@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import NewInvoice from "./pages/NewInvoice";
+import Invoices from "./pages/Invoices";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
