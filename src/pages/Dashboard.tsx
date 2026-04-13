@@ -1,5 +1,5 @@
+import { useState } from "react";
 import { getSession } from "@/lib/auth";
-import { useNavigate } from "react-router-dom";
 import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
