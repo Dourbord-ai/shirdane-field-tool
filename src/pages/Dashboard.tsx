@@ -2,9 +2,9 @@ import { getSession } from "@/lib/auth";
 import { BarChart3, ClipboardList, Package, ShoppingCart } from "lucide-react";
 
 const modules = [
+  { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها" },
   { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها" },
   { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار" },
-  { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها" },
   { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد" },
 ];
 
