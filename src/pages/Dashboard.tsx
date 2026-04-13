@@ -12,7 +12,7 @@ const modules = [
 
 export default function Dashboard() {
   const { user } = getSession();
-  const navigate = useNavigate();
+  const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
   return (
     <div className="py-6 space-y-6 animate-fade-in">
