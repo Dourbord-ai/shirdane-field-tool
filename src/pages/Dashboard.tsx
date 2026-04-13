@@ -1,5 +1,5 @@
+import { useState } from "react";
 import { getSession } from "@/lib/auth";
-import { useNavigate } from "react-router-dom";
 import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -12,7 +12,7 @@ const modules = [
 
 export default function Dashboard() {
   const { user } = getSession();
-  const navigate = useNavigate();
+  const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
   return (
     <div className="py-6 space-y-6 animate-fade-in">
@@ -28,6 +28,7 @@ export default function Dashboard() {
         {modules.map((mod) => (
           <div key={mod.key}>
             <button
+              onClick={() => setExpandedModule(expandedModule === mod.key ? null : mod.key)}
               className="w-full touch-target rounded-xl bg-card border border-border p-5 flex items-center gap-4 active:bg-secondary transition-all duration-200 text-right hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.25)] hover:border-primary/20"
             >
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -39,10 +40,10 @@ export default function Dashboard() {
               </div>
             </button>
 
-            {/* New Invoice button under خرید و فروش */}
-            {mod.key === "sales" && (
+            {/* New Invoice button - shown when خرید و فروش is tapped */}
+            {mod.key === "sales" && expandedModule === "sales" && (
               <Button
-                className="w-full mt-2 touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
+                className="w-full mt-2 touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)] animate-fade-in"
                 size="lg"
               >
                 <Plus className="w-5 h-5" />
