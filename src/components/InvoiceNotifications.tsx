@@ -38,7 +38,7 @@ function formatDateTime(dateStr: string): string {
   const time = new Intl.DateTimeFormat("fa-IR", {
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   }).format(date);
   return `${jalali} · ${time}`;
 }
@@ -89,13 +89,13 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
       style={{ transitionDuration: dismissed ? "300ms" : offset > 0 ? "0ms" : "300ms" }}
     >
       {/* Background hint for swipe */}
-      <div className="absolute inset-0 rounded-xl bg-destructive/15 flex items-center px-4">
-        <X className="w-5 h-5 text-destructive" />
+      <div className="absolute inset-0 rounded-xl bg-purple-100 flex items-center px-4">
+        <X className="w-5 h-5 text-purple-600" />
       </div>
 
       {/* Card */}
       <div
-        className="relative rounded-xl border border-border bg-white shadow-sm p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing select-none"
+        className="relative rounded-xl border border-purple-200/70 bg-gradient-to-l from-purple-50/50 to-white shadow-sm p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing select-none"
         style={{
           transform: `translateX(${offset}px)`,
           transition: isDragging.current ? "none" : "transform 300ms ease",
@@ -110,10 +110,10 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
         onTouchEnd={handleEnd}
       >
         {/* Left accent bar */}
-        <div className="absolute right-0 top-2 bottom-2 w-1 rounded-full bg-primary" />
+        <div className="absolute right-0 top-2 bottom-2 w-1 rounded-full bg-purple-500" />
         
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mr-2">
-          <FileText className="w-5 h-5 text-primary" />
+        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0 mr-2">
+          <FileText className="w-5 h-5 text-purple-600" />
         </div>
         <div className="min-w-0 flex-1 pl-1">
           <div className="flex items-center justify-between gap-2">
@@ -121,7 +121,7 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
               فاکتور {invoiceTypeLabels[invoice.invoiceType] || invoice.invoiceType}{" "}
               {productLabels[invoice.productType] || invoice.productType}
             </p>
-            <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap" dir="rtl">
+            <span className="text-[11px] text-purple-600/80 shrink-0 whitespace-nowrap font-medium" dir="rtl">
               {formatDateTime(invoice.createdAt)}
             </span>
           </div>
@@ -129,7 +129,7 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
             <span className="text-xs text-muted-foreground">
               شماره: {toPersianDigits(invoice.invoiceNumber || "—")}
             </span>
-            <span className="text-xs font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
               {toPersianDigits(invoice.payable?.toLocaleString("en-US") || "0")} ریال
             </span>
           </div>
@@ -165,19 +165,19 @@ export default function InvoiceNotifications() {
   if (invoices.length === 0) return null;
 
   return (
-    <div className="rounded-2xl bg-white border border-border shadow-sm p-4 space-y-2">
-      {/* Header with bell icon and professional styling */}
-      <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
+    <div className="rounded-2xl bg-gradient-to-br from-purple-50/80 to-white border border-purple-200/60 shadow-sm p-4 space-y-2">
+      {/* Header with bell icon and purple styling */}
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-purple-200/40">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <Bell className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+            <Bell className="w-4 h-4 text-purple-600" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-foreground">رویدادهای اخیر</h3>
-            <p className="text-[11px] text-muted-foreground">{toPersianDigits(invoices.length)} مورد جدید</p>
+            <h3 className="text-sm font-bold text-purple-900">رویدادهای اخیر</h3>
+            <p className="text-[11px] text-purple-600/70">{toPersianDigits(invoices.length)} مورد جدید</p>
           </div>
         </div>
-        <span className="text-[11px] text-muted-foreground bg-muted px-2 py-1 rounded-full">← بکشید برای حذف</span>
+        <span className="text-[11px] text-purple-600/70 bg-purple-100/50 px-2 py-1 rounded-full">← بکشید برای حذف</span>
       </div>
       {invoices.map((inv) => (
         <SwipeCard key={inv.id} invoice={inv} onDismiss={handleDismiss} />
