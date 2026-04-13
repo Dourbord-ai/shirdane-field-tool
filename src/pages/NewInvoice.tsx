@@ -136,6 +136,8 @@ export default function NewInvoice() {
     setData((prev) => ({ ...prev, [key]: val }));
 
   const isMilk = data.productType === "milk";
+  const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
+  const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
 
   // Auto-calculate liter from kg using sample
   const milkSample = parseFloat(data.milkSample) || 0.97;
@@ -143,8 +145,12 @@ export default function NewInvoice() {
   const autoLiter = milkSample > 0 ? Math.round((quantityKg / milkSample) * 100) / 100 : 0;
   const milkPricePerKg = parseInt(data.pricePerKg) || 0;
   const milkTotal = Math.round(quantityKg * milkPricePerKg);
+  const milkDiscount = parseInt(data.discount) || 0;
+  const milkShipping = parseInt(data.shipping) || 0;
   const milkTaxAmount = data.tax === "yes" ? Math.round(milkTotal * 0.1) : 0;
-  const milkPayable = milkTotal + milkTaxAmount;
+  const milkPayable = isMilkRetail
+    ? milkTotal - milkDiscount + milkShipping + milkTaxAmount
+    : milkTotal + milkTaxAmount;
 
   // Non-milk calculations
   const qty = parseInt(data.quantity) || 0;
@@ -337,84 +343,89 @@ export default function NewInvoice() {
             />
           </div>
 
-          {/* Quantity Liter - auto */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">مقدار به لیتر</label>
-            <div className="flex gap-2 items-center">
-              <Input
-                value={quantityKg > 0 ? toPersianDigits(autoLiter.toString()) : ""}
-                readOnly
-                placeholder="خودکار محاسبه می‌شود"
-                className="rounded-xl touch-target bg-muted/50 flex-1"
-              />
-              <div className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-                <span>نمونه:</span>
+          {/* Milk Receipt only fields */}
+          {isMilkReceipt && (
+            <>
+              {/* Quantity Liter - auto */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">مقدار به لیتر</label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={quantityKg > 0 ? toPersianDigits(autoLiter.toString()) : ""}
+                    readOnly
+                    placeholder="خودکار محاسبه می‌شود"
+                    className="rounded-xl touch-target bg-muted/50 flex-1"
+                  />
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                    <span>نمونه:</span>
+                    <Input
+                      type="number"
+                      value={data.milkSample}
+                      onChange={(e) => set("milkSample", e.target.value)}
+                      className="rounded-lg w-16 h-8 text-center text-xs"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Fat */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">چربی</label>
                 <Input
                   type="number"
-                  value={data.milkSample}
-                  onChange={(e) => set("milkSample", e.target.value)}
-                  className="rounded-lg w-16 h-8 text-center text-xs"
+                  value={data.fat}
+                  onChange={(e) => set("fat", e.target.value)}
+                  placeholder="درصد چربی..."
+                  className="rounded-xl touch-target"
                   step="0.01"
                   min="0"
                 />
               </div>
-            </div>
-          </div>
 
-          {/* Fat */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">چربی</label>
-            <Input
-              type="number"
-              value={data.fat}
-              onChange={(e) => set("fat", e.target.value)}
-              placeholder="درصد چربی..."
-              className="rounded-xl touch-target"
-              step="0.01"
-              min="0"
-            />
-          </div>
+              {/* Protein */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">پروتئین</label>
+                <Input
+                  type="number"
+                  value={data.protein}
+                  onChange={(e) => set("protein", e.target.value)}
+                  placeholder="درصد پروتئین..."
+                  className="rounded-xl touch-target"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
 
-          {/* Protein */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">پروتئین</label>
-            <Input
-              type="number"
-              value={data.protein}
-              onChange={(e) => set("protein", e.target.value)}
-              placeholder="درصد پروتئین..."
-              className="rounded-xl touch-target"
-              step="0.01"
-              min="0"
-            />
-          </div>
+              {/* Total */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">توتال</label>
+                <Input
+                  type="number"
+                  value={data.total}
+                  onChange={(e) => set("total", e.target.value)}
+                  placeholder="توتال..."
+                  className="rounded-xl touch-target"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
 
-          {/* Total */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">توتال</label>
-            <Input
-              type="number"
-              value={data.total}
-              onChange={(e) => set("total", e.target.value)}
-              placeholder="توتال..."
-              className="rounded-xl touch-target"
-              step="0.01"
-              min="0"
-            />
-          </div>
-
-          {/* Somatic */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">سماتیک</label>
-            <Input
-              type="number"
-              value={data.somatic}
-              onChange={(e) => set("somatic", e.target.value)}
-              placeholder="سماتیک..."
-              className="rounded-xl touch-target"
-              min="0"
-            />
-          </div>
+              {/* Somatic */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">سماتیک</label>
+                <Input
+                  type="number"
+                  value={data.somatic}
+                  onChange={(e) => set("somatic", e.target.value)}
+                  placeholder="سماتیک..."
+                  className="rounded-xl touch-target"
+                  min="0"
+                />
+              </div>
+            </>
+          )}
 
           {/* Price per KG */}
           <div className="space-y-2">
