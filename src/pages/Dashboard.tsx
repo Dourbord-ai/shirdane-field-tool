@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
 import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ const modules = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { user } = getSession();
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
@@ -42,13 +44,25 @@ export default function Dashboard() {
 
             {/* New Invoice button - shown when خرید و فروش is tapped */}
             {mod.key === "sales" && expandedModule === "sales" && (
-              <Button
-                className="w-full mt-2 touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)] animate-fade-in"
-                size="lg"
-              >
-                <Plus className="w-5 h-5" />
-                ثبت فاکتور جدید
-              </Button>
+              <div className="space-y-2 mt-2 animate-fade-in">
+                <Button
+                  onClick={() => navigate("/invoices/new")}
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
+                  size="lg"
+                >
+                  <Plus className="w-5 h-5" />
+                  ثبت فاکتور جدید
+                </Button>
+                <Button
+                  onClick={() => navigate("/invoices")}
+                  variant="outline"
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)] hover:border-primary/20"
+                  size="lg"
+                >
+                  <ClipboardList className="w-5 h-5" />
+                  فاکتورها
+                </Button>
+              </div>
             )}
           </div>
         ))}
