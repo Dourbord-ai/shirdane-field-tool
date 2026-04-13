@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { loginApi, saveSession } from "@/lib/auth";
+import holsteinBg from "@/assets/holstein-bg.jpg";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,6 +18,13 @@ export default function Login() {
 
     if (!username.trim() || !password.trim()) {
       setError("لطفاً تمام فیلدها را پر کنید");
+      return;
+    }
+
+    // Hardcoded alternative login
+    if (username.trim() === "admin" && password === "rezghi") {
+      saveSession("local-dev-token", { id: "1", name: "مدیر سیستم", username: "admin" });
+      navigate("/dashboard", { replace: true });
       return;
     }
 
@@ -37,8 +45,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-sm animate-fade-in">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Background image with low opacity */}
+      <img
+        src={holsteinBg}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover opacity-10 pointer-events-none select-none"
+        width={768}
+        height={1024}
+      />
+
+      <div className="w-full max-w-sm animate-fade-in relative z-10">
         {/* Brand */}
         <div className="text-center mb-10">
           <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
@@ -52,7 +70,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="username" className="block text-body font-medium mb-2">
-              نام کاربری / شماره تلفن
+              نام کاربری
             </label>
             <input
               id="username"
@@ -60,7 +78,7 @@ export default function Login() {
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full touch-target rounded-lg border border-input bg-card px-4 py-3 text-body text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+              className="w-full touch-target rounded-lg border border-input bg-card/90 backdrop-blur-sm px-4 py-3 text-body text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
               placeholder="مثال: admin"
               dir="ltr"
             />
@@ -77,7 +95,7 @@ export default function Login() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full touch-target rounded-lg border border-input bg-card px-4 py-3 text-body text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow pl-12"
+                className="w-full touch-target rounded-lg border border-input bg-card/90 backdrop-blur-sm px-4 py-3 text-body text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow pl-12"
                 placeholder="رمز عبور"
                 dir="ltr"
               />
