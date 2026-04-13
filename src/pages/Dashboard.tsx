@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
 import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import InvoiceNotifications from "@/components/InvoiceNotifications";
 
 const modules = [
   { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها", key: "sales" },
@@ -24,6 +25,9 @@ export default function Dashboard() {
         <h2 className="text-heading text-foreground mt-1">{user?.name || "کاربر"}</h2>
         <p className="text-body text-muted-foreground mt-1">به شیردانه خوش آمدید</p>
       </div>
+
+      {/* Invoice Notifications */}
+      <InvoiceNotifications />
 
       {/* Module Cards */}
       <div className="space-y-3">
@@ -55,8 +59,7 @@ export default function Dashboard() {
                 </Button>
                 <Button
                   onClick={() => navigate("/invoices")}
-                  variant="secondary"
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold bg-primary/10 text-primary border border-primary/20 transition-all duration-200 hover:bg-primary/15 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.2)] hover:border-primary/30"
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
                   size="lg"
                 >
                   <ClipboardList className="w-5 h-5" />
