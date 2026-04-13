@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, X } from "lucide-react";
-import { toPersianDigits } from "@/lib/jalali";
+import { FileText, X, Bell } from "lucide-react";
+import { toPersianDigits, jalaliMonthNames } from "@/lib/jalali";
 
 interface StoredInvoice {
   id: string;
@@ -28,16 +28,19 @@ const invoiceTypeLabels: Record<string, string> = {
   sell: "فروش",
 };
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMin = Math.floor((now - then) / 60000);
-  if (diffMin < 1) return "همین الان";
-  if (diffMin < 60) return toPersianDigits(diffMin) + " دقیقه پیش";
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return toPersianDigits(diffHr) + " ساعت پیش";
-  const diffDay = Math.floor(diffHr / 24);
-  return toPersianDigits(diffDay) + " روز پیش";
+function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const jalali = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("fa-IR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+  return `${jalali} · ${time}`;
 }
 
 interface SwipeCardProps {
@@ -62,7 +65,6 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
   const handleMove = (clientX: number) => {
     if (!isDragging.current) return;
     currentX.current = clientX;
-    // Only allow swipe right (positive direction in RTL = visual right = negative translateX)
     const diff = currentX.current - startX.current;
     if (diff > 0) {
       setOffset(diff);
@@ -86,18 +88,18 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
       className={`relative overflow-hidden rounded-xl transition-all ${dismissed ? "opacity-0 max-h-0 mb-0 scale-95" : "opacity-100 max-h-40 mb-2"}`}
       style={{ transitionDuration: dismissed ? "300ms" : offset > 0 ? "0ms" : "300ms" }}
     >
-      {/* Background hint */}
-      <div className="absolute inset-0 rounded-xl bg-primary/10 flex items-center px-4">
-        <X className="w-5 h-5 text-primary" />
+      {/* Background hint for swipe */}
+      <div className="absolute inset-0 rounded-xl bg-destructive/15 flex items-center px-4">
+        <X className="w-5 h-5 text-destructive" />
       </div>
 
       {/* Card */}
       <div
-        className="relative rounded-xl border border-primary/15 bg-card p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing select-none"
+        className="relative rounded-xl border border-border bg-white shadow-sm p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing select-none"
         style={{
           transform: `translateX(${offset}px)`,
           transition: isDragging.current ? "none" : "transform 300ms ease",
-          opacity: Math.max(0.3, 1 - offset / 250),
+          opacity: Math.max(0.4, 1 - offset / 250),
         }}
         onMouseDown={(e) => handleStart(e.clientX)}
         onMouseMove={(e) => handleMove(e.clientX)}
@@ -107,24 +109,27 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
         onTouchMove={(e) => handleMove(e.touches[0].clientX)}
         onTouchEnd={handleEnd}
       >
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <FileText className="w-4 h-4 text-primary" />
+        {/* Left accent bar */}
+        <div className="absolute right-0 top-2 bottom-2 w-1 rounded-full bg-primary" />
+        
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mr-2">
+          <FileText className="w-5 h-5 text-primary" />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-bold text-foreground">
+        <div className="min-w-0 flex-1 pl-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">
               فاکتور {invoiceTypeLabels[invoice.invoiceType] || invoice.invoiceType}{" "}
               {productLabels[invoice.productType] || invoice.productType}
             </p>
-            <span className="text-[11px] text-muted-foreground shrink-0 mr-2">
-              {timeAgo(invoice.createdAt)}
+            <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap" dir="rtl">
+              {formatDateTime(invoice.createdAt)}
             </span>
           </div>
-          <div className="flex items-center justify-between mt-0.5">
+          <div className="flex items-center justify-between mt-1">
             <span className="text-xs text-muted-foreground">
               شماره: {toPersianDigits(invoice.invoiceNumber || "—")}
             </span>
-            <span className="text-xs font-bold text-primary">
+            <span className="text-xs font-bold text-primary bg-primary/5 px-2 py-0.5 rounded-full">
               {toPersianDigits(invoice.payable?.toLocaleString("en-US") || "0")} ریال
             </span>
           </div>
@@ -143,7 +148,6 @@ export default function InvoiceNotifications() {
 
   useEffect(() => {
     const stored: StoredInvoice[] = JSON.parse(localStorage.getItem("shirdaneh_invoices") || "[]");
-    // Show latest 5 that aren't dismissed
     const visible = stored
       .reverse()
       .filter((inv) => !dismissedIds.includes(inv.id))
@@ -161,13 +165,19 @@ export default function InvoiceNotifications() {
   if (invoices.length === 0) return null;
 
   return (
-    <div className="rounded-2xl bg-accent/30 border border-accent/40 p-4 space-y-2">
-      <div className="flex items-center justify-between mb-1">
+    <div className="rounded-2xl bg-white border border-border shadow-sm p-4 space-y-2">
+      {/* Header with bell icon and professional styling */}
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-          <h3 className="text-sm font-bold text-accent-foreground">رویدادهای اخیر</h3>
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <Bell className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">رویدادهای اخیر</h3>
+            <p className="text-[11px] text-muted-foreground">{toPersianDigits(invoices.length)} مورد جدید</p>
+          </div>
         </div>
-        <span className="text-[11px] text-muted-foreground">← بکشید برای حذف</span>
+        <span className="text-[11px] text-muted-foreground bg-muted px-2 py-1 rounded-full">← بکشید برای حذف</span>
       </div>
       {invoices.map((inv) => (
         <SwipeCard key={inv.id} invoice={inv} onDismiss={handleDismiss} />
