@@ -1,20 +1,23 @@
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, ShoppingCart } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const modules = [
-  { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها" },
-  { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها" },
-  { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار" },
-  { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد" },
+  { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها", key: "sales" },
+  { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها", key: "livestock" },
+  { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار", key: "storage" },
+  { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
 ];
 
 export default function Dashboard() {
   const { user } = getSession();
+  const navigate = useNavigate();
 
   return (
     <div className="py-6 space-y-6 animate-fade-in">
       {/* Welcome */}
-      <div className="rounded-xl bg-primary/5 border border-primary/10 p-5">
+      <div className="rounded-xl bg-primary/5 border border-primary/10 p-5 transition-shadow duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.2)]">
         <p className="text-body text-muted-foreground">سلام 👋</p>
         <h2 className="text-heading text-foreground mt-1">{user?.name || "کاربر"}</h2>
         <p className="text-body text-muted-foreground mt-1">به شیردانه خوش آمدید</p>
@@ -23,18 +26,30 @@ export default function Dashboard() {
       {/* Module Cards */}
       <div className="space-y-3">
         {modules.map((mod) => (
-          <button
-            key={mod.title}
-            className="w-full touch-target rounded-xl bg-card border border-border p-5 flex items-center gap-4 active:bg-secondary transition-colors text-right"
-          >
-            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <mod.icon className="w-6 h-6 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-body-lg font-bold text-foreground">{mod.title}</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">{mod.description}</p>
-            </div>
-          </button>
+          <div key={mod.key}>
+            <button
+              className="w-full touch-target rounded-xl bg-card border border-border p-5 flex items-center gap-4 active:bg-secondary transition-all duration-200 text-right hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.25)] hover:border-primary/20"
+            >
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <mod.icon className="w-6 h-6 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-body-lg font-bold text-foreground">{mod.title}</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">{mod.description}</p>
+              </div>
+            </button>
+
+            {/* New Invoice button under خرید و فروش */}
+            {mod.key === "sales" && (
+              <Button
+                className="w-full mt-2 touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
+                size="lg"
+              >
+                <Plus className="w-5 h-5" />
+                ثبت فاکتور جدید
+              </Button>
+            )}
+          </div>
         ))}
       </div>
 
