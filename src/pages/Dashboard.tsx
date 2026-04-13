@@ -55,8 +55,8 @@ export default function Dashboard() {
                 </Button>
                 <Button
                   onClick={() => navigate("/invoices")}
-                  variant="outline"
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)] hover:border-primary/20"
+                  variant="secondary"
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold bg-primary/10 text-primary border border-primary/20 transition-all duration-200 hover:bg-primary/15 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.2)] hover:border-primary/30"
                   size="lg"
                 >
                   <ClipboardList className="w-5 h-5" />
