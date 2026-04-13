@@ -26,6 +26,9 @@ export default function Dashboard() {
         <p className="text-body text-muted-foreground mt-1">به شیردانه خوش آمدید</p>
       </div>
 
+      {/* Invoice Notifications */}
+      <InvoiceNotifications />
+
       {/* Module Cards */}
       <div className="space-y-3">
         {modules.map((mod) => (
@@ -56,8 +59,7 @@ export default function Dashboard() {
                 </Button>
                 <Button
                   onClick={() => navigate("/invoices")}
-                  variant="secondary"
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold bg-primary/10 text-primary border border-primary/20 transition-all duration-200 hover:bg-primary/15 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.2)] hover:border-primary/30"
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
                   size="lg"
                 >
                   <ClipboardList className="w-5 h-5" />
