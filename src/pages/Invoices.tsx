@@ -163,16 +163,8 @@ export default function Invoices() {
 
   return (
     <div className="py-6 space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         <h1 className="text-heading text-foreground">فاکتورها</h1>
-        <Button
-          onClick={() => navigate("/invoices/new")}
-          size="sm"
-          className="rounded-xl gap-1 transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.2)]"
-        >
-          <Plus className="w-4 h-4" />
-          جدید
-        </Button>
       </div>
 
       {/* Detail overlay */}
