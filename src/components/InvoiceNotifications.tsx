@@ -26,6 +26,8 @@ const productLabels: Record<string, string> = {
 const invoiceTypeLabels: Record<string, string> = {
   buy: "خرید",
   sell: "فروش",
+  milk_receipt: "قبض مراکز خرید شیر",
+  retail_sell: "فروش خورده",
 };
 
 function formatDateTime(dateStr: string): string {
