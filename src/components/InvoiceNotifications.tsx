@@ -120,8 +120,9 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
         <div className="min-w-0 flex-1 pl-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">
-              فاکتور {invoiceTypeLabels[invoice.invoiceType] || invoice.invoiceType}{" "}
               {productLabels[invoice.productType] || invoice.productType}
+              {" — "}
+              {invoiceTypeLabels[invoice.invoiceType] || invoice.invoiceType}
             </p>
             <span className="text-[11px] text-purple-600/80 shrink-0 whitespace-nowrap font-medium" dir="rtl">
               {formatDateTime(invoice.createdAt)}
