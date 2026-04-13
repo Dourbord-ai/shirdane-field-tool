@@ -482,6 +482,34 @@ export default function NewInvoice() {
             </h2>
             <div className="space-y-3 text-sm">
               <Row label="مبلغ کل فاکتور" value={formatRial(milkTotal)} />
+
+              {isMilkRetail && (
+                <>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">تخفیف (ریال)</label>
+                    <Input
+                      type="number"
+                      value={data.discount}
+                      onChange={(e) => set("discount", e.target.value)}
+                      placeholder="۰"
+                      className="rounded-xl touch-target"
+                      min="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">کرایه حمل و نقل (ریال)</label>
+                    <Input
+                      type="number"
+                      value={data.shipping}
+                      onChange={(e) => set("shipping", e.target.value)}
+                      placeholder="۰"
+                      className="rounded-xl touch-target"
+                      min="0"
+                    />
+                  </div>
+                </>
+              )}
+
               {data.tax === "yes" && (
                 <Row label="مبلغ مالیات (۱۰٪)" value={formatRial(milkTaxAmount)} highlight />
               )}
