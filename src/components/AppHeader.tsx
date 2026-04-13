@@ -32,7 +32,7 @@ export default function AppHeader() {
             localStorage.removeItem("shirdaneh_session");
             navigate("/login");
           }}
-          className="touch-target flex items-center justify-center rounded-full text-muted-foreground active:bg-secondary transition-colors"
+          className="touch-target flex items-center justify-center rounded-full border border-border text-muted-foreground active:bg-secondary transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.2)] hover:border-primary/20"
           aria-label="خروج"
         >
           <ArrowLeft className="w-6 h-6" />
