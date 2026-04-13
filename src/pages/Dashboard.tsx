@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
 import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import InvoiceNotifications from "@/components/InvoiceNotifications";
 
 const modules = [
   { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها", key: "sales" },
