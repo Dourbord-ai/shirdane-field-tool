@@ -161,9 +161,12 @@ export default function InvoiceNotifications() {
   if (invoices.length === 0) return null;
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-bold text-foreground">رویدادهای اخیر</h3>
+    <div className="rounded-2xl bg-accent/30 border border-accent/40 p-4 space-y-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+          <h3 className="text-sm font-bold text-accent-foreground">رویدادهای اخیر</h3>
+        </div>
         <span className="text-[11px] text-muted-foreground">← بکشید برای حذف</span>
       </div>
       {invoices.map((inv) => (
