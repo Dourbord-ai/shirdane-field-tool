@@ -342,6 +342,8 @@ export default function NewInvoice() {
         settlement_number: null,
         description: isMilk
           ? milkRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isFeed
+          ? feedRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
