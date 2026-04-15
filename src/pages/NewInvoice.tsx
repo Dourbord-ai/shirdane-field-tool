@@ -119,28 +119,6 @@ const createMilkRow = (): MilkProductRow => ({
   pricePerKg: "",
   description: "",
 });
-  id: string;
-  quantityKg: string;
-  milkSample: string;
-  fat: string;
-  protein: string;
-  total: string;
-  somatic: string;
-  pricePerKg: string;
-  description: string;
-}
-
-const createMilkRow = (): MilkProductRow => ({
-  id: Date.now().toString() + Math.random().toString(36).slice(2),
-  quantityKg: "",
-  milkSample: "0.97",
-  fat: "",
-  protein: "",
-  total: "",
-  somatic: "",
-  pricePerKg: "",
-  description: "",
-});
 
 interface InvoiceData {
   productType: string;
