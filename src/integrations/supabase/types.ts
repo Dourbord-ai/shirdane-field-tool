@@ -83,6 +83,50 @@ export type Database = {
         }
         Relationships: []
       }
+      feed_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          factor_id: string
+          feed_name: string | null
+          id: string
+          moisture_loss: number | null
+          price_per_kg: number | null
+          row_total: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          factor_id: string
+          feed_name?: string | null
+          id?: string
+          moisture_loss?: number | null
+          price_per_kg?: number | null
+          row_total?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          factor_id?: string
+          feed_name?: string | null
+          id?: string
+          moisture_loss?: number | null
+          price_per_kg?: number | null
+          row_total?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_items_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feeds: {
         Row: {
           id: number
