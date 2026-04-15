@@ -163,6 +163,48 @@ function InvoiceDetail({ factor, items, milkItems, onClose }: { factor: FactorRo
             </>
           )}
 
+          {/* Line items for milk */}
+          {factor.product_type === "milk" && milkItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور:</p>
+              {milkItems.map((item) => (
+                <div key={item.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">مقدار (کیلو)</span>
+                    <span className="text-foreground">{toPersianDigits(String(item.quantity_kg || 0))}</span>
+                  </div>
+                  {(item.quantity_liter || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">مقدار (لیتر)</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.quantity_liter || 0))}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">قیمت هر کیلو</span>
+                    <span className="text-foreground">{formatRial(item.price_per_kg || 0)}</span>
+                  </div>
+                  {(item.fat || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">چربی</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.fat))}</span>
+                    </div>
+                  )}
+                  {(item.protein || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">پروتئین</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.protein))}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="text-muted-foreground">جمع</span>
+                    <span className="text-foreground">{formatRial(item.row_total || 0)}</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
           <Separator className="my-2" />
 
           <DetailRow label="مبلغ کل" value={formatRial(factor.total_amount || 0)} />
