@@ -255,9 +255,12 @@ export default function Invoices() {
     if (selectedId === id) {
       setSelectedId(null);
       setSelectedItems([]);
+      setSelectedMilkItems([]);
       return;
     }
     setSelectedId(id);
+    setSelectedItems([]);
+    setSelectedMilkItems([]);
 
     const factor = factors.find((f) => f.id === id);
     if (factor?.product_type === "sperm") {
@@ -266,8 +269,12 @@ export default function Invoices() {
         .select("*")
         .eq("factor_id", id);
       setSelectedItems((data as SpermBuyRow[]) || []);
-    } else {
-      setSelectedItems([]);
+    } else if (factor?.product_type === "milk") {
+      const { data } = await supabase
+        .from("milk")
+        .select("*")
+        .eq("factor_id", id);
+      setSelectedMilkItems((data as MilkRow[]) || []);
     }
   };
 
