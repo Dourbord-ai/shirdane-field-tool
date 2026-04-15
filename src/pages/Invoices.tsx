@@ -39,6 +39,20 @@ interface SpermBuyRow {
   description: string | null;
 }
 
+interface MilkRow {
+  id: string;
+  quantity_kg: number | null;
+  quantity_liter: number | null;
+  milk_sample: number | null;
+  fat: number | null;
+  protein: number | null;
+  total: number | null;
+  somatic: number | null;
+  price_per_kg: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
