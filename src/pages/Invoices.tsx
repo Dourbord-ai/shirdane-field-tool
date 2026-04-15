@@ -362,11 +362,14 @@ export default function Invoices() {
         .eq("factor_id", id);
       setSelectedItems((data as SpermBuyRow[]) || []);
     } else if (factor?.product_type === "milk") {
-      const { data } = await supabase
-        .from("milk")
-        .select("*")
-        .eq("factor_id", id);
+      const { data } = await supabase.from("milk").select("*").eq("factor_id", id);
       setSelectedMilkItems((data as MilkRow[]) || []);
+    } else if (factor?.product_type === "feed") {
+      const { data } = await supabase.from("feed_items").select("*").eq("factor_id", id);
+      setSelectedFeedItems((data as FeedItemRow[]) || []);
+    } else if (factor?.product_type === "medicine") {
+      const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
+      setSelectedMedicineItems((data as MedicineItemRow[]) || []);
     }
   };
 
