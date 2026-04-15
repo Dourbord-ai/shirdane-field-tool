@@ -157,6 +157,50 @@ export type Database = {
         }
         Relationships: []
       }
+      medicine_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          factor_id: string
+          id: string
+          medicine_name: string | null
+          medicine_type: string | null
+          quantity: number | null
+          row_total: number | null
+          unit_price: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          factor_id: string
+          id?: string
+          medicine_name?: string | null
+          medicine_type?: string | null
+          quantity?: number | null
+          row_total?: number | null
+          unit_price?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          factor_id?: string
+          id?: string
+          medicine_name?: string | null
+          medicine_type?: string | null
+          quantity?: number | null
+          row_total?: number | null
+          unit_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicine_items_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medicines: {
         Row: {
           id: number

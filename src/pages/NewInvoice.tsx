@@ -96,6 +96,24 @@ const createFeedRow = (): FeedProductRow => ({
   description: "",
 });
 
+interface MedicineProductRow {
+  id: string;
+  medicineName: string;
+  medicineType: string;
+  quantity: string;
+  unitPrice: string;
+  description: string;
+}
+
+const createMedicineRow = (): MedicineProductRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  medicineName: "",
+  medicineType: "",
+  quantity: "",
+  unitPrice: "",
+  description: "",
+});
+
 interface MilkProductRow {
   id: string;
   quantityKg: string;
@@ -162,11 +180,13 @@ export default function NewInvoice() {
   const [rows, setRows] = useState<ProductRow[]>([createRow()]);
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
   const [feedRows, setFeedRows] = useState<FeedProductRow[]>([createFeedRow()]);
+  const [medicineRows, setMedicineRows] = useState<MedicineProductRow[]>([createMedicineRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineCompanyOptions, setMedicineCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
+  const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
@@ -213,10 +233,26 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchMedicines = async () => {
+      const { data: meds } = await supabase.from("medicines").select("*").order("id");
+      const { data: types } = await supabase.from("medicinetypes").select("*").order("id");
+      if (meds && types) {
+        const typeMap = new Map(types.map((t) => [t.id, t.name || ""]));
+        setMedicineOptions(
+          meds.map((m) => ({
+            label: m.name || "",
+            value: m.id.toString(),
+            typeId: Number(m.medicinetypeid) || 0,
+            typeName: typeMap.get(Number(m.medicinetypeid)) || "",
+          }))
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
     fetchMedicineCompanies();
     fetchFeeds();
+    fetchMedicines();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
@@ -252,11 +288,32 @@ export default function NewInvoice() {
     setFeedRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Medicine row helpers
+  const updateMedicineRow = (rowId: string, field: keyof MedicineProductRow, value: string) => {
+    setMedicineRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const selectMedicine = (rowId: string, medicineValue: string) => {
+    const med = medicineOptions.find((m) => m.value === medicineValue);
+    setMedicineRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? { ...r, medicineName: medicineValue, medicineType: med?.typeName || "" }
+          : r
+      )
+    );
+  };
+  const addMedicineRow = () => setMedicineRows((prev) => [...prev, createMedicineRow()]);
+  const removeMedicineRow = (rowId: string) => {
+    if (medicineRows.length <= 1) return;
+    setMedicineRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
   const isSperm = data.productType === "sperm";
   const isFeed = data.productType === "feed";
+  const isMedicine = data.productType === "medicine";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
@@ -286,12 +343,16 @@ export default function NewInvoice() {
   });
   const feedTotalProduct = feedRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
 
+  // Medicine calculations (multi-row)
+  const medicineRowTotals = medicineRows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
+  const medicineTotalProduct = medicineRowTotals.reduce((a, b) => a + b, 0);
+
   // Non-milk/non-feed calculations (multi-row)
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
 
   // Unified total for non-milk
-  const totalProduct = isFeed ? feedTotalProduct : genericTotalProduct;
+  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -318,7 +379,8 @@ export default function NewInvoice() {
   const showCompany = showSellerType && data.sellerType === "company";
   const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
   const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
-  const hasValidRows = isFeed ? hasFeedValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasMedicineValidRows = medicineRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasValidRows = isFeed ? hasFeedValidRows : isMedicine ? hasMedicineValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
@@ -357,6 +419,8 @@ export default function NewInvoice() {
           ? milkRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isFeed
           ? feedRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isMedicine
+          ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
@@ -439,6 +503,29 @@ export default function NewInvoice() {
       if (feedInsertRows.length > 0) {
         const { error: feedError } = await supabase.from("feed_items").insert(feedInsertRows);
         if (feedError) console.error("Feed items insert error:", feedError);
+      }
+    }
+
+    // 5) Insert medicine line items
+    if (isMedicine) {
+      const medInsertRows = medicineRows
+        .filter((r) => (parseInt(r.quantity) || 0) > 0)
+        .map((r, idx) => {
+          const selectedMed = medicineOptions.find((m) => m.value === r.medicineName);
+          return {
+            factor_id: factor.id,
+            medicine_name: selectedMed ? selectedMed.label : r.medicineName || null,
+            medicine_type: r.medicineType || null,
+            quantity: parseInt(r.quantity) || 0,
+            unit_price: parseInt(r.unitPrice) || 0,
+            row_total: medicineRowTotals[idx],
+            description: r.description || null,
+          };
+        });
+
+      if (medInsertRows.length > 0) {
+        const { error: medError } = await supabase.from("medicine_items").insert(medInsertRows);
+        if (medError) console.error("Medicine items insert error:", medError);
       }
     }
 
@@ -761,7 +848,7 @@ export default function NewInvoice() {
           <div className="flex items-center justify-between">
             <h2 className="text-body font-bold text-foreground">اقلام فاکتور</h2>
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-              {toPersianDigits((isFeed ? feedRows.length : rows.length).toString())} ردیف
+              {toPersianDigits((isFeed ? feedRows.length : isMedicine ? medicineRows.length : rows.length).toString())} ردیف
             </span>
           </div>
 
@@ -830,6 +917,79 @@ export default function NewInvoice() {
                 type="button"
                 variant="outline"
                 onClick={addFeedRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isMedicine ? (
+            <>
+              {/* ===== MEDICINE ITEMS ===== */}
+              <div className="space-y-3">
+                {medicineRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {medicineRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeMedicineRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <SearchableSelect
+                      label="نام دارو"
+                      options={medicineOptions.map((m) => ({ label: m.label, value: m.value }))}
+                      value={row.medicineName}
+                      onChange={(v) => selectMedicine(row.id, v)}
+                      placeholder="انتخاب دارو..."
+                    />
+
+                    {row.medicineType && (
+                      <div className="flex justify-between items-center bg-primary/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">نوع دارو</span>
+                        <span className="text-sm font-bold text-primary">{row.medicineType}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد</label>
+                        <Input type="number" value={row.quantity} onChange={(e) => updateMedicineRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
+                        <Input type="number" value={row.unitPrice} onChange={(e) => updateMedicineRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت واحد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {medicineRowTotals[index] > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(medicineRowTotals[index])}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateMedicineRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addMedicineRow}
                 className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
               >
                 <Plus className="w-5 h-5" />
