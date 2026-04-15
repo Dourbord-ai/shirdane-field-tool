@@ -145,6 +145,7 @@ export default function NewInvoice() {
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
+  const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
@@ -158,7 +159,19 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchFeedCompanies = async () => {
+      const { data: companies } = await supabase.from("feedshoppingcenter").select("*").order("id");
+      if (companies) {
+        setFeedCompanyOptions(
+          companies.map((c) => ({
+            label: c.name || "",
+            value: c.id.toString(),
+          }))
+        );
+      }
+    };
     fetchSperms();
+    fetchFeedCompanies();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
