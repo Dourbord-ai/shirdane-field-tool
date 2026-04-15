@@ -233,10 +233,26 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchMedicines = async () => {
+      const { data: meds } = await supabase.from("medicines").select("*").order("id");
+      const { data: types } = await supabase.from("medicinetypes").select("*").order("id");
+      if (meds && types) {
+        const typeMap = new Map(types.map((t) => [t.id, t.name || ""]));
+        setMedicineOptions(
+          meds.map((m) => ({
+            label: m.name || "",
+            value: m.id.toString(),
+            typeId: Number(m.medicinetypeid) || 0,
+            typeName: typeMap.get(Number(m.medicinetypeid)) || "",
+          }))
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
     fetchMedicineCompanies();
     fetchFeeds();
+    fetchMedicines();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
