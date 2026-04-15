@@ -405,6 +405,30 @@ export default function NewInvoice() {
       }
     }
 
+    // 4) Insert feed line items
+    if (isFeed) {
+      const feedInsertRows = feedRows
+        .filter((r) => (parseFloat(r.weightKg) || 0) > 0)
+        .map((r, idx) => {
+          const calc = feedRowCalcs[idx];
+          const selectedFeed = feedOptions.find((f) => f.value === r.feedName);
+          return {
+            factor_id: factor.id,
+            feed_name: selectedFeed ? selectedFeed.label : r.feedName || null,
+            weight_kg: calc.wt,
+            moisture_loss: calc.moisture,
+            price_per_kg: calc.ppk,
+            row_total: calc.rowTotal,
+            description: r.description || null,
+          };
+        });
+
+      if (feedInsertRows.length > 0) {
+        const { error: feedError } = await supabase.from("feed_items").insert(feedInsertRows);
+        if (feedError) console.error("Feed items insert error:", feedError);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
