@@ -53,6 +53,26 @@ interface MilkRow {
   description: string | null;
 }
 
+interface FeedItemRow {
+  id: string;
+  feed_name: string | null;
+  weight_kg: number | null;
+  moisture_loss: number | null;
+  price_per_kg: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
+interface MedicineItemRow {
+  id: string;
+  medicine_name: string | null;
+  medicine_type: string | null;
+  quantity: number | null;
+  unit_price: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
