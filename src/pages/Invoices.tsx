@@ -390,7 +390,7 @@ export default function Invoices() {
       </div>
 
       {selectedFactor && (
-        <InvoiceDetail factor={selectedFactor} items={selectedItems} milkItems={selectedMilkItems} onClose={() => { setSelectedId(null); setSelectedItems([]); setSelectedMilkItems([]); }} />
+        <InvoiceDetail factor={selectedFactor} items={selectedItems} milkItems={selectedMilkItems} feedItems={selectedFeedItems} medicineItems={selectedMedicineItems} onClose={() => { setSelectedId(null); setSelectedItems([]); setSelectedMilkItems([]); setSelectedFeedItems([]); setSelectedMedicineItems([]); }} />
       )}
 
       {factors.length === 0 ? (
