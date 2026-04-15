@@ -157,7 +157,40 @@ export type Database = {
         }
         Relationships: []
       }
+      medicines: {
+        Row: {
+          id: number
+          medicinetypeid: number | null
+          name: string | null
+        }
+        Insert: {
+          id: number
+          medicinetypeid?: number | null
+          name?: string | null
+        }
+        Update: {
+          id?: number
+          medicinetypeid?: number | null
+          name?: string | null
+        }
+        Relationships: []
+      }
       medicineshoppingcenter: {
+        Row: {
+          id: number
+          name: string | null
+        }
+        Insert: {
+          id: number
+          name?: string | null
+        }
+        Update: {
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
+      }
+      medicinetypes: {
         Row: {
           id: number
           name: string | null
