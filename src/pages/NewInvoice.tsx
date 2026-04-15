@@ -262,9 +262,23 @@ export default function NewInvoice() {
     ? milkTotalProduct - milkDiscount + milkShipping + milkTaxAmount
     : milkTotalProduct + milkTaxAmount;
 
-  // Non-milk calculations (multi-row)
+  // Feed calculations (multi-row)
+  const feedRowCalcs = feedRows.map((r) => {
+    const wt = parseFloat(r.weightKg) || 0;
+    const moisture = parseFloat(r.moistureLoss) || 0;
+    const ppk = parseInt(r.pricePerKg) || 0;
+    const effectiveWeight = wt * (1 - moisture / 100);
+    const rowTotal = Math.round(effectiveWeight * ppk);
+    return { wt, moisture, effectiveWeight, ppk, rowTotal };
+  });
+  const feedTotalProduct = feedRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
+  // Non-milk/non-feed calculations (multi-row)
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
-  const totalProduct = rowTotals.reduce((a, b) => a + b, 0);
+  const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
+
+  // Unified total for non-milk
+  const totalProduct = isFeed ? feedTotalProduct : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -290,7 +304,8 @@ export default function NewInvoice() {
   const showSellerType = !isMilk && !!data.tax;
   const showCompany = showSellerType && data.sellerType === "company";
   const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
-  const hasValidRows = rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
+  const hasValidRows = isFeed ? hasFeedValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
