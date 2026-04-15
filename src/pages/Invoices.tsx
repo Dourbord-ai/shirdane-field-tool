@@ -344,11 +344,15 @@ export default function Invoices() {
       setSelectedId(null);
       setSelectedItems([]);
       setSelectedMilkItems([]);
+      setSelectedFeedItems([]);
+      setSelectedMedicineItems([]);
       return;
     }
     setSelectedId(id);
     setSelectedItems([]);
     setSelectedMilkItems([]);
+    setSelectedFeedItems([]);
+    setSelectedMedicineItems([]);
 
     const factor = factors.find((f) => f.id === id);
     if (factor?.product_type === "sperm") {
