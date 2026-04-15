@@ -124,7 +124,7 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, onC
     <div className="animate-fade-in">
       <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-card overflow-hidden">
         <div className="bg-primary/5 border-b border-primary/10 p-4 flex items-center justify-between">
-          <h2 className="text-body-lg font-bold text-foreground">جزئیات فاکتور</h2>
+          <h2 className="text-body-lg font-bold text-primary">جزئیات فاکتور</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-lg border border-border flex items-center justify-center transition-all duration-200 hover:bg-secondary hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)]"
