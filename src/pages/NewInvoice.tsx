@@ -190,8 +190,20 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchFeeds = async () => {
+      const { data: feeds } = await supabase.from("feeds").select("*").order("id");
+      if (feeds) {
+        setFeedOptions(
+          feeds.map((f) => ({
+            label: f.name || "",
+            value: f.id.toString(),
+          }))
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
+    fetchFeeds();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
