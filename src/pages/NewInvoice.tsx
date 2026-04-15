@@ -288,11 +288,32 @@ export default function NewInvoice() {
     setFeedRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Medicine row helpers
+  const updateMedicineRow = (rowId: string, field: keyof MedicineProductRow, value: string) => {
+    setMedicineRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const selectMedicine = (rowId: string, medicineValue: string) => {
+    const med = medicineOptions.find((m) => m.value === medicineValue);
+    setMedicineRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? { ...r, medicineName: medicineValue, medicineType: med?.typeName || "" }
+          : r
+      )
+    );
+  };
+  const addMedicineRow = () => setMedicineRows((prev) => [...prev, createMedicineRow()]);
+  const removeMedicineRow = (rowId: string) => {
+    if (medicineRows.length <= 1) return;
+    setMedicineRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
   const isSperm = data.productType === "sperm";
   const isFeed = data.productType === "feed";
+  const isMedicine = data.productType === "medicine";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
