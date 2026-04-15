@@ -150,7 +150,7 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, onC
             label="فروشنده/خریدار"
             value={
               factor.buyer_type === "company"
-                ? (companyLabels[factor.company || ""] || factor.company || "شرکت")
+                ? (factor.company || "شرکت")
                 : "شخص"
             }
           />
