@@ -113,19 +113,9 @@ interface InvoiceData {
   settlement: string;
   discount: string;
   shipping: string;
-  // Milk-specific
   deliveryDate: JalaliDate | null;
   isBuyerCompany: boolean;
   milkCompany: string;
-  quantityKg: string;
-  quantityLiter: string;
-  milkSample: string;
-  fat: string;
-  protein: string;
-  total: string;
-  somatic: string;
-  pricePerKg: string;
-  milkDescription: string;
 }
 
 const initial: InvoiceData = {
@@ -142,15 +132,6 @@ const initial: InvoiceData = {
   deliveryDate: null,
   isBuyerCompany: false,
   milkCompany: "",
-  quantityKg: "",
-  quantityLiter: "",
-  milkSample: "0.97",
-  fat: "",
-  protein: "",
-  total: "",
-  somatic: "",
-  pricePerKg: "",
-  milkDescription: "",
 };
 
 function formatRial(n: number): string {
