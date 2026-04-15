@@ -83,6 +83,62 @@ export type Database = {
         }
         Relationships: []
       }
+      milk: {
+        Row: {
+          created_at: string
+          description: string | null
+          factor_id: string
+          fat: number | null
+          id: string
+          milk_sample: number | null
+          price_per_kg: number | null
+          protein: number | null
+          quantity_kg: number | null
+          quantity_liter: number | null
+          row_total: number | null
+          somatic: number | null
+          total: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          factor_id: string
+          fat?: number | null
+          id?: string
+          milk_sample?: number | null
+          price_per_kg?: number | null
+          protein?: number | null
+          quantity_kg?: number | null
+          quantity_liter?: number | null
+          row_total?: number | null
+          somatic?: number | null
+          total?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          factor_id?: string
+          fat?: number | null
+          id?: string
+          milk_sample?: number | null
+          price_per_kg?: number | null
+          protein?: number | null
+          quantity_kg?: number | null
+          quantity_liter?: number | null
+          row_total?: number | null
+          somatic?: number | null
+          total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "milk_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spermbuy: {
         Row: {
           created_at: string

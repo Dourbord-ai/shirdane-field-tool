@@ -39,6 +39,20 @@ interface SpermBuyRow {
   description: string | null;
 }
 
+interface MilkRow {
+  id: string;
+  quantity_kg: number | null;
+  quantity_liter: number | null;
+  milk_sample: number | null;
+  fat: number | null;
+  protein: number | null;
+  total: number | null;
+  somatic: number | null;
+  price_per_kg: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
@@ -83,7 +97,7 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
   );
 }
 
-function InvoiceDetail({ factor, items, onClose }: { factor: FactorRow; items: SpermBuyRow[]; onClose: () => void }) {
+function InvoiceDetail({ factor, items, milkItems, onClose }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; onClose: () => void }) {
   const dateStr = factor.invoice_date ? toPersianDigits(factor.invoice_date) : "—";
 
   return (
@@ -149,6 +163,48 @@ function InvoiceDetail({ factor, items, onClose }: { factor: FactorRow; items: S
             </>
           )}
 
+          {/* Line items for milk */}
+          {factor.product_type === "milk" && milkItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور:</p>
+              {milkItems.map((item) => (
+                <div key={item.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">مقدار (کیلو)</span>
+                    <span className="text-foreground">{toPersianDigits(String(item.quantity_kg || 0))}</span>
+                  </div>
+                  {(item.quantity_liter || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">مقدار (لیتر)</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.quantity_liter || 0))}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">قیمت هر کیلو</span>
+                    <span className="text-foreground">{formatRial(item.price_per_kg || 0)}</span>
+                  </div>
+                  {(item.fat || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">چربی</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.fat))}</span>
+                    </div>
+                  )}
+                  {(item.protein || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">پروتئین</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.protein))}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="text-muted-foreground">جمع</span>
+                    <span className="text-foreground">{formatRial(item.row_total || 0)}</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
           <Separator className="my-2" />
 
           <DetailRow label="مبلغ کل" value={formatRial(factor.total_amount || 0)} />
@@ -178,6 +234,7 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<SpermBuyRow[]>([]);
+  const [selectedMilkItems, setSelectedMilkItems] = useState<MilkRow[]>([]);
 
   useEffect(() => {
     const fetchFactors = async () => {
@@ -198,9 +255,12 @@ export default function Invoices() {
     if (selectedId === id) {
       setSelectedId(null);
       setSelectedItems([]);
+      setSelectedMilkItems([]);
       return;
     }
     setSelectedId(id);
+    setSelectedItems([]);
+    setSelectedMilkItems([]);
 
     const factor = factors.find((f) => f.id === id);
     if (factor?.product_type === "sperm") {
@@ -209,8 +269,12 @@ export default function Invoices() {
         .select("*")
         .eq("factor_id", id);
       setSelectedItems((data as SpermBuyRow[]) || []);
-    } else {
-      setSelectedItems([]);
+    } else if (factor?.product_type === "milk") {
+      const { data } = await supabase
+        .from("milk")
+        .select("*")
+        .eq("factor_id", id);
+      setSelectedMilkItems((data as MilkRow[]) || []);
     }
   };
 
@@ -231,7 +295,7 @@ export default function Invoices() {
       </div>
 
       {selectedFactor && (
-        <InvoiceDetail factor={selectedFactor} items={selectedItems} onClose={() => { setSelectedId(null); setSelectedItems([]); }} />
+        <InvoiceDetail factor={selectedFactor} items={selectedItems} milkItems={selectedMilkItems} onClose={() => { setSelectedId(null); setSelectedItems([]); setSelectedMilkItems([]); }} />
       )}
 
       {factors.length === 0 ? (

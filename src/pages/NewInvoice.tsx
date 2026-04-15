@@ -291,6 +291,26 @@ export default function NewInvoice() {
       }
     }
 
+    // Insert milk line item
+    if (isMilk && quantityKg > 0) {
+      const { error: milkError } = await supabase.from("milk").insert({
+        factor_id: factor.id,
+        quantity_kg: quantityKg,
+        quantity_liter: autoLiter,
+        milk_sample: milkSample,
+        fat: parseFloat(data.fat) || 0,
+        protein: parseFloat(data.protein) || 0,
+        total: parseFloat(data.total) || 0,
+        somatic: parseFloat(data.somatic) || 0,
+        price_per_kg: milkPricePerKg,
+        row_total: milkTotal,
+        description: data.milkDescription || null,
+      });
+      if (milkError) {
+        console.error("Milk insert error:", milkError);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
