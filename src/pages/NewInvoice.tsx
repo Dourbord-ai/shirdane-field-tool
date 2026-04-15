@@ -229,10 +229,21 @@ export default function NewInvoice() {
     setMilkRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Feed row helpers
+  const updateFeedRow = (rowId: string, field: keyof FeedProductRow, value: string) => {
+    setFeedRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const addFeedRow = () => setFeedRows((prev) => [...prev, createFeedRow()]);
+  const removeFeedRow = (rowId: string) => {
+    if (feedRows.length <= 1) return;
+    setFeedRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
   const isSperm = data.productType === "sperm";
+  const isFeed = data.productType === "feed";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
