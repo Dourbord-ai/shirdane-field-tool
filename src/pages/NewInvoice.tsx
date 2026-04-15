@@ -220,29 +220,77 @@ export default function NewInvoice() {
   const hasValidRows = rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const finalTotal = isMilk ? milkTotal : totalProduct;
     const finalTax = isMilk ? milkTaxAmount : taxAmount;
     const finalPayable = isMilk ? milkPayable : payable;
+    const finalDiscount = isMilk ? milkDiscount : discount;
+    const finalShipping = isMilk ? milkShipping : shipping;
 
-    const invoices = JSON.parse(localStorage.getItem("shirdaneh_invoices") || "[]");
-    invoices.push({
-      ...data,
-      rows: isMilk ? [] : rows,
-      description: isMilk ? data.milkDescription : rows.map((r) => r.description).filter(Boolean).join(" | "),
-      spermCode: isSperm ? rows.map((r) => r.spermCode).join(",") : "",
-      quantity: isMilk ? "" : rows.reduce((a, r) => a + (parseInt(r.quantity) || 0), 0).toString(),
-      unitPrice: "",
-      quantityLiter: isMilk ? autoLiter.toString() : "",
-      totalProduct: finalTotal,
-      discount: isMilk ? milkDiscount : discount,
-      shipping: isMilk ? milkShipping : shipping,
-      taxAmount: finalTax,
-      payable: finalPayable,
-      createdAt: new Date().toISOString(),
-      id: Date.now().toString(),
-    });
-    localStorage.setItem("shirdaneh_invoices", JSON.stringify(invoices));
+    // Format dates to string
+    const formatDate = (d: JalaliDate | null) =>
+      d ? `${d.year}/${d.month}/${d.day}` : null;
+
+    // 1) Insert factor header
+    const { data: factor, error: factorError } = await supabase
+      .from("factors")
+      .insert({
+        product_type: data.productType,
+        invoice_type: data.invoiceType,
+        invoice_date: formatDate(data.date),
+        invoice_number: data.invoiceNumber || null,
+        delivery_date: formatDate(data.deliveryDate),
+        tax: data.tax || "ندارد",
+        buyer_type: isMilk
+          ? (data.isBuyerCompany ? "company" : "person")
+          : data.sellerType || null,
+        company: isMilk ? data.milkCompany : data.company || null,
+        discount: finalDiscount,
+        shipping: finalShipping,
+        tax_amount: finalTax,
+        total_amount: finalTotal,
+        payable_amount: finalPayable,
+        settlement_type: data.settlement || null,
+        settlement_date: null,
+        settlement_number: null,
+        description: isMilk
+          ? data.milkDescription
+          : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
+      })
+      .select()
+      .single();
+
+    if (factorError || !factor) {
+      console.error("Factor insert error:", factorError);
+      alert("خطا در ثبت فاکتور: " + (factorError?.message || "Unknown"));
+      return;
+    }
+
+    // 2) Insert line items into their respective table
+    if (isSperm && rows.length > 0) {
+      const spermRows = rows
+        .filter((r) => r.spermCode || (parseInt(r.quantity) || 0) > 0)
+        .map((r) => {
+          const selectedSperm = spermOptions.find((s) => s.value === r.spermCode);
+          return {
+            factor_id: factor.id,
+            sperm_code: selectedSperm ? selectedSperm.label.split(" - ")[0]?.trim() : r.spermCode,
+            sperm_name: selectedSperm ? selectedSperm.label.split(" - ")[1]?.trim() : null,
+            quantity: parseInt(r.quantity) || 0,
+            unit_price: parseInt(r.unitPrice) || 0,
+            row_total: (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0),
+            description: r.description || null,
+          };
+        });
+
+      if (spermRows.length > 0) {
+        const { error: itemsError } = await supabase.from("spermbuy").insert(spermRows);
+        if (itemsError) {
+          console.error("Spermbuy insert error:", itemsError);
+        }
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
