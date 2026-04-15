@@ -161,9 +161,11 @@ export default function NewInvoice() {
   const [data, setData] = useState<InvoiceData>(initial);
   const [rows, setRows] = useState<ProductRow[]>([createRow()]);
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
+  const [feedRows, setFeedRows] = useState<FeedProductRow[]>([createFeedRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+  const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
