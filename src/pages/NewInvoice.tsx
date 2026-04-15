@@ -506,6 +506,29 @@ export default function NewInvoice() {
       }
     }
 
+    // 5) Insert medicine line items
+    if (isMedicine) {
+      const medInsertRows = medicineRows
+        .filter((r) => (parseInt(r.quantity) || 0) > 0)
+        .map((r, idx) => {
+          const selectedMed = medicineOptions.find((m) => m.value === r.medicineName);
+          return {
+            factor_id: factor.id,
+            medicine_name: selectedMed ? selectedMed.label : r.medicineName || null,
+            medicine_type: r.medicineType || null,
+            quantity: parseInt(r.quantity) || 0,
+            unit_price: parseInt(r.unitPrice) || 0,
+            row_total: medicineRowTotals[idx],
+            description: r.description || null,
+          };
+        });
+
+      if (medInsertRows.length > 0) {
+        const { error: medError } = await supabase.from("medicine_items").insert(medInsertRows);
+        if (medError) console.error("Medicine items insert error:", medError);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
