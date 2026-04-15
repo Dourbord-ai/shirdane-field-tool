@@ -321,6 +321,8 @@ export default function Invoices() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<SpermBuyRow[]>([]);
   const [selectedMilkItems, setSelectedMilkItems] = useState<MilkRow[]>([]);
+  const [selectedFeedItems, setSelectedFeedItems] = useState<FeedItemRow[]>([]);
+  const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
 
   useEffect(() => {
     const fetchFactors = async () => {
