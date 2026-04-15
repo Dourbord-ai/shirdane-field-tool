@@ -234,6 +234,7 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<SpermBuyRow[]>([]);
+  const [selectedMilkItems, setSelectedMilkItems] = useState<MilkRow[]>([]);
 
   useEffect(() => {
     const fetchFactors = async () => {
