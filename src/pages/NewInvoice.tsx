@@ -343,12 +343,16 @@ export default function NewInvoice() {
   });
   const feedTotalProduct = feedRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
 
+  // Medicine calculations (multi-row)
+  const medicineRowTotals = medicineRows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
+  const medicineTotalProduct = medicineRowTotals.reduce((a, b) => a + b, 0);
+
   // Non-milk/non-feed calculations (multi-row)
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
 
   // Unified total for non-milk
-  const totalProduct = isFeed ? feedTotalProduct : genericTotalProduct;
+  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -375,7 +379,8 @@ export default function NewInvoice() {
   const showCompany = showSellerType && data.sellerType === "company";
   const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
   const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
-  const hasValidRows = isFeed ? hasFeedValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasMedicineValidRows = medicineRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasValidRows = isFeed ? hasFeedValidRows : isMedicine ? hasMedicineValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
