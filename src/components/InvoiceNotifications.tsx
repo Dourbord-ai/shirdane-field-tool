@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, X, Bell } from "lucide-react";
-import { toPersianDigits, jalaliMonthNames } from "@/lib/jalali";
+import { toPersianDigits } from "@/lib/jalali";
+import { supabase } from "@/integrations/supabase/client";
 
-interface StoredInvoice {
+interface FactorRow {
   id: string;
-  productType: string;
-  invoiceType: string;
-  date: { year: number; month: number; day: number } | null;
-  invoiceNumber: string;
-  payable: number;
-  createdAt: string;
-  settlement: string;
+  product_type: string;
+  invoice_type: string;
+  invoice_date: string | null;
+  invoice_number: string | null;
+  payable_amount: number | null;
+  created_at: string;
+  settlement_type: string | null;
 }
 
 const productLabels: Record<string, string> = {
@@ -46,7 +47,7 @@ function formatDateTime(dateStr: string): string {
 }
 
 interface SwipeCardProps {
-  invoice: StoredInvoice;
+  invoice: FactorRow;
   onDismiss: (id: string) => void;
 }
 
@@ -90,12 +91,10 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
       className={`relative overflow-hidden rounded-xl transition-all ${dismissed ? "opacity-0 max-h-0 mb-0 scale-95" : "opacity-100 max-h-40 mb-2"}`}
       style={{ transitionDuration: dismissed ? "300ms" : offset > 0 ? "0ms" : "300ms" }}
     >
-      {/* Background hint for swipe */}
       <div className="absolute inset-0 rounded-xl bg-purple-100 flex items-center px-4">
         <X className="w-5 h-5 text-purple-600" />
       </div>
 
-      {/* Card */}
       <div
         className="relative rounded-xl border border-purple-200/70 bg-gradient-to-l from-purple-50/50 to-white shadow-sm p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing select-none"
         style={{
@@ -111,7 +110,6 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
         onTouchMove={(e) => handleMove(e.touches[0].clientX)}
         onTouchEnd={handleEnd}
       >
-        {/* Left accent bar */}
         <div className="absolute right-0 top-2 bottom-2 w-1 rounded-full bg-purple-500" />
         
         <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0 mr-2">
@@ -120,20 +118,20 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
         <div className="min-w-0 flex-1 pl-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">
-              {productLabels[invoice.productType] || invoice.productType}
+              {productLabels[invoice.product_type] || invoice.product_type}
               {" — "}
-              {invoiceTypeLabels[invoice.invoiceType] || invoice.invoiceType}
+              {invoiceTypeLabels[invoice.invoice_type] || invoice.invoice_type}
             </p>
             <span className="text-[11px] text-purple-600/80 shrink-0 whitespace-nowrap font-medium" dir="rtl">
-              {formatDateTime(invoice.createdAt)}
+              {formatDateTime(invoice.created_at)}
             </span>
           </div>
           <div className="flex items-center justify-between mt-1">
             <span className="text-xs text-muted-foreground">
-              شماره: {toPersianDigits(invoice.invoiceNumber || "—")}
+              شماره: {toPersianDigits(invoice.invoice_number || "—")}
             </span>
             <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-              {toPersianDigits(invoice.payable?.toLocaleString("en-US") || "0")} ریال
+              {toPersianDigits((invoice.payable_amount ?? 0).toLocaleString("en-US"))} ریال
             </span>
           </div>
         </div>
@@ -144,18 +142,26 @@ function SwipeCard({ invoice, onDismiss }: SwipeCardProps) {
 
 export default function InvoiceNotifications() {
   const navigate = useNavigate();
-  const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
+  const [invoices, setInvoices] = useState<FactorRow[]>([]);
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     return JSON.parse(localStorage.getItem("shirdaneh_dismissed_notifs") || "[]");
   });
 
   useEffect(() => {
-    const stored: StoredInvoice[] = JSON.parse(localStorage.getItem("shirdaneh_invoices") || "[]");
-    const visible = stored
-      .reverse()
-      .filter((inv) => !dismissedIds.includes(inv.id))
-      .slice(0, 5);
-    setInvoices(visible);
+    const fetchFactors = async () => {
+      const { data, error } = await supabase
+        .from("factors")
+        .select("id, product_type, invoice_type, invoice_date, invoice_number, payable_amount, created_at, settlement_type")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (!error && data) {
+        const visible = data.filter((inv) => !dismissedIds.includes(inv.id)).slice(0, 5);
+        setInvoices(visible);
+      }
+    };
+
+    fetchFactors();
   }, [dismissedIds]);
 
   const handleDismiss = (id: string) => {
@@ -169,7 +175,6 @@ export default function InvoiceNotifications() {
 
   return (
     <div className="rounded-2xl bg-gradient-to-br from-purple-50/80 to-white border border-purple-200/60 shadow-sm p-4 space-y-2">
-      {/* Header with bell icon and purple styling */}
       <div className="flex items-center justify-between mb-3 pb-2 border-b border-purple-200/40">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
