@@ -14,7 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      sperms: {
+        Row: {
+          code: string | null
+          id: number
+          name: string | null
+        }
+        Insert: {
+          code?: string | null
+          id: number
+          name?: string | null
+        }
+        Update: {
+          code?: string | null
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
