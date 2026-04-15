@@ -736,74 +736,150 @@ export default function NewInvoice() {
           <div className="flex items-center justify-between">
             <h2 className="text-body font-bold text-foreground">اقلام فاکتور</h2>
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-              {toPersianDigits(rows.length.toString())} ردیف
+              {toPersianDigits((isFeed ? feedRows.length : rows.length).toString())} ردیف
             </span>
           </div>
 
-          <div className="space-y-3">
-            {rows.map((row, index) => (
-              <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
-                    ردیف {toPersianDigits((index + 1).toString())}
-                  </span>
-                  {rows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeRow(row.id)}
-                      className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      aria-label="حذف ردیف"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+          {/* ===== FEED ITEMS ===== */}
+          {isFeed ? (
+            <>
+              <div className="space-y-3">
+                {feedRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {feedRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFeedRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
 
-                {isSperm && (
-                  <SearchableSelect
-                    label="کد و نام اسپرم"
-                    options={spermOptions}
-                    value={row.spermCode}
-                    onChange={(v) => updateRow(row.id, "spermCode", v)}
-                    placeholder="انتخاب اسپرم..."
-                  />
-                )}
+                    <SearchableSelect
+                      label="نوع خوراک"
+                      options={feedOptions}
+                      value={row.feedName}
+                      onChange={(v) => updateFeedRow(row.id, "feedName", v)}
+                      placeholder="انتخاب نوع خوراک..."
+                    />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-foreground">تعداد</label>
-                    <Input type="number" value={row.quantity} onChange={(e) => updateRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">وزن به کیلوگرم</label>
+                        <Input type="number" value={row.weightKg} onChange={(e) => updateFeedRow(row.id, "weightKg", e.target.value)} placeholder="کیلوگرم..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">درصد افت رطوبت</label>
+                        <Input type="number" value={row.moistureLoss} onChange={(e) => updateFeedRow(row.id, "moistureLoss", e.target.value)} placeholder="درصد..." className="rounded-xl touch-target text-sm" min="0" max="100" step="0.1" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">قیمت هر کیلوگرم (ریال)</label>
+                      <Input type="number" value={row.pricePerKg} onChange={(e) => updateFeedRow(row.id, "pricePerKg", e.target.value)} placeholder="قیمت..." className="rounded-xl touch-target text-sm" min="0" />
+                    </div>
+
+                    {feedRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(feedRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateFeedRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
-                    <Input type="number" value={row.unitPrice} onChange={(e) => updateRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت واحد..." className="rounded-xl touch-target text-sm" min="0" />
-                  </div>
-                </div>
-
-                {rowTotals[index] > 0 && (
-                  <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
-                    <span className="text-xs text-muted-foreground">جمع ردیف</span>
-                    <span className="text-sm font-bold text-accent">{formatRial(rowTotals[index])}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-foreground">توضیحات</label>
-                  <Input value={row.description} onChange={(e) => updateRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={addRow}
-            className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
-          >
-            <Plus className="w-5 h-5" />
-            ردیف جدید
-          </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addFeedRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* ===== GENERIC (SPERM, etc.) ITEMS ===== */}
+              <div className="space-y-3">
+                {rows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {rows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {isSperm && (
+                      <SearchableSelect
+                        label="کد و نام اسپرم"
+                        options={spermOptions}
+                        value={row.spermCode}
+                        onChange={(v) => updateRow(row.id, "spermCode", v)}
+                        placeholder="انتخاب اسپرم..."
+                      />
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد</label>
+                        <Input type="number" value={row.quantity} onChange={(e) => updateRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
+                        <Input type="number" value={row.unitPrice} onChange={(e) => updateRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت واحد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {rowTotals[index] > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(rowTotals[index])}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          )}
 
           {totalProduct > 0 && (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
