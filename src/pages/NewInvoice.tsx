@@ -458,6 +458,7 @@ export default function NewInvoice() {
           setData({ ...initial, productType: v });
           setRows([createRow()]);
           setMilkRows([createMilkRow()]);
+          setFeedRows([createFeedRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
