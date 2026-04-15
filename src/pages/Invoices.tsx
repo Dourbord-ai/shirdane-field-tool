@@ -225,6 +225,72 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, onC
             </>
           )}
 
+          {/* Line items for feed */}
+          {factor.product_type === "feed" && feedItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور:</p>
+              {feedItems.map((item, idx) => (
+                <div key={item.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                    <span className="font-medium text-foreground">{item.feed_name || "—"}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">وزن (کیلوگرم)</span>
+                    <span className="text-foreground">{toPersianDigits(String(item.weight_kg || 0))}</span>
+                  </div>
+                  {(item.moisture_loss || 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">افت رطوبت</span>
+                      <span className="text-foreground">{toPersianDigits(String(item.moisture_loss))}٪</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">قیمت هر کیلو</span>
+                    <span className="text-foreground">{formatRial(item.price_per_kg || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="text-muted-foreground">جمع ردیف</span>
+                    <span className="text-foreground">{formatRial(item.row_total || 0)}</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Line items for medicine */}
+          {factor.product_type === "medicine" && medicineItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور:</p>
+              {medicineItems.map((item, idx) => (
+                <div key={item.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                    <span className="font-medium text-foreground">{item.medicine_name || "—"}</span>
+                  </div>
+                  {item.medicine_type && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">نوع دارو</span>
+                      <span className="text-primary font-medium">{item.medicine_type}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">تعداد × قیمت واحد</span>
+                    <span className="text-foreground">
+                      {toPersianDigits(String(item.quantity || 0))} × {formatRial(item.unit_price || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="text-muted-foreground">جمع ردیف</span>
+                    <span className="text-foreground">{formatRial(item.row_total || 0)}</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
           <Separator className="my-2" />
 
           <DetailRow label="مبلغ کل" value={formatRial(factor.total_amount || 0)} />
