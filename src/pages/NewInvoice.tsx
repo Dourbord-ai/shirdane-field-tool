@@ -406,7 +406,11 @@ export default function NewInvoice() {
         buyer_type: isMilk
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
-        company: isMilk ? data.milkCompany : data.company || null,
+        company: isMilk ? data.milkCompany : (() => {
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : companyList;
+          const found = allCompanies.find((c) => c.value === data.company);
+          return found ? found.label : data.company || null;
+        })(),
         discount: finalDiscount,
         shipping: finalShipping,
         tax_amount: finalTax,
