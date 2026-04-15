@@ -97,7 +97,7 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
   );
 }
 
-function InvoiceDetail({ factor, items, onClose }: { factor: FactorRow; items: SpermBuyRow[]; onClose: () => void }) {
+function InvoiceDetail({ factor, items, milkItems, onClose }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; onClose: () => void }) {
   const dateStr = factor.invoice_date ? toPersianDigits(factor.invoice_date) : "—";
 
   return (
