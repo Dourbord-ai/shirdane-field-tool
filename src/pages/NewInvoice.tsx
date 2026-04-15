@@ -848,7 +848,7 @@ export default function NewInvoice() {
           <div className="flex items-center justify-between">
             <h2 className="text-body font-bold text-foreground">اقلام فاکتور</h2>
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-              {toPersianDigits((isFeed ? feedRows.length : rows.length).toString())} ردیف
+              {toPersianDigits((isFeed ? feedRows.length : isMedicine ? medicineRows.length : rows.length).toString())} ردیف
             </span>
           </div>
 
