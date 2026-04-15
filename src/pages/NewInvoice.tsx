@@ -640,7 +640,7 @@ export default function NewInvoice() {
 
       {showCompany && (
         <div className="animate-fade-in">
-          <SearchableSelect label="لیست شرکت‌ها" options={companyList} value={data.company} onChange={(v) => set("company", v)} placeholder="انتخاب شرکت..." />
+          <SearchableSelect label="لیست شرکت‌ها" options={data.productType === "feed" ? feedCompanyOptions : companyList} value={data.company} onChange={(v) => set("company", v)} placeholder="انتخاب شرکت..." />
         </div>
       )}
 
