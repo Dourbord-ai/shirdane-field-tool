@@ -78,6 +78,24 @@ const createRow = (): ProductRow => ({
   description: "",
 });
 
+interface FeedProductRow {
+  id: string;
+  feedName: string;
+  weightKg: string;
+  moistureLoss: string;
+  pricePerKg: string;
+  description: string;
+}
+
+const createFeedRow = (): FeedProductRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  feedName: "",
+  weightKg: "",
+  moistureLoss: "",
+  pricePerKg: "",
+  description: "",
+});
+
 interface MilkProductRow {
   id: string;
   quantityKg: string;
@@ -143,9 +161,11 @@ export default function NewInvoice() {
   const [data, setData] = useState<InvoiceData>(initial);
   const [rows, setRows] = useState<ProductRow[]>([createRow()]);
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
+  const [feedRows, setFeedRows] = useState<FeedProductRow[]>([createFeedRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+  const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
@@ -170,8 +190,20 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchFeeds = async () => {
+      const { data: feeds } = await supabase.from("feeds").select("*").order("id");
+      if (feeds) {
+        setFeedOptions(
+          feeds.map((f) => ({
+            label: f.name || "",
+            value: f.id.toString(),
+          }))
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
+    fetchFeeds();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
@@ -197,10 +229,21 @@ export default function NewInvoice() {
     setMilkRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Feed row helpers
+  const updateFeedRow = (rowId: string, field: keyof FeedProductRow, value: string) => {
+    setFeedRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const addFeedRow = () => setFeedRows((prev) => [...prev, createFeedRow()]);
+  const removeFeedRow = (rowId: string) => {
+    if (feedRows.length <= 1) return;
+    setFeedRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
   const isSperm = data.productType === "sperm";
+  const isFeed = data.productType === "feed";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
@@ -219,9 +262,23 @@ export default function NewInvoice() {
     ? milkTotalProduct - milkDiscount + milkShipping + milkTaxAmount
     : milkTotalProduct + milkTaxAmount;
 
-  // Non-milk calculations (multi-row)
+  // Feed calculations (multi-row)
+  const feedRowCalcs = feedRows.map((r) => {
+    const wt = parseFloat(r.weightKg) || 0;
+    const moisture = parseFloat(r.moistureLoss) || 0;
+    const ppk = parseInt(r.pricePerKg) || 0;
+    const effectiveWeight = wt * (1 - moisture / 100);
+    const rowTotal = Math.round(effectiveWeight * ppk);
+    return { wt, moisture, effectiveWeight, ppk, rowTotal };
+  });
+  const feedTotalProduct = feedRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
+  // Non-milk/non-feed calculations (multi-row)
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
-  const totalProduct = rowTotals.reduce((a, b) => a + b, 0);
+  const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
+
+  // Unified total for non-milk
+  const totalProduct = isFeed ? feedTotalProduct : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -247,7 +304,8 @@ export default function NewInvoice() {
   const showSellerType = !isMilk && !!data.tax;
   const showCompany = showSellerType && data.sellerType === "company";
   const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
-  const hasValidRows = rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
+  const hasValidRows = isFeed ? hasFeedValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
@@ -284,6 +342,8 @@ export default function NewInvoice() {
         settlement_number: null,
         description: isMilk
           ? milkRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isFeed
+          ? feedRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
@@ -345,6 +405,30 @@ export default function NewInvoice() {
       }
     }
 
+    // 4) Insert feed line items
+    if (isFeed) {
+      const feedInsertRows = feedRows
+        .filter((r) => (parseFloat(r.weightKg) || 0) > 0)
+        .map((r, idx) => {
+          const calc = feedRowCalcs[idx];
+          const selectedFeed = feedOptions.find((f) => f.value === r.feedName);
+          return {
+            factor_id: factor.id,
+            feed_name: selectedFeed ? selectedFeed.label : r.feedName || null,
+            weight_kg: calc.wt,
+            moisture_loss: calc.moisture,
+            price_per_kg: calc.ppk,
+            row_total: calc.rowTotal,
+            description: r.description || null,
+          };
+        });
+
+      if (feedInsertRows.length > 0) {
+        const { error: feedError } = await supabase.from("feed_items").insert(feedInsertRows);
+        if (feedError) console.error("Feed items insert error:", feedError);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
@@ -374,6 +458,7 @@ export default function NewInvoice() {
           setData({ ...initial, productType: v });
           setRows([createRow()]);
           setMilkRows([createMilkRow()]);
+          setFeedRows([createFeedRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
@@ -651,74 +736,150 @@ export default function NewInvoice() {
           <div className="flex items-center justify-between">
             <h2 className="text-body font-bold text-foreground">اقلام فاکتور</h2>
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-              {toPersianDigits(rows.length.toString())} ردیف
+              {toPersianDigits((isFeed ? feedRows.length : rows.length).toString())} ردیف
             </span>
           </div>
 
-          <div className="space-y-3">
-            {rows.map((row, index) => (
-              <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
-                    ردیف {toPersianDigits((index + 1).toString())}
-                  </span>
-                  {rows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeRow(row.id)}
-                      className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      aria-label="حذف ردیف"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+          {/* ===== FEED ITEMS ===== */}
+          {isFeed ? (
+            <>
+              <div className="space-y-3">
+                {feedRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {feedRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFeedRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
 
-                {isSperm && (
-                  <SearchableSelect
-                    label="کد و نام اسپرم"
-                    options={spermOptions}
-                    value={row.spermCode}
-                    onChange={(v) => updateRow(row.id, "spermCode", v)}
-                    placeholder="انتخاب اسپرم..."
-                  />
-                )}
+                    <SearchableSelect
+                      label="نوع خوراک"
+                      options={feedOptions}
+                      value={row.feedName}
+                      onChange={(v) => updateFeedRow(row.id, "feedName", v)}
+                      placeholder="انتخاب نوع خوراک..."
+                    />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-foreground">تعداد</label>
-                    <Input type="number" value={row.quantity} onChange={(e) => updateRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">وزن به کیلوگرم</label>
+                        <Input type="number" value={row.weightKg} onChange={(e) => updateFeedRow(row.id, "weightKg", e.target.value)} placeholder="کیلوگرم..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">درصد افت رطوبت</label>
+                        <Input type="number" value={row.moistureLoss} onChange={(e) => updateFeedRow(row.id, "moistureLoss", e.target.value)} placeholder="درصد..." className="rounded-xl touch-target text-sm" min="0" max="100" step="0.1" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">قیمت هر کیلوگرم (ریال)</label>
+                      <Input type="number" value={row.pricePerKg} onChange={(e) => updateFeedRow(row.id, "pricePerKg", e.target.value)} placeholder="قیمت..." className="rounded-xl touch-target text-sm" min="0" />
+                    </div>
+
+                    {feedRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(feedRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateFeedRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
-                    <Input type="number" value={row.unitPrice} onChange={(e) => updateRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت واحد..." className="rounded-xl touch-target text-sm" min="0" />
-                  </div>
-                </div>
-
-                {rowTotals[index] > 0 && (
-                  <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
-                    <span className="text-xs text-muted-foreground">جمع ردیف</span>
-                    <span className="text-sm font-bold text-accent">{formatRial(rowTotals[index])}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-foreground">توضیحات</label>
-                  <Input value={row.description} onChange={(e) => updateRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={addRow}
-            className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
-          >
-            <Plus className="w-5 h-5" />
-            ردیف جدید
-          </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addFeedRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* ===== GENERIC (SPERM, etc.) ITEMS ===== */}
+              <div className="space-y-3">
+                {rows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {rows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {isSperm && (
+                      <SearchableSelect
+                        label="کد و نام اسپرم"
+                        options={spermOptions}
+                        value={row.spermCode}
+                        onChange={(v) => updateRow(row.id, "spermCode", v)}
+                        placeholder="انتخاب اسپرم..."
+                      />
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد</label>
+                        <Input type="number" value={row.quantity} onChange={(e) => updateRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
+                        <Input type="number" value={row.unitPrice} onChange={(e) => updateRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت واحد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {rowTotals[index] > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(rowTotals[index])}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          )}
 
           {totalProduct > 0 && (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
