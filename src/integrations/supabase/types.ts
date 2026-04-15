@@ -14,6 +14,119 @@ export type Database = {
   }
   public: {
     Tables: {
+      factors: {
+        Row: {
+          buyer_type: string | null
+          company: string | null
+          created_at: string
+          delivery_date: string | null
+          description: string | null
+          discount: number | null
+          id: string
+          invoice_date: string | null
+          invoice_number: string | null
+          invoice_type: string
+          payable_amount: number | null
+          product_type: string
+          settlement_date: string | null
+          settlement_number: string | null
+          settlement_type: string | null
+          shipping: number | null
+          tax: string | null
+          tax_amount: number | null
+          total_amount: number | null
+          updated_at: string
+        }
+        Insert: {
+          buyer_type?: string | null
+          company?: string | null
+          created_at?: string
+          delivery_date?: string | null
+          description?: string | null
+          discount?: number | null
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          invoice_type: string
+          payable_amount?: number | null
+          product_type: string
+          settlement_date?: string | null
+          settlement_number?: string | null
+          settlement_type?: string | null
+          shipping?: number | null
+          tax?: string | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Update: {
+          buyer_type?: string | null
+          company?: string | null
+          created_at?: string
+          delivery_date?: string | null
+          description?: string | null
+          discount?: number | null
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          invoice_type?: string
+          payable_amount?: number | null
+          product_type?: string
+          settlement_date?: string | null
+          settlement_number?: string | null
+          settlement_type?: string | null
+          shipping?: number | null
+          tax?: string | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      spermbuy: {
+        Row: {
+          created_at: string
+          description: string | null
+          factor_id: string
+          id: string
+          quantity: number | null
+          row_total: number | null
+          sperm_code: string | null
+          sperm_name: string | null
+          unit_price: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          factor_id: string
+          id?: string
+          quantity?: number | null
+          row_total?: number | null
+          sperm_code?: string | null
+          sperm_name?: string | null
+          unit_price?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          factor_id?: string
+          id?: string
+          quantity?: number | null
+          row_total?: number | null
+          sperm_code?: string | null
+          sperm_name?: string | null
+          unit_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spermbuy_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sperms: {
         Row: {
           code: string | null
