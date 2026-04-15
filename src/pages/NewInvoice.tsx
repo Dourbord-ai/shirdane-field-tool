@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, toPersianDigits } from "@/lib/jalali";
 import { Separator } from "@/components/ui/separator";
+import { supabase } from "@/integrations/supabase/client";
+import { Plus, Trash2 } from "lucide-react";
 
 // ---- static data ----
 const productTypes = [
@@ -53,18 +55,28 @@ const milkCompanyList = [
   { label: "پگاه + رامک", value: "pegah_ramak" },
 ];
 
-const spermCodes = [
-  { label: "Trivia", value: "trivia" },
-  { label: "Kio", value: "kio" },
-  { label: "Sahara", value: "sahara" },
-];
-
 const settlementTypes = [
   { label: "نقدی", value: "cash" },
   { label: "پس پرداخت", value: "deferred" },
   { label: "چک", value: "cheque" },
   { label: "نقد - پس چک", value: "cash_cheque" },
 ];
+
+interface ProductRow {
+  id: string;
+  spermCode: string;
+  quantity: string;
+  unitPrice: string;
+  description: string;
+}
+
+const createRow = (): ProductRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  spermCode: "",
+  quantity: "",
+  unitPrice: "",
+  description: "",
+});
 
 interface InvoiceData {
   productType: string;
@@ -74,10 +86,6 @@ interface InvoiceData {
   tax: string;
   sellerType: string;
   company: string;
-  spermCode: string;
-  quantity: string;
-  unitPrice: string;
-  description: string;
   settlement: string;
   discount: string;
   shipping: string;
@@ -93,6 +101,7 @@ interface InvoiceData {
   total: string;
   somatic: string;
   pricePerKg: string;
+  milkDescription: string;
 }
 
 const initial: InvoiceData = {
@@ -103,10 +112,6 @@ const initial: InvoiceData = {
   tax: "",
   sellerType: "",
   company: "",
-  spermCode: "",
-  quantity: "",
-  unitPrice: "",
-  description: "",
   settlement: "",
   discount: "",
   shipping: "",
@@ -121,6 +126,7 @@ const initial: InvoiceData = {
   total: "",
   somatic: "",
   pricePerKg: "",
+  milkDescription: "",
 };
 
 function formatRial(n: number): string {
@@ -130,14 +136,46 @@ function formatRial(n: number): string {
 export default function NewInvoice() {
   const navigate = useNavigate();
   const [data, setData] = useState<InvoiceData>(initial);
+  const [rows, setRows] = useState<ProductRow[]>([createRow()]);
   const [submitted, setSubmitted] = useState(false);
+  const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
+
+  // Fetch sperms from Supabase
+  useEffect(() => {
+    const fetchSperms = async () => {
+      const { data: sperms } = await supabase.from("sperms").select("*").order("id");
+      if (sperms) {
+        setSpermOptions(
+          sperms.map((s) => ({
+            label: `${s.code || ""} - ${s.name || ""}`.trim(),
+            value: s.id.toString(),
+          }))
+        );
+      }
+    };
+    fetchSperms();
+  }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
     setData((prev) => ({ ...prev, [key]: val }));
 
+  const updateRow = (rowId: string, field: keyof ProductRow, value: string) => {
+    setRows((prev) =>
+      prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r))
+    );
+  };
+
+  const addRow = () => setRows((prev) => [...prev, createRow()]);
+
+  const removeRow = (rowId: string) => {
+    if (rows.length <= 1) return;
+    setRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
+  const isSperm = data.productType === "sperm";
 
   // Auto-calculate liter from kg using sample
   const milkSample = parseFloat(data.milkSample) || 0.97;
@@ -152,15 +190,13 @@ export default function NewInvoice() {
     ? milkTotal - milkDiscount + milkShipping + milkTaxAmount
     : milkTotal + milkTaxAmount;
 
-  // Non-milk calculations
-  const qty = parseInt(data.quantity) || 0;
-  const unitP = parseInt(data.unitPrice) || 0;
-  const totalProduct = qty * unitP;
+  // Non-milk calculations (multi-row)
+  const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
+  const totalProduct = rowTotals.reduce((a, b) => a + b, 0);
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
-  const subtotal = totalProduct;
-  const taxAmount = data.tax === "yes" ? Math.round(subtotal * 0.1) : 0;
-  const payable = subtotal - discount + shipping + taxAmount;
+  const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
+  const payable = totalProduct - discount + shipping + taxAmount;
 
   const invoiceTypes = data.productType ? (invoiceTypesMap[data.productType] || []) : [];
 
@@ -181,7 +217,8 @@ export default function NewInvoice() {
   const showSellerType = !isMilk && !!data.tax;
   const showCompany = showSellerType && data.sellerType === "company";
   const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
-  const showPreview = showProductDetails && !!data.settlement && qty > 0 && unitP > 0;
+  const hasValidRows = rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = () => {
     const finalTotal = isMilk ? milkTotal : totalProduct;
@@ -191,10 +228,15 @@ export default function NewInvoice() {
     const invoices = JSON.parse(localStorage.getItem("shirdaneh_invoices") || "[]");
     invoices.push({
       ...data,
+      rows: isMilk ? [] : rows,
+      description: isMilk ? data.milkDescription : rows.map((r) => r.description).filter(Boolean).join(" | "),
+      spermCode: isSperm ? rows.map((r) => r.spermCode).join(",") : "",
+      quantity: isMilk ? "" : rows.reduce((a, r) => a + (parseInt(r.quantity) || 0), 0).toString(),
+      unitPrice: "",
       quantityLiter: isMilk ? autoLiter.toString() : "",
       totalProduct: finalTotal,
-      discount: isMilk ? 0 : discount,
-      shipping: isMilk ? 0 : shipping,
+      discount: isMilk ? milkDiscount : discount,
+      shipping: isMilk ? milkShipping : shipping,
       taxAmount: finalTax,
       payable: finalPayable,
       createdAt: new Date().toISOString(),
@@ -228,6 +270,7 @@ export default function NewInvoice() {
         value={data.productType}
         onChange={(v) => {
           setData({ ...initial, productType: v });
+          setRows([createRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
@@ -346,7 +389,6 @@ export default function NewInvoice() {
           {/* Milk Receipt only fields */}
           {isMilkReceipt && (
             <>
-              {/* Quantity Liter - auto */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">مقدار به لیتر</label>
                 <div className="flex gap-2 items-center">
@@ -370,59 +412,21 @@ export default function NewInvoice() {
                 </div>
               </div>
 
-              {/* Fat */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">چربی</label>
-                <Input
-                  type="number"
-                  value={data.fat}
-                  onChange={(e) => set("fat", e.target.value)}
-                  placeholder="درصد چربی..."
-                  className="rounded-xl touch-target"
-                  step="0.01"
-                  min="0"
-                />
+                <Input type="number" value={data.fat} onChange={(e) => set("fat", e.target.value)} placeholder="درصد چربی..." className="rounded-xl touch-target" step="0.01" min="0" />
               </div>
-
-              {/* Protein */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">پروتئین</label>
-                <Input
-                  type="number"
-                  value={data.protein}
-                  onChange={(e) => set("protein", e.target.value)}
-                  placeholder="درصد پروتئین..."
-                  className="rounded-xl touch-target"
-                  step="0.01"
-                  min="0"
-                />
+                <Input type="number" value={data.protein} onChange={(e) => set("protein", e.target.value)} placeholder="درصد پروتئین..." className="rounded-xl touch-target" step="0.01" min="0" />
               </div>
-
-              {/* Total */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">توتال</label>
-                <Input
-                  type="number"
-                  value={data.total}
-                  onChange={(e) => set("total", e.target.value)}
-                  placeholder="توتال..."
-                  className="rounded-xl touch-target"
-                  step="0.01"
-                  min="0"
-                />
+                <Input type="number" value={data.total} onChange={(e) => set("total", e.target.value)} placeholder="توتال..." className="rounded-xl touch-target" step="0.01" min="0" />
               </div>
-
-              {/* Somatic */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">سماتیک</label>
-                <Input
-                  type="number"
-                  value={data.somatic}
-                  onChange={(e) => set("somatic", e.target.value)}
-                  placeholder="سماتیک..."
-                  className="rounded-xl touch-target"
-                  min="0"
-                />
+                <Input type="number" value={data.somatic} onChange={(e) => set("somatic", e.target.value)} placeholder="سماتیک..." className="rounded-xl touch-target" min="0" />
               </div>
             </>
           )}
@@ -430,17 +434,9 @@ export default function NewInvoice() {
           {/* Price per KG */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">قیمت هر کیلو ریال</label>
-            <Input
-              type="number"
-              value={data.pricePerKg}
-              onChange={(e) => set("pricePerKg", e.target.value)}
-              placeholder="قیمت هر کیلو..."
-              className="rounded-xl touch-target"
-              min="0"
-            />
+            <Input type="number" value={data.pricePerKg} onChange={(e) => set("pricePerKg", e.target.value)} placeholder="قیمت هر کیلو..." className="rounded-xl touch-target" min="0" />
           </div>
 
-          {/* Auto total */}
           {quantityKg > 0 && milkPricePerKg > 0 && (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <div className="flex justify-between items-center">
@@ -450,25 +446,12 @@ export default function NewInvoice() {
             </div>
           )}
 
-          {/* Description */}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">توضیحات</label>
-            <Textarea
-              value={data.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="توضیحات اضافی..."
-              className="rounded-xl min-h-[80px]"
-            />
+            <Textarea value={data.milkDescription} onChange={(e) => set("milkDescription", e.target.value)} placeholder="توضیحات اضافی..." className="rounded-xl min-h-[80px]" />
           </div>
 
-          {/* Settlement */}
-          <SearchableSelect
-            label="نحوه تسویه"
-            options={settlementTypes}
-            value={data.settlement}
-            onChange={(v) => set("settlement", v)}
-            placeholder="نوع تسویه..."
-          />
+          <SearchableSelect label="نحوه تسویه" options={settlementTypes} value={data.settlement} onChange={(v) => set("settlement", v)} placeholder="نوع تسویه..." />
         </div>
       )}
 
@@ -477,52 +460,27 @@ export default function NewInvoice() {
         <div className="animate-fade-in space-y-4 mt-6">
           <Separator />
           <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-card p-5 space-y-4">
-            <h2 className="text-body-lg font-bold text-foreground text-center border-b border-border pb-3">
-              پیش‌نمایش فاکتور
-            </h2>
+            <h2 className="text-body-lg font-bold text-foreground text-center border-b border-border pb-3">پیش‌نمایش فاکتور</h2>
             <div className="space-y-3 text-sm">
               <Row label="مبلغ کل فاکتور" value={formatRial(milkTotal)} />
-
               {isMilkRetail && (
                 <>
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-foreground">تخفیف (ریال)</label>
-                    <Input
-                      type="number"
-                      value={data.discount}
-                      onChange={(e) => set("discount", e.target.value)}
-                      placeholder="۰"
-                      className="rounded-xl touch-target"
-                      min="0"
-                    />
+                    <Input type="number" value={data.discount} onChange={(e) => set("discount", e.target.value)} placeholder="۰" className="rounded-xl touch-target" min="0" />
                   </div>
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-foreground">کرایه حمل و نقل (ریال)</label>
-                    <Input
-                      type="number"
-                      value={data.shipping}
-                      onChange={(e) => set("shipping", e.target.value)}
-                      placeholder="۰"
-                      className="rounded-xl touch-target"
-                      min="0"
-                    />
+                    <Input type="number" value={data.shipping} onChange={(e) => set("shipping", e.target.value)} placeholder="۰" className="rounded-xl touch-target" min="0" />
                   </div>
                 </>
               )}
-
-              {data.tax === "yes" && (
-                <Row label="مبلغ مالیات (۱۰٪)" value={formatRial(milkTaxAmount)} highlight />
-              )}
+              {data.tax === "yes" && <Row label="مبلغ مالیات (۱۰٪)" value={formatRial(milkTaxAmount)} highlight />}
               <Separator />
               <Row label="مبلغ قابل پرداخت" value={formatRial(milkPayable)} bold />
             </div>
           </div>
-
-          <Button
-            onClick={handleSubmit}
-            className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
-            size="lg"
-          >
+          <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
             ثبت نهایی
           </Button>
         </div>
@@ -531,25 +489,13 @@ export default function NewInvoice() {
       {/* ===== NON-MILK FLOW ===== */}
       {showSellerType && (
         <div className="animate-fade-in">
-          <SearchableSelect
-            label="فروشنده"
-            options={sellerTypeOptions}
-            value={data.sellerType}
-            onChange={(v) => { set("sellerType", v); set("company", ""); }}
-            placeholder="نوع فروشنده..."
-          />
+          <SearchableSelect label="فروشنده" options={sellerTypeOptions} value={data.sellerType} onChange={(v) => { set("sellerType", v); set("company", ""); }} placeholder="نوع فروشنده..." />
         </div>
       )}
 
       {showCompany && (
         <div className="animate-fade-in">
-          <SearchableSelect
-            label="لیست شرکت‌ها"
-            options={companyList}
-            value={data.company}
-            onChange={(v) => set("company", v)}
-            placeholder="انتخاب شرکت..."
-          />
+          <SearchableSelect label="لیست شرکت‌ها" options={companyList} value={data.company} onChange={(v) => set("company", v)} placeholder="انتخاب شرکت..." />
         </div>
       )}
 
@@ -557,64 +503,120 @@ export default function NewInvoice() {
         <div className="animate-fade-in space-y-4">
           <Separator />
 
-          {data.productType === "sperm" && (
-            <SearchableSelect
-              label="کد و نام اسپرم"
-              options={spermCodes}
-              value={data.spermCode}
-              onChange={(v) => set("spermCode", v)}
-              placeholder="انتخاب اسپرم..."
-            />
+          {/* Product rows header */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-body font-bold text-foreground">اقلام فاکتور</h2>
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
+              {toPersianDigits(rows.length.toString())} ردیف
+            </span>
+          </div>
+
+          {/* Product rows */}
+          <div className="space-y-3">
+            {rows.map((row, index) => (
+              <div
+                key={row.id}
+                className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative"
+              >
+                {/* Row header */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                    ردیف {toPersianDigits((index + 1).toString())}
+                  </span>
+                  {rows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRow(row.id)}
+                      className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      aria-label="حذف ردیف"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Sperm code select */}
+                {isSperm && (
+                  <SearchableSelect
+                    label="کد و نام اسپرم"
+                    options={spermOptions}
+                    value={row.spermCode}
+                    onChange={(v) => updateRow(row.id, "spermCode", v)}
+                    placeholder="انتخاب اسپرم..."
+                  />
+                )}
+
+                {/* Quantity & Unit price side by side on mobile */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-foreground">تعداد</label>
+                    <Input
+                      type="number"
+                      value={row.quantity}
+                      onChange={(e) => updateRow(row.id, "quantity", e.target.value)}
+                      placeholder="تعداد..."
+                      className="rounded-xl touch-target text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
+                    <Input
+                      type="number"
+                      value={row.unitPrice}
+                      onChange={(e) => updateRow(row.id, "unitPrice", e.target.value)}
+                      placeholder="قیمت واحد..."
+                      className="rounded-xl touch-target text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                {/* Row total */}
+                {rowTotals[index] > 0 && (
+                  <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                    <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                    <span className="text-sm font-bold text-accent">{formatRial(rowTotals[index])}</span>
+                  </div>
+                )}
+
+                {/* Description */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                  <Input
+                    value={row.description}
+                    onChange={(e) => updateRow(row.id, "description", e.target.value)}
+                    placeholder="توضیحات ردیف..."
+                    className="rounded-xl touch-target text-sm"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add row button */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addRow}
+            className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+          >
+            <Plus className="w-5 h-5" />
+            ردیف جدید
+          </Button>
+
+          {/* Grand total of all rows */}
+          {totalProduct > 0 && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">قیمت کل</span>
+                <span className="text-body-lg font-bold text-primary">{formatRial(totalProduct)}</span>
+              </div>
+            </div>
           )}
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">تعداد</label>
-            <Input
-              type="number"
-              value={data.quantity}
-              onChange={(e) => set("quantity", e.target.value)}
-              placeholder="تعداد..."
-              className="rounded-xl touch-target"
-              min="0"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">قیمت واحد به ریال</label>
-            <Input
-              type="number"
-              value={data.unitPrice}
-              onChange={(e) => set("unitPrice", e.target.value)}
-              placeholder="قیمت واحد..."
-              className="rounded-xl touch-target"
-              min="0"
-            />
-          </div>
-
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">قیمت کل</span>
-              <span className="text-body-lg font-bold text-primary">{formatRial(totalProduct)}</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-foreground">توضیحات</label>
-            <Textarea
-              value={data.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="توضیحات اضافی..."
-              className="rounded-xl min-h-[80px]"
-            />
-          </div>
-
-          <SearchableSelect
-            label="نوع تسویه"
-            options={settlementTypes}
-            value={data.settlement}
-            onChange={(v) => set("settlement", v)}
-            placeholder="نوع تسویه..."
-          />
+          {/* Settlement */}
+          <SearchableSelect label="نوع تسویه" options={settlementTypes} value={data.settlement} onChange={(v) => set("settlement", v)} placeholder="نوع تسویه..." />
         </div>
       )}
 
@@ -623,46 +625,23 @@ export default function NewInvoice() {
         <div className="animate-fade-in space-y-4 mt-6">
           <Separator />
           <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-card p-5 space-y-4">
-            <h2 className="text-body-lg font-bold text-foreground text-center border-b border-border pb-3">
-              پیش‌نمایش فاکتور
-            </h2>
+            <h2 className="text-body-lg font-bold text-foreground text-center border-b border-border pb-3">پیش‌نمایش فاکتور</h2>
             <div className="space-y-3 text-sm">
-              <Row label="مبلغ کل فاکتور" value={formatRial(subtotal)} />
+              <Row label="مبلغ کل فاکتور" value={formatRial(totalProduct)} />
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">تخفیف (ریال)</label>
-                <Input
-                  type="number"
-                  value={data.discount}
-                  onChange={(e) => set("discount", e.target.value)}
-                  placeholder="۰"
-                  className="rounded-xl touch-target"
-                  min="0"
-                />
+                <Input type="number" value={data.discount} onChange={(e) => set("discount", e.target.value)} placeholder="۰" className="rounded-xl touch-target" min="0" />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">کرایه حمل و نقل (ریال)</label>
-                <Input
-                  type="number"
-                  value={data.shipping}
-                  onChange={(e) => set("shipping", e.target.value)}
-                  placeholder="۰"
-                  className="rounded-xl touch-target"
-                  min="0"
-                />
+                <Input type="number" value={data.shipping} onChange={(e) => set("shipping", e.target.value)} placeholder="۰" className="rounded-xl touch-target" min="0" />
               </div>
-              {data.tax === "yes" && (
-                <Row label="مبلغ مالیات (۱۰٪)" value={formatRial(taxAmount)} highlight />
-              )}
+              {data.tax === "yes" && <Row label="مبلغ مالیات (۱۰٪)" value={formatRial(taxAmount)} highlight />}
               <Separator />
               <Row label="مبلغ قابل پرداخت" value={formatRial(payable)} bold />
             </div>
           </div>
-
-          <Button
-            onClick={handleSubmit}
-            className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
-            size="lg"
-          >
+          <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
             ثبت نهایی
           </Button>
         </div>
