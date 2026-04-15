@@ -191,6 +191,17 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchMedicineCompanies = async () => {
+      const { data: companies } = await supabase.from("medicineshoppingcenter").select("*").order("id");
+      if (companies) {
+        setMedicineCompanyOptions(
+          companies.map((c) => ({
+            label: c.name || "",
+            value: c.id.toString(),
+          }))
+        );
+      }
+    };
     const fetchFeeds = async () => {
       const { data: feeds } = await supabase.from("feeds").select("*").order("id");
       if (feeds) {
@@ -204,6 +215,7 @@ export default function NewInvoice() {
     };
     fetchSperms();
     fetchFeedCompanies();
+    fetchMedicineCompanies();
     fetchFeeds();
   }, []);
 
