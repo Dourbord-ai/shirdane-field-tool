@@ -157,6 +157,21 @@ export type Database = {
         }
         Relationships: []
       }
+      medicineshoppingcenter: {
+        Row: {
+          id: number
+          name: string | null
+        }
+        Insert: {
+          id: number
+          name?: string | null
+        }
+        Update: {
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
+      }
       milk: {
         Row: {
           created_at: string
