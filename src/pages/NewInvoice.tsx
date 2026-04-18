@@ -523,6 +523,36 @@ export default function NewInvoice() {
     setLivestockRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Examination row helpers
+  const updateExaminationRow = (rowId: string, field: keyof ExaminationRow, value: string) => {
+    setExaminationRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const addExaminationRow = () => setExaminationRows((prev) => [...prev, createExaminationRow()]);
+  const removeExaminationRow = (rowId: string) => {
+    if (examinationRows.length <= 1) return;
+    setExaminationRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  // Wage row helpers
+  const updateWageRow = (rowId: string, field: keyof WageRow, value: string | JalaliDate | null) => {
+    setWageRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as WageRow : r)));
+  };
+  const addWageRow = () => setWageRows((prev) => [...prev, createWageRow()]);
+  const removeWageRow = (rowId: string) => {
+    if (wageRows.length <= 1) return;
+    setWageRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  // Daily worker row helpers
+  const updateDailyWorkerRow = (rowId: string, field: keyof DailyWorkerRow, value: string | JalaliDate | null) => {
+    setDailyWorkerRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as DailyWorkerRow : r)));
+  };
+  const addDailyWorkerRow = () => setDailyWorkerRows((prev) => [...prev, createDailyWorkerRow()]);
+  const removeDailyWorkerRow = (rowId: string) => {
+    if (dailyWorkerRows.length <= 1) return;
+    setDailyWorkerRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
@@ -530,6 +560,10 @@ export default function NewInvoice() {
   const isFeed = data.productType === "feed";
   const isMedicine = data.productType === "medicine";
   const isLivestock = data.productType === "livestock";
+  const isServices = data.productType === "services";
+  const isExaminations = isServices && data.serviceSubType === "examinations";
+  const isWage = isServices && data.serviceSubType === "wage";
+  const isDailyWorker = isServices && data.serviceSubType === "daily_worker";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
