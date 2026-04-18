@@ -360,6 +360,16 @@ export default function NewInvoice() {
   const updateLivestockRow = (rowId: string, field: keyof LivestockProductRow, value: string) => {
     setLivestockRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
   };
+  const selectCow = (rowId: string, cowValue: string) => {
+    const cow = cowOptions.find((c) => c.value === cowValue);
+    setLivestockRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? { ...r, animalNumber: cowValue, earNumber: cow?.earNumber || "" }
+          : r
+      )
+    );
+  };
   const addLivestockRow = () => setLivestockRows((prev) => [...prev, createLivestockRow()]);
   const removeLivestockRow = (rowId: string) => {
     if (livestockRows.length <= 1) return;
