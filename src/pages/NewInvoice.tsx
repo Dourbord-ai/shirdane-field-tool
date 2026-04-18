@@ -798,6 +798,8 @@ export default function NewInvoice() {
           ? wageRows.map((r) => [r.purpose, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
           : isDailyWorker
           ? dailyWorkerRows.map((r) => [r.purpose, r.workerName, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
+          : isRental
+          ? rentalRows.map((r) => [r.purpose, r.driverName, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
           : data.productType === "other"
           ? rows
               .map((r) => {
