@@ -298,6 +298,9 @@ export default function NewInvoice() {
   const [feedRows, setFeedRows] = useState<FeedProductRow[]>([createFeedRow()]);
   const [medicineRows, setMedicineRows] = useState<MedicineProductRow[]>([createMedicineRow()]);
   const [livestockRows, setLivestockRows] = useState<LivestockProductRow[]>([createLivestockRow()]);
+  const [examinationRows, setExaminationRows] = useState<ExaminationRow[]>([createExaminationRow()]);
+  const [wageRows, setWageRows] = useState<WageRow[]>([createWageRow()]);
+  const [dailyWorkerRows, setDailyWorkerRows] = useState<DailyWorkerRow[]>([createDailyWorkerRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
@@ -305,6 +308,7 @@ export default function NewInvoice() {
   const [livestockCompanyOptions, setLivestockCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [otherCompanyOptions, setOtherCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [otherItemOptions, setOtherItemOptions] = useState<{ label: string; value: string }[]>([]);
+  const [examinationItemOptions, setExaminationItemOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
   const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
