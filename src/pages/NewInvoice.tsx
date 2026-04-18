@@ -1290,7 +1290,7 @@ export default function NewInvoice() {
                 ? medicineCompanyOptions
                 : data.productType === "livestock"
                 ? livestockCompanyOptions
-                : data.productType === "other"
+                : (data.productType === "other" || data.productType === "services" || data.productType === "rental")
                 ? otherCompanyOptions
                 : companyList
             }
