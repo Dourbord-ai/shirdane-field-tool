@@ -187,6 +187,47 @@ export type Database = {
         }
         Relationships: []
       }
+      livestock_items: {
+        Row: {
+          animal_number: string | null
+          created_at: string
+          description: string | null
+          factor_id: string
+          id: string
+          price_per_kg: number | null
+          row_total: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          animal_number?: string | null
+          created_at?: string
+          description?: string | null
+          factor_id: string
+          id?: string
+          price_per_kg?: number | null
+          row_total?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          animal_number?: string | null
+          created_at?: string
+          description?: string | null
+          factor_id?: string
+          id?: string
+          price_per_kg?: number | null
+          row_total?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "livestock_items_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medicine_items: {
         Row: {
           created_at: string

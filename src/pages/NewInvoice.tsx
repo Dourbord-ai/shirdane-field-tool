@@ -114,6 +114,22 @@ const createMedicineRow = (): MedicineProductRow => ({
   description: "",
 });
 
+interface LivestockProductRow {
+  id: string;
+  animalNumber: string;
+  weightKg: string;
+  pricePerKg: string;
+  description: string;
+}
+
+const createLivestockRow = (): LivestockProductRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  animalNumber: "",
+  weightKg: "",
+  pricePerKg: "",
+  description: "",
+});
+
 interface MilkProductRow {
   id: string;
   quantityKg: string;
@@ -181,6 +197,7 @@ export default function NewInvoice() {
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
   const [feedRows, setFeedRows] = useState<FeedProductRow[]>([createFeedRow()]);
   const [medicineRows, setMedicineRows] = useState<MedicineProductRow[]>([createMedicineRow()]);
+  const [livestockRows, setLivestockRows] = useState<LivestockProductRow[]>([createLivestockRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
@@ -308,12 +325,23 @@ export default function NewInvoice() {
     setMedicineRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Livestock row helpers
+  const updateLivestockRow = (rowId: string, field: keyof LivestockProductRow, value: string) => {
+    setLivestockRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const addLivestockRow = () => setLivestockRows((prev) => [...prev, createLivestockRow()]);
+  const removeLivestockRow = (rowId: string) => {
+    if (livestockRows.length <= 1) return;
+    setLivestockRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
   const isSperm = data.productType === "sperm";
   const isFeed = data.productType === "feed";
   const isMedicine = data.productType === "medicine";
+  const isLivestock = data.productType === "livestock";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
@@ -347,12 +375,21 @@ export default function NewInvoice() {
   const medicineRowTotals = medicineRows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const medicineTotalProduct = medicineRowTotals.reduce((a, b) => a + b, 0);
 
+  // Livestock calculations (multi-row)
+  const livestockRowCalcs = livestockRows.map((r) => {
+    const wt = parseFloat(r.weightKg) || 0;
+    const ppk = parseInt(r.pricePerKg) || 0;
+    const rowTotal = Math.round(wt * ppk);
+    return { wt, ppk, rowTotal };
+  });
+  const livestockTotalProduct = livestockRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
   // Non-milk/non-feed calculations (multi-row)
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
 
   // Unified total for non-milk
-  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : genericTotalProduct;
+  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : isLivestock ? livestockTotalProduct : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -380,7 +417,8 @@ export default function NewInvoice() {
   const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
   const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
   const hasMedicineValidRows = medicineRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
-  const hasValidRows = isFeed ? hasFeedValidRows : isMedicine ? hasMedicineValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasLivestockValidRows = livestockRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
+  const hasValidRows = isFeed ? hasFeedValidRows : isMedicine ? hasMedicineValidRows : isLivestock ? hasLivestockValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
@@ -425,6 +463,8 @@ export default function NewInvoice() {
           ? feedRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isMedicine
           ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isLivestock
+          ? livestockRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
@@ -533,6 +573,28 @@ export default function NewInvoice() {
       }
     }
 
+    // 6) Insert livestock line items
+    if (isLivestock) {
+      const livestockInsertRows = livestockRows
+        .filter((r) => (parseFloat(r.weightKg) || 0) > 0)
+        .map((r, idx) => {
+          const calc = livestockRowCalcs[idx];
+          return {
+            factor_id: factor.id,
+            animal_number: r.animalNumber || null,
+            weight_kg: calc.wt,
+            price_per_kg: calc.ppk,
+            row_total: calc.rowTotal,
+            description: r.description || null,
+          };
+        });
+
+      if (livestockInsertRows.length > 0) {
+        const { error: livestockError } = await supabase.from("livestock_items").insert(livestockInsertRows);
+        if (livestockError) console.error("Livestock items insert error:", livestockError);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
@@ -563,6 +625,8 @@ export default function NewInvoice() {
           setRows([createRow()]);
           setMilkRows([createMilkRow()]);
           setFeedRows([createFeedRow()]);
+          setMedicineRows([createMedicineRow()]);
+          setLivestockRows([createLivestockRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
@@ -994,6 +1058,74 @@ export default function NewInvoice() {
                 type="button"
                 variant="outline"
                 onClick={addMedicineRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isLivestock ? (
+            <>
+              {/* ===== LIVESTOCK ITEMS ===== */}
+              <div className="space-y-3">
+                {livestockRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {livestockRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLivestockRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">شماره دام</label>
+                      <Input
+                        value={row.animalNumber}
+                        onChange={(e) => updateLivestockRow(row.id, "animalNumber", e.target.value)}
+                        placeholder="شماره دام..."
+                        className="rounded-xl touch-target text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">وزن به کیلوگرم</label>
+                        <Input type="number" value={row.weightKg} onChange={(e) => updateLivestockRow(row.id, "weightKg", e.target.value)} placeholder="کیلوگرم..." className="rounded-xl touch-target text-sm" min="0" step="0.01" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت هر کیلوگرم (ریال)</label>
+                        <Input type="number" value={row.pricePerKg} onChange={(e) => updateLivestockRow(row.id, "pricePerKg", e.target.value)} placeholder="قیمت..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {livestockRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(livestockRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateLivestockRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addLivestockRow}
                 className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
               >
                 <Plus className="w-5 h-5" />
