@@ -1273,6 +1273,16 @@ export default function NewInvoice() {
                       />
                     )}
 
+                    {data.productType === "other" && (
+                      <SearchableSelect
+                        label="نام آیتم"
+                        options={otherItemOptions}
+                        value={row.itemName}
+                        onChange={(v) => updateRow(row.id, "itemName", v)}
+                        placeholder="انتخاب آیتم..."
+                      />
+                    )}
+
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="block text-xs font-medium text-foreground">تعداد</label>
