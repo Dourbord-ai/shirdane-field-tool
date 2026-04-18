@@ -1064,6 +1064,74 @@ export default function NewInvoice() {
                 ردیف جدید
               </Button>
             </>
+          ) : isLivestock ? (
+            <>
+              {/* ===== LIVESTOCK ITEMS ===== */}
+              <div className="space-y-3">
+                {livestockRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {livestockRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLivestockRow(row.id)}
+                          className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          aria-label="حذف ردیف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">شماره دام</label>
+                      <Input
+                        value={row.animalNumber}
+                        onChange={(e) => updateLivestockRow(row.id, "animalNumber", e.target.value)}
+                        placeholder="شماره دام..."
+                        className="rounded-xl touch-target text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">وزن به کیلوگرم</label>
+                        <Input type="number" value={row.weightKg} onChange={(e) => updateLivestockRow(row.id, "weightKg", e.target.value)} placeholder="کیلوگرم..." className="rounded-xl touch-target text-sm" min="0" step="0.01" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت هر کیلوگرم (ریال)</label>
+                        <Input type="number" value={row.pricePerKg} onChange={(e) => updateLivestockRow(row.id, "pricePerKg", e.target.value)} placeholder="قیمت..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {livestockRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(livestockRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateLivestockRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addLivestockRow}
+                className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
+              >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
           ) : (
             <>
               {/* ===== GENERIC (SPERM, etc.) ITEMS ===== */}
