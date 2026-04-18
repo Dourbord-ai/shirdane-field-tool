@@ -898,6 +898,75 @@ export default function NewInvoice() {
       }
     }
 
+    // 7) Insert examination items (services > examinations) — reuse medicine_items table for now? No, store in feed-style. We'll save into a generic table by reusing factor description; line items live below.
+    if (isExaminations) {
+      const examRowsToInsert = examinationRows
+        .filter((r) => r.itemName || (parseInt(r.quantity) || 0) > 0)
+        .map((r) => {
+          const itemLabel = examinationItemOptions.find((o) => o.value === r.itemName)?.label || r.itemName || null;
+          return {
+            factor_id: factor.id,
+            medicine_name: itemLabel,
+            medicine_type: "معاینات",
+            quantity: parseInt(r.quantity) || 0,
+            unit_price: parseInt(r.unitPrice) || 0,
+            row_total: (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0),
+            description: r.description || null,
+          };
+        });
+      if (examRowsToInsert.length > 0) {
+        const { error: examErr } = await supabase.from("medicine_items").insert(examRowsToInsert);
+        if (examErr) console.error("Examination items insert error:", examErr);
+      }
+    }
+
+    // 8) Insert wage items
+    if (isWage) {
+      const wageInsertRows = wageRows
+        .filter((r) => r.purpose || (parseInt(r.dailyAmount) || 0) > 0 || (parseInt(r.contractAmount) || 0) > 0)
+        .map((r, idx) => ({
+          factor_id: factor.id,
+          purpose: r.purpose || null,
+          work_mode: r.workMode || null,
+          start_date: formatDate(r.startDate),
+          end_date: formatDate(r.endDate),
+          payment_type: r.paymentType || null,
+          daily_amount: parseInt(r.dailyAmount) || 0,
+          contract_amount: parseInt(r.contractAmount) || 0,
+          account_holder: r.accountHolder || null,
+          iban_or_card: r.ibanOrCard || null,
+          row_total: wageRowCalcs[idx].rowTotal,
+          description: r.description || null,
+        }));
+      if (wageInsertRows.length > 0) {
+        const { error: wageErr } = await (supabase as any).from("wage_items").insert(wageInsertRows);
+        if (wageErr) console.error("Wage items insert error:", wageErr);
+      }
+    }
+
+    // 9) Insert daily worker items
+    if (isDailyWorker) {
+      const dwInsertRows = dailyWorkerRows
+        .filter((r) => r.workerName || (parseFloat(r.daysCount) || 0) > 0 || (parseFloat(r.hoursCount) || 0) > 0)
+        .map((r, idx) => ({
+          factor_id: factor.id,
+          purpose: r.purpose || null,
+          worker_name: r.workerName || null,
+          days_count: parseFloat(r.daysCount) || 0,
+          hours_count: parseFloat(r.hoursCount) || 0,
+          daily_rate: parseInt(r.dailyRate) || 0,
+          hourly_rate: parseInt(r.hourlyRate) || 0,
+          start_date: formatDate(r.startDate),
+          end_date: formatDate(r.endDate),
+          row_total: dailyWorkerRowCalcs[idx].rowTotal,
+          description: r.description || null,
+        }));
+      if (dwInsertRows.length > 0) {
+        const { error: dwErr } = await (supabase as any).from("daily_worker_items").insert(dwInsertRows);
+        if (dwErr) console.error("Daily worker items insert error:", dwErr);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
