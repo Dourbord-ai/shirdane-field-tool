@@ -741,6 +741,19 @@ export default function NewInvoice() {
           ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isLivestock
           ? livestockRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isExaminations
+          ? examinationRows
+              .map((r) => {
+                const itemLabel = examinationItemOptions.find((o) => o.value === r.itemName)?.label;
+                const parts = [itemLabel, r.description].filter(Boolean);
+                return parts.join(" — ");
+              })
+              .filter(Boolean)
+              .join(" | ") || null
+          : isWage
+          ? wageRows.map((r) => [r.purpose, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
+          : isDailyWorker
+          ? dailyWorkerRows.map((r) => [r.purpose, r.workerName, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
           : data.productType === "other"
           ? rows
               .map((r) => {
