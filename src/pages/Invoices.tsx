@@ -73,6 +73,15 @@ interface MedicineItemRow {
   description: string | null;
 }
 
+interface LivestockItemRow {
+  id: string;
+  animal_number: string | null;
+  weight_kg: number | null;
+  price_per_kg: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
@@ -117,7 +126,7 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
   );
 }
 
-function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, onClose }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; onClose: () => void }) {
+function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, livestockItems, onClose }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; livestockItems: LivestockItemRow[]; onClose: () => void }) {
   const dateStr = factor.invoice_date ? toPersianDigits(factor.invoice_date) : "—";
 
   return (
@@ -259,6 +268,37 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, onC
             </>
           )}
 
+          {/* Line items for livestock */}
+          {factor.product_type === "livestock" && livestockItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور:</p>
+              {livestockItems.map((item, idx) => (
+                <div key={item.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                    <span className="font-medium text-foreground">شماره دام: {toPersianDigits(item.animal_number || "—")}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">وزن × قیمت هر کیلو</span>
+                    <span className="text-foreground">
+                      {toPersianDigits(String(item.weight_kg || 0))} × {formatRial(item.price_per_kg || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="text-muted-foreground">جمع ردیف</span>
+                    <span className="text-foreground">{formatRial(item.row_total || 0)}</span>
+                  </div>
+                  {item.description && (
+                    <div className="text-xs text-muted-foreground border-t border-border pt-1.5 mt-1.5">
+                      {item.description}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+
           {/* Line items for medicine */}
           {factor.product_type === "medicine" && medicineItems.length > 0 && (
             <>
@@ -323,6 +363,7 @@ export default function Invoices() {
   const [selectedMilkItems, setSelectedMilkItems] = useState<MilkRow[]>([]);
   const [selectedFeedItems, setSelectedFeedItems] = useState<FeedItemRow[]>([]);
   const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
+  const [selectedLivestockItems, setSelectedLivestockItems] = useState<LivestockItemRow[]>([]);
 
   useEffect(() => {
     const fetchFactors = async () => {
@@ -346,6 +387,7 @@ export default function Invoices() {
       setSelectedMilkItems([]);
       setSelectedFeedItems([]);
       setSelectedMedicineItems([]);
+      setSelectedLivestockItems([]);
       return;
     }
     setSelectedId(id);
@@ -353,6 +395,7 @@ export default function Invoices() {
     setSelectedMilkItems([]);
     setSelectedFeedItems([]);
     setSelectedMedicineItems([]);
+    setSelectedLivestockItems([]);
 
     const factor = factors.find((f) => f.id === id);
     if (factor?.product_type === "sperm") {
@@ -370,7 +413,11 @@ export default function Invoices() {
     } else if (factor?.product_type === "medicine") {
       const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
       setSelectedMedicineItems((data as MedicineItemRow[]) || []);
+    } else if (factor?.product_type === "livestock") {
+      const { data } = await supabase.from("livestock_items").select("*").eq("factor_id", id);
+      setSelectedLivestockItems((data as LivestockItemRow[]) || []);
     }
+    // Note: "other" product type stores item info in factor.description (no dedicated table yet)
   };
 
   const selectedFactor = factors.find((f) => f.id === selectedId);
@@ -390,7 +437,7 @@ export default function Invoices() {
       </div>
 
       {selectedFactor && (
-        <InvoiceDetail factor={selectedFactor} items={selectedItems} milkItems={selectedMilkItems} feedItems={selectedFeedItems} medicineItems={selectedMedicineItems} onClose={() => { setSelectedId(null); setSelectedItems([]); setSelectedMilkItems([]); setSelectedFeedItems([]); setSelectedMedicineItems([]); }} />
+        <InvoiceDetail factor={selectedFactor} items={selectedItems} milkItems={selectedMilkItems} feedItems={selectedFeedItems} medicineItems={selectedMedicineItems} livestockItems={selectedLivestockItems} onClose={() => { setSelectedId(null); setSelectedItems([]); setSelectedMilkItems([]); setSelectedFeedItems([]); setSelectedMedicineItems([]); setSelectedLivestockItems([]); }} />
       )}
 
       {factors.length === 0 ? (
