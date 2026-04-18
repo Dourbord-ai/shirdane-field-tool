@@ -118,15 +118,24 @@ interface LivestockProductRow {
   id: string;
   animalNumber: string;
   earNumber: string;
+  saleType: string;
   weightKg: string;
   pricePerKg: string;
   description: string;
 }
 
+const livestockSaleTypeOptions = [
+  { label: "فروش", value: "sale" },
+  { label: "تلفات", value: "loss" },
+  { label: "کشتار", value: "slaughter" },
+  { label: "سایر", value: "other" },
+];
+
 const createLivestockRow = (): LivestockProductRow => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
   animalNumber: "",
   earNumber: "",
+  saleType: "",
   weightKg: "",
   pricePerKg: "",
   description: "",
