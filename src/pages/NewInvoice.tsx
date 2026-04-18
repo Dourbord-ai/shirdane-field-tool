@@ -1067,6 +1067,7 @@ export default function NewInvoice() {
           setExaminationRows([createExaminationRow()]);
           setWageRows([createWageRow()]);
           setDailyWorkerRows([createDailyWorkerRow()]);
+          setRentalRows([createRentalRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
