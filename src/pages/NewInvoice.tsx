@@ -321,6 +321,7 @@ export default function NewInvoice() {
   const [wageRows, setWageRows] = useState<WageRow[]>([createWageRow()]);
   const [dailyWorkerRows, setDailyWorkerRows] = useState<DailyWorkerRow[]>([createDailyWorkerRow()]);
   const [rentalRows, setRentalRows] = useState<RentalRow[]>([createRentalRow()]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
