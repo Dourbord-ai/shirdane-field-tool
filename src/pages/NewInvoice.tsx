@@ -375,6 +375,15 @@ export default function NewInvoice() {
   const medicineRowTotals = medicineRows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const medicineTotalProduct = medicineRowTotals.reduce((a, b) => a + b, 0);
 
+  // Livestock calculations (multi-row)
+  const livestockRowCalcs = livestockRows.map((r) => {
+    const wt = parseFloat(r.weightKg) || 0;
+    const ppk = parseInt(r.pricePerKg) || 0;
+    const rowTotal = Math.round(wt * ppk);
+    return { wt, ppk, rowTotal };
+  });
+  const livestockTotalProduct = livestockRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
   // Non-milk/non-feed calculations (multi-row)
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
