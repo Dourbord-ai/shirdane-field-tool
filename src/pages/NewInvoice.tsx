@@ -999,6 +999,9 @@ export default function NewInvoice() {
           setFeedRows([createFeedRow()]);
           setMedicineRows([createMedicineRow()]);
           setLivestockRows([createLivestockRow()]);
+          setExaminationRows([createExaminationRow()]);
+          setWageRows([createWageRow()]);
+          setDailyWorkerRows([createDailyWorkerRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
@@ -1006,7 +1009,20 @@ export default function NewInvoice() {
       {/* Invoice Type */}
       {showInvoiceType && (
         <div className="animate-fade-in">
-          <SearchableSelect label="نوع فاکتور" options={invoiceTypes} value={data.invoiceType} onChange={(v) => set("invoiceType", v)} placeholder="انتخاب نوع فاکتور..." />
+          <SearchableSelect label="نوع فاکتور" options={invoiceTypes} value={data.invoiceType} onChange={(v) => { set("invoiceType", v); set("serviceSubType", ""); }} placeholder="انتخاب نوع فاکتور..." />
+        </div>
+      )}
+
+      {/* Service Sub-type (only for خدمات) */}
+      {showServiceSubType && (
+        <div className="animate-fade-in">
+          <SearchableSelect
+            label="نوع خدمات"
+            options={serviceSubTypeOptions}
+            value={data.serviceSubType}
+            onChange={(v) => set("serviceSubType", v)}
+            placeholder="انتخاب نوع خدمات..."
+          />
         </div>
       )}
 
