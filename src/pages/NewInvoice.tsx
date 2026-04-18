@@ -663,6 +663,10 @@ export default function NewInvoice() {
   });
   const dailyWorkerTotalProduct = dailyWorkerRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
 
+  // Rental calculations
+  const rentalRowCalcs = rentalRows.map((r) => ({ rowTotal: parseInt(r.amount) || 0 }));
+  const rentalTotalProduct = rentalRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
   // Unified total for non-milk
   const totalProduct = isFeed
     ? feedTotalProduct
@@ -676,6 +680,8 @@ export default function NewInvoice() {
     ? wageTotalProduct
     : isDailyWorker
     ? dailyWorkerTotalProduct
+    : isRental
+    ? rentalTotalProduct
     : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
