@@ -63,23 +63,52 @@ export default function SearchableSelect({
     setSearch("");
   };
 
+  const useSheet = options.length > 3;
+
   return (
     <div className={cn("space-y-2", className)}>
       {label && (
         <label className="block text-sm font-medium text-foreground">{label}</label>
       )}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full touch-target rounded-xl border border-input bg-background px-4 py-3 text-right text-body flex items-center justify-between gap-2 transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)] hover:border-primary/20 focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        <span className={cn("truncate", !selected && "text-muted-foreground")}>
-          {selected ? selected.label : placeholder}
-        </span>
-        <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-      </button>
 
-      {open && (
+      {useSheet ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full touch-target rounded-xl border border-input bg-background px-4 py-3 text-right text-body flex items-center justify-between gap-2 transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)] hover:border-primary/20 focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected ? selected.label : placeholder}
+          </span>
+          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        </button>
+      ) : (
+        <div className="grid gap-2" role="radiogroup">
+          {options.map((o) => {
+            const isSelected = o.value === value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => onChange(o.value)}
+                className={cn(
+                  "w-full touch-target rounded-xl border-2 px-4 py-3 text-right text-body flex items-center justify-between gap-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring",
+                  isSelected
+                    ? "border-primary bg-primary/10 text-primary font-bold"
+                    : "border-input bg-background text-foreground hover:border-primary/30 hover:bg-muted/50"
+                )}
+              >
+                <span className="truncate">{o.label}</span>
+                {isSelected && <Check className="w-5 h-5 text-primary shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {useSheet && open && (
         <div
           className="fixed inset-0 z-[100] flex items-end sm:items-center sm:justify-center"
           role="dialog"
