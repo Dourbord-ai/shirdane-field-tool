@@ -610,8 +610,44 @@ export default function NewInvoice() {
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
 
+  // Examination calculations
+  const examinationRowTotals = examinationRows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
+  const examinationTotalProduct = examinationRowTotals.reduce((a, b) => a + b, 0);
+
+  // Wage calculations: total = daily*days OR contract amount (whichever is entered)
+  const wageRowCalcs = wageRows.map((r) => {
+    const daily = parseInt(r.dailyAmount) || 0;
+    const contract = parseInt(r.contractAmount) || 0;
+    const rowTotal = r.workMode === "contract" ? contract : daily;
+    return { rowTotal };
+  });
+  const wageTotalProduct = wageRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
+  // Daily worker calculations
+  const dailyWorkerRowCalcs = dailyWorkerRows.map((r) => {
+    const days = parseFloat(r.daysCount) || 0;
+    const hours = parseFloat(r.hoursCount) || 0;
+    const dRate = parseInt(r.dailyRate) || 0;
+    const hRate = parseInt(r.hourlyRate) || 0;
+    const rowTotal = Math.round(days * dRate + hours * hRate);
+    return { rowTotal };
+  });
+  const dailyWorkerTotalProduct = dailyWorkerRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
   // Unified total for non-milk
-  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : isLivestock ? livestockTotalProduct : genericTotalProduct;
+  const totalProduct = isFeed
+    ? feedTotalProduct
+    : isMedicine
+    ? medicineTotalProduct
+    : isLivestock
+    ? livestockTotalProduct
+    : isExaminations
+    ? examinationTotalProduct
+    : isWage
+    ? wageTotalProduct
+    : isDailyWorker
+    ? dailyWorkerTotalProduct
+    : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -621,7 +657,10 @@ export default function NewInvoice() {
 
   // Visibility logic
   const showInvoiceType = !!data.productType;
-  const showDate = !!data.invoiceType;
+  // Services requires sub-type chosen before continuing the flow
+  const showServiceSubType = isServices && !!data.invoiceType;
+  const servicesGate = !isServices || !!data.serviceSubType;
+  const showDate = !!data.invoiceType && servicesGate;
   const showInvoiceNumber = !!data.date;
   const showTax = !!data.invoiceNumber;
 
@@ -640,7 +679,22 @@ export default function NewInvoice() {
   const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
   const hasMedicineValidRows = medicineRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const hasLivestockValidRows = livestockRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
-  const hasValidRows = isFeed ? hasFeedValidRows : isMedicine ? hasMedicineValidRows : isLivestock ? hasLivestockValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasExaminationValidRows = examinationRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasWageValidRows = wageRows.some((r) => (parseInt(r.dailyAmount) || 0) > 0 || (parseInt(r.contractAmount) || 0) > 0);
+  const hasDailyWorkerValidRows = dailyWorkerRows.some((r) => (parseFloat(r.daysCount) || 0) > 0 || (parseFloat(r.hoursCount) || 0) > 0);
+  const hasValidRows = isFeed
+    ? hasFeedValidRows
+    : isMedicine
+    ? hasMedicineValidRows
+    : isLivestock
+    ? hasLivestockValidRows
+    : isExaminations
+    ? hasExaminationValidRows
+    : isWage
+    ? hasWageValidRows
+    : isDailyWorker
+    ? hasDailyWorkerValidRows
+    : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
