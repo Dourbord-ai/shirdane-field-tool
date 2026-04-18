@@ -37,6 +37,17 @@ const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
   rental: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
 };
 
+const serviceSubTypeOptions = [
+  { label: "معاینات", value: "examinations" },
+  { label: "اجرت", value: "wage" },
+  { label: "کارگر روز مزد", value: "daily_worker" },
+];
+
+const workModeOptions = [
+  { label: "روزانه", value: "daily" },
+  { label: "پیمان کاری", value: "contract" },
+];
+
 const taxOptions = [
   { label: "دارد", value: "yes" },
   { label: "ندارد", value: "no" },
