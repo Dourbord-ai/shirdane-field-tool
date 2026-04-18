@@ -463,6 +463,8 @@ export default function NewInvoice() {
           ? feedRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isMedicine
           ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isLivestock
+          ? livestockRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
