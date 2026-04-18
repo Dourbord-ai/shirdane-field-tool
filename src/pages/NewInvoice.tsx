@@ -761,6 +761,8 @@ export default function NewInvoice() {
         tax: data.tax || "ندارد",
         buyer_type: isMilk
           ? (data.isBuyerCompany ? "company" : "person")
+          : isRental
+          ? "person"
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
           const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : (data.productType === "other" || data.productType === "services" || data.productType === "rental") ? otherCompanyOptions : companyList;
