@@ -252,6 +252,24 @@ const createDailyWorkerRow = (): DailyWorkerRow => ({
   description: "",
 });
 
+interface RentalRow {
+  id: string;
+  purpose: string;
+  driverName: string;
+  ibanOrCard: string;
+  amount: string;
+  description: string;
+}
+
+const createRentalRow = (): RentalRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  purpose: "",
+  driverName: "",
+  ibanOrCard: "",
+  amount: "",
+  description: "",
+});
+
 interface InvoiceData {
   productType: string;
   invoiceType: string;
