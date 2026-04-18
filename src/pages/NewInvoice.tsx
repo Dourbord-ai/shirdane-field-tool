@@ -389,7 +389,7 @@ export default function NewInvoice() {
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
 
   // Unified total for non-milk
-  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : genericTotalProduct;
+  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : isLivestock ? livestockTotalProduct : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
