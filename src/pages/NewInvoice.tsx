@@ -550,6 +550,15 @@ export default function NewInvoice() {
           ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isLivestock
           ? livestockRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : data.productType === "other"
+          ? rows
+              .map((r) => {
+                const itemLabel = otherItemOptions.find((o) => o.value === r.itemName)?.label;
+                const parts = [itemLabel, r.description].filter(Boolean);
+                return parts.join(" — ");
+              })
+              .filter(Boolean)
+              .join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
