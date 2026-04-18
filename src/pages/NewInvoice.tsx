@@ -37,6 +37,17 @@ const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
   rental: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
 };
 
+const serviceSubTypeOptions = [
+  { label: "معاینات", value: "examinations" },
+  { label: "اجرت", value: "wage" },
+  { label: "کارگر روز مزد", value: "daily_worker" },
+];
+
+const workModeOptions = [
+  { label: "روزانه", value: "daily" },
+  { label: "پیمان کاری", value: "contract" },
+];
+
 const taxOptions = [
   { label: "دارد", value: "yes" },
   { label: "ندارد", value: "no" },
@@ -171,9 +182,80 @@ const createMilkRow = (): MilkProductRow => ({
   description: "",
 });
 
+interface ExaminationRow {
+  id: string;
+  itemName: string;
+  quantity: string;
+  unitPrice: string;
+  description: string;
+}
+
+const createExaminationRow = (): ExaminationRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  itemName: "",
+  quantity: "",
+  unitPrice: "",
+  description: "",
+});
+
+interface WageRow {
+  id: string;
+  purpose: string;
+  workMode: string;
+  startDate: JalaliDate | null;
+  endDate: JalaliDate | null;
+  paymentType: string;
+  dailyAmount: string;
+  contractAmount: string;
+  accountHolder: string;
+  ibanOrCard: string;
+  description: string;
+}
+
+const createWageRow = (): WageRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  purpose: "",
+  workMode: "",
+  startDate: null,
+  endDate: null,
+  paymentType: "",
+  dailyAmount: "",
+  contractAmount: "",
+  accountHolder: "",
+  ibanOrCard: "",
+  description: "",
+});
+
+interface DailyWorkerRow {
+  id: string;
+  purpose: string;
+  workerName: string;
+  daysCount: string;
+  hoursCount: string;
+  dailyRate: string;
+  hourlyRate: string;
+  startDate: JalaliDate | null;
+  endDate: JalaliDate | null;
+  description: string;
+}
+
+const createDailyWorkerRow = (): DailyWorkerRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  purpose: "",
+  workerName: "",
+  daysCount: "",
+  hoursCount: "",
+  dailyRate: "",
+  hourlyRate: "",
+  startDate: null,
+  endDate: null,
+  description: "",
+});
+
 interface InvoiceData {
   productType: string;
   invoiceType: string;
+  serviceSubType: string;
   date: JalaliDate | null;
   invoiceNumber: string;
   tax: string;
@@ -190,6 +272,7 @@ interface InvoiceData {
 const initial: InvoiceData = {
   productType: "",
   invoiceType: "",
+  serviceSubType: "",
   date: null,
   invoiceNumber: "",
   tax: "",
@@ -215,6 +298,9 @@ export default function NewInvoice() {
   const [feedRows, setFeedRows] = useState<FeedProductRow[]>([createFeedRow()]);
   const [medicineRows, setMedicineRows] = useState<MedicineProductRow[]>([createMedicineRow()]);
   const [livestockRows, setLivestockRows] = useState<LivestockProductRow[]>([createLivestockRow()]);
+  const [examinationRows, setExaminationRows] = useState<ExaminationRow[]>([createExaminationRow()]);
+  const [wageRows, setWageRows] = useState<WageRow[]>([createWageRow()]);
+  const [dailyWorkerRows, setDailyWorkerRows] = useState<DailyWorkerRow[]>([createDailyWorkerRow()]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
@@ -222,6 +308,7 @@ export default function NewInvoice() {
   const [livestockCompanyOptions, setLivestockCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [otherCompanyOptions, setOtherCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [otherItemOptions, setOtherItemOptions] = useState<{ label: string; value: string }[]>([]);
+  const [examinationItemOptions, setExaminationItemOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
   const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
@@ -327,16 +414,28 @@ export default function NewInvoice() {
       const { data: children } = await supabase.from("factor_item_type_id").select("*").order("id");
       if (parents && children) {
         const parentMap = new Map(parents.map((p) => [p.id, p.name || ""]));
+        // Parents tagged as services_examinations should be excluded from "other" and shown under services
+        const examinationParentIds = new Set(
+          (parents as Array<{ id: number; category?: string | null }>)
+            .filter((p) => (p.category || "other") === "services_examinations")
+            .map((p) => p.id)
+        );
+        const childOption = (c: { id: number; name: string | null; factortypeid: number | null }) => {
+          const parentName = parentMap.get(Number(c.factortypeid)) || "";
+          return {
+            label: parentName ? `${parentName} - ${c.name}` : c.name || "",
+            value: c.id.toString(),
+          };
+        };
         setOtherItemOptions(
           children
-            .filter((c) => c.name)
-            .map((c) => {
-              const parentName = parentMap.get(Number(c.factortypeid)) || "";
-              return {
-                label: parentName ? `${parentName} - ${c.name}` : c.name || "",
-                value: c.id.toString(),
-              };
-            })
+            .filter((c) => c.name && !examinationParentIds.has(Number(c.factortypeid)))
+            .map(childOption)
+        );
+        setExaminationItemOptions(
+          children
+            .filter((c) => c.name && examinationParentIds.has(Number(c.factortypeid)))
+            .map(childOption)
         );
       }
     };
@@ -424,6 +523,36 @@ export default function NewInvoice() {
     setLivestockRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
+  // Examination row helpers
+  const updateExaminationRow = (rowId: string, field: keyof ExaminationRow, value: string) => {
+    setExaminationRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const addExaminationRow = () => setExaminationRows((prev) => [...prev, createExaminationRow()]);
+  const removeExaminationRow = (rowId: string) => {
+    if (examinationRows.length <= 1) return;
+    setExaminationRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  // Wage row helpers
+  const updateWageRow = (rowId: string, field: keyof WageRow, value: string | JalaliDate | null) => {
+    setWageRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as WageRow : r)));
+  };
+  const addWageRow = () => setWageRows((prev) => [...prev, createWageRow()]);
+  const removeWageRow = (rowId: string) => {
+    if (wageRows.length <= 1) return;
+    setWageRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  // Daily worker row helpers
+  const updateDailyWorkerRow = (rowId: string, field: keyof DailyWorkerRow, value: string | JalaliDate | null) => {
+    setDailyWorkerRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as DailyWorkerRow : r)));
+  };
+  const addDailyWorkerRow = () => setDailyWorkerRows((prev) => [...prev, createDailyWorkerRow()]);
+  const removeDailyWorkerRow = (rowId: string) => {
+    if (dailyWorkerRows.length <= 1) return;
+    setDailyWorkerRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
   const isMilk = data.productType === "milk";
   const isMilkReceipt = isMilk && data.invoiceType === "milk_receipt";
   const isMilkRetail = isMilk && data.invoiceType === "retail_sell";
@@ -431,6 +560,10 @@ export default function NewInvoice() {
   const isFeed = data.productType === "feed";
   const isMedicine = data.productType === "medicine";
   const isLivestock = data.productType === "livestock";
+  const isServices = data.productType === "services";
+  const isExaminations = isServices && data.serviceSubType === "examinations";
+  const isWage = isServices && data.serviceSubType === "wage";
+  const isDailyWorker = isServices && data.serviceSubType === "daily_worker";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
@@ -477,8 +610,44 @@ export default function NewInvoice() {
   const rowTotals = rows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
   const genericTotalProduct = rowTotals.reduce((a, b) => a + b, 0);
 
+  // Examination calculations
+  const examinationRowTotals = examinationRows.map((r) => (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0));
+  const examinationTotalProduct = examinationRowTotals.reduce((a, b) => a + b, 0);
+
+  // Wage calculations: total = daily*days OR contract amount (whichever is entered)
+  const wageRowCalcs = wageRows.map((r) => {
+    const daily = parseInt(r.dailyAmount) || 0;
+    const contract = parseInt(r.contractAmount) || 0;
+    const rowTotal = r.workMode === "contract" ? contract : daily;
+    return { rowTotal };
+  });
+  const wageTotalProduct = wageRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
+  // Daily worker calculations
+  const dailyWorkerRowCalcs = dailyWorkerRows.map((r) => {
+    const days = parseFloat(r.daysCount) || 0;
+    const hours = parseFloat(r.hoursCount) || 0;
+    const dRate = parseInt(r.dailyRate) || 0;
+    const hRate = parseInt(r.hourlyRate) || 0;
+    const rowTotal = Math.round(days * dRate + hours * hRate);
+    return { rowTotal };
+  });
+  const dailyWorkerTotalProduct = dailyWorkerRowCalcs.reduce((a, b) => a + b.rowTotal, 0);
+
   // Unified total for non-milk
-  const totalProduct = isFeed ? feedTotalProduct : isMedicine ? medicineTotalProduct : isLivestock ? livestockTotalProduct : genericTotalProduct;
+  const totalProduct = isFeed
+    ? feedTotalProduct
+    : isMedicine
+    ? medicineTotalProduct
+    : isLivestock
+    ? livestockTotalProduct
+    : isExaminations
+    ? examinationTotalProduct
+    : isWage
+    ? wageTotalProduct
+    : isDailyWorker
+    ? dailyWorkerTotalProduct
+    : genericTotalProduct;
   const discount = parseInt(data.discount) || 0;
   const shipping = parseInt(data.shipping) || 0;
   const taxAmount = data.tax === "yes" ? Math.round(totalProduct * 0.1) : 0;
@@ -488,7 +657,10 @@ export default function NewInvoice() {
 
   // Visibility logic
   const showInvoiceType = !!data.productType;
-  const showDate = !!data.invoiceType;
+  // Services requires sub-type chosen before continuing the flow
+  const showServiceSubType = isServices && !!data.invoiceType;
+  const servicesGate = !isServices || !!data.serviceSubType;
+  const showDate = !!data.invoiceType && servicesGate;
   const showInvoiceNumber = !!data.date;
   const showTax = !!data.invoiceNumber;
 
@@ -507,7 +679,22 @@ export default function NewInvoice() {
   const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
   const hasMedicineValidRows = medicineRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const hasLivestockValidRows = livestockRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
-  const hasValidRows = isFeed ? hasFeedValidRows : isMedicine ? hasMedicineValidRows : isLivestock ? hasLivestockValidRows : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasExaminationValidRows = examinationRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
+  const hasWageValidRows = wageRows.some((r) => (parseInt(r.dailyAmount) || 0) > 0 || (parseInt(r.contractAmount) || 0) > 0);
+  const hasDailyWorkerValidRows = dailyWorkerRows.some((r) => (parseFloat(r.daysCount) || 0) > 0 || (parseFloat(r.hoursCount) || 0) > 0);
+  const hasValidRows = isFeed
+    ? hasFeedValidRows
+    : isMedicine
+    ? hasMedicineValidRows
+    : isLivestock
+    ? hasLivestockValidRows
+    : isExaminations
+    ? hasExaminationValidRows
+    : isWage
+    ? hasWageValidRows
+    : isDailyWorker
+    ? hasDailyWorkerValidRows
+    : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
@@ -534,7 +721,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : data.productType === "other" ? otherCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : (data.productType === "other" || data.productType === "services" || data.productType === "rental") ? otherCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
@@ -554,6 +741,19 @@ export default function NewInvoice() {
           ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isLivestock
           ? livestockRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : isExaminations
+          ? examinationRows
+              .map((r) => {
+                const itemLabel = examinationItemOptions.find((o) => o.value === r.itemName)?.label;
+                const parts = [itemLabel, r.description].filter(Boolean);
+                return parts.join(" — ");
+              })
+              .filter(Boolean)
+              .join(" | ") || null
+          : isWage
+          ? wageRows.map((r) => [r.purpose, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
+          : isDailyWorker
+          ? dailyWorkerRows.map((r) => [r.purpose, r.workerName, r.description].filter(Boolean).join(" — ")).filter(Boolean).join(" | ") || null
           : data.productType === "other"
           ? rows
               .map((r) => {
@@ -698,6 +898,75 @@ export default function NewInvoice() {
       }
     }
 
+    // 7) Insert examination items (services > examinations) — reuse medicine_items table for now? No, store in feed-style. We'll save into a generic table by reusing factor description; line items live below.
+    if (isExaminations) {
+      const examRowsToInsert = examinationRows
+        .filter((r) => r.itemName || (parseInt(r.quantity) || 0) > 0)
+        .map((r) => {
+          const itemLabel = examinationItemOptions.find((o) => o.value === r.itemName)?.label || r.itemName || null;
+          return {
+            factor_id: factor.id,
+            medicine_name: itemLabel,
+            medicine_type: "معاینات",
+            quantity: parseInt(r.quantity) || 0,
+            unit_price: parseInt(r.unitPrice) || 0,
+            row_total: (parseInt(r.quantity) || 0) * (parseInt(r.unitPrice) || 0),
+            description: r.description || null,
+          };
+        });
+      if (examRowsToInsert.length > 0) {
+        const { error: examErr } = await supabase.from("medicine_items").insert(examRowsToInsert);
+        if (examErr) console.error("Examination items insert error:", examErr);
+      }
+    }
+
+    // 8) Insert wage items
+    if (isWage) {
+      const wageInsertRows = wageRows
+        .filter((r) => r.purpose || (parseInt(r.dailyAmount) || 0) > 0 || (parseInt(r.contractAmount) || 0) > 0)
+        .map((r, idx) => ({
+          factor_id: factor.id,
+          purpose: r.purpose || null,
+          work_mode: r.workMode || null,
+          start_date: formatDate(r.startDate),
+          end_date: formatDate(r.endDate),
+          payment_type: r.paymentType || null,
+          daily_amount: parseInt(r.dailyAmount) || 0,
+          contract_amount: parseInt(r.contractAmount) || 0,
+          account_holder: r.accountHolder || null,
+          iban_or_card: r.ibanOrCard || null,
+          row_total: wageRowCalcs[idx].rowTotal,
+          description: r.description || null,
+        }));
+      if (wageInsertRows.length > 0) {
+        const { error: wageErr } = await (supabase as any).from("wage_items").insert(wageInsertRows);
+        if (wageErr) console.error("Wage items insert error:", wageErr);
+      }
+    }
+
+    // 9) Insert daily worker items
+    if (isDailyWorker) {
+      const dwInsertRows = dailyWorkerRows
+        .filter((r) => r.workerName || (parseFloat(r.daysCount) || 0) > 0 || (parseFloat(r.hoursCount) || 0) > 0)
+        .map((r, idx) => ({
+          factor_id: factor.id,
+          purpose: r.purpose || null,
+          worker_name: r.workerName || null,
+          days_count: parseFloat(r.daysCount) || 0,
+          hours_count: parseFloat(r.hoursCount) || 0,
+          daily_rate: parseInt(r.dailyRate) || 0,
+          hourly_rate: parseInt(r.hourlyRate) || 0,
+          start_date: formatDate(r.startDate),
+          end_date: formatDate(r.endDate),
+          row_total: dailyWorkerRowCalcs[idx].rowTotal,
+          description: r.description || null,
+        }));
+      if (dwInsertRows.length > 0) {
+        const { error: dwErr } = await (supabase as any).from("daily_worker_items").insert(dwInsertRows);
+        if (dwErr) console.error("Daily worker items insert error:", dwErr);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
@@ -730,6 +999,9 @@ export default function NewInvoice() {
           setFeedRows([createFeedRow()]);
           setMedicineRows([createMedicineRow()]);
           setLivestockRows([createLivestockRow()]);
+          setExaminationRows([createExaminationRow()]);
+          setWageRows([createWageRow()]);
+          setDailyWorkerRows([createDailyWorkerRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
@@ -737,7 +1009,20 @@ export default function NewInvoice() {
       {/* Invoice Type */}
       {showInvoiceType && (
         <div className="animate-fade-in">
-          <SearchableSelect label="نوع فاکتور" options={invoiceTypes} value={data.invoiceType} onChange={(v) => set("invoiceType", v)} placeholder="انتخاب نوع فاکتور..." />
+          <SearchableSelect label="نوع فاکتور" options={invoiceTypes} value={data.invoiceType} onChange={(v) => { set("invoiceType", v); set("serviceSubType", ""); }} placeholder="انتخاب نوع فاکتور..." />
+        </div>
+      )}
+
+      {/* Service Sub-type (only for خدمات) */}
+      {showServiceSubType && (
+        <div className="animate-fade-in">
+          <SearchableSelect
+            label="نوع خدمات"
+            options={serviceSubTypeOptions}
+            value={data.serviceSubType}
+            onChange={(v) => set("serviceSubType", v)}
+            placeholder="انتخاب نوع خدمات..."
+          />
         </div>
       )}
 
@@ -1005,7 +1290,7 @@ export default function NewInvoice() {
                 ? medicineCompanyOptions
                 : data.productType === "livestock"
                 ? livestockCompanyOptions
-                : data.productType === "other"
+                : (data.productType === "other" || data.productType === "services" || data.productType === "rental")
                 ? otherCompanyOptions
                 : companyList
             }
@@ -1250,6 +1535,217 @@ export default function NewInvoice() {
                 onClick={addLivestockRow}
                 className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent"
               >
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isExaminations ? (
+            <>
+              {/* ===== EXAMINATION ITEMS (services > معاینات) ===== */}
+              <div className="space-y-3">
+                {examinationRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {examinationRows.length > 1 && (
+                        <button type="button" onClick={() => removeExaminationRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <SearchableSelect
+                      label="نام آیتم"
+                      options={examinationItemOptions}
+                      value={row.itemName}
+                      onChange={(v) => updateExaminationRow(row.id, "itemName", v)}
+                      placeholder="انتخاب آیتم معاینات..."
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد</label>
+                        <Input type="number" value={row.quantity} onChange={(e) => updateExaminationRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
+                        <Input type="number" value={row.unitPrice} onChange={(e) => updateExaminationRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {examinationRowTotals[index] > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(examinationRowTotals[index])}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateExaminationRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addExaminationRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isWage ? (
+            <>
+              {/* ===== WAGE ITEMS (services > اجرت) ===== */}
+              <div className="space-y-3">
+                {wageRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {wageRows.length > 1 && (
+                        <button type="button" onClick={() => removeWageRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">بابت</label>
+                      <Input value={row.purpose} onChange={(e) => updateWageRow(row.id, "purpose", e.target.value)} placeholder="بابت چیست..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <SearchableSelect
+                      label="نوع کار"
+                      options={workModeOptions}
+                      value={row.workMode}
+                      onChange={(v) => updateWageRow(row.id, "workMode", v)}
+                      placeholder="روزانه یا پیمان کاری..."
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <JalaliDatePicker label="از تاریخ" value={row.startDate} onChange={(v) => updateWageRow(row.id, "startDate", v)} />
+                      <JalaliDatePicker label="تا تاریخ" value={row.endDate} onChange={(v) => updateWageRow(row.id, "endDate", v)} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">پرداخت</label>
+                      <Input value={row.paymentType} onChange={(e) => updateWageRow(row.id, "paymentType", e.target.value)} placeholder="نوع پرداخت..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">روزی چقدر (ریال)</label>
+                        <Input type="number" value={row.dailyAmount} onChange={(e) => updateWageRow(row.id, "dailyAmount", e.target.value)} placeholder="مبلغ روزانه..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">پیمان کاری چقدر (ریال)</label>
+                        <Input type="number" value={row.contractAmount} onChange={(e) => updateWageRow(row.id, "contractAmount", e.target.value)} placeholder="مبلغ پیمان..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">نام صاحب حساب</label>
+                      <Input value={row.accountHolder} onChange={(e) => updateWageRow(row.id, "accountHolder", e.target.value)} placeholder="نام و نام خانوادگی..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">شماره شبا یا کارت</label>
+                      <Input value={row.ibanOrCard} onChange={(e) => updateWageRow(row.id, "ibanOrCard", e.target.value)} placeholder="شبا/کارت..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    {wageRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(wageRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateWageRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addWageRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isDailyWorker ? (
+            <>
+              {/* ===== DAILY WORKER ITEMS (services > کارگر روز مزد) ===== */}
+              <div className="space-y-3">
+                {dailyWorkerRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {dailyWorkerRows.length > 1 && (
+                        <button type="button" onClick={() => removeDailyWorkerRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">بابت</label>
+                      <Input value={row.purpose} onChange={(e) => updateDailyWorkerRow(row.id, "purpose", e.target.value)} placeholder="بابت چیست..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">نام کارگر</label>
+                      <Input value={row.workerName} onChange={(e) => updateDailyWorkerRow(row.id, "workerName", e.target.value)} placeholder="نام کارگر..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد روز</label>
+                        <Input type="number" value={row.daysCount} onChange={(e) => updateDailyWorkerRow(row.id, "daysCount", e.target.value)} placeholder="روز..." className="rounded-xl touch-target text-sm" min="0" step="0.5" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد ساعت</label>
+                        <Input type="number" value={row.hoursCount} onChange={(e) => updateDailyWorkerRow(row.id, "hoursCount", e.target.value)} placeholder="ساعت..." className="rounded-xl touch-target text-sm" min="0" step="0.5" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت روز (ریال)</label>
+                        <Input type="number" value={row.dailyRate} onChange={(e) => updateDailyWorkerRow(row.id, "dailyRate", e.target.value)} placeholder="نرخ روز..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت ساعت (ریال)</label>
+                        <Input type="number" value={row.hourlyRate} onChange={(e) => updateDailyWorkerRow(row.id, "hourlyRate", e.target.value)} placeholder="نرخ ساعت..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <JalaliDatePicker label="تاریخ شروع" value={row.startDate} onChange={(v) => updateDailyWorkerRow(row.id, "startDate", v)} />
+                      <JalaliDatePicker label="تاریخ پایان" value={row.endDate} onChange={(v) => updateDailyWorkerRow(row.id, "endDate", v)} />
+                    </div>
+
+                    {dailyWorkerRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(dailyWorkerRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateDailyWorkerRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addDailyWorkerRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
                 <Plus className="w-5 h-5" />
                 ردیف جدید
               </Button>

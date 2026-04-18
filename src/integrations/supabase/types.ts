@@ -59,16 +59,67 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_worker_items: {
+        Row: {
+          created_at: string
+          daily_rate: number | null
+          days_count: number | null
+          description: string | null
+          end_date: string | null
+          factor_id: string
+          hourly_rate: number | null
+          hours_count: number | null
+          id: string
+          purpose: string | null
+          row_total: number | null
+          start_date: string | null
+          worker_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          daily_rate?: number | null
+          days_count?: number | null
+          description?: string | null
+          end_date?: string | null
+          factor_id: string
+          hourly_rate?: number | null
+          hours_count?: number | null
+          id?: string
+          purpose?: string | null
+          row_total?: number | null
+          start_date?: string | null
+          worker_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          daily_rate?: number | null
+          days_count?: number | null
+          description?: string | null
+          end_date?: string | null
+          factor_id?: string
+          hourly_rate?: number | null
+          hours_count?: number | null
+          id?: string
+          purpose?: string | null
+          row_total?: number | null
+          start_date?: string | null
+          worker_name?: string | null
+        }
+        Relationships: []
+      }
       factor_item_type: {
         Row: {
+          category: string
           id: number
           name: string | null
         }
         Insert: {
+          category?: string
           id: number
           name?: string | null
         }
         Update: {
+          category?: string
           id?: number
           name?: string | null
         }
@@ -498,6 +549,57 @@ export type Database = {
           code?: string | null
           id?: number
           name?: string | null
+        }
+        Relationships: []
+      }
+      wage_items: {
+        Row: {
+          account_holder: string | null
+          contract_amount: number | null
+          created_at: string
+          daily_amount: number | null
+          description: string | null
+          end_date: string | null
+          factor_id: string
+          iban_or_card: string | null
+          id: string
+          payment_type: string | null
+          purpose: string | null
+          row_total: number | null
+          start_date: string | null
+          work_mode: string | null
+        }
+        Insert: {
+          account_holder?: string | null
+          contract_amount?: number | null
+          created_at?: string
+          daily_amount?: number | null
+          description?: string | null
+          end_date?: string | null
+          factor_id: string
+          iban_or_card?: string | null
+          id?: string
+          payment_type?: string | null
+          purpose?: string | null
+          row_total?: number | null
+          start_date?: string | null
+          work_mode?: string | null
+        }
+        Update: {
+          account_holder?: string | null
+          contract_amount?: number | null
+          created_at?: string
+          daily_amount?: number | null
+          description?: string | null
+          end_date?: string | null
+          factor_id?: string
+          iban_or_card?: string | null
+          id?: string
+          payment_type?: string | null
+          purpose?: string | null
+          row_total?: number | null
+          start_date?: string | null
+          work_mode?: string | null
         }
         Relationships: []
       }
