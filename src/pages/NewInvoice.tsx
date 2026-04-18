@@ -269,11 +269,38 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchLivestockCompanies = async () => {
+      const { data: companies } = await supabase.from("buy_cattle_shoppingcenter").select("*").order("id");
+      if (companies) {
+        setLivestockCompanyOptions(
+          companies.map((c) => ({
+            label: c.name || "",
+            value: c.id.toString(),
+          }))
+        );
+      }
+    };
+    const fetchCows = async () => {
+      const { data: cows } = await supabase.from("cows").select("*").order("bodynumber");
+      if (cows) {
+        setCowOptions(
+          cows
+            .filter((c) => c.bodynumber != null)
+            .map((c) => ({
+              label: c.bodynumber?.toString() || "",
+              value: c.id.toString(),
+              earNumber: c.earnumber?.toString() || "",
+            }))
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
     fetchMedicineCompanies();
+    fetchLivestockCompanies();
     fetchFeeds();
     fetchMedicines();
+    fetchCows();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
