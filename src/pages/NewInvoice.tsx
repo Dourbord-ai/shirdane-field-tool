@@ -592,6 +592,7 @@ export default function NewInvoice() {
   const isExaminations = isServices && data.serviceSubType === "examinations";
   const isWage = isServices && data.serviceSubType === "wage";
   const isDailyWorker = isServices && data.serviceSubType === "daily_worker";
+  const isRental = data.productType === "rental";
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
