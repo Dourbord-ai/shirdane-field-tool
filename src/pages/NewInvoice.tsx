@@ -569,7 +569,16 @@ export default function NewInvoice() {
   const addDailyWorkerRow = () => setDailyWorkerRows((prev) => [...prev, createDailyWorkerRow()]);
   const removeDailyWorkerRow = (rowId: string) => {
     if (dailyWorkerRows.length <= 1) return;
-    setDailyWorkerRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  // Rental row helpers
+  const updateRentalRow = (rowId: string, field: keyof RentalRow, value: string) => {
+    setRentalRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const addRentalRow = () => setRentalRows((prev) => [...prev, createRentalRow()]);
+  const removeRentalRow = (rowId: string) => {
+    if (rentalRows.length <= 1) return;
+    setRentalRows((prev) => prev.filter((r) => r.id !== rowId));
   };
 
   const isMilk = data.productType === "milk";
