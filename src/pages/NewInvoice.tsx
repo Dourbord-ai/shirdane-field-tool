@@ -721,7 +721,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : data.productType === "other" ? otherCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : (data.productType === "other" || data.productType === "services" || data.productType === "rental") ? otherCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
