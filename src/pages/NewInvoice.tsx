@@ -696,8 +696,8 @@ export default function NewInvoice() {
   const showServiceSubType = isServices && !!data.invoiceType;
   const servicesGate = !isServices || !!data.serviceSubType;
   const showDate = !!data.invoiceType && servicesGate;
-  const showInvoiceNumber = !!data.date;
-  const showTax = !!data.invoiceNumber;
+  const showInvoiceNumber = !!data.date && !isRental;
+  const showTax = isRental ? !!data.date : !!data.invoiceNumber;
 
   // Milk flow
   const showDeliveryDate = isMilk && !!data.tax;
