@@ -1129,15 +1129,20 @@ export default function NewInvoice() {
                       )}
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-foreground">شماره دام</label>
-                      <Input
-                        value={row.animalNumber}
-                        onChange={(e) => updateLivestockRow(row.id, "animalNumber", e.target.value)}
-                        placeholder="شماره دام..."
-                        className="rounded-xl touch-target text-sm"
-                      />
-                    </div>
+                    <SearchableSelect
+                      label="شماره دام"
+                      options={cowOptions.map((c) => ({ label: c.label, value: c.value }))}
+                      value={row.animalNumber}
+                      onChange={(v) => selectCow(row.id, v)}
+                      placeholder="انتخاب شماره دام..."
+                    />
+
+                    {row.earNumber && (
+                      <div className="flex justify-between items-center bg-primary/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">شماره گوش</span>
+                        <span className="text-sm font-bold text-primary">{toPersianDigits(row.earNumber)}</span>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
