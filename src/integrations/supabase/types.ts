@@ -59,6 +59,39 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_item_type: {
+        Row: {
+          id: number
+          name: string | null
+        }
+        Insert: {
+          id: number
+          name?: string | null
+        }
+        Update: {
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
+      }
+      factor_item_type_id: {
+        Row: {
+          factortypeid: number | null
+          id: number
+          name: string | null
+        }
+        Insert: {
+          factortypeid?: number | null
+          id: number
+          name?: string | null
+        }
+        Update: {
+          factortypeid?: number | null
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
+      }
       factors: {
         Row: {
           buyer_type: string | null
@@ -390,6 +423,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      other_shoppingcenter: {
+        Row: {
+          id: number
+          name: string | null
+        }
+        Insert: {
+          id: number
+          name?: string | null
+        }
+        Update: {
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
       }
       spermbuy: {
         Row: {
