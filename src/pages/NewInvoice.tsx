@@ -573,6 +573,28 @@ export default function NewInvoice() {
       }
     }
 
+    // 6) Insert livestock line items
+    if (isLivestock) {
+      const livestockInsertRows = livestockRows
+        .filter((r) => (parseFloat(r.weightKg) || 0) > 0)
+        .map((r, idx) => {
+          const calc = livestockRowCalcs[idx];
+          return {
+            factor_id: factor.id,
+            animal_number: r.animalNumber || null,
+            weight_kg: calc.wt,
+            price_per_kg: calc.ppk,
+            row_total: calc.rowTotal,
+            description: r.description || null,
+          };
+        });
+
+      if (livestockInsertRows.length > 0) {
+        const { error: livestockError } = await supabase.from("livestock_items").insert(livestockInsertRows);
+        if (livestockError) console.error("Livestock items insert error:", livestockError);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
