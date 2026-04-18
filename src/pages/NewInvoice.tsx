@@ -414,16 +414,28 @@ export default function NewInvoice() {
       const { data: children } = await supabase.from("factor_item_type_id").select("*").order("id");
       if (parents && children) {
         const parentMap = new Map(parents.map((p) => [p.id, p.name || ""]));
+        // Parents tagged as services_examinations should be excluded from "other" and shown under services
+        const examinationParentIds = new Set(
+          (parents as Array<{ id: number; category?: string | null }>)
+            .filter((p) => (p.category || "other") === "services_examinations")
+            .map((p) => p.id)
+        );
+        const childOption = (c: { id: number; name: string | null; factortypeid: number | null }) => {
+          const parentName = parentMap.get(Number(c.factortypeid)) || "";
+          return {
+            label: parentName ? `${parentName} - ${c.name}` : c.name || "",
+            value: c.id.toString(),
+          };
+        };
         setOtherItemOptions(
           children
-            .filter((c) => c.name)
-            .map((c) => {
-              const parentName = parentMap.get(Number(c.factortypeid)) || "";
-              return {
-                label: parentName ? `${parentName} - ${c.name}` : c.name || "",
-                value: c.id.toString(),
-              };
-            })
+            .filter((c) => c.name && !examinationParentIds.has(Number(c.factortypeid)))
+            .map(childOption)
+        );
+        setExaminationItemOptions(
+          children
+            .filter((c) => c.name && examinationParentIds.has(Number(c.factortypeid)))
+            .map(childOption)
         );
       }
     };
