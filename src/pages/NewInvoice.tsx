@@ -625,6 +625,8 @@ export default function NewInvoice() {
           setRows([createRow()]);
           setMilkRows([createMilkRow()]);
           setFeedRows([createFeedRow()]);
+          setMedicineRows([createMedicineRow()]);
+          setLivestockRows([createLivestockRow()]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
