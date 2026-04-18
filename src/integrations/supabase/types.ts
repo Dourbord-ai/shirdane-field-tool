@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      cows: {
+        Row: {
+          bodynumber: number | null
+          earnumber: number | null
+          existancestatus: number | null
+          existancestatusdes: string | null
+          id: number
+          sex: number | null
+          sextype: string | null
+        }
+        Insert: {
+          bodynumber?: number | null
+          earnumber?: number | null
+          existancestatus?: number | null
+          existancestatusdes?: string | null
+          id: number
+          sex?: number | null
+          sextype?: string | null
+        }
+        Update: {
+          bodynumber?: number | null
+          earnumber?: number | null
+          existancestatus?: number | null
+          existancestatusdes?: string | null
+          id?: number
+          sex?: number | null
+          sextype?: string | null
+        }
+        Relationships: []
+      }
       factors: {
         Row: {
           buyer_type: string | null
