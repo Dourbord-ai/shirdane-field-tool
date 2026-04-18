@@ -941,6 +941,8 @@ export default function NewInvoice() {
                 ? feedCompanyOptions
                 : data.productType === "medicine"
                 ? medicineCompanyOptions
+                : data.productType === "livestock" && data.invoiceType === "buy"
+                ? livestockCompanyOptions
                 : companyList
             }
             value={data.company}
