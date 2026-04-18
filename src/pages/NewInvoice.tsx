@@ -117,6 +117,7 @@ const createMedicineRow = (): MedicineProductRow => ({
 interface LivestockProductRow {
   id: string;
   animalNumber: string;
+  earNumber: string;
   weightKg: string;
   pricePerKg: string;
   description: string;
@@ -125,6 +126,7 @@ interface LivestockProductRow {
 const createLivestockRow = (): LivestockProductRow => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
   animalNumber: "",
+  earNumber: "",
   weightKg: "",
   pricePerKg: "",
   description: "",
