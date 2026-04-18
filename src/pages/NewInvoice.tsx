@@ -34,7 +34,7 @@ const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
   livestock: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   other: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   services: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
-  rental: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
+  rental: [{ label: "پرداخت", value: "payment" }],
 };
 
 const serviceSubTypeOptions = [

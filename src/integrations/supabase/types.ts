@@ -490,6 +490,42 @@ export type Database = {
         }
         Relationships: []
       }
+      rental_items: {
+        Row: {
+          amount: number | null
+          created_at: string
+          description: string | null
+          driver_name: string | null
+          factor_id: string
+          iban_or_card: string | null
+          id: string
+          purpose: string | null
+          row_total: number | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          description?: string | null
+          driver_name?: string | null
+          factor_id: string
+          iban_or_card?: string | null
+          id?: string
+          purpose?: string | null
+          row_total?: number | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          description?: string | null
+          driver_name?: string | null
+          factor_id?: string
+          iban_or_card?: string | null
+          id?: string
+          purpose?: string | null
+          row_total?: number | null
+        }
+        Relationships: []
+      }
       spermbuy: {
         Row: {
           created_at: string
