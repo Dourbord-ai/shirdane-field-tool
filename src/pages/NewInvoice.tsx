@@ -1013,6 +1013,25 @@ export default function NewInvoice() {
       }
     }
 
+    // 10) Insert rental items
+    if (isRental) {
+      const rentalInsertRows = rentalRows
+        .filter((r) => r.purpose || r.driverName || (parseInt(r.amount) || 0) > 0)
+        .map((r, idx) => ({
+          factor_id: factor.id,
+          purpose: r.purpose || null,
+          driver_name: r.driverName || null,
+          iban_or_card: r.ibanOrCard || null,
+          amount: parseInt(r.amount) || 0,
+          row_total: rentalRowCalcs[idx].rowTotal,
+          description: r.description || null,
+        }));
+      if (rentalInsertRows.length > 0) {
+        const { error: rentalErr } = await (supabase as any).from("rental_items").insert(rentalInsertRows);
+        if (rentalErr) console.error("Rental items insert error:", rentalErr);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
