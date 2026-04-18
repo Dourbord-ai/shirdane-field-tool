@@ -530,7 +530,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : data.productType === "other" ? otherCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
@@ -992,6 +992,8 @@ export default function NewInvoice() {
                 ? medicineCompanyOptions
                 : data.productType === "livestock"
                 ? livestockCompanyOptions
+                : data.productType === "other"
+                ? otherCompanyOptions
                 : companyList
             }
             value={data.company}
