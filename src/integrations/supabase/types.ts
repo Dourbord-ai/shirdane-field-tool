@@ -107,6 +107,36 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_attachments: {
+        Row: {
+          created_at: string
+          factor_id: string
+          file_name: string | null
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          factor_id: string
+          file_name?: string | null
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          factor_id?: string
+          file_name?: string | null
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       factor_item_type: {
         Row: {
           category: string

@@ -10,6 +10,7 @@ import { JalaliDate, toPersianDigits } from "@/lib/jalali";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
+import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 
 // ---- static data ----
 const productTypes = [
@@ -320,6 +321,7 @@ export default function NewInvoice() {
   const [wageRows, setWageRows] = useState<WageRow[]>([createWageRow()]);
   const [dailyWorkerRows, setDailyWorkerRows] = useState<DailyWorkerRow[]>([createDailyWorkerRow()]);
   const [rentalRows, setRentalRows] = useState<RentalRow[]>([createRentalRow()]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
@@ -1032,6 +1034,35 @@ export default function NewInvoice() {
       }
     }
 
+    // Final) Upload attachments to storage and link to factor
+    if (attachments.length > 0) {
+      const attachmentRows: { factor_id: string; file_path: string; file_name: string; file_type: string; file_size: number }[] = [];
+      for (const att of attachments) {
+        const safeName = att.file.name.replace(/[^\w.\-]+/g, "_");
+        const path = `${factor.id}/${Date.now()}_${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from("factor-attachments")
+          .upload(path, att.file, { upsert: false, contentType: att.file.type || undefined });
+        if (upErr) {
+          console.error("Attachment upload error:", upErr);
+          continue;
+        }
+        attachmentRows.push({
+          factor_id: factor.id,
+          file_path: path,
+          file_name: att.file.name,
+          file_type: att.file.type || "application/octet-stream",
+          file_size: att.file.size,
+        });
+      }
+      if (attachmentRows.length > 0) {
+        const { error: attErr } = await (supabase as any)
+          .from("factor_attachments")
+          .insert(attachmentRows);
+        if (attErr) console.error("factor_attachments insert error:", attErr);
+      }
+    }
+
     setSubmitted(true);
     setTimeout(() => navigate("/invoices"), 1200);
   };
@@ -1068,6 +1099,7 @@ export default function NewInvoice() {
           setWageRows([createWageRow()]);
           setDailyWorkerRows([createDailyWorkerRow()]);
           setRentalRows([createRentalRow()]);
+          setAttachments([]);
         }}
         placeholder="انتخاب نوع محصول..."
       />
@@ -1332,6 +1364,7 @@ export default function NewInvoice() {
               <RowDisplay label="مبلغ قابل پرداخت" value={formatRial(milkPayable)} bold />
             </div>
           </div>
+          <FileAttachments files={attachments} onChange={setAttachments} />
           <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
             ثبت نهایی
           </Button>
@@ -1987,6 +2020,7 @@ export default function NewInvoice() {
               <RowDisplay label="مبلغ قابل پرداخت" value={formatRial(payable)} bold />
             </div>
           </div>
+          <FileAttachments files={attachments} onChange={setAttachments} />
           <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
             ثبت نهایی
           </Button>
