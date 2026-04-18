@@ -620,13 +620,16 @@ export default function NewInvoice() {
         .filter((r) => (parseFloat(r.weightKg) || 0) > 0)
         .map((r, idx) => {
           const calc = livestockRowCalcs[idx];
+          const cow = cowOptions.find((c) => c.value === r.animalNumber);
+          const bodyNum = cow ? cow.label : r.animalNumber;
+          const earSuffix = cow?.earNumber ? ` (شماره گوش: ${cow.earNumber})` : "";
           return {
             factor_id: factor.id,
-            animal_number: r.animalNumber || null,
+            animal_number: bodyNum || null,
             weight_kg: calc.wt,
             price_per_kg: calc.ppk,
             row_total: calc.rowTotal,
-            description: r.description || null,
+            description: ((r.description || "") + earSuffix) || null,
           };
         });
 
