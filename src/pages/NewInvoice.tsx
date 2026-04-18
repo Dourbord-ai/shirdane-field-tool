@@ -708,15 +708,20 @@ export default function NewInvoice() {
   const showMilkPreview = showMilkDetails && !!data.settlement && hasMilkValidRows;
 
   // Non-milk flow
-  const showSellerType = !isMilk && !!data.tax;
+  const showSellerType = !isMilk && !!data.tax && !isRental;
   const showCompany = showSellerType && data.sellerType === "company";
-  const showProductDetails = !isMilk && (data.sellerType === "person" || (data.sellerType === "company" && !!data.company));
+  const showProductDetails = !isMilk && (
+    isRental
+      ? !!data.tax
+      : (data.sellerType === "person" || (data.sellerType === "company" && !!data.company))
+  );
   const hasFeedValidRows = feedRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
   const hasMedicineValidRows = medicineRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const hasLivestockValidRows = livestockRows.some((r) => (parseFloat(r.weightKg) || 0) > 0 && (parseInt(r.pricePerKg) || 0) > 0);
   const hasExaminationValidRows = examinationRows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const hasWageValidRows = wageRows.some((r) => (parseInt(r.dailyAmount) || 0) > 0 || (parseInt(r.contractAmount) || 0) > 0);
   const hasDailyWorkerValidRows = dailyWorkerRows.some((r) => (parseFloat(r.daysCount) || 0) > 0 || (parseFloat(r.hoursCount) || 0) > 0);
+  const hasRentalValidRows = rentalRows.some((r) => (parseInt(r.amount) || 0) > 0 || !!r.driverName || !!r.purpose);
   const hasValidRows = isFeed
     ? hasFeedValidRows
     : isMedicine
@@ -729,6 +734,8 @@ export default function NewInvoice() {
     ? hasWageValidRows
     : isDailyWorker
     ? hasDailyWorkerValidRows
+    : isRental
+    ? hasRentalValidRows
     : rows.some((r) => (parseInt(r.quantity) || 0) > 0 && (parseInt(r.unitPrice) || 0) > 0);
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
