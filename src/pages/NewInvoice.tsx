@@ -19,6 +19,8 @@ const productTypes = [
   { label: "دارو", value: "medicine" },
   { label: "دام", value: "livestock" },
   { label: "سایر", value: "other" },
+  { label: "خدمات", value: "services" },
+  { label: "کرایه", value: "rental" },
 ];
 
 const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
