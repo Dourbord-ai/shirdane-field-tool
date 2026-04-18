@@ -1539,6 +1539,217 @@ export default function NewInvoice() {
                 ردیف جدید
               </Button>
             </>
+          ) : isExaminations ? (
+            <>
+              {/* ===== EXAMINATION ITEMS (services > معاینات) ===== */}
+              <div className="space-y-3">
+                {examinationRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {examinationRows.length > 1 && (
+                        <button type="button" onClick={() => removeExaminationRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <SearchableSelect
+                      label="نام آیتم"
+                      options={examinationItemOptions}
+                      value={row.itemName}
+                      onChange={(v) => updateExaminationRow(row.id, "itemName", v)}
+                      placeholder="انتخاب آیتم معاینات..."
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد</label>
+                        <Input type="number" value={row.quantity} onChange={(e) => updateExaminationRow(row.id, "quantity", e.target.value)} placeholder="تعداد..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت واحد (ریال)</label>
+                        <Input type="number" value={row.unitPrice} onChange={(e) => updateExaminationRow(row.id, "unitPrice", e.target.value)} placeholder="قیمت..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    {examinationRowTotals[index] > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(examinationRowTotals[index])}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateExaminationRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addExaminationRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isWage ? (
+            <>
+              {/* ===== WAGE ITEMS (services > اجرت) ===== */}
+              <div className="space-y-3">
+                {wageRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {wageRows.length > 1 && (
+                        <button type="button" onClick={() => removeWageRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">بابت</label>
+                      <Input value={row.purpose} onChange={(e) => updateWageRow(row.id, "purpose", e.target.value)} placeholder="بابت چیست..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <SearchableSelect
+                      label="نوع کار"
+                      options={workModeOptions}
+                      value={row.workMode}
+                      onChange={(v) => updateWageRow(row.id, "workMode", v)}
+                      placeholder="روزانه یا پیمان کاری..."
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <JalaliDatePicker label="از تاریخ" value={row.startDate} onChange={(v) => updateWageRow(row.id, "startDate", v)} />
+                      <JalaliDatePicker label="تا تاریخ" value={row.endDate} onChange={(v) => updateWageRow(row.id, "endDate", v)} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">پرداخت</label>
+                      <Input value={row.paymentType} onChange={(e) => updateWageRow(row.id, "paymentType", e.target.value)} placeholder="نوع پرداخت..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">روزی چقدر (ریال)</label>
+                        <Input type="number" value={row.dailyAmount} onChange={(e) => updateWageRow(row.id, "dailyAmount", e.target.value)} placeholder="مبلغ روزانه..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">پیمان کاری چقدر (ریال)</label>
+                        <Input type="number" value={row.contractAmount} onChange={(e) => updateWageRow(row.id, "contractAmount", e.target.value)} placeholder="مبلغ پیمان..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">نام صاحب حساب</label>
+                      <Input value={row.accountHolder} onChange={(e) => updateWageRow(row.id, "accountHolder", e.target.value)} placeholder="نام و نام خانوادگی..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">شماره شبا یا کارت</label>
+                      <Input value={row.ibanOrCard} onChange={(e) => updateWageRow(row.id, "ibanOrCard", e.target.value)} placeholder="شبا/کارت..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    {wageRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(wageRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateWageRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addWageRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
+          ) : isDailyWorker ? (
+            <>
+              {/* ===== DAILY WORKER ITEMS (services > کارگر روز مزد) ===== */}
+              <div className="space-y-3">
+                {dailyWorkerRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {dailyWorkerRows.length > 1 && (
+                        <button type="button" onClick={() => removeDailyWorkerRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">بابت</label>
+                      <Input value={row.purpose} onChange={(e) => updateDailyWorkerRow(row.id, "purpose", e.target.value)} placeholder="بابت چیست..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">نام کارگر</label>
+                      <Input value={row.workerName} onChange={(e) => updateDailyWorkerRow(row.id, "workerName", e.target.value)} placeholder="نام کارگر..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد روز</label>
+                        <Input type="number" value={row.daysCount} onChange={(e) => updateDailyWorkerRow(row.id, "daysCount", e.target.value)} placeholder="روز..." className="rounded-xl touch-target text-sm" min="0" step="0.5" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">تعداد ساعت</label>
+                        <Input type="number" value={row.hoursCount} onChange={(e) => updateDailyWorkerRow(row.id, "hoursCount", e.target.value)} placeholder="ساعت..." className="rounded-xl touch-target text-sm" min="0" step="0.5" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت روز (ریال)</label>
+                        <Input type="number" value={row.dailyRate} onChange={(e) => updateDailyWorkerRow(row.id, "dailyRate", e.target.value)} placeholder="نرخ روز..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-medium text-foreground">قیمت ساعت (ریال)</label>
+                        <Input type="number" value={row.hourlyRate} onChange={(e) => updateDailyWorkerRow(row.id, "hourlyRate", e.target.value)} placeholder="نرخ ساعت..." className="rounded-xl touch-target text-sm" min="0" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <JalaliDatePicker label="تاریخ شروع" value={row.startDate} onChange={(v) => updateDailyWorkerRow(row.id, "startDate", v)} />
+                      <JalaliDatePicker label="تاریخ پایان" value={row.endDate} onChange={(v) => updateDailyWorkerRow(row.id, "endDate", v)} />
+                    </div>
+
+                    {dailyWorkerRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(dailyWorkerRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateDailyWorkerRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addDailyWorkerRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
           ) : (
             <>
               {/* ===== GENERIC (SPERM, etc.) ITEMS ===== */}
