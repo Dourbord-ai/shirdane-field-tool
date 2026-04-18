@@ -182,9 +182,80 @@ const createMilkRow = (): MilkProductRow => ({
   description: "",
 });
 
+interface ExaminationRow {
+  id: string;
+  itemName: string;
+  quantity: string;
+  unitPrice: string;
+  description: string;
+}
+
+const createExaminationRow = (): ExaminationRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  itemName: "",
+  quantity: "",
+  unitPrice: "",
+  description: "",
+});
+
+interface WageRow {
+  id: string;
+  purpose: string;
+  workMode: string;
+  startDate: JalaliDate | null;
+  endDate: JalaliDate | null;
+  paymentType: string;
+  dailyAmount: string;
+  contractAmount: string;
+  accountHolder: string;
+  ibanOrCard: string;
+  description: string;
+}
+
+const createWageRow = (): WageRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  purpose: "",
+  workMode: "",
+  startDate: null,
+  endDate: null,
+  paymentType: "",
+  dailyAmount: "",
+  contractAmount: "",
+  accountHolder: "",
+  ibanOrCard: "",
+  description: "",
+});
+
+interface DailyWorkerRow {
+  id: string;
+  purpose: string;
+  workerName: string;
+  daysCount: string;
+  hoursCount: string;
+  dailyRate: string;
+  hourlyRate: string;
+  startDate: JalaliDate | null;
+  endDate: JalaliDate | null;
+  description: string;
+}
+
+const createDailyWorkerRow = (): DailyWorkerRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  purpose: "",
+  workerName: "",
+  daysCount: "",
+  hoursCount: "",
+  dailyRate: "",
+  hourlyRate: "",
+  startDate: null,
+  endDate: null,
+  description: "",
+});
+
 interface InvoiceData {
   productType: string;
   invoiceType: string;
+  serviceSubType: string;
   date: JalaliDate | null;
   invoiceNumber: string;
   tax: string;
@@ -201,6 +272,7 @@ interface InvoiceData {
 const initial: InvoiceData = {
   productType: "",
   invoiceType: "",
+  serviceSubType: "",
   date: null,
   invoiceNumber: "",
   tax: "",
