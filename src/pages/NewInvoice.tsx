@@ -10,6 +10,7 @@ import { JalaliDate, toPersianDigits } from "@/lib/jalali";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
+import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 
 // ---- static data ----
 const productTypes = [
