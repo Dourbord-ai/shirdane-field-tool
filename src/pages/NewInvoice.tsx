@@ -65,6 +65,7 @@ const settlementTypes = [
 interface ProductRow {
   id: string;
   spermCode: string;
+  itemName: string;
   quantity: string;
   unitPrice: string;
   description: string;
@@ -73,6 +74,7 @@ interface ProductRow {
 const createRow = (): ProductRow => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
   spermCode: "",
+  itemName: "",
   quantity: "",
   unitPrice: "",
   description: "",
@@ -214,6 +216,8 @@ export default function NewInvoice() {
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineCompanyOptions, setMedicineCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [livestockCompanyOptions, setLivestockCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+  const [otherCompanyOptions, setOtherCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+  const [otherItemOptions, setOtherItemOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
   const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
@@ -303,10 +307,41 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchOtherCompanies = async () => {
+      const { data: companies } = await supabase.from("other_shoppingcenter").select("*").order("id");
+      if (companies) {
+        setOtherCompanyOptions(
+          companies.map((c) => ({
+            label: c.name || "",
+            value: c.id.toString(),
+          }))
+        );
+      }
+    };
+    const fetchOtherItems = async () => {
+      const { data: parents } = await supabase.from("factor_item_type").select("*").order("id");
+      const { data: children } = await supabase.from("factor_item_type_id").select("*").order("id");
+      if (parents && children) {
+        const parentMap = new Map(parents.map((p) => [p.id, p.name || ""]));
+        setOtherItemOptions(
+          children
+            .filter((c) => c.name)
+            .map((c) => {
+              const parentName = parentMap.get(Number(c.factortypeid)) || "";
+              return {
+                label: parentName ? `${parentName} - ${c.name}` : c.name || "",
+                value: c.id.toString(),
+              };
+            })
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
     fetchMedicineCompanies();
     fetchLivestockCompanies();
+    fetchOtherCompanies();
+    fetchOtherItems();
     fetchFeeds();
     fetchMedicines();
     fetchCows();
@@ -495,7 +530,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : data.productType === "other" ? otherCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
@@ -515,6 +550,15 @@ export default function NewInvoice() {
           ? medicineRows.map((r) => r.description).filter(Boolean).join(" | ") || null
           : isLivestock
           ? livestockRows.map((r) => r.description).filter(Boolean).join(" | ") || null
+          : data.productType === "other"
+          ? rows
+              .map((r) => {
+                const itemLabel = otherItemOptions.find((o) => o.value === r.itemName)?.label;
+                const parts = [itemLabel, r.description].filter(Boolean);
+                return parts.join(" — ");
+              })
+              .filter(Boolean)
+              .join(" | ") || null
           : rows.map((r) => r.description).filter(Boolean).join(" | ") || null,
       })
       .select()
@@ -957,6 +1001,8 @@ export default function NewInvoice() {
                 ? medicineCompanyOptions
                 : data.productType === "livestock"
                 ? livestockCompanyOptions
+                : data.productType === "other"
+                ? otherCompanyOptions
                 : companyList
             }
             value={data.company}
@@ -1233,6 +1279,16 @@ export default function NewInvoice() {
                         value={row.spermCode}
                         onChange={(v) => updateRow(row.id, "spermCode", v)}
                         placeholder="انتخاب اسپرم..."
+                      />
+                    )}
+
+                    {data.productType === "other" && (
+                      <SearchableSelect
+                        label="نام آیتم"
+                        options={otherItemOptions}
+                        value={row.itemName}
+                        onChange={(v) => updateRow(row.id, "itemName", v)}
+                        placeholder="انتخاب آیتم..."
                       />
                     )}
 
