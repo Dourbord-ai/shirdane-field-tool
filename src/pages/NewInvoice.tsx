@@ -118,15 +118,24 @@ interface LivestockProductRow {
   id: string;
   animalNumber: string;
   earNumber: string;
+  saleType: string;
   weightKg: string;
   pricePerKg: string;
   description: string;
 }
 
+const livestockSaleTypeOptions = [
+  { label: "فروش", value: "sale" },
+  { label: "تلفات", value: "loss" },
+  { label: "کشتار", value: "slaughter" },
+  { label: "سایر", value: "other" },
+];
+
 const createLivestockRow = (): LivestockProductRow => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
   animalNumber: "",
   earNumber: "",
+  saleType: "",
   weightKg: "",
   pricePerKg: "",
   description: "",
@@ -486,7 +495,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : (data.productType === "livestock" && data.invoiceType === "buy") ? livestockCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
@@ -623,13 +632,15 @@ export default function NewInvoice() {
           const cow = cowOptions.find((c) => c.value === r.animalNumber);
           const bodyNum = cow ? cow.label : r.animalNumber;
           const earSuffix = cow?.earNumber ? ` (شماره گوش: ${cow.earNumber})` : "";
+          const saleTypeLabel = livestockSaleTypeOptions.find((o) => o.value === r.saleType)?.label;
+          const saleTypePrefix = saleTypeLabel ? `[نوع: ${saleTypeLabel}] ` : "";
           return {
             factor_id: factor.id,
             animal_number: bodyNum || null,
             weight_kg: calc.wt,
             price_per_kg: calc.ppk,
             row_total: calc.rowTotal,
-            description: ((r.description || "") + earSuffix) || null,
+            description: (saleTypePrefix + (r.description || "") + earSuffix).trim() || null,
           };
         });
 
@@ -944,7 +955,7 @@ export default function NewInvoice() {
                 ? feedCompanyOptions
                 : data.productType === "medicine"
                 ? medicineCompanyOptions
-                : data.productType === "livestock" && data.invoiceType === "buy"
+                : data.productType === "livestock"
                 ? livestockCompanyOptions
                 : companyList
             }
@@ -1145,6 +1156,16 @@ export default function NewInvoice() {
                         <span className="text-xs text-muted-foreground">شماره گوش</span>
                         <span className="text-sm font-bold text-primary">{toPersianDigits(row.earNumber)}</span>
                       </div>
+                    )}
+
+                    {data.invoiceType === "sell" && (
+                      <SearchableSelect
+                        label="نوع"
+                        options={livestockSaleTypeOptions}
+                        value={row.saleType}
+                        onChange={(v) => updateLivestockRow(row.id, "saleType", v)}
+                        placeholder="انتخاب نوع..."
+                      />
                     )}
 
                     <div className="grid grid-cols-2 gap-3">
