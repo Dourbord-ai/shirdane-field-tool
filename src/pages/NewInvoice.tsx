@@ -117,6 +117,7 @@ const createMedicineRow = (): MedicineProductRow => ({
 interface LivestockProductRow {
   id: string;
   animalNumber: string;
+  earNumber: string;
   weightKg: string;
   pricePerKg: string;
   description: string;
@@ -125,6 +126,7 @@ interface LivestockProductRow {
 const createLivestockRow = (): LivestockProductRow => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
   animalNumber: "",
+  earNumber: "",
   weightKg: "",
   pricePerKg: "",
   description: "",
@@ -202,8 +204,10 @@ export default function NewInvoice() {
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineCompanyOptions, setMedicineCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+  const [livestockCompanyOptions, setLivestockCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
+  const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
@@ -265,11 +269,38 @@ export default function NewInvoice() {
         );
       }
     };
+    const fetchLivestockCompanies = async () => {
+      const { data: companies } = await supabase.from("buy_cattle_shoppingcenter").select("*").order("id");
+      if (companies) {
+        setLivestockCompanyOptions(
+          companies.map((c) => ({
+            label: c.name || "",
+            value: c.id.toString(),
+          }))
+        );
+      }
+    };
+    const fetchCows = async () => {
+      const { data: cows } = await supabase.from("cows").select("*").order("bodynumber");
+      if (cows) {
+        setCowOptions(
+          cows
+            .filter((c) => c.bodynumber != null)
+            .map((c) => ({
+              label: c.bodynumber?.toString() || "",
+              value: c.id.toString(),
+              earNumber: c.earnumber?.toString() || "",
+            }))
+        );
+      }
+    };
     fetchSperms();
     fetchFeedCompanies();
     fetchMedicineCompanies();
+    fetchLivestockCompanies();
     fetchFeeds();
     fetchMedicines();
+    fetchCows();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
@@ -328,6 +359,16 @@ export default function NewInvoice() {
   // Livestock row helpers
   const updateLivestockRow = (rowId: string, field: keyof LivestockProductRow, value: string) => {
     setLivestockRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+  const selectCow = (rowId: string, cowValue: string) => {
+    const cow = cowOptions.find((c) => c.value === cowValue);
+    setLivestockRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? { ...r, animalNumber: cowValue, earNumber: cow?.earNumber || "" }
+          : r
+      )
+    );
   };
   const addLivestockRow = () => setLivestockRows((prev) => [...prev, createLivestockRow()]);
   const removeLivestockRow = (rowId: string) => {
@@ -445,7 +486,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : (data.productType === "livestock" && data.invoiceType === "buy") ? livestockCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
@@ -579,13 +620,16 @@ export default function NewInvoice() {
         .filter((r) => (parseFloat(r.weightKg) || 0) > 0)
         .map((r, idx) => {
           const calc = livestockRowCalcs[idx];
+          const cow = cowOptions.find((c) => c.value === r.animalNumber);
+          const bodyNum = cow ? cow.label : r.animalNumber;
+          const earSuffix = cow?.earNumber ? ` (شماره گوش: ${cow.earNumber})` : "";
           return {
             factor_id: factor.id,
-            animal_number: r.animalNumber || null,
+            animal_number: bodyNum || null,
             weight_kg: calc.wt,
             price_per_kg: calc.ppk,
             row_total: calc.rowTotal,
-            description: r.description || null,
+            description: ((r.description || "") + earSuffix) || null,
           };
         });
 
@@ -900,6 +944,8 @@ export default function NewInvoice() {
                 ? feedCompanyOptions
                 : data.productType === "medicine"
                 ? medicineCompanyOptions
+                : data.productType === "livestock" && data.invoiceType === "buy"
+                ? livestockCompanyOptions
                 : companyList
             }
             value={data.company}
@@ -1086,15 +1132,20 @@ export default function NewInvoice() {
                       )}
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-foreground">شماره دام</label>
-                      <Input
-                        value={row.animalNumber}
-                        onChange={(e) => updateLivestockRow(row.id, "animalNumber", e.target.value)}
-                        placeholder="شماره دام..."
-                        className="rounded-xl touch-target text-sm"
-                      />
-                    </div>
+                    <SearchableSelect
+                      label="شماره دام"
+                      options={cowOptions.map((c) => ({ label: c.label, value: c.value }))}
+                      value={row.animalNumber}
+                      onChange={(v) => selectCow(row.id, v)}
+                      placeholder="انتخاب شماره دام..."
+                    />
+
+                    {row.earNumber && (
+                      <div className="flex justify-between items-center bg-primary/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">شماره گوش</span>
+                        <span className="text-sm font-bold text-primary">{toPersianDigits(row.earNumber)}</span>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">

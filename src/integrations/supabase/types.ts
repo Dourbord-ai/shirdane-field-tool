@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      buy_cattle_shoppingcenter: {
+        Row: {
+          id: number
+          name: string | null
+        }
+        Insert: {
+          id: number
+          name?: string | null
+        }
+        Update: {
+          id?: number
+          name?: string | null
+        }
+        Relationships: []
+      }
       cows: {
         Row: {
           bodynumber: number | null
