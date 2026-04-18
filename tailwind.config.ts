@@ -89,12 +89,17 @@ export default {
           from: { transform: "rotate(0deg)" },
           to: { transform: "rotate(360deg)" },
         },
+        "slide-up": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.3s ease-out",
         "spin-slow": "spin-slow 1s linear infinite",
+        "slide-up": "slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
       },
     },
   },
