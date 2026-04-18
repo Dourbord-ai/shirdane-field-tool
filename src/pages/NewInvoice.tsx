@@ -1364,6 +1364,7 @@ export default function NewInvoice() {
               <RowDisplay label="مبلغ قابل پرداخت" value={formatRial(milkPayable)} bold />
             </div>
           </div>
+          <FileAttachments files={attachments} onChange={setAttachments} />
           <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
             ثبت نهایی
           </Button>
@@ -2019,6 +2020,7 @@ export default function NewInvoice() {
               <RowDisplay label="مبلغ قابل پرداخت" value={formatRial(payable)} bold />
             </div>
           </div>
+          <FileAttachments files={attachments} onChange={setAttachments} />
           <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
             ثبت نهایی
           </Button>
