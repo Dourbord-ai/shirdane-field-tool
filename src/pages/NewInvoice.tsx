@@ -114,6 +114,22 @@ const createMedicineRow = (): MedicineProductRow => ({
   description: "",
 });
 
+interface LivestockProductRow {
+  id: string;
+  animalNumber: string;
+  weightKg: string;
+  pricePerKg: string;
+  description: string;
+}
+
+const createLivestockRow = (): LivestockProductRow => ({
+  id: Date.now().toString() + Math.random().toString(36).slice(2),
+  animalNumber: "",
+  weightKg: "",
+  pricePerKg: "",
+  description: "",
+});
+
 interface MilkProductRow {
   id: string;
   quantityKg: string;
