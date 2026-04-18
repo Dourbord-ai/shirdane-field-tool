@@ -204,8 +204,10 @@ export default function NewInvoice() {
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineCompanyOptions, setMedicineCompanyOptions] = useState<{ label: string; value: string }[]>([]);
+  const [livestockCompanyOptions, setLivestockCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
+  const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
