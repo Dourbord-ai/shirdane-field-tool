@@ -486,7 +486,7 @@ export default function NewInvoice() {
           ? (data.isBuyerCompany ? "company" : "person")
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : companyList;
+          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : (data.productType === "livestock" && data.invoiceType === "buy") ? livestockCompanyOptions : companyList;
           const found = allCompanies.find((c) => c.value === data.company);
           return found ? found.label : data.company || null;
         })(),
