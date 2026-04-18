@@ -1816,6 +1816,63 @@ export default function NewInvoice() {
                 ردیف جدید
               </Button>
             </>
+          ) : isRental ? (
+            <>
+              {/* ===== RENTAL ITEMS (کرایه) ===== */}
+              <div className="space-y-3">
+                {rentalRows.map((row, index) => (
+                  <div key={row.id} className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg">
+                        ردیف {toPersianDigits((index + 1).toString())}
+                      </span>
+                      {rentalRows.length > 1 && (
+                        <button type="button" onClick={() => removeRentalRow(row.id)} className="p-2 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="حذف ردیف">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">بابت</label>
+                      <Input value={row.purpose} onChange={(e) => updateRentalRow(row.id, "purpose", e.target.value)} placeholder="بابت چیست..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">نام و نام خانوادگی راننده</label>
+                      <Input value={row.driverName} onChange={(e) => updateRentalRow(row.id, "driverName", e.target.value)} placeholder="نام راننده..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">شماره شبا یا کارت</label>
+                      <Input value={row.ibanOrCard} onChange={(e) => updateRentalRow(row.id, "ibanOrCard", e.target.value)} placeholder="شبا/کارت..." className="rounded-xl touch-target text-sm" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">مبلغ (ریال)</label>
+                      <Input type="number" value={row.amount} onChange={(e) => updateRentalRow(row.id, "amount", e.target.value)} placeholder="مبلغ کرایه..." className="rounded-xl touch-target text-sm" min="0" />
+                    </div>
+
+                    {rentalRowCalcs[index].rowTotal > 0 && (
+                      <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
+                        <span className="text-xs text-muted-foreground">جمع ردیف</span>
+                        <span className="text-sm font-bold text-accent">{formatRial(rentalRowCalcs[index].rowTotal)}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">توضیحات</label>
+                      <Input value={row.description} onChange={(e) => updateRentalRow(row.id, "description", e.target.value)} placeholder="توضیحات ردیف..." className="rounded-xl touch-target text-sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button type="button" variant="outline" onClick={addRentalRow} className="w-full touch-target rounded-xl gap-2 border-dashed border-2 border-accent/40 text-accent hover:bg-accent/10 hover:text-accent">
+                <Plus className="w-5 h-5" />
+                ردیف جدید
+              </Button>
+            </>
           ) : (
             <>
               {/* ===== GENERIC (SPERM, etc.) ITEMS ===== */}
