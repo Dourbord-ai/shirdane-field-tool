@@ -19,6 +19,8 @@ const productTypes = [
   { label: "دارو", value: "medicine" },
   { label: "دام", value: "livestock" },
   { label: "سایر", value: "other" },
+  { label: "خدمات", value: "services" },
+  { label: "کرایه", value: "rental" },
 ];
 
 const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
@@ -31,6 +33,8 @@ const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
   medicine: [{ label: "خرید", value: "buy" }],
   livestock: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   other: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
+  services: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
+  rental: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
 };
 
 const taxOptions = [
