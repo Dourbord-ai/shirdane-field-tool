@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      bankpartyaccountinfos: {
+        Row: {
+          bankpartyid: number | null
+          id: number | null
+          matchbankname: string | null
+          matchcontent: string | null
+          matchname: string | null
+          matchtype: string | null
+          status: string | null
+        }
+        Insert: {
+          bankpartyid?: number | null
+          id?: number | null
+          matchbankname?: string | null
+          matchcontent?: string | null
+          matchname?: string | null
+          matchtype?: string | null
+          status?: string | null
+        }
+        Update: {
+          bankpartyid?: number | null
+          id?: number | null
+          matchbankname?: string | null
+          matchcontent?: string | null
+          matchname?: string | null
+          matchtype?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       buy_cattle_shoppingcenter: {
         Row: {
           id: number
