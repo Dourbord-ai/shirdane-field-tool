@@ -284,6 +284,7 @@ interface RentalRow {
   ibanOrCard: string;
   amount: string;
   description: string;
+  verifyStatus?: "match" | "partial" | "mismatch" | null;
 }
 
 const createRentalRow = (): RentalRow => ({
@@ -294,6 +295,7 @@ const createRentalRow = (): RentalRow => ({
   ibanOrCard: "",
   amount: "",
   description: "",
+  verifyStatus: null,
 });
 
 interface InvoiceData {
