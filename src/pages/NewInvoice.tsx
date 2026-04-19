@@ -601,8 +601,8 @@ export default function NewInvoice() {
   };
 
   // Rental row helpers
-  const updateRentalRow = (rowId: string, field: keyof RentalRow, value: string) => {
-    setRentalRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  const updateRentalRow = (rowId: string, field: keyof RentalRow, value: string | "match" | "partial" | "mismatch" | null) => {
+    setRentalRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as RentalRow : r)));
   };
   const addRentalRow = () => setRentalRows((prev) => [...prev, createRentalRow()]);
   const removeRentalRow = (rowId: string) => {
