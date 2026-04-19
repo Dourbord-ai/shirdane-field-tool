@@ -1792,6 +1792,7 @@ export default function NewInvoice() {
                       number={row.ibanOrCard}
                       accountHolderName={row.accountHolder}
                       onAccountHolderNameChange={(name) => updateWageRow(row.id, "accountHolder", name)}
+                      onMatchStatusChange={(status) => updateWageRow(row.id, "verifyStatus", status)}
                     />
 
                     {wageRowCalcs[index].rowTotal > 0 && (
