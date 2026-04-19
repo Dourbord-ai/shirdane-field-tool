@@ -49,12 +49,9 @@ export default function AccountVerifyButton({ type, number, onUseName }: Account
       });
 
       if (fnError) {
-        // Try to read inner error from response if available
-        let msg = fnError.message || "خطا در ارتباط با سرویس";
-        // @ts-expect-error - context may include response
-        const ctxRes = fnError.context?.body || fnError.context;
-        if (ctxRes?.error) msg = ctxRes.error;
-        throw new Error(msg);
+        const ctx = (fnError as { context?: { error?: string; body?: { error?: string } } }).context;
+        const ctxMsg = ctx?.body?.error || ctx?.error;
+        throw new Error(ctxMsg || fnError.message || "خطا در ارتباط با سرویس");
       }
 
       if (!data?.ok) {
