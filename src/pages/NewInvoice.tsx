@@ -1931,6 +1931,7 @@ export default function NewInvoice() {
                       number={row.ibanOrCard}
                       accountHolderName={row.driverName}
                       onAccountHolderNameChange={(name) => updateRentalRow(row.id, "driverName", name)}
+                      onMatchStatusChange={(status) => updateRentalRow(row.id, "verifyStatus", status)}
                       nameLabel="نام و نام خانوادگی راننده"
                       namePlaceholder="نام راننده..."
                     />
