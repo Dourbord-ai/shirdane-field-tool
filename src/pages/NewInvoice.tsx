@@ -11,6 +11,25 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
+import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
+
+const paymentMethods: { label: string; value: PaymentMethod }[] = [
+  { label: "کارت", value: "1" },
+  { label: "شبا", value: "2" },
+  { label: "حساب", value: "3" },
+];
+
+const paymentMethodPlaceholder: Record<PaymentMethod, string> = {
+  "1": "شماره ۱۶ رقمی کارت...",
+  "2": "IR + ۲۴ رقم...",
+  "3": "شماره حساب (بانک کشاورزی)...",
+};
+
+const paymentMethodLabel: Record<PaymentMethod, string> = {
+  "1": "شماره کارت",
+  "2": "شماره شبا",
+  "3": "شماره حساب",
+};
 
 // ---- static data ----
 const productTypes = [
@@ -209,6 +228,7 @@ interface WageRow {
   dailyAmount: string;
   contractAmount: string;
   accountHolder: string;
+  paymentMethod: PaymentMethod;
   ibanOrCard: string;
   description: string;
 }
@@ -223,6 +243,7 @@ const createWageRow = (): WageRow => ({
   dailyAmount: "",
   contractAmount: "",
   accountHolder: "",
+  paymentMethod: "1",
   ibanOrCard: "",
   description: "",
 });
@@ -257,6 +278,7 @@ interface RentalRow {
   id: string;
   purpose: string;
   driverName: string;
+  paymentMethod: PaymentMethod;
   ibanOrCard: string;
   amount: string;
   description: string;
@@ -266,6 +288,7 @@ const createRentalRow = (): RentalRow => ({
   id: Date.now().toString() + Math.random().toString(36).slice(2),
   purpose: "",
   driverName: "",
+  paymentMethod: "1",
   ibanOrCard: "",
   amount: "",
   description: "",
@@ -1751,9 +1774,25 @@ export default function NewInvoice() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-foreground">شماره شبا یا کارت</label>
-                      <Input value={row.ibanOrCard} onChange={(e) => updateWageRow(row.id, "ibanOrCard", e.target.value)} placeholder="شبا/کارت..." className="rounded-xl touch-target text-sm" />
+                      <label className="block text-xs font-medium text-foreground">روش پرداخت</label>
+                      <SearchableSelect
+                        value={row.paymentMethod}
+                        onChange={(v) => updateWageRow(row.id, "paymentMethod", (v as PaymentMethod) || "1")}
+                        options={paymentMethods}
+                        placeholder="انتخاب روش..."
+                      />
                     </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">{paymentMethodLabel[row.paymentMethod]}</label>
+                      <Input value={row.ibanOrCard} onChange={(e) => updateWageRow(row.id, "ibanOrCard", e.target.value)} placeholder={paymentMethodPlaceholder[row.paymentMethod]} className="rounded-xl touch-target text-sm" dir="ltr" />
+                    </div>
+
+                    <AccountVerifyButton
+                      type={row.paymentMethod}
+                      number={row.ibanOrCard}
+                      onUseName={(name) => updateWageRow(row.id, "accountHolder", name)}
+                    />
 
                     {wageRowCalcs[index].rowTotal > 0 && (
                       <div className="flex justify-between items-center bg-accent/10 rounded-xl px-3 py-2">
@@ -1877,9 +1916,25 @@ export default function NewInvoice() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-foreground">شماره شبا یا کارت</label>
-                      <Input value={row.ibanOrCard} onChange={(e) => updateRentalRow(row.id, "ibanOrCard", e.target.value)} placeholder="شبا/کارت..." className="rounded-xl touch-target text-sm" />
+                      <label className="block text-xs font-medium text-foreground">روش پرداخت</label>
+                      <SearchableSelect
+                        value={row.paymentMethod}
+                        onChange={(v) => updateRentalRow(row.id, "paymentMethod", (v as PaymentMethod) || "1")}
+                        options={paymentMethods}
+                        placeholder="انتخاب روش..."
+                      />
                     </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-foreground">{paymentMethodLabel[row.paymentMethod]}</label>
+                      <Input value={row.ibanOrCard} onChange={(e) => updateRentalRow(row.id, "ibanOrCard", e.target.value)} placeholder={paymentMethodPlaceholder[row.paymentMethod]} className="rounded-xl touch-target text-sm" dir="ltr" />
+                    </div>
+
+                    <AccountVerifyButton
+                      type={row.paymentMethod}
+                      number={row.ibanOrCard}
+                      onUseName={(name) => updateRentalRow(row.id, "driverName", name)}
+                    />
 
                     <div className="space-y-1.5">
                       <label className="block text-xs font-medium text-foreground">مبلغ (ریال)</label>
