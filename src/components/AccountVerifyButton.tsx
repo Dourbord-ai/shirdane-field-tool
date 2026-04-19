@@ -14,7 +14,7 @@ interface VerifyResult {
   cached: boolean;
 }
 
-type MatchStatus = "match" | "partial" | "mismatch" | null;
+export type MatchStatus = "match" | "partial" | "mismatch" | null;
 
 interface AccountVerifyButtonProps {
   type: PaymentMethod;
@@ -24,6 +24,7 @@ interface AccountVerifyButtonProps {
   nameLabel?: string;
   namePlaceholder?: string;
   onUseName?: (name: string) => void;
+  onMatchStatusChange?: (status: MatchStatus) => void;
 }
 
 const TYPE_LABEL: Record<PaymentMethod, string> = {
