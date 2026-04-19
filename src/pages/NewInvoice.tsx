@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
+import { toast } from "@/hooks/use-toast";
 
 const paymentMethods: { label: string; value: PaymentMethod }[] = [
   { label: "کارت", value: "1" },
@@ -231,6 +232,7 @@ interface WageRow {
   paymentMethod: PaymentMethod;
   ibanOrCard: string;
   description: string;
+  verifyStatus?: "match" | "partial" | "mismatch" | null;
 }
 
 const createWageRow = (): WageRow => ({
@@ -246,6 +248,7 @@ const createWageRow = (): WageRow => ({
   paymentMethod: "1",
   ibanOrCard: "",
   description: "",
+  verifyStatus: null,
 });
 
 interface DailyWorkerRow {
@@ -282,6 +285,7 @@ interface RentalRow {
   ibanOrCard: string;
   amount: string;
   description: string;
+  verifyStatus?: "match" | "partial" | "mismatch" | null;
 }
 
 const createRentalRow = (): RentalRow => ({
@@ -292,6 +296,7 @@ const createRentalRow = (): RentalRow => ({
   ibanOrCard: "",
   amount: "",
   description: "",
+  verifyStatus: null,
 });
 
 interface InvoiceData {
@@ -578,7 +583,7 @@ export default function NewInvoice() {
   };
 
   // Wage row helpers
-  const updateWageRow = (rowId: string, field: keyof WageRow, value: string | JalaliDate | null) => {
+  const updateWageRow = (rowId: string, field: keyof WageRow, value: string | JalaliDate | null | "match" | "partial" | "mismatch") => {
     setWageRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as WageRow : r)));
   };
   const addWageRow = () => setWageRows((prev) => [...prev, createWageRow()]);
@@ -597,8 +602,8 @@ export default function NewInvoice() {
   };
 
   // Rental row helpers
-  const updateRentalRow = (rowId: string, field: keyof RentalRow, value: string) => {
-    setRentalRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  const updateRentalRow = (rowId: string, field: keyof RentalRow, value: string | "match" | "partial" | "mismatch" | null) => {
+    setRentalRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as RentalRow : r)));
   };
   const addRentalRow = () => setRentalRows((prev) => [...prev, createRentalRow()]);
   const removeRentalRow = (rowId: string) => {
@@ -765,6 +770,18 @@ export default function NewInvoice() {
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
+    // Block submission if any wage/rental row has a verified name mismatch (red)
+    const wageMismatch = wageRows.some((r) => r.verifyStatus === "mismatch");
+    const rentalMismatch = rentalRows.some((r) => r.verifyStatus === "mismatch");
+    if (wageMismatch || rentalMismatch) {
+      toast({
+        title: "مغایرت کامل نام صاحب حساب",
+        description: "یکی از ردیف‌ها با نام صاحب حساب بانک مغایرت دارد. لطفاً نام را اصلاح کنید یا روی «استفاده از این نام» بزنید.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const finalTotal = isMilk ? milkTotalProduct : totalProduct;
     const finalTax = isMilk ? milkTaxAmount : taxAmount;
     const finalPayable = isMilk ? milkPayable : payable;
@@ -1788,6 +1805,7 @@ export default function NewInvoice() {
                       number={row.ibanOrCard}
                       accountHolderName={row.accountHolder}
                       onAccountHolderNameChange={(name) => updateWageRow(row.id, "accountHolder", name)}
+                      onMatchStatusChange={(status) => updateWageRow(row.id, "verifyStatus", status)}
                     />
 
                     {wageRowCalcs[index].rowTotal > 0 && (
@@ -1926,6 +1944,7 @@ export default function NewInvoice() {
                       number={row.ibanOrCard}
                       accountHolderName={row.driverName}
                       onAccountHolderNameChange={(name) => updateRentalRow(row.id, "driverName", name)}
+                      onMatchStatusChange={(status) => updateRentalRow(row.id, "verifyStatus", status)}
                       nameLabel="نام و نام خانوادگی راننده"
                       namePlaceholder="نام راننده..."
                     />

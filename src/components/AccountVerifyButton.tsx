@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, CheckCircle2, AlertCircle, BadgeCheck, AlertTriangle, XCircle } from "lucide-react";
@@ -14,7 +14,7 @@ interface VerifyResult {
   cached: boolean;
 }
 
-type MatchStatus = "match" | "partial" | "mismatch" | null;
+export type MatchStatus = "match" | "partial" | "mismatch" | null;
 
 interface AccountVerifyButtonProps {
   type: PaymentMethod;
@@ -24,6 +24,7 @@ interface AccountVerifyButtonProps {
   nameLabel?: string;
   namePlaceholder?: string;
   onUseName?: (name: string) => void;
+  onMatchStatusChange?: (status: MatchStatus) => void;
 }
 
 const TYPE_LABEL: Record<PaymentMethod, string> = {
@@ -96,6 +97,7 @@ export default function AccountVerifyButton({
   nameLabel = "نام صاحب حساب",
   namePlaceholder = "نام و نام خانوادگی...",
   onUseName,
+  onMatchStatusChange,
 }: AccountVerifyButtonProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -105,6 +107,11 @@ export default function AccountVerifyButton({
     if (!result) return null;
     return compareNames(accountHolderName, result.name);
   }, [result, accountHolderName]);
+
+  // Notify parent whenever status changes (for submit-blocking)
+  useEffect(() => {
+    onMatchStatusChange?.(matchStatus);
+  }, [matchStatus, onMatchStatusChange]);
 
   const inputStateClass = (() => {
     if (!matchStatus) return "";
