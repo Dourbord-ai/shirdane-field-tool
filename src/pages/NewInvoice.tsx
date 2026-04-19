@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
+import { toast } from "@/hooks/use-toast";
 
 const paymentMethods: { label: string; value: PaymentMethod }[] = [
   { label: "کارت", value: "1" },
