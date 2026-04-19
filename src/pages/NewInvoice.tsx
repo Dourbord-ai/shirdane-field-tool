@@ -231,6 +231,7 @@ interface WageRow {
   paymentMethod: PaymentMethod;
   ibanOrCard: string;
   description: string;
+  verifyStatus?: "match" | "partial" | "mismatch" | null;
 }
 
 const createWageRow = (): WageRow => ({
@@ -246,6 +247,7 @@ const createWageRow = (): WageRow => ({
   paymentMethod: "1",
   ibanOrCard: "",
   description: "",
+  verifyStatus: null,
 });
 
 interface DailyWorkerRow {
