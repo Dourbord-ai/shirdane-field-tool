@@ -770,6 +770,18 @@ export default function NewInvoice() {
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
+    // Block submission if any wage/rental row has a verified name mismatch (red)
+    const wageMismatch = wageRows.some((r) => r.verifyStatus === "mismatch");
+    const rentalMismatch = rentalRows.some((r) => r.verifyStatus === "mismatch");
+    if (wageMismatch || rentalMismatch) {
+      toast({
+        title: "مغایرت کامل نام صاحب حساب",
+        description: "یکی از ردیف‌ها با نام صاحب حساب بانک مغایرت دارد. لطفاً نام را اصلاح کنید یا روی «استفاده از این نام» بزنید.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const finalTotal = isMilk ? milkTotalProduct : totalProduct;
     const finalTax = isMilk ? milkTaxAmount : taxAmount;
     const finalPayable = isMilk ? milkPayable : payable;
