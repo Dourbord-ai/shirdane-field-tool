@@ -582,7 +582,7 @@ export default function NewInvoice() {
   };
 
   // Wage row helpers
-  const updateWageRow = (rowId: string, field: keyof WageRow, value: string | JalaliDate | null) => {
+  const updateWageRow = (rowId: string, field: keyof WageRow, value: string | JalaliDate | null | "match" | "partial" | "mismatch") => {
     setWageRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } as WageRow : r)));
   };
   const addWageRow = () => setWageRows((prev) => [...prev, createWageRow()]);
