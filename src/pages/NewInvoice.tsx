@@ -1907,11 +1907,6 @@ export default function NewInvoice() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-foreground">نام و نام خانوادگی راننده</label>
-                      <Input value={row.driverName} onChange={(e) => updateRentalRow(row.id, "driverName", e.target.value)} placeholder="نام راننده..." className="rounded-xl touch-target text-sm" />
-                    </div>
-
-                    <div className="space-y-1.5">
                       <label className="block text-xs font-medium text-foreground">روش پرداخت</label>
                       <SearchableSelect
                         value={row.paymentMethod}
@@ -1929,7 +1924,10 @@ export default function NewInvoice() {
                     <AccountVerifyButton
                       type={row.paymentMethod}
                       number={row.ibanOrCard}
-                      onUseName={(name) => updateRentalRow(row.id, "driverName", name)}
+                      accountHolderName={row.driverName}
+                      onAccountHolderNameChange={(name) => updateRentalRow(row.id, "driverName", name)}
+                      nameLabel="نام و نام خانوادگی راننده"
+                      namePlaceholder="نام راننده..."
                     />
 
                     <div className="space-y-1.5">
