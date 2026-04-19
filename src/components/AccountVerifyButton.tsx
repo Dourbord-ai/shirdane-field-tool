@@ -97,6 +97,7 @@ export default function AccountVerifyButton({
   nameLabel = "نام صاحب حساب",
   namePlaceholder = "نام و نام خانوادگی...",
   onUseName,
+  onMatchStatusChange,
 }: AccountVerifyButtonProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -106,6 +107,11 @@ export default function AccountVerifyButton({
     if (!result) return null;
     return compareNames(accountHolderName, result.name);
   }, [result, accountHolderName]);
+
+  // Notify parent whenever status changes (for submit-blocking)
+  useEffect(() => {
+    onMatchStatusChange?.(matchStatus);
+  }, [matchStatus, onMatchStatusChange]);
 
   const inputStateClass = (() => {
     if (!matchStatus) return "";
