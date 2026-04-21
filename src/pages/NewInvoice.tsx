@@ -1524,8 +1524,9 @@ export default function NewInvoice() {
             </div>
           </div>
           <FileAttachments files={attachments} onChange={setAttachments} />
-          <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
-            ثبت نهایی
+          {/* Disable while a submit is in flight to prevent double POSTs. */}
+          <Button onClick={handleSubmit} disabled={submitting} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
+            {submitting ? "در حال ارسال..." : "ثبت نهایی"}
           </Button>
         </div>
       )}
