@@ -13,6 +13,26 @@ import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
 import { toast } from "@/hooks/use-toast";
+// API service for the new .NET-backed "فاکتور دام" submission flow.
+// We import only what we need so tree-shaking can drop unused exports.
+import {
+  submitCowFactor,
+  CowFactorValidationError,
+  type CowFormHeader,
+  type CowFormRow,
+} from "@/services/cowFactor";
+
+// ---------------------------------------------------------------------
+// Settlement-type -> backend CkeckoutTypeId map.
+// Kept here (next to the option list) so it's easy to keep in sync.
+// If backend ids differ, change ONLY this map.
+// ---------------------------------------------------------------------
+const SETTLEMENT_TYPE_ID_MAP: Record<string, number> = {
+  cash: 1,         // نقدی
+  deferred: 2,     // پس پرداخت
+  cheque: 3,       // چک
+  cash_cheque: 4,  // نقد - پس چک
+};
 
 const paymentMethods: { label: string; value: PaymentMethod }[] = [
   { label: "کارت", value: "1" },
@@ -351,6 +371,9 @@ export default function NewInvoice() {
   const [rentalRows, setRentalRows] = useState<RentalRow[]>([createRentalRow()]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  // `submitting` disables the action button & shows a loading label while
+  // the network request is in flight. Prevents double-submits.
+  const [submitting, setSubmitting] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineCompanyOptions, setMedicineCompanyOptions] = useState<{ label: string; value: string }[]>([]);
