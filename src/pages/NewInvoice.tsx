@@ -13,6 +13,26 @@ import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
 import { toast } from "@/hooks/use-toast";
+// API service for the new .NET-backed "فاکتور دام" submission flow.
+// We import only what we need so tree-shaking can drop unused exports.
+import {
+  submitCowFactor,
+  CowFactorValidationError,
+  type CowFormHeader,
+  type CowFormRow,
+} from "@/services/cowFactor";
+
+// ---------------------------------------------------------------------
+// Settlement-type -> backend CkeckoutTypeId map.
+// Kept here (next to the option list) so it's easy to keep in sync.
+// If backend ids differ, change ONLY this map.
+// ---------------------------------------------------------------------
+const SETTLEMENT_TYPE_ID_MAP: Record<string, number> = {
+  cash: 1,         // نقدی
+  deferred: 2,     // پس پرداخت
+  cheque: 3,       // چک
+  cash_cheque: 4,  // نقد - پس چک
+};
 
 const paymentMethods: { label: string; value: PaymentMethod }[] = [
   { label: "کارت", value: "1" },
@@ -351,6 +371,9 @@ export default function NewInvoice() {
   const [rentalRows, setRentalRows] = useState<RentalRow[]>([createRentalRow()]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  // `submitting` disables the action button & shows a loading label while
+  // the network request is in flight. Prevents double-submits.
+  const [submitting, setSubmitting] = useState(false);
   const [spermOptions, setSpermOptions] = useState<{ label: string; value: string }[]>([]);
   const [feedCompanyOptions, setFeedCompanyOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineCompanyOptions, setMedicineCompanyOptions] = useState<{ label: string; value: string }[]>([]);
@@ -781,6 +804,102 @@ export default function NewInvoice() {
       });
       return;
     }
+
+    // =================================================================
+    // ===== LIVESTOCK ("دام") — NEW .NET API FLOW =====================
+    // We intercept this branch BEFORE the legacy Supabase flow runs,
+    // because the requirement is: livestock no longer goes through
+    // Supabase. All other product types still use the existing flow.
+    // =================================================================
+    if (isLivestock) {
+      // Disable the button & show a loading state for the entire request.
+      setSubmitting(true);
+      try {
+        // 1) Build the header DTO from the form's high-level state.
+        //    invoiceType in the form is "buy" | "sell" — exactly what
+        //    the service expects, so we cast it (TS narrowing).
+        const headerPayload: CowFormHeader = {
+          invoiceType: data.invoiceType as "buy" | "sell",
+          // factor date as Persian "yyyy/m/d" — the backend stores it as a string.
+          factorDate: data.date
+            ? `${data.date.year}/${data.date.month}/${data.date.day}`
+            : "",
+          factorNumber: data.invoiceNumber || "0",
+          totalPrice: totalProduct,
+          payablePrice: payable,
+          vatAmount: taxAmount,
+          vatPercent: data.tax === "yes" ? 10 : 0,
+          discount: parseInt(data.discount) || 0,
+          shipping: parseInt(data.shipping) || 0,
+          checkoutTypeId: SETTLEMENT_TYPE_ID_MAP[data.settlement] ?? 0,
+          // sellerType in the form is also "company" | "person".
+          sellerType: (data.sellerType || "person") as "company" | "person",
+          // Only attach ShoppingCenterId when seller is a registered company
+          // AND the user actually picked one from the dropdown.
+          shoppingCenterId:
+            data.sellerType === "company" && data.company
+              ? parseInt(data.company, 10) || undefined
+              : undefined,
+        };
+
+        // 2) Build the per-row DTO array. We carry the pre-calculated
+        //    rowTotal so the API receives the same number the user saw.
+        const rowsPayload: CowFormRow[] = livestockRows.map((r, idx) => ({
+          cowId: r.animalNumber,
+          weight: r.weightKg,
+          unitPrice: r.pricePerKg,
+          rowTotal: livestockRowCalcs[idx].rowTotal,
+          existenceStatus: r.saleType,
+          description: r.description,
+        }));
+
+        // 3) Hand off to the service. It validates, maps, and POSTs.
+        const apiResp = await submitCowFactor(headerPayload, rowsPayload);
+
+        // 4) Backend convention: id > 0 means success.
+        if (apiResp.id > 0) {
+          toast({
+            title: "ثبت موفق",
+            description: apiResp.massage || "فاکتور دام با موفقیت ثبت شد.",
+          });
+          // Match the legacy success behavior: brief success screen + redirect.
+          setSubmitted(true);
+          setTimeout(() => navigate("/invoices"), 1200);
+        } else {
+          // Backend rejected the data (e.g. cow already in herd / not in herd).
+          // Show the raw Persian message so the user knows exactly what to fix.
+          toast({
+            title: "خطا در ثبت فاکتور",
+            description: apiResp.massage || "خطای نامشخص از سمت سرور.",
+            variant: "destructive",
+          });
+        }
+      } catch (err) {
+        // Two kinds of errors land here:
+        //  - CowFactorValidationError: client-side rule failed (no network call made)
+        //  - Generic Error: network / 5xx / non-JSON response
+        // Both already carry user-readable Persian messages.
+        const message =
+          err instanceof CowFactorValidationError
+            ? err.message
+            : err instanceof Error
+            ? err.message
+            : "خطای ناشناخته در ارسال فاکتور.";
+        toast({
+          title: "ثبت انجام نشد",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        // Always re-enable the button so the user can fix & retry.
+        setSubmitting(false);
+      }
+
+      // IMPORTANT: stop here so the legacy Supabase code below does NOT run
+      // for livestock invoices.
+      return;
+    }
+
 
     const finalTotal = isMilk ? milkTotalProduct : totalProduct;
     const finalTax = isMilk ? milkTaxAmount : taxAmount;
@@ -1405,8 +1524,9 @@ export default function NewInvoice() {
             </div>
           </div>
           <FileAttachments files={attachments} onChange={setAttachments} />
-          <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
-            ثبت نهایی
+          {/* Disable while a submit is in flight to prevent double POSTs. */}
+          <Button onClick={handleSubmit} disabled={submitting} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
+            {submitting ? "در حال ارسال..." : "ثبت نهایی"}
           </Button>
         </div>
       )}
@@ -2089,8 +2209,9 @@ export default function NewInvoice() {
             </div>
           </div>
           <FileAttachments files={attachments} onChange={setAttachments} />
-          <Button onClick={handleSubmit} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
-            ثبت نهایی
+          {/* Mirror the milk-flow button: same loading/disable behavior. */}
+          <Button onClick={handleSubmit} disabled={submitting} className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]" size="lg">
+            {submitting ? "در حال ارسال..." : "ثبت نهایی"}
           </Button>
         </div>
       )}
