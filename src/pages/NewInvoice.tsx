@@ -818,6 +818,12 @@ export default function NewInvoice() {
         // 1) Build the header DTO from the form's high-level state.
         //    invoiceType in the form is "buy" | "sell" — exactly what
         //    the service expects, so we cast it (TS narrowing).
+        // Attach the FIRST image-type attachment as the invoice scan
+        // (Storage bucket has a 2MB rule, validated inside the service).
+        const firstImage = attachments.find((a) =>
+          a.file.type.startsWith("image/") || a.file.type === "application/pdf"
+        )?.file ?? null;
+
         const headerPayload: CowFormHeader = {
           invoiceType: data.invoiceType as "buy" | "sell",
           // factor date as Persian "yyyy/m/d" — the backend stores it as a string.
@@ -832,14 +838,14 @@ export default function NewInvoice() {
           discount: parseInt(data.discount) || 0,
           shipping: parseInt(data.shipping) || 0,
           checkoutTypeId: SETTLEMENT_TYPE_ID_MAP[data.settlement] ?? 0,
-          // sellerType in the form is also "company" | "person".
           sellerType: (data.sellerType || "person") as "company" | "person",
-          // Only attach ShoppingCenterId when seller is a registered company
-          // AND the user actually picked one from the dropdown.
           shoppingCenterId:
             data.sellerType === "company" && data.company
               ? parseInt(data.company, 10) || undefined
               : undefined,
+          // NEW: attach the invoice image so the service uploads it to
+          // Supabase Storage and stores the path in factors.image.
+          imageFile: firstImage,
         };
 
         // 2) Build the per-row DTO array. We carry the pre-calculated
@@ -853,32 +859,32 @@ export default function NewInvoice() {
           description: r.description,
         }));
 
-        // 3) Hand off to the service. It validates, maps, and POSTs.
+        // 3) Hand off to the service. It validates, uploads image, and
+        //    invokes the Postgres RPC (which runs as an atomic transaction
+        //    AND enqueues a sync_queue row for the local SQL Server worker).
         const apiResp = await submitCowFactor(headerPayload, rowsPayload);
 
-        // 4) Backend convention: id > 0 means success.
-        if (apiResp.id > 0) {
+        // 4) New normalized contract: `success: boolean` instead of `id > 0`.
+        if (apiResp.success) {
           toast({
             title: "ثبت موفق",
-            description: apiResp.massage || "فاکتور دام با موفقیت ثبت شد.",
+            description: apiResp.message || "فاکتور دام با موفقیت ثبت شد.",
           });
-          // Match the legacy success behavior: brief success screen + redirect.
           setSubmitted(true);
           setTimeout(() => navigate("/invoices"), 1200);
         } else {
-          // Backend rejected the data (e.g. cow already in herd / not in herd).
-          // Show the raw Persian message so the user knows exactly what to fix.
+          // Server-side validation rejected the data (e.g. duplicate cow id,
+          // cow already in herd, etc.). Show the Persian message verbatim.
           toast({
             title: "خطا در ثبت فاکتور",
-            description: apiResp.massage || "خطای نامشخص از سمت سرور.",
+            description: apiResp.message || "خطای نامشخص از سمت سرور.",
             variant: "destructive",
           });
         }
       } catch (err) {
         // Two kinds of errors land here:
         //  - CowFactorValidationError: client-side rule failed (no network call made)
-        //  - Generic Error: network / 5xx / non-JSON response
-        // Both already carry user-readable Persian messages.
+        //  - Generic Error: network / RPC / image upload failure
         const message =
           err instanceof CowFactorValidationError
             ? err.message
@@ -891,12 +897,10 @@ export default function NewInvoice() {
           variant: "destructive",
         });
       } finally {
-        // Always re-enable the button so the user can fix & retry.
         setSubmitting(false);
       }
 
-      // IMPORTANT: stop here so the legacy Supabase code below does NOT run
-      // for livestock invoices.
+      // Stop here — the legacy Supabase code below is for non-livestock flows.
       return;
     }
 

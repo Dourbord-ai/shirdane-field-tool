@@ -1,44 +1,52 @@
 // =====================================================================
 // cowFactor.ts
 // ---------------------------------------------------------------------
-// Service module that handles ALL communication with the .NET backend
-// for the "فاکتور دام" (Cow / Livestock invoice) flow.
+// Service module for the "فاکتور دام" (Livestock invoice) submission flow.
 //
-// We deliberately keep this layer separate from the React component so:
-//   1. The component stays focused on UI/state
-//   2. The payload mapper (form -> API contract) is unit-testable
-//   3. Validation happens in ONE place before any network call
-//   4. If the backend contract changes, only this file changes
+// ARCHITECTURE (post-pivot):
+//   Supabase = primary system. Holds factors, cow_factor_details, and
+//              a sync_queue outbox.
+//   SQL Server = secondary mirror. A separate local worker script
+//                (see scripts/sql-sync-worker.cjs) reads sync_queue
+//                from Supabase and writes to the legacy SQL Server.
 //
-// IMPORTANT: The contract shape (PascalCase, parallel arrays) is defined
-// by the legacy .NET API and MUST NOT be transformed/renamed.
+// What this file does:
+//   1. Validates the form on the client (fast feedback, no round-trip).
+//   2. Uploads the optional invoice image to Supabase Storage (≤ 2MB).
+//   3. Calls the Postgres RPC `submit_cow_factor` which atomically:
+//        - validates again (server-side, authoritative)
+//        - inserts the factor + cow_factor_details rows
+//        - enqueues a row in sync_queue for the local SQL worker
+//   4. Returns a normalized result the UI can display.
+//
+// IMPORTANT: We keep the legacy PascalCase contract for the `Factor`
+// and `CowFactorDetail` JSON because the SQL Server side still expects
+// those exact names — the worker reads the queue payload as-is.
 // =====================================================================
 
+import { supabase } from "@/integrations/supabase/client";
+
 // ---------------------------------------------------------------------
-// 1) TYPE DEFINITIONS — mirror the backend contract EXACTLY (PascalCase)
+// 1) BACKEND CONTRACT TYPES (preserved for SQL Server compatibility)
 // ---------------------------------------------------------------------
 
-/**
- * The "Factor" header object the .NET API expects.
- * All field names, casing, and types match the SQL Server / .NET model.
- */
 export interface CowFactorHeader {
   FactorTypeId: number;        // 1 = خرید (buy) | 2 = فروش (sell)
   ProductTypeId: number;       // numeric id for "دام" (livestock)
-  FactorDate: string;          // Persian (Jalali) date as a string e.g. "1403/02/15"
-  Date: string;                // duplicate of FactorDate per backend contract
+  FactorDate: string;          // Persian (Jalali) date string e.g. "1403/02/15"
+  Date: string;                // duplicate of FactorDate per legacy contract
   FactorNumber: number;        // user-entered invoice number
-  TotalPrice: number;          // sum of row totals (before tax/discount)
-  PayablePrice: number;        // final payable amount
-  Vat: number;                 // tax amount in Rial
-  VatPercent: number;          // tax percent (0 or 10)
-  OffPrice: number;            // discount amount in Rial
-  DeliveryCost: number;        // shipping/delivery amount in Rial
-  CkeckoutTypeId: number;      // settlement type id (typo "Ckeckout" preserved on purpose — backend spelling)
-  SellerBuyerTypes: number;    // 1 = company, 2 = person (legacy backend convention)
+  TotalPrice: number;
+  PayablePrice: number;
+  Vat: number;
+  VatPercent: number;
+  OffPrice: number;
+  DeliveryCost: number;
+  CkeckoutTypeId: number;      // typo preserved (legacy backend spelling)
+  SellerBuyerTypes: number;    // 1 = company, 2 = person
+  Image?: string;              // storage path of uploaded invoice image
 
-  // Conditional fields — only populated when applicable.
-  // We always include them but with safe defaults so backend deserialization is predictable.
+  // Optional / conditional fields:
   ShoppingCenterId?: number;
   BuyerUserId?: number;
   OtherCenterName?: string;
@@ -47,13 +55,6 @@ export interface CowFactorHeader {
   OtherCenterDescription?: string;
 }
 
-/**
- * The "CowFactorDetail" object — parallel arrays aligned by index.
- * CowIds[i], Weights[i], UnitPrices[i], etc. all describe the SAME row.
- *
- * RULE: Every array MUST have the same length. The backend relies on
- * positional alignment, NOT object grouping.
- */
 export interface CowFactorDetail {
   CowIds: number[];
   Weights: number[];
@@ -63,89 +64,71 @@ export interface CowFactorDetail {
   Descriptions: string[];
 }
 
-/**
- * Final request body envelope.
- */
 export interface SubmitCowFactorRequest {
   Factor: CowFactorHeader;
   CowFactorDetail: CowFactorDetail;
 }
 
 /**
- * The API response shape (note backend typo "massage" instead of "message").
- * We preserve it exactly because we do NOT control the backend.
+ * Normalized response the UI consumes. We keep `id` as the new factor's
+ * UUID (string) — the legacy code used `id > 0` for success; we now use
+ * `success` boolean so the UI doesn't have to care about id types.
  */
 export interface SubmitCowFactorResponse {
-  id: number;        // > 0 on success, 0 on failure
-  massage: string;   // human-readable Persian message (success or error)
+  id: string | null;
+  success: boolean;
+  message: string;
 }
 
 // ---------------------------------------------------------------------
-// 2) FORM-FACING TYPES — what the React component passes in.
-// These are intentionally simple/plain so the component does not need
-// to know about the backend contract.
+// 2) FORM-FACING TYPES (what the React component passes in)
 // ---------------------------------------------------------------------
 
-/** A single row from the livestock repeater in the UI. */
 export interface CowFormRow {
-  /** Selected cow id (DB primary key). String because <select> values are strings. */
-  cowId: string;
-  /** Weight in kg (string from <Input type="number">). */
+  cowId: string;          // string because <select> values are strings
   weight: string;
-  /** Unit price (Rial per kg). */
   unitPrice: string;
-  /** Pre-computed row total — we use this directly to avoid float drift. */
-  rowTotal: number;
-  /** Existence status code (UI value mapped to backend numeric id). */
+  rowTotal: number;       // pre-computed by the form to avoid float drift
   existenceStatus: string;
-  /** Free text description for the row. */
   description: string;
 }
 
-/** The high-level invoice (header) data from the form. */
 export interface CowFormHeader {
-  /** "buy" or "sell" — mapped to FactorTypeId 1 or 2. */
   invoiceType: "buy" | "sell";
-  /** Backend ProductTypeId for "دام". Defaults to 5 if not provided. */
   productTypeId?: number;
-  /** Persian date string e.g. "1403/02/15". */
   factorDate: string;
-  /** User-entered invoice number (free text). We coerce to number. */
   factorNumber: string;
-  /** Aggregated totals (already calculated by the form for display). */
   totalPrice: number;
   payablePrice: number;
   vatAmount: number;
   vatPercent: number;     // 0 or 10
   discount: number;
   shipping: number;
-  /** Settlement type id (e.g. cash=1, deferred=2 ...). */
   checkoutTypeId: number;
-  /** "company" or "person". */
   sellerType: "company" | "person";
-  /** When sellerType=company: id of the chosen shopping center. */
   shoppingCenterId?: number;
-  /** Optional fields when seller is an "other" / unregistered party. */
   otherCenterName?: string;
   otherCenterPhoneNumber?: string;
   otherCenterAddress?: string;
   otherCenterDescription?: string;
+  /**
+   * Optional File object (image or PDF) to upload as the invoice scan.
+   * The service uploads it to the `cow-factor-images` bucket and stores
+   * the resulting path in `factors.image`.
+   */
+  imageFile?: File | null;
 }
 
 // ---------------------------------------------------------------------
-// 3) MAPPING TABLES
+// 3) MAPPING TABLES — UI value → backend numeric id
 // ---------------------------------------------------------------------
 
 /**
- * Map UI sale-type values to the backend ExistenceStatus numeric codes.
- * These ids reflect the existing `cows.existancestatus` convention used
- * elsewhere in the SQL Server schema. If the backend disagrees, only
- * this map needs to change.
- *
+ * Existence status codes mirror the legacy `cows.existancestatus` column.
  *  1 = موجود/فروش (in herd / sold normally)
- *  2 = تلفات (loss / death)
- *  3 = کشتار (slaughter)
- *  4 = سایر (other)
+ *  2 = تلفات
+ *  3 = کشتار
+ *  4 = سایر
  */
 const EXISTENCE_STATUS_MAP: Record<string, number> = {
   sale: 1,
@@ -154,38 +137,22 @@ const EXISTENCE_STATUS_MAP: Record<string, number> = {
   other: 4,
 };
 
-/**
- * Map "buy" / "sell" form value to the backend FactorTypeId.
- */
-const FACTOR_TYPE_MAP: Record<"buy" | "sell", number> = {
-  buy: 1,
-  sell: 2,
-};
+const FACTOR_TYPE_MAP: Record<"buy" | "sell", number> = { buy: 1, sell: 2 };
+const SELLER_BUYER_TYPE_MAP: Record<"company" | "person", number> = { company: 1, person: 2 };
 
-/**
- * Map seller type to backend SellerBuyerTypes id.
- */
-const SELLER_BUYER_TYPE_MAP: Record<"company" | "person", number> = {
-  company: 1,
-  person: 2,
-};
+/** Max size for the invoice image: 2MB per spec. */
+export const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
 // ---------------------------------------------------------------------
-// 4) PAYLOAD MAPPER — UI shape -> backend contract
+// 4) PAYLOAD MAPPER — UI shape → backend contract (PascalCase, parallel arrays)
 // ---------------------------------------------------------------------
 
-/**
- * Convert the form's header + rows into the EXACT request body the
- * .NET API expects. Pure function (no side effects) so it's easy to test.
- */
 export function buildCowFactorPayload(
   header: CowFormHeader,
   rows: CowFormRow[],
+  imagePath?: string | null,
 ): SubmitCowFactorRequest {
-  // Build the four parallel arrays in a single pass so indices line up.
-  // We use parseFloat/parseInt to convert string inputs to numbers because
-  // the backend expects numeric types and JSON.stringify would otherwise
-  // serialize "12" (string) instead of 12 (number).
+  // Build parallel arrays in a single pass so indices are guaranteed aligned.
   const CowIds: number[] = [];
   const Weights: number[] = [];
   const UnitPrices: number[] = [];
@@ -198,20 +165,15 @@ export function buildCowFactorPayload(
     Weights.push(parseFloat(r.weight) || 0);
     UnitPrices.push(parseInt(r.unitPrice, 10) || 0);
     RowPrices.push(Math.round(r.rowTotal || 0));
-    // Default to 1 ("normal") when the user didn't pick one — but validation
-    // below should have already rejected empty values.
     ExistenceStatuses.push(EXISTENCE_STATUS_MAP[r.existenceStatus] ?? 1);
-    // The backend expects a string array — empty string for missing values.
     Descriptions.push(r.description || "");
   }
 
-  // Build the header with backend's PascalCase keys.
   const Factor: CowFactorHeader = {
     FactorTypeId: FACTOR_TYPE_MAP[header.invoiceType],
-    // Default ProductTypeId for "دام" is 5 in our schema; allow override.
-    ProductTypeId: header.productTypeId ?? 5,
+    ProductTypeId: header.productTypeId ?? 5, // 5 = دام
     FactorDate: header.factorDate,
-    Date: header.factorDate, // duplicate per backend contract
+    Date: header.factorDate,
     FactorNumber: parseInt(header.factorNumber, 10) || 0,
     TotalPrice: Math.round(header.totalPrice),
     PayablePrice: Math.round(header.payablePrice),
@@ -223,9 +185,7 @@ export function buildCowFactorPayload(
     SellerBuyerTypes: SELLER_BUYER_TYPE_MAP[header.sellerType],
   };
 
-  // Only attach conditional fields when defined — keeps payload clean and
-  // avoids sending `undefined` (which JSON.stringify drops anyway, but we
-  // are explicit for clarity).
+  if (imagePath) Factor.Image = imagePath;
   if (header.shoppingCenterId != null) Factor.ShoppingCenterId = header.shoppingCenterId;
   if (header.otherCenterName) Factor.OtherCenterName = header.otherCenterName;
   if (header.otherCenterPhoneNumber) Factor.OtherCenterPhoneNumber = header.otherCenterPhoneNumber;
@@ -234,23 +194,14 @@ export function buildCowFactorPayload(
 
   return {
     Factor,
-    CowFactorDetail: {
-      CowIds,
-      Weights,
-      UnitPrices,
-      RowPrices,
-      ExistenceStatuses,
-      Descriptions,
-    },
+    CowFactorDetail: { CowIds, Weights, UnitPrices, RowPrices, ExistenceStatuses, Descriptions },
   };
 }
 
 // ---------------------------------------------------------------------
-// 5) VALIDATION LAYER — runs BEFORE we touch the network.
+// 5) CLIENT-SIDE VALIDATION (fast feedback before any network call)
 // ---------------------------------------------------------------------
 
-/** Thrown when client-side business rules fail. Carries a Persian message
- *  that's safe to display directly to the end user. */
 export class CowFactorValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -258,26 +209,10 @@ export class CowFactorValidationError extends Error {
   }
 }
 
-/**
- * Validate the rows + header. Throws CowFactorValidationError on the
- * first violation so the caller can show a single clear message.
- *
- * Rules enforced (per spec):
- *   1. No duplicate CowIds
- *   2. Required fields per row: cowId, weight, unitPrice, existenceStatus
- *   3. Arrays must not be empty
- *   4. Header: factor date and seller type required
- */
-export function validateCowFactorInput(
-  header: CowFormHeader,
-  rows: CowFormRow[],
-): void {
-  // --- 3) Non-empty array check ---
+export function validateCowFactorInput(header: CowFormHeader, rows: CowFormRow[]): void {
   if (!rows || rows.length === 0) {
     throw new CowFactorValidationError("حداقل یک ردیف دام باید وارد شود.");
   }
-
-  // --- header sanity (date is critical for the backend) ---
   if (!header.factorDate) {
     throw new CowFactorValidationError("تاریخ فاکتور الزامی است.");
   }
@@ -285,127 +220,136 @@ export function validateCowFactorInput(
     throw new CowFactorValidationError("نوع فاکتور (خرید/فروش) الزامی است.");
   }
 
-  // --- 2) Required field check + numeric sanity ---
-  const seenCowIds = new Set<number>();
+  // Image size guard — runs before the upload attempt to give a clear error.
+  if (header.imageFile && header.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new CowFactorValidationError("اندازه تصویر فاکتور نباید بیشتر از ۲ مگابایت باشد.");
+  }
 
+  const seen = new Set<number>();
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const rowLabel = `ردیف ${i + 1}`; // 1-based for human-friendly errors
+    const label = `ردیف ${i + 1}`;
 
-    if (!r.cowId) {
-      throw new CowFactorValidationError(`${rowLabel}: شماره دام انتخاب نشده است.`);
-    }
+    if (!r.cowId) throw new CowFactorValidationError(`${label}: شماره دام انتخاب نشده است.`);
     const cowIdNum = parseInt(r.cowId, 10);
     if (!Number.isFinite(cowIdNum) || cowIdNum <= 0) {
-      throw new CowFactorValidationError(`${rowLabel}: شماره دام نامعتبر است.`);
+      throw new CowFactorValidationError(`${label}: شماره دام نامعتبر است.`);
     }
 
-    const weightNum = parseFloat(r.weight);
-    if (!r.weight || !Number.isFinite(weightNum) || weightNum <= 0) {
-      throw new CowFactorValidationError(`${rowLabel}: وزن باید بزرگ‌تر از صفر باشد.`);
+    const w = parseFloat(r.weight);
+    if (!r.weight || !Number.isFinite(w) || w <= 0) {
+      throw new CowFactorValidationError(`${label}: وزن باید بزرگ‌تر از صفر باشد.`);
     }
 
-    const priceNum = parseInt(r.unitPrice, 10);
-    if (!r.unitPrice || !Number.isFinite(priceNum) || priceNum <= 0) {
-      throw new CowFactorValidationError(`${rowLabel}: قیمت واحد باید بزرگ‌تر از صفر باشد.`);
+    const p = parseInt(r.unitPrice, 10);
+    if (!r.unitPrice || !Number.isFinite(p) || p <= 0) {
+      throw new CowFactorValidationError(`${label}: قیمت واحد باید بزرگ‌تر از صفر باشد.`);
     }
 
     if (!r.existenceStatus) {
-      throw new CowFactorValidationError(`${rowLabel}: نوع (فروش/تلفات/کشتار) انتخاب نشده است.`);
+      throw new CowFactorValidationError(`${label}: نوع (فروش/تلفات/کشتار) انتخاب نشده است.`);
     }
     if (!(r.existenceStatus in EXISTENCE_STATUS_MAP)) {
-      throw new CowFactorValidationError(`${rowLabel}: نوع نامعتبر است.`);
+      throw new CowFactorValidationError(`${label}: نوع نامعتبر است.`);
     }
 
-    // --- 1) Duplicate CowId check ---
-    if (seenCowIds.has(cowIdNum)) {
+    if (seen.has(cowIdNum)) {
       throw new CowFactorValidationError(
         `شماره دام «${r.cowId}» در چند ردیف تکراری است. هر دام فقط یک‌بار قابل ثبت است.`,
       );
     }
-    seenCowIds.add(cowIdNum);
+    seen.add(cowIdNum);
   }
 }
 
 // ---------------------------------------------------------------------
-// 6) HTTP CLIENT
+// 6) IMAGE UPLOAD — Supabase Storage bucket "cow-factor-images"
 // ---------------------------------------------------------------------
 
 /**
- * Resolve the API base URL.
- * - Reads from Vite env (VITE_API_BASE_URL) so the same build can target
- *   different servers (dev / staging / on-prem).
- * - Falls back to "" which results in a same-origin request (works when
- *   the SPA is served from the same host as the API, or behind a proxy).
+ * Upload the user's invoice image and return the storage path on success.
+ * Returns null if there's nothing to upload. Throws on real errors.
  */
-function getApiBaseUrl(): string {
-  // import.meta.env is replaced at build time by Vite — no runtime cost.
-  const fromEnv = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  // Trim trailing slash so we can safely concatenate with the path.
-  return (fromEnv || "").replace(/\/+$/, "");
+async function uploadInvoiceImage(file: File | null | undefined): Promise<string | null> {
+  if (!file) return null;
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new CowFactorValidationError("اندازه تصویر فاکتور نباید بیشتر از ۲ مگابایت باشد.");
+  }
+
+  // Build a unique path so concurrent uploads can't collide.
+  // Format: <YYYY-MM>/<uuid>.<ext>
+  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+  const yearMonth = new Date().toISOString().slice(0, 7); // "2025-04"
+  const path = `${yearMonth}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("cow-factor-images")
+    .upload(path, file, {
+      // Don't overwrite if path collides (it shouldn't, given the UUID).
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (error) {
+    throw new Error(`آپلود تصویر ناموفق بود: ${error.message}`);
+  }
+  return path;
 }
 
+// ---------------------------------------------------------------------
+// 7) MAIN ENTRY POINT — submit factor via Supabase RPC
+// ---------------------------------------------------------------------
+
 /**
- * Submit the cow factor to the .NET backend.
+ * Submit a livestock factor.
  *
- * Steps:
- *   1. Run client-side validation (throws on failure → caller catches)
- *   2. Build the EXACT backend payload via the mapper
- *   3. POST it to /api/Cow/AddCowFactorDetail
- *   4. Parse the JSON response and return it as-is
+ * Flow:
+ *   1) Client-side validation (throws CowFactorValidationError on failure).
+ *   2) Upload optional image to Storage.
+ *   3) Build the legacy-PascalCase payload.
+ *   4) Call the `submit_cow_factor` RPC (atomic transaction in Postgres).
+ *   5) Return a normalized response.
  *
- * We send `credentials: "include"` because the project uses cookie/session
- * auth on the same origin (per user's choice during planning).
+ * The RPC also enqueues a row in `sync_queue` so the local SQL Server
+ * worker can mirror the data — that part is asynchronous and out of band.
  */
 export async function submitCowFactor(
   header: CowFormHeader,
   rows: CowFormRow[],
 ): Promise<SubmitCowFactorResponse> {
-  // 1) Validate first — fail fast, no network call on bad input.
+  // 1) Fail fast on bad input.
   validateCowFactorInput(header, rows);
 
-  // 2) Build the strict backend payload.
-  const body = buildCowFactorPayload(header, rows);
+  // 2) Upload image if the user attached one.
+  const imagePath = await uploadInvoiceImage(header.imageFile ?? null);
 
-  // 3) Fire the POST request.
-  const url = `${getApiBaseUrl()}/api/Cow/AddCowFactorDetail`;
+  // 3) Map UI → legacy PascalCase contract.
+  const body = buildCowFactorPayload(header, rows, imagePath);
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      // Persian-friendly UTF-8 JSON.
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      // Cookie/session auth — browser will attach the auth cookie automatically.
-      credentials: "include",
-      body: JSON.stringify(body),
-    });
-  } catch (networkErr) {
-    // fetch() only rejects on network failure (DNS, offline, CORS preflight blocked, etc.)
-    // We surface a Persian message that is meaningful to the user.
-    const detail = networkErr instanceof Error ? networkErr.message : String(networkErr);
-    throw new Error(`خطای شبکه در ارتباط با سرور: ${detail}`);
+  // 4) Invoke the Postgres RPC. The function returns jsonb; supabase-js
+  //    surfaces it as `data` typed loosely. We coerce defensively below.
+  // Cast to `any` because this RPC is custom and isn't in the generated
+  // Supabase Database types yet (types.ts is read-only).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc("submit_cow_factor", {
+    p_factor: body.Factor,
+    p_details: body.CowFactorDetail,
+  });
+
+  if (error) {
+    // Network or auth error — surface to UI.
+    return {
+      id: null,
+      success: false,
+      message: `خطا در ارتباط با پایگاه داده: ${error.message}`,
+    };
   }
 
-  // 4) The .NET endpoint returns JSON even on logical errors (id=0 + massage).
-  // We still guard against non-2xx responses (e.g. 401 / 500) where the body
-  // might not be JSON.
-  let json: SubmitCowFactorResponse | null = null;
-  try {
-    json = (await res.json()) as SubmitCowFactorResponse;
-  } catch {
-    // Body wasn't JSON — likely a server crash or auth redirect.
-    throw new Error(`پاسخ نامعتبر از سرور (وضعیت ${res.status}).`);
-  }
-
-  // If HTTP status is bad AND backend didn't give us a usable message,
-  // synthesize one so the UI can show something meaningful.
-  if (!res.ok && (!json || !json.massage)) {
-    throw new Error(`خطای سرور: ${res.status} ${res.statusText}`);
-  }
-
-  return json!;
+  // RPC returns: { id: uuid|null, success: bool, message: string }
+  const result = (data ?? {}) as { id?: string | null; success?: boolean; message?: string };
+  return {
+    id: result.id ?? null,
+    success: !!result.success,
+    message: result.message ?? "پاسخ نامعتبر از سرور.",
+  };
 }

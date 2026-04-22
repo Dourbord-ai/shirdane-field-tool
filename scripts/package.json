@@ -1,0 +1,14 @@
+{
+  "name": "sql-sync-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mirrors Supabase factor data into legacy SQL Server",
+  "main": "sql-sync-worker.cjs",
+  "scripts": {
+    "start": "node sql-sync-worker.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "mssql": "^11.0.0"
+  }
+}
