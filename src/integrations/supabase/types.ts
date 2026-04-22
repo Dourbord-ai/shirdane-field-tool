@@ -59,6 +59,62 @@ export type Database = {
         }
         Relationships: []
       }
+      cow_factor_details: {
+        Row: {
+          cow_id: number
+          created_at: string
+          delivery_cost: number | null
+          description: string | null
+          existence_status: number
+          factor_id: string
+          id: string
+          off_unit_price: number | null
+          payable_unit_price: number | null
+          row_price: number
+          unit_price: number
+          vat: number | null
+          weight: number
+        }
+        Insert: {
+          cow_id: number
+          created_at?: string
+          delivery_cost?: number | null
+          description?: string | null
+          existence_status: number
+          factor_id: string
+          id?: string
+          off_unit_price?: number | null
+          payable_unit_price?: number | null
+          row_price?: number
+          unit_price: number
+          vat?: number | null
+          weight: number
+        }
+        Update: {
+          cow_id?: number
+          created_at?: string
+          delivery_cost?: number | null
+          description?: string | null
+          existence_status?: number
+          factor_id?: string
+          id?: string
+          off_unit_price?: number | null
+          payable_unit_price?: number | null
+          row_price?: number
+          unit_price?: number
+          vat?: number | null
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cow_factor_details_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cows: {
         Row: {
           bodynumber: number | null
@@ -206,69 +262,114 @@ export type Database = {
       factors: {
         Row: {
           buyer_type: string | null
+          buyer_user_id: number | null
+          checkout_type_id: number | null
           company: string | null
           created_at: string
           delivery_date: string | null
+          delivery_percent: number | null
           description: string | null
           discount: number | null
+          factor_type_id: number | null
           id: string
+          image: string | null
           invoice_date: string | null
           invoice_number: string | null
           invoice_type: string
+          off_percent: number | null
+          other_center_address: string | null
+          other_center_description: string | null
+          other_center_name: string | null
+          other_center_phone: string | null
           payable_amount: number | null
           product_type: string
+          product_type_id: number | null
+          seller_buyer_type: number | null
           settlement_date: string | null
           settlement_number: string | null
           settlement_type: string | null
           shipping: number | null
+          shopping_center_id: number | null
+          sync_status: string
           tax: string | null
           tax_amount: number | null
           total_amount: number | null
           updated_at: string
+          vat_percent: number | null
         }
         Insert: {
           buyer_type?: string | null
+          buyer_user_id?: number | null
+          checkout_type_id?: number | null
           company?: string | null
           created_at?: string
           delivery_date?: string | null
+          delivery_percent?: number | null
           description?: string | null
           discount?: number | null
+          factor_type_id?: number | null
           id?: string
+          image?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
           invoice_type: string
+          off_percent?: number | null
+          other_center_address?: string | null
+          other_center_description?: string | null
+          other_center_name?: string | null
+          other_center_phone?: string | null
           payable_amount?: number | null
           product_type: string
+          product_type_id?: number | null
+          seller_buyer_type?: number | null
           settlement_date?: string | null
           settlement_number?: string | null
           settlement_type?: string | null
           shipping?: number | null
+          shopping_center_id?: number | null
+          sync_status?: string
           tax?: string | null
           tax_amount?: number | null
           total_amount?: number | null
           updated_at?: string
+          vat_percent?: number | null
         }
         Update: {
           buyer_type?: string | null
+          buyer_user_id?: number | null
+          checkout_type_id?: number | null
           company?: string | null
           created_at?: string
           delivery_date?: string | null
+          delivery_percent?: number | null
           description?: string | null
           discount?: number | null
+          factor_type_id?: number | null
           id?: string
+          image?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
           invoice_type?: string
+          off_percent?: number | null
+          other_center_address?: string | null
+          other_center_description?: string | null
+          other_center_name?: string | null
+          other_center_phone?: string | null
           payable_amount?: number | null
           product_type?: string
+          product_type_id?: number | null
+          seller_buyer_type?: number | null
           settlement_date?: string | null
           settlement_number?: string | null
           settlement_type?: string | null
           shipping?: number | null
+          shopping_center_id?: number | null
+          sync_status?: string
           tax?: string | null
           tax_amount?: number | null
           total_amount?: number | null
           updated_at?: string
+          vat_percent?: number | null
         }
         Relationships: []
       }
@@ -648,6 +749,45 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_queue: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          last_error: string | null
+          payload: Json
+          retry_count: number
+          status: string
+          synced_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          last_error?: string | null
+          payload: Json
+          retry_count?: number
+          status?: string
+          synced_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          last_error?: string | null
+          payload?: Json
+          retry_count?: number
+          status?: string
+          synced_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       wage_items: {
         Row: {
           account_holder: string | null
@@ -704,7 +844,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      submit_cow_factor: {
+        Args: { p_details: Json; p_factor: Json }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
