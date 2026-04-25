@@ -4,11 +4,28 @@
   "private": true,
   "description": "Mirrors Supabase factor data into legacy SQL Server",
   "main": "sql-sync-worker.cjs",
+  "bin": "sql-sync-worker.cjs",
   "scripts": {
-    "start": "node sql-sync-worker.cjs"
+    "start": "node sql-sync-worker.cjs",
+    "build:win": "pkg . --targets node18-win-x64   --output dist/sync-worker-win.exe",
+    "build:linux": "pkg . --targets node18-linux-x64 --output dist/sync-worker-linux",
+    "build:mac": "pkg . --targets node18-macos-x64 --output dist/sync-worker-mac",
+    "build:all": "pkg . --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --out-path dist"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "mssql": "^11.0.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": ["sql-sync-worker.cjs"],
+    "assets": [
+      "node_modules/mssql/**/*",
+      "node_modules/tedious/**/*"
+    ],
+    "targets": ["node18-win-x64"],
+    "outputPath": "dist"
   }
 }
