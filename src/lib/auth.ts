@@ -1,3 +1,5 @@
+import { supabase } from "@/integrations/supabase/client";
+
 const TOKEN_KEY = "shirdaneh_token";
 const USER_KEY = "shirdaneh_user";
 
@@ -7,21 +9,6 @@ export interface User {
   username: string;
   role?: string;
   isSuperAdmin?: boolean;
-}
-
-export function hasRole(role: string): boolean {
-  const { user } = getSession();
-  if (!user) return false;
-  if (user.isSuperAdmin) return true;
-  return user.role === role;
-}
-
-export function canAccess(_resource?: string): boolean {
-  const { user } = getSession();
-  if (!user) return false;
-  // Hardcoded super admin bypasses all restrictions
-  if (user.isSuperAdmin) return true;
-  return true;
 }
 
 export interface LoginCredentials {
@@ -36,31 +23,54 @@ export interface AuthResponse {
   error?: string;
 }
 
-// Placeholder API endpoint — replace with real endpoint
-const API_BASE = "/api";
-
 export async function loginApi(credentials: LoginCredentials): Promise<AuthResponse> {
-  // TODO: Replace with real API call
-  // Example:
-  // const res = await fetch(`${API_BASE}/auth/login`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify(credentials),
-  // });
-  // return res.json();
+  try {
+    const { data, error } = await supabase
+      .from("app_users")
+      .select("id, username, full_name, password_hash, is_active, role_id, app_roles(name)")
+      .eq("username", credentials.username)
+      .maybeSingle();
 
-  // Simulated response for development
-  await new Promise((r) => setTimeout(r, 1200));
+    if (error) {
+      return { success: false, error: "خطا در ارتباط با سرور" };
+    }
+    if (!data) {
+      return { success: false, error: "نام کاربری یا رمز عبور اشتباه است" };
+    }
+    if (!data.is_active) {
+      return { success: false, error: "حساب کاربری غیرفعال است" };
+    }
+    if (data.password_hash !== credentials.password) {
+      return { success: false, error: "نام کاربری یا رمز عبور اشتباه است" };
+    }
 
-  if (credentials.username === "admin" && credentials.password === "1234") {
+    // Update last_login_at (best-effort)
+    supabase
+      .from("app_users")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", data.id)
+      .then(() => {});
+
+    const roleName = (data.app_roles as { name?: string } | null)?.name;
+    const isSuperAdmin =
+      roleName === "super_admin" ||
+      roleName === "admin" ||
+      data.username === "admin";
+
     return {
       success: true,
-      token: "mock-jwt-token-xyz",
-      user: { id: "1", name: "مدیر سیستم", username: "admin" },
+      token: `db-${data.id}`,
+      user: {
+        id: data.id,
+        name: data.full_name || data.username,
+        username: data.username,
+        role: roleName || undefined,
+        isSuperAdmin,
+      },
     };
+  } catch {
+    return { success: false, error: "خطا در ارتباط با سرور" };
   }
-
-  return { success: false, error: "نام کاربری یا رمز عبور اشتباه است" };
 }
 
 export function saveSession(token: string, user: User) {
@@ -81,4 +91,18 @@ export function clearSession() {
 
 export function isAuthenticated(): boolean {
   return !!localStorage.getItem(TOKEN_KEY);
+}
+
+export function hasRole(role: string): boolean {
+  const { user } = getSession();
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  return user.role === role;
+}
+
+export function canAccess(_resource?: string): boolean {
+  const { user } = getSession();
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  return true;
 }
