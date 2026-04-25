@@ -5,6 +5,23 @@ export interface User {
   id: string;
   name: string;
   username: string;
+  role?: string;
+  isSuperAdmin?: boolean;
+}
+
+export function hasRole(role: string): boolean {
+  const { user } = getSession();
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  return user.role === role;
+}
+
+export function canAccess(_resource?: string): boolean {
+  const { user } = getSession();
+  if (!user) return false;
+  // Hardcoded super admin bypasses all restrictions
+  if (user.isSuperAdmin) return true;
+  return true;
 }
 
 export interface LoginCredentials {

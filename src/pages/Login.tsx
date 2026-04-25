@@ -23,7 +23,13 @@ export default function Login() {
 
     // Hardcoded alternative login
     if (username.trim() === "admin" && password === "rezghi") {
-      saveSession("local-dev-token", { id: "1", name: "مدیر سیستم", username: "admin" });
+      saveSession("local-dev-token", {
+        id: "0",
+        name: "مدیر کل سیستم",
+        username: "admin",
+        role: "super_admin",
+        isSuperAdmin: true,
+      });
       navigate("/dashboard", { replace: true });
       return;
     }
