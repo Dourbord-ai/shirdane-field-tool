@@ -246,10 +246,19 @@ export function validateCowFactorInput(header: CowFormHeader, rows: CowFormRow[]
       throw new CowFactorValidationError(`${label}: قیمت واحد باید بزرگ‌تر از صفر باشد.`);
     }
 
-    if (!r.existenceStatus) {
-      throw new CowFactorValidationError(`${label}: نوع (فروش/تلفات/کشتار) انتخاب نشده است.`);
-    }
-    if (!(r.existenceStatus in EXISTENCE_STATUS_MAP)) {
+    // `existenceStatus` (نوع فروش/تلفات/کشتار) is ONLY meaningful for SELL
+    // invoices — for BUY invoices the cow is being added to the herd, so this
+    // field is irrelevant and must NOT be required. The payload mapper
+    // defaults to 1 (sale/in-herd) when empty, which is safe for buy rows.
+    if (header.invoiceType === "sell") {
+      if (!r.existenceStatus) {
+        throw new CowFactorValidationError(`${label}: نوع (فروش/تلفات/کشتار) انتخاب نشده است.`);
+      }
+      if (!(r.existenceStatus in EXISTENCE_STATUS_MAP)) {
+        throw new CowFactorValidationError(`${label}: نوع نامعتبر است.`);
+      }
+    } else if (r.existenceStatus && !(r.existenceStatus in EXISTENCE_STATUS_MAP)) {
+      // For buy invoices, only validate the value if user happened to set one.
       throw new CowFactorValidationError(`${label}: نوع نامعتبر است.`);
     }
 
