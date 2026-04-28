@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import NewInvoice from "./pages/NewInvoice";
 import Invoices from "./pages/Invoices";
 import MilkReceipts from "./pages/MilkReceipts";
+import LabResults from "./pages/LabResults";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/invoices/new" element={<NewInvoice />} />
             <Route path="/receipts/milk" element={<MilkReceipts />} />
+            <Route path="/receipts/lab" element={<LabResults />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
