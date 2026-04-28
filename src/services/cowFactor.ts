@@ -25,6 +25,7 @@
 // =====================================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import { safeUUID } from "@/lib/uuid";
 
 // ---------------------------------------------------------------------
 // 1) BACKEND CONTRACT TYPES (preserved for SQL Server compatibility)
@@ -289,7 +290,7 @@ async function uploadInvoiceImage(file: File | null | undefined): Promise<string
   // Format: <YYYY-MM>/<uuid>.<ext>
   const ext = (file.name.split(".").pop() || "bin").toLowerCase();
   const yearMonth = new Date().toISOString().slice(0, 7); // "2025-04"
-  const path = `${yearMonth}/${crypto.randomUUID()}.${ext}`;
+  const path = `${yearMonth}/${safeUUID()}.${ext}`;
 
   const { error } = await supabase.storage
     .from("cow-factor-images")
