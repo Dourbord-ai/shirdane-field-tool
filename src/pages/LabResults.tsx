@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { safeUUID } from "@/lib/uuid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -119,7 +120,7 @@ export default function LabResults() {
     setSubmitting(true);
     try {
       const ext = file.name.split(".").pop() || "bin";
-      const path = `${year}/${String(month).padStart(2, "0")}/${crypto.randomUUID()}.${ext}`;
+      const path = `${year}/${String(month).padStart(2, "0")}/${safeUUID()}.${ext}`;
 
       const { error: upErr } = await supabase.storage
         .from("lab-results")

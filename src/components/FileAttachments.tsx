@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Paperclip, Trash2, FileText, Image as ImageIcon } from "lucide-react";
 import { toPersianDigits } from "@/lib/jalali";
+import { safeUUID } from "@/lib/uuid";
 
 export interface PendingAttachment {
   id: string;
@@ -26,7 +27,7 @@ const FileAttachments = ({ files, onChange }: Props) => {
     const list = e.target.files;
     if (!list || list.length === 0) return;
     const newOnes: PendingAttachment[] = Array.from(list).map((f) => ({
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       file: f,
     }));
     onChange([...files, ...newOnes]);
