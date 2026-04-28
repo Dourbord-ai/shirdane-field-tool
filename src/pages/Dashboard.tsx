@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart } from "lucide-react";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 
 const modules = [
   { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها", key: "sales" },
+  { title: "قبوض", icon: Receipt, description: "قبض شیر و نتایج آزمایشگاه", key: "receipts" },
   { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها", key: "livestock" },
   { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار", key: "storage" },
   { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
@@ -65,6 +66,43 @@ export default function Dashboard() {
                   <ClipboardList className="w-5 h-5" />
                   فاکتورها
                 </Button>
+              </div>
+            )}
+
+            {/* Receipts sub-cards - shown when قبوض is tapped */}
+            {mod.key === "receipts" && expandedModule === "receipts" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 animate-fade-in">
+                <button
+                  onClick={() => navigate("/receipts/milk")}
+                  className="touch-target rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-200/60 p-4 flex flex-col items-start gap-2 text-right transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(210_80%_50%/0.25)] hover:border-blue-300 active:scale-[0.98]"
+                  aria-label="قبض شیر"
+                >
+                  <div className="w-11 h-11 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Milk className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-body font-bold text-foreground">قبض شیر</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      صورت حساب فروش شیر کارخانه
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => navigate("/receipts/lab")}
+                  className="touch-target rounded-xl bg-gradient-to-br from-amber-50 to-white border border-amber-200/60 p-4 flex flex-col items-start gap-2 text-right transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(38_90%_50%/0.25)] hover:border-amber-300 active:scale-[0.98]"
+                  aria-label="نتایج آزمایشگاه"
+                >
+                  <div className="w-11 h-11 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <FlaskConical className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-body font-bold text-foreground">نتایج آزمایشگاه</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      مشاهده نتایج آزمون‌های شیر
+                    </p>
+                  </div>
+                </button>
               </div>
             )}
           </div>
