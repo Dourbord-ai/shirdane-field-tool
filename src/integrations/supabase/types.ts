@@ -225,30 +225,60 @@ export type Database = {
       cows: {
         Row: {
           bodynumber: number | null
+          created_at: string
           earnumber: number | null
           existancestatus: number | null
           existancestatusdes: string | null
           id: number
+          is_dry: boolean | null
+          last_fertility_status: number | null
+          presence_status: number | null
+          purchase_date: string | null
+          purchase_invoice_number: string | null
+          purchase_price: number | null
           sex: number | null
           sextype: string | null
+          supplier: string | null
+          tag_number: string | null
+          updated_at: string
         }
         Insert: {
           bodynumber?: number | null
+          created_at?: string
           earnumber?: number | null
           existancestatus?: number | null
           existancestatusdes?: string | null
           id: number
+          is_dry?: boolean | null
+          last_fertility_status?: number | null
+          presence_status?: number | null
+          purchase_date?: string | null
+          purchase_invoice_number?: string | null
+          purchase_price?: number | null
           sex?: number | null
           sextype?: string | null
+          supplier?: string | null
+          tag_number?: string | null
+          updated_at?: string
         }
         Update: {
           bodynumber?: number | null
+          created_at?: string
           earnumber?: number | null
           existancestatus?: number | null
           existancestatusdes?: string | null
           id?: number
+          is_dry?: boolean | null
+          last_fertility_status?: number | null
+          presence_status?: number | null
+          purchase_date?: string | null
+          purchase_invoice_number?: string | null
+          purchase_price?: number | null
           sex?: number | null
           sextype?: string | null
+          supplier?: string | null
+          tag_number?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -587,6 +617,39 @@ export type Database = {
           month?: number
           updated_at?: string
           year?: number
+        }
+        Relationships: []
+      }
+      livestock_events: {
+        Row: {
+          cow_id: number
+          created_at: string
+          description: string | null
+          event_date: string | null
+          event_type: string
+          from_value: string | null
+          id: string
+          to_value: string | null
+        }
+        Insert: {
+          cow_id: number
+          created_at?: string
+          description?: string | null
+          event_date?: string | null
+          event_type: string
+          from_value?: string | null
+          id?: string
+          to_value?: string | null
+        }
+        Update: {
+          cow_id?: number
+          created_at?: string
+          description?: string | null
+          event_date?: string | null
+          event_type?: string
+          from_value?: string | null
+          id?: string
+          to_value?: string | null
         }
         Relationships: []
       }
