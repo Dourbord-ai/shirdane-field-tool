@@ -49,6 +49,7 @@ export default function Livestock() {
   const [onlyInHerd, setOnlyInHerd] = useState(false);
   const [dryFilter, setDryFilter] = useState<string>("all"); // all | dry | wet
   const [fertilityFilter, setFertilityFilter] = useState<string>("all");
+  const [sexFilter, setSexFilter] = useState<string>("all"); // all | female | male
   const [showFilters, setShowFilters] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
