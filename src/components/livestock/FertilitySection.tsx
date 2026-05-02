@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
+import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 
 type Props = {
   livestockId: number;
