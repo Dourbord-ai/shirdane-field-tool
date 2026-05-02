@@ -78,6 +78,8 @@ function EventList({ events, emptyText }: { events: FertilityEvent[]; emptyText:
 export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [events, setEvents] = useState<FertilityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heatOpen, setHeatOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +100,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [livestockId]);
+  }, [livestockId, reloadKey]);
 
   const byType = useMemo(() => {
     const map: Record<string, FertilityEvent[]> = {};
