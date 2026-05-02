@@ -82,7 +82,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [loading, setLoading] = useState(true);
   const [heatOpen, setHeatOpen] = useState(false);
   const [rinseOpen, setRinseOpen] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [cleanTestOpen, setCleanTestOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
