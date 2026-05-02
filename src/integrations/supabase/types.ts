@@ -584,6 +584,27 @@ export type Database = {
         }
         Relationships: []
       }
+      fertility_heat_types: {
+        Row: {
+          created_at: string
+          id: number
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       lab_results: {
         Row: {
           created_at: string

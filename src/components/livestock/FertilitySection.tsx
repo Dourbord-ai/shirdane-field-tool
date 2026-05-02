@@ -9,7 +9,9 @@ import {
   formatEventDate,
 } from "@/lib/fertility";
 import { fertilityLabel } from "@/lib/livestock";
-import { Loader2, Activity, History } from "lucide-react";
+import { Loader2, Activity, History, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import HeatRegistrationDialog from "./HeatRegistrationDialog";
 
 type Props = {
   livestockId: number;
@@ -76,6 +78,8 @@ function EventList({ events, emptyText }: { events: FertilityEvent[]; emptyText:
 export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [events, setEvents] = useState<FertilityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heatOpen, setHeatOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +100,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [livestockId]);
+  }, [livestockId, reloadKey]);
 
   const byType = useMemo(() => {
     const map: Record<string, FertilityEvent[]> = {};
@@ -114,10 +118,27 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
   return (
     <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <h2 className="text-body-lg font-bold text-foreground flex items-center gap-2">
-        <Activity className="w-4 h-4 text-primary" />
-        وضعیت باروری و رویدادها
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-body-lg font-bold text-foreground flex items-center gap-2">
+          <Activity className="w-4 h-4 text-primary" />
+          وضعیت باروری و رویدادها
+        </h2>
+        <Button
+          size="sm"
+          onClick={() => setHeatOpen(true)}
+          className="gap-1"
+        >
+          <Plus className="w-4 h-4" />
+          ثبت فحلی
+        </Button>
+      </div>
+
+      <HeatRegistrationDialog
+        open={heatOpen}
+        onOpenChange={setHeatOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
