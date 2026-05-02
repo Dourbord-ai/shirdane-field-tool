@@ -182,6 +182,12 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <InseminationRegistrationDialog
+        open={inseminationOpen}
+        onOpenChange={setInseminationOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
 
 
       {loading ? (
