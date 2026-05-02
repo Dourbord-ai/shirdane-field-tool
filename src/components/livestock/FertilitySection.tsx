@@ -9,7 +9,9 @@ import {
   formatEventDate,
 } from "@/lib/fertility";
 import { fertilityLabel } from "@/lib/livestock";
-import { Loader2, Activity, History } from "lucide-react";
+import { Loader2, Activity, History, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import HeatRegistrationDialog from "./HeatRegistrationDialog";
 
 type Props = {
   livestockId: number;
