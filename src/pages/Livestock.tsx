@@ -49,6 +49,7 @@ export default function Livestock() {
   const [onlyInHerd, setOnlyInHerd] = useState(false);
   const [dryFilter, setDryFilter] = useState<string>("all"); // all | dry | wet
   const [fertilityFilter, setFertilityFilter] = useState<string>("all");
+  const [sexFilter, setSexFilter] = useState<string>("all"); // all | female | male
   const [showFilters, setShowFilters] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -58,7 +59,7 @@ export default function Livestock() {
     setCows([]);
     setPage(0);
     setHasMore(true);
-  }, [search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter]);
+  }, [search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +91,8 @@ export default function Livestock() {
       if (fertilityFilter !== "all") {
         q = q.eq("last_fertility_status", Number(fertilityFilter)).eq("sextype", "ماده");
       }
+      if (sexFilter === "female") q = q.or("sextype.eq.ماده,sex.eq.0");
+      if (sexFilter === "male") q = q.or("sextype.eq.نر,sex.eq.1");
 
       const { data, error } = await q;
       if (cancelled) return;
@@ -107,7 +110,7 @@ export default function Livestock() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter, hasMore]);
+  }, [page, search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter, hasMore]);
 
   // Infinite scroll
   useEffect(() => {
@@ -131,8 +134,9 @@ export default function Livestock() {
     if (onlyInHerd) n++;
     if (dryFilter !== "all") n++;
     if (fertilityFilter !== "all") n++;
+    if (sexFilter !== "all") n++;
     return n;
-  }, [presenceFilter, onlyInHerd, dryFilter, fertilityFilter]);
+  }, [presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter]);
 
   return (
     <div className="py-4 space-y-4 animate-fade-in">
@@ -182,6 +186,17 @@ export default function Livestock() {
       {showFilters && (
         <div className="rounded-xl border border-border bg-card p-3 space-y-3 animate-fade-in">
           <div>
+            <label className="text-xs text-muted-foreground mb-1 block">جنسیت</label>
+            <Select value={sexFilter} onValueChange={setSexFilter}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">همه</SelectItem>
+                <SelectItem value="female">ماده</SelectItem>
+                <SelectItem value="male">نر</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
             <label className="text-xs text-muted-foreground mb-1 block">وضعیت حضور</label>
             <Select value={presenceFilter} onValueChange={setPresenceFilter}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -225,6 +240,7 @@ export default function Livestock() {
                 setOnlyInHerd(false);
                 setDryFilter("all");
                 setFertilityFilter("all");
+                setSexFilter("all");
               }}
               className="w-full"
             >
