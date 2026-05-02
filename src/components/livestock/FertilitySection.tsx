@@ -165,6 +165,12 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <CleanTestRegistrationDialog
+        open={cleanTestOpen}
+        onOpenChange={setCleanTestOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
 
 
       {loading ? (
