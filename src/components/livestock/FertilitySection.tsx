@@ -13,6 +13,7 @@ import { Loader2, Activity, History, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
+import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
 
 type Props = {
   livestockId: number;
@@ -81,6 +82,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [loading, setLoading] = useState(true);
   const [heatOpen, setHeatOpen] = useState(false);
   const [rinseOpen, setRinseOpen] = useState(false);
+  const [cleanTestOpen, setCleanTestOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -139,6 +141,15 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
             <Plus className="w-4 h-4" />
             ثبت شستشو
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setCleanTestOpen(true)}
+            className="gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            ثبت کلین تست
+          </Button>
         </div>
       </div>
 
@@ -151,6 +162,12 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
       <RinseRegistrationDialog
         open={rinseOpen}
         onOpenChange={setRinseOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+      <CleanTestRegistrationDialog
+        open={cleanTestOpen}
+        onOpenChange={setCleanTestOpen}
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
