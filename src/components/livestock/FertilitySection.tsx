@@ -141,6 +141,15 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
             <Plus className="w-4 h-4" />
             ثبت شستشو
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setCleanTestOpen(true)}
+            className="gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            ثبت کلین تست
+          </Button>
         </div>
       </div>
 
