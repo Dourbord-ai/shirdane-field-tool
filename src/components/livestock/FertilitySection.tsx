@@ -137,6 +137,15 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => setInseminationOpen(true)}
+            className="gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            ثبت تلقیح
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => setRinseOpen(true)}
             className="gap-1"
           >
