@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
+import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 
 type Props = {
   livestockId: number;
@@ -83,6 +84,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [heatOpen, setHeatOpen] = useState(false);
   const [rinseOpen, setRinseOpen] = useState(false);
   const [cleanTestOpen, setCleanTestOpen] = useState(false);
+  const [inseminationOpen, setInseminationOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -135,6 +137,15 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => setInseminationOpen(true)}
+            className="gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            ثبت تلقیح
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => setRinseOpen(true)}
             className="gap-1"
           >
@@ -168,6 +179,12 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
       <CleanTestRegistrationDialog
         open={cleanTestOpen}
         onOpenChange={setCleanTestOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+      <InseminationRegistrationDialog
+        open={inseminationOpen}
+        onOpenChange={setInseminationOpen}
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
