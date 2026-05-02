@@ -118,10 +118,27 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
   return (
     <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <h2 className="text-body-lg font-bold text-foreground flex items-center gap-2">
-        <Activity className="w-4 h-4 text-primary" />
-        وضعیت باروری و رویدادها
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-body-lg font-bold text-foreground flex items-center gap-2">
+          <Activity className="w-4 h-4 text-primary" />
+          وضعیت باروری و رویدادها
+        </h2>
+        <Button
+          size="sm"
+          onClick={() => setHeatOpen(true)}
+          className="gap-1"
+        >
+          <Plus className="w-4 h-4" />
+          ثبت فحلی
+        </Button>
+      </div>
+
+      <HeatRegistrationDialog
+        open={heatOpen}
+        onOpenChange={setHeatOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
