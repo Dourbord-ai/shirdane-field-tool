@@ -59,7 +59,7 @@ export default function Livestock() {
     setCows([]);
     setPage(0);
     setHasMore(true);
-  }, [search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter]);
+  }, [search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +91,8 @@ export default function Livestock() {
       if (fertilityFilter !== "all") {
         q = q.eq("last_fertility_status", Number(fertilityFilter)).eq("sextype", "ماده");
       }
+      if (sexFilter === "female") q = q.or("sextype.eq.ماده,sex.eq.0");
+      if (sexFilter === "male") q = q.or("sextype.eq.نر,sex.eq.1");
 
       const { data, error } = await q;
       if (cancelled) return;
