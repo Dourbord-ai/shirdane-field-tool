@@ -9,6 +9,7 @@ import {
   dryLabel,
 } from "@/lib/livestock";
 import { Loader2, History } from "lucide-react";
+import FertilitySection from "@/components/livestock/FertilitySection";
 
 type Cow = {
   id: number;
@@ -164,6 +165,14 @@ export default function LivestockProfile() {
           <Row label="وضعیت دوشش" value={dryLabel(cow.is_dry)} />
           <Row label="آخرین وضعیت باروری" value={fertilityLabel(cow.last_fertility_status)} />
         </Section>
+      )}
+
+      {/* Fertility tabs (female only) */}
+      {female && (
+        <FertilitySection
+          livestockId={cow.id}
+          latestStatus={cow.last_fertility_status}
+        />
       )}
 
       {/* Section 3: Purchase info */}

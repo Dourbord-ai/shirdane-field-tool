@@ -653,6 +653,54 @@ export type Database = {
         }
         Relationships: []
       }
+      livestock_fertility_events: {
+        Row: {
+          created_at: string
+          event_date: string | null
+          event_type: string
+          id: string
+          legacy_record_id: number | null
+          legacy_table_name: string | null
+          livestock_id: number
+          metadata: Json
+          notes: string | null
+          operator_name: string | null
+          operator_user_id: number | null
+          result: string | null
+          status_code: number | null
+        }
+        Insert: {
+          created_at?: string
+          event_date?: string | null
+          event_type: string
+          id?: string
+          legacy_record_id?: number | null
+          legacy_table_name?: string | null
+          livestock_id: number
+          metadata?: Json
+          notes?: string | null
+          operator_name?: string | null
+          operator_user_id?: number | null
+          result?: string | null
+          status_code?: number | null
+        }
+        Update: {
+          created_at?: string
+          event_date?: string | null
+          event_type?: string
+          id?: string
+          legacy_record_id?: number | null
+          legacy_table_name?: string | null
+          livestock_id?: number
+          metadata?: Json
+          notes?: string | null
+          operator_name?: string | null
+          operator_user_id?: number | null
+          result?: string | null
+          status_code?: number | null
+        }
+        Relationships: []
+      }
       livestock_items: {
         Row: {
           animal_number: string | null
