@@ -10,6 +10,8 @@ import NewInvoice from "./pages/NewInvoice";
 import Invoices from "./pages/Invoices";
 import MilkReceipts from "./pages/MilkReceipts";
 import LabResults from "./pages/LabResults";
+import Livestock from "./pages/Livestock";
+import LivestockProfile from "./pages/LivestockProfile";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -30,6 +32,8 @@ const App = () => (
             <Route path="/invoices/new" element={<NewInvoice />} />
             <Route path="/receipts/milk" element={<MilkReceipts />} />
             <Route path="/receipts/lab" element={<LabResults />} />
+            <Route path="/livestock" element={<Livestock />} />
+            <Route path="/livestock/:id" element={<LivestockProfile />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
