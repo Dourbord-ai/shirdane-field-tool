@@ -13,6 +13,7 @@ import { Loader2, Activity, History, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
+import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
 
 type Props = {
   livestockId: number;
