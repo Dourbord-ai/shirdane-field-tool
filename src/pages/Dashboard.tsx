@@ -105,6 +105,20 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
+
+            {/* Livestock management — direct navigation */}
+            {mod.key === "livestock" && expandedModule === "livestock" && (
+              <div className="mt-2 animate-fade-in">
+                <Button
+                  onClick={() => navigate("/livestock")}
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
+                  size="lg"
+                >
+                  <ClipboardList className="w-5 h-5" />
+                  مشاهده لیست دام‌ها
+                </Button>
+              </div>
+            )}
           </div>
         ))}
       </div>
