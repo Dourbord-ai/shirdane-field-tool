@@ -125,14 +125,21 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
           <Activity className="w-4 h-4 text-primary" />
           وضعیت باروری و رویدادها
         </h2>
-        <Button
-          size="sm"
-          onClick={() => setHeatOpen(true)}
-          className="gap-1"
-        >
-          <Plus className="w-4 h-4" />
-          ثبت فحلی
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setHeatOpen(true)} className="gap-1">
+            <Plus className="w-4 h-4" />
+            ثبت فحلی
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setRinseOpen(true)}
+            className="gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            ثبت شستشو
+          </Button>
+        </div>
       </div>
 
       <HeatRegistrationDialog
@@ -141,6 +148,13 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <RinseRegistrationDialog
+        open={rinseOpen}
+        onOpenChange={setRinseOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
