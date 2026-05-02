@@ -137,30 +137,52 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
           {/* Summary */}
           <TabsContent value="summary" className="space-y-3">
-            <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
-              <p className="text-xs text-muted-foreground">آخرین وضعیت باروری</p>
-              <p className="text-base font-bold text-foreground mt-1">
-                {fertilityLabel(latestStatus)}
-              </p>
-              {latestStatusEvent?.event_date && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  تاریخ ثبت: {formatEventDate(latestStatusEvent.event_date)}
+            {events.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
+                <History className="w-8 h-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  هنوز رویداد باروری برای این دام ثبت یا همگام‌سازی نشده است.
                 </p>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(FERTILITY_EVENT_LABELS).map(([type, label]) => (
-                <div
-                  key={type}
-                  className="rounded-md border border-border bg-background p-2 text-center"
-                >
-                  <p className="text-[11px] text-muted-foreground">{label}</p>
-                  <p className="text-sm font-bold text-foreground">
-                    {(byType[type]?.length ?? 0).toLocaleString("fa-IR")}
-                  </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-[11px] px-2 py-1 rounded-full border bg-primary/10 text-primary border-primary/20 font-bold">
+                    مجموع رویدادها: {events.length.toLocaleString("fa-IR")}
+                  </span>
+                  <span className="text-[11px] px-2 py-1 rounded-full border bg-secondary text-secondary-foreground border-border">
+                    آخرین رویداد: {formatEventDate(events[0]?.event_date)}
+                  </span>
+                  <span className="text-[11px] px-2 py-1 rounded-full border bg-accent text-accent-foreground border-border">
+                    وضعیت: {fertilityLabel(latestStatus)}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
+                  <p className="text-xs text-muted-foreground">آخرین وضعیت باروری</p>
+                  <p className="text-base font-bold text-foreground mt-1">
+                    {fertilityLabel(latestStatus)}
+                  </p>
+                  {latestStatusEvent?.event_date && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      تاریخ ثبت: {formatEventDate(latestStatusEvent.event_date)}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(FERTILITY_EVENT_LABELS).map(([type, label]) => (
+                    <div
+                      key={type}
+                      className="rounded-md border border-border bg-background p-2 text-center"
+                    >
+                      <p className="text-[11px] text-muted-foreground">{label}</p>
+                      <p className="text-sm font-bold text-foreground">
+                        {(byType[type]?.length ?? 0).toLocaleString("fa-IR")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </TabsContent>
 
           {/* Full timeline */}
