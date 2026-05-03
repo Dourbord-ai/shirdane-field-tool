@@ -457,6 +457,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                 (b.event_date ?? "").localeCompare(a.event_date ?? ""),
               )}
               emptyText="رویداد زایش یا سقط ثبت نشده است"
+              onCreateCalves={setCalvesReviewEvent}
             />
           </TabsContent>
 
