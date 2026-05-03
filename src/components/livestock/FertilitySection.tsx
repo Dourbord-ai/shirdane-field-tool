@@ -272,6 +272,12 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <PregnancyTestRegistrationDialog
+        open={pregnancyTestOpen}
+        onOpenChange={setPregnancyTestOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
