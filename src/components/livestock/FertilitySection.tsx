@@ -178,6 +178,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [inseminationOpen, setInseminationOpen] = useState(false);
   const [abortionOpen, setAbortionOpen] = useState(false);
   const [calvingOpen, setCalvingOpen] = useState(false);
+  const [calvesReviewEvent, setCalvesReviewEvent] = useState<FertilityEvent | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState("summary");
 
