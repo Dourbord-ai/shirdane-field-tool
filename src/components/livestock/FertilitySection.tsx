@@ -196,6 +196,9 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
       case "clean_test":
         setCleanTestOpen(true);
         break;
+      case "pregnancy_test":
+        setPregnancyTestOpen(true);
+        break;
       default:
         toast({
           title: "به‌زودی",
