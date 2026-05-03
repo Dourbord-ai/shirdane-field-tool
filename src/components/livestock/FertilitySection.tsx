@@ -32,6 +32,8 @@ import PregnancyTestRegistrationDialog from "./PregnancyTestRegistrationDialog";
 import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 import AbortionRegistrationDialog from "./AbortionRegistrationDialog";
 import CalvingRegistrationDialog from "./CalvingRegistrationDialog";
+import CreateCalvesFromCalvingDialog from "./CreateCalvesFromCalvingDialog";
+import { Baby } from "lucide-react";
 
 type Props = {
   livestockId: number;
