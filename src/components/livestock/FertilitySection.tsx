@@ -32,6 +32,8 @@ import PregnancyTestRegistrationDialog from "./PregnancyTestRegistrationDialog";
 import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 import AbortionRegistrationDialog from "./AbortionRegistrationDialog";
 import CalvingRegistrationDialog from "./CalvingRegistrationDialog";
+import CreateCalvesFromCalvingDialog from "./CreateCalvesFromCalvingDialog";
+import { Baby } from "lucide-react";
 
 type Props = {
   livestockId: number;
@@ -51,7 +53,16 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "sync", label: "همزمان‌سازی فحلی" },
 ];
 
-function EventCard({ e }: { e: FertilityEvent }) {
+function EventCard({
+  e,
+  onCreateCalves,
+}: {
+  e: FertilityEvent;
+  onCreateCalves?: (e: FertilityEvent) => void;
+}) {
+  const calves = (e.metadata as any)?.calves as any[] | undefined;
+  const hasCalves = e.event_type === "calving" && Array.isArray(calves) && calves.length > 0;
+  const allCreated = hasCalves && calves!.every((c) => c?.created_cow_id);
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -71,6 +82,18 @@ function EventCard({ e }: { e: FertilityEvent }) {
           {e.legacy_record_id != null && <> #{e.legacy_record_id}</>}
         </p>
       )}
+      {hasCalves && onCreateCalves && (
+        <Button
+          type="button"
+          size="sm"
+          variant={allCreated ? "outline" : "default"}
+          className="w-full gap-1 mt-1"
+          onClick={() => onCreateCalves(e)}
+        >
+          <Baby className="w-4 h-4" />
+          {allCreated ? "مشاهده گوساله‌های ایجادشده" : "ایجاد دام از اطلاعات گوساله‌ها"}
+        </Button>
+      )}
     </div>
   );
 }
@@ -84,12 +107,20 @@ function EmptyList({ text }: { text: string }) {
   );
 }
 
-function EventList({ events, emptyText }: { events: FertilityEvent[]; emptyText: string }) {
+function EventList({
+  events,
+  emptyText,
+  onCreateCalves,
+}: {
+  events: FertilityEvent[];
+  emptyText: string;
+  onCreateCalves?: (e: FertilityEvent) => void;
+}) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
     <div className="space-y-2">
       {events.map((e) => (
-        <EventCard key={e.id} e={e} />
+        <EventCard key={e.id} e={e} onCreateCalves={onCreateCalves} />
       ))}
     </div>
   );
@@ -147,6 +178,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [inseminationOpen, setInseminationOpen] = useState(false);
   const [abortionOpen, setAbortionOpen] = useState(false);
   const [calvingOpen, setCalvingOpen] = useState(false);
+  const [calvesReviewEvent, setCalvesReviewEvent] = useState<FertilityEvent | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState("summary");
 
@@ -300,6 +332,13 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <CreateCalvesFromCalvingDialog
+        open={!!calvesReviewEvent}
+        onOpenChange={(o) => !o && setCalvesReviewEvent(null)}
+        event={calvesReviewEvent}
+        motherCowId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -391,7 +430,11 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
           {/* Full timeline */}
           <TabsContent value="all">
-            <EventList events={events} emptyText="رویدادی ثبت نشده است" />
+            <EventList
+              events={events}
+              emptyText="رویدادی ثبت نشده است"
+              onCreateCalves={setCalvesReviewEvent}
+            />
           </TabsContent>
 
           {/* Per-type */}
@@ -414,6 +457,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                 (b.event_date ?? "").localeCompare(a.event_date ?? ""),
               )}
               emptyText="رویداد زایش یا سقط ثبت نشده است"
+              onCreateCalves={setCalvesReviewEvent}
             />
           </TabsContent>
 
