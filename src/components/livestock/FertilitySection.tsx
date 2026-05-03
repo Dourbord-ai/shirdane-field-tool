@@ -2,6 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   FERTILITY_EVENT_LABELS,
   FertilityEvent,
   eventBadgeClass,
@@ -11,6 +24,7 @@ import {
 import { fertilityLabel } from "@/lib/livestock";
 import { Loader2, Activity, History, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
@@ -21,15 +35,15 @@ type Props = {
   latestStatus: number | null;
 };
 
-const TAB_DEFS: { key: string; label: string; type?: string }[] = [
+const TAB_DEFS: { key: string; label: string }[] = [
   { key: "summary", label: "خلاصه" },
   { key: "all", label: "تاریخچه کامل" },
-  { key: "heat", label: "فحلی", type: "heat" },
-  { key: "insemination", label: "تلقیح", type: "insemination" },
-  { key: "pregnancy_test", label: "تست آبستنی", type: "pregnancy_test" },
+  { key: "heat", label: "فحلی" },
+  { key: "insemination", label: "تلقیح" },
+  { key: "pregnancy_test", label: "تست آبستنی" },
   { key: "calving_abortion", label: "زایش و سقط" },
-  { key: "dry_off", label: "خشک کردن", type: "dry_off" },
-  { key: "prescription", label: "درمان / نسخه", type: "prescription" },
+  { key: "dry_off", label: "خشک کردن" },
+  { key: "prescription", label: "درمان / نسخه" },
   { key: "rinse_clean", label: "شستشو و کلین تست" },
   { key: "sync", label: "همزمان‌سازی فحلی" },
 ];
@@ -37,14 +51,14 @@ const TAB_DEFS: { key: string; label: string; type?: string }[] = [
 function EventCard({ e }: { e: FertilityEvent }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className={`text-[11px] px-2 py-0.5 rounded-full border ${eventBadgeClass(e.event_type)}`}>
           {fertilityEventLabel(e.event_type)}
         </span>
         <span className="text-xs text-muted-foreground">{formatEventDate(e.event_date)}</span>
       </div>
-      {e.result && <p className="text-sm text-foreground">{e.result}</p>}
-      {e.notes && <p className="text-xs text-muted-foreground">{e.notes}</p>}
+      {e.result && <p className="text-sm text-foreground break-words">{e.result}</p>}
+      {e.notes && <p className="text-xs text-muted-foreground break-words">{e.notes}</p>}
       {e.operator_name && (
         <p className="text-[11px] text-muted-foreground">اپراتور: {e.operator_name}</p>
       )}
@@ -78,14 +92,57 @@ function EventList({ events, emptyText }: { events: FertilityEvent[]; emptyText:
   );
 }
 
+type ActionKey =
+  | "heat"
+  | "insemination"
+  | "pregnancy_test"
+  | "calving"
+  | "abortion"
+  | "dry_off"
+  | "rinse"
+  | "clean_test"
+  | "prescription"
+  | "sync";
+
+const ACTION_GROUPS: { title: string; actions: { key: ActionKey; label: string }[] }[] = [
+  {
+    title: "عملیات اصلی",
+    actions: [
+      { key: "heat", label: "ثبت فحلی" },
+      { key: "insemination", label: "ثبت تلقیح" },
+      { key: "pregnancy_test", label: "ثبت تست آبستنی" },
+    ],
+  },
+  {
+    title: "زایش و خروج از چرخه",
+    actions: [
+      { key: "calving", label: "ثبت زایش" },
+      { key: "abortion", label: "ثبت سقط" },
+      { key: "dry_off", label: "ثبت خشک کردن" },
+    ],
+  },
+  {
+    title: "درمان و اقدامات تکمیلی",
+    actions: [
+      { key: "rinse", label: "ثبت شستشو" },
+      { key: "clean_test", label: "ثبت کلین تست" },
+      { key: "prescription", label: "ثبت درمان / نسخه" },
+      { key: "sync", label: "ثبت همزمان‌سازی فحلی" },
+    ],
+  },
+];
+
 export default function FertilitySection({ livestockId, latestStatus }: Props) {
+  const { toast } = useToast();
   const [events, setEvents] = useState<FertilityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [heatOpen, setHeatOpen] = useState(false);
   const [rinseOpen, setRinseOpen] = useState(false);
   const [cleanTestOpen, setCleanTestOpen] = useState(false);
   const [inseminationOpen, setInseminationOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [activeTab, setActiveTab] = useState("summary");
 
   useEffect(() => {
     let cancelled = false;
@@ -122,47 +179,69 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
     [events],
   );
 
+  function handleAction(key: ActionKey) {
+    setActionsOpen(false);
+    switch (key) {
+      case "heat":
+        setHeatOpen(true);
+        break;
+      case "insemination":
+        setInseminationOpen(true);
+        break;
+      case "rinse":
+        setRinseOpen(true);
+        break;
+      case "clean_test":
+        setCleanTestOpen(true);
+        break;
+      default:
+        toast({
+          title: "به‌زودی",
+          description: "این عملیات هنوز در دسترس نیست.",
+        });
+    }
+  }
+
   return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-body-lg font-bold text-foreground flex items-center gap-2">
-          <Activity className="w-4 h-4 text-primary" />
-          وضعیت باروری و رویدادها
+    <section className="rounded-xl border border-border bg-card p-3 sm:p-4 space-y-3 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-body-lg font-bold text-foreground flex items-center gap-2 min-w-0">
+          <Activity className="w-4 h-4 text-primary shrink-0" />
+          <span className="truncate">وضعیت باروری و رویدادها</span>
         </h2>
-        <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => setHeatOpen(true)} className="gap-1">
-            <Plus className="w-4 h-4" />
-            ثبت فحلی
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setInseminationOpen(true)}
-            className="gap-1"
-          >
-            <Plus className="w-4 h-4" />
-            ثبت تلقیح
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setRinseOpen(true)}
-            className="gap-1"
-          >
-            <Plus className="w-4 h-4" />
-            ثبت شستشو
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setCleanTestOpen(true)}
-            className="gap-1"
-          >
-            <Plus className="w-4 h-4" />
-            ثبت کلین تست
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setActionsOpen(true)} className="gap-1 shrink-0">
+          <Plus className="w-4 h-4" />
+          ثبت عملیات باروری
+        </Button>
       </div>
+
+      <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto" dir="rtl">
+          <SheetHeader className="text-right">
+            <SheetTitle>ثبت عملیات باروری</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-5">
+            {ACTION_GROUPS.map((group) => (
+              <div key={group.title} className="space-y-2">
+                <h3 className="text-xs font-bold text-muted-foreground">{group.title}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {group.actions.map((a) => (
+                    <Button
+                      key={a.key}
+                      variant="outline"
+                      className="justify-start gap-2 h-11"
+                      onClick={() => handleAction(a.key)}
+                    >
+                      <Plus className="w-4 h-4 text-primary" />
+                      {a.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <HeatRegistrationDialog
         open={heatOpen}
@@ -189,14 +268,31 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
 
-
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
           <Loader2 className="w-5 h-5 animate-spin" />
         </div>
       ) : (
-        <Tabs defaultValue="summary" dir="rtl">
-          <div className="overflow-x-auto -mx-1 px-1">
+        <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
+          {/* Mobile: Select dropdown */}
+          <div className="md:hidden">
+            <label className="text-xs text-muted-foreground mb-1 block">نمایش رویدادها</label>
+            <Select value={activeTab} onValueChange={setActiveTab}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TAB_DEFS.map((t) => (
+                  <SelectItem key={t.key} value={t.key}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Desktop/tablet: tabs */}
+          <div className="hidden md:block overflow-x-auto -mx-1 px-1">
             <TabsList className="flex w-max gap-1 bg-muted/50">
               {TAB_DEFS.map((t) => (
                 <TabsTrigger key={t.key} value={t.key} className="text-xs whitespace-nowrap">
@@ -239,13 +335,13 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {Object.entries(FERTILITY_EVENT_LABELS).map(([type, label]) => (
                     <div
                       key={type}
                       className="rounded-md border border-border bg-background p-2 text-center"
                     >
-                      <p className="text-[11px] text-muted-foreground">{label}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{label}</p>
                       <p className="text-sm font-bold text-foreground">
                         {(byType[type]?.length ?? 0).toLocaleString("fa-IR")}
                       </p>
@@ -275,7 +371,6 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
             />
           </TabsContent>
 
-          {/* Combined: calving + abortion */}
           <TabsContent value="calving_abortion">
             <EventList
               events={[...(byType.calving ?? []), ...(byType.abortion ?? [])].sort((a, b) =>
@@ -292,7 +387,6 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
             <EventList events={byType.prescription ?? []} emptyText="نسخه/درمانی ثبت نشده است" />
           </TabsContent>
 
-          {/* Combined: rinse + clean test */}
           <TabsContent value="rinse_clean">
             <EventList
               events={[...(byType.rinse ?? []), ...(byType.clean_test ?? [])].sort((a, b) =>
@@ -302,7 +396,6 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
             />
           </TabsContent>
 
-          {/* Combined: sync + sync details */}
           <TabsContent value="sync">
             <EventList
               events={[
