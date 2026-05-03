@@ -53,7 +53,16 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "sync", label: "همزمان‌سازی فحلی" },
 ];
 
-function EventCard({ e }: { e: FertilityEvent }) {
+function EventCard({
+  e,
+  onCreateCalves,
+}: {
+  e: FertilityEvent;
+  onCreateCalves?: (e: FertilityEvent) => void;
+}) {
+  const calves = (e.metadata as any)?.calves as any[] | undefined;
+  const hasCalves = e.event_type === "calving" && Array.isArray(calves) && calves.length > 0;
+  const allCreated = hasCalves && calves!.every((c) => c?.created_cow_id);
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -73,6 +82,18 @@ function EventCard({ e }: { e: FertilityEvent }) {
           {e.legacy_record_id != null && <> #{e.legacy_record_id}</>}
         </p>
       )}
+      {hasCalves && onCreateCalves && (
+        <Button
+          type="button"
+          size="sm"
+          variant={allCreated ? "outline" : "default"}
+          className="w-full gap-1 mt-1"
+          onClick={() => onCreateCalves(e)}
+        >
+          <Baby className="w-4 h-4" />
+          {allCreated ? "مشاهده گوساله‌های ایجادشده" : "ایجاد دام از اطلاعات گوساله‌ها"}
+        </Button>
+      )}
     </div>
   );
 }
@@ -86,12 +107,20 @@ function EmptyList({ text }: { text: string }) {
   );
 }
 
-function EventList({ events, emptyText }: { events: FertilityEvent[]; emptyText: string }) {
+function EventList({
+  events,
+  emptyText,
+  onCreateCalves,
+}: {
+  events: FertilityEvent[];
+  emptyText: string;
+  onCreateCalves?: (e: FertilityEvent) => void;
+}) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
     <div className="space-y-2">
       {events.map((e) => (
-        <EventCard key={e.id} e={e} />
+        <EventCard key={e.id} e={e} onCreateCalves={onCreateCalves} />
       ))}
     </div>
   );
