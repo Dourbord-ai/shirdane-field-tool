@@ -2,3 +2,15 @@ project_id = "gwwryrdrbmhifhfdmkph"
 
 [functions.verify-account]
 verify_jwt = false
+
+[functions.get-hr-attendance]
+verify_jwt = false
+
+[functions.submit-hr-request]
+verify_jwt = false
+
+[functions.check-hr-alerts]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false

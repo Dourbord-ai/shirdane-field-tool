@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -12,6 +13,7 @@ import MilkReceipts from "./pages/MilkReceipts";
 import LabResults from "./pages/LabResults";
 import Livestock from "./pages/Livestock";
 import LivestockProfile from "./pages/LivestockProfile";
+import HumanResources from "./pages/HumanResources";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -19,26 +21,29 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/invoices" element={<Invoices />} />
-            <Route path="/invoices/new" element={<NewInvoice />} />
-            <Route path="/receipts/milk" element={<MilkReceipts />} />
-            <Route path="/receipts/lab" element={<LabResults />} />
-            <Route path="/livestock" element={<Livestock />} />
-            <Route path="/livestock/:id" element={<LivestockProfile />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/invoices" element={<Invoices />} />
+              <Route path="/invoices/new" element={<NewInvoice />} />
+              <Route path="/receipts/milk" element={<MilkReceipts />} />
+              <Route path="/receipts/lab" element={<LabResults />} />
+              <Route path="/livestock" element={<Livestock />} />
+              <Route path="/livestock/:id" element={<LivestockProfile />} />
+              <Route path="/hr" element={<HumanResources />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
