@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
+import PregnancyTestRegistrationDialog from "./PregnancyTestRegistrationDialog";
 import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 
 type Props = {
