@@ -430,7 +430,11 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
           {/* Full timeline */}
           <TabsContent value="all">
-            <EventList events={events} emptyText="رویدادی ثبت نشده است" />
+            <EventList
+              events={events}
+              emptyText="رویدادی ثبت نشده است"
+              onCreateCalves={setCalvesReviewEvent}
+            />
           </TabsContent>
 
           {/* Per-type */}
