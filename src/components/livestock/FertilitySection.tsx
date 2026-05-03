@@ -30,6 +30,7 @@ import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
 import PregnancyTestRegistrationDialog from "./PregnancyTestRegistrationDialog";
 import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
+import AbortionRegistrationDialog from "./AbortionRegistrationDialog";
 
 type Props = {
   livestockId: number;
@@ -143,6 +144,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [cleanTestOpen, setCleanTestOpen] = useState(false);
   const [pregnancyTestOpen, setPregnancyTestOpen] = useState(false);
   const [inseminationOpen, setInseminationOpen] = useState(false);
+  const [abortionOpen, setAbortionOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState("summary");
 
@@ -198,6 +200,9 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         break;
       case "pregnancy_test":
         setPregnancyTestOpen(true);
+        break;
+      case "abortion":
+        setAbortionOpen(true);
         break;
       default:
         toast({
@@ -275,6 +280,12 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
       <PregnancyTestRegistrationDialog
         open={pregnancyTestOpen}
         onOpenChange={setPregnancyTestOpen}
+        livestockId={livestockId}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+      <AbortionRegistrationDialog
+        open={abortionOpen}
+        onOpenChange={setAbortionOpen}
         livestockId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
