@@ -605,6 +605,435 @@ export type Database = {
         }
         Relationships: []
       }
+      hr_attendance: {
+        Row: {
+          created_at: string
+          entry_at: string
+          entry_date_shamsi: string | null
+          entry_type: string
+          id: string
+          notes: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          entry_at: string
+          entry_date_shamsi?: string | null
+          entry_type: string
+          id?: string
+          notes?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          entry_at?: string
+          entry_date_shamsi?: string | null
+          entry_type?: string
+          id?: string
+          notes?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      hr_attendance_records: {
+        Row: {
+          created_at: string
+          date_shamsi: string
+          early_leave_minutes: number
+          hourly_leave_minutes: number
+          id: string
+          in1: string | null
+          in2: string | null
+          in3: string | null
+          late_minutes: number
+          mission_minutes: number
+          notes: string | null
+          other_entries: string | null
+          out1: string | null
+          out2: string | null
+          out3: string | null
+          overtime_minutes: number
+          presence_minutes: number
+          rest_minutes: number
+          shift_type: string | null
+          shortfall_minutes: number
+          status: string
+          updated_at: string
+          user_id: string
+          user_name: string | null
+          weekday: string | null
+          worked_minutes: number
+        }
+        Insert: {
+          created_at?: string
+          date_shamsi: string
+          early_leave_minutes?: number
+          hourly_leave_minutes?: number
+          id?: string
+          in1?: string | null
+          in2?: string | null
+          in3?: string | null
+          late_minutes?: number
+          mission_minutes?: number
+          notes?: string | null
+          other_entries?: string | null
+          out1?: string | null
+          out2?: string | null
+          out3?: string | null
+          overtime_minutes?: number
+          presence_minutes?: number
+          rest_minutes?: number
+          shift_type?: string | null
+          shortfall_minutes?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          user_name?: string | null
+          weekday?: string | null
+          worked_minutes?: number
+        }
+        Update: {
+          created_at?: string
+          date_shamsi?: string
+          early_leave_minutes?: number
+          hourly_leave_minutes?: number
+          id?: string
+          in1?: string | null
+          in2?: string | null
+          in3?: string | null
+          late_minutes?: number
+          mission_minutes?: number
+          notes?: string | null
+          other_entries?: string | null
+          out1?: string | null
+          out2?: string | null
+          out3?: string | null
+          overtime_minutes?: number
+          presence_minutes?: number
+          rest_minutes?: number
+          shift_type?: string | null
+          shortfall_minutes?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          user_name?: string | null
+          weekday?: string | null
+          worked_minutes?: number
+        }
+        Relationships: []
+      }
+      hr_leave: {
+        Row: {
+          created_at: string
+          date_shamsi: string | null
+          days: number | null
+          from_date_shamsi: string | null
+          from_time: string | null
+          hours: number | null
+          id: string
+          leave_kind: string
+          leave_type: string | null
+          reason: string | null
+          to_date_shamsi: string | null
+          to_time: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          date_shamsi?: string | null
+          days?: number | null
+          from_date_shamsi?: string | null
+          from_time?: string | null
+          hours?: number | null
+          id?: string
+          leave_kind: string
+          leave_type?: string | null
+          reason?: string | null
+          to_date_shamsi?: string | null
+          to_time?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          date_shamsi?: string | null
+          days?: number | null
+          from_date_shamsi?: string | null
+          from_time?: string | null
+          hours?: number | null
+          id?: string
+          leave_kind?: string
+          leave_type?: string | null
+          reason?: string | null
+          to_date_shamsi?: string | null
+          to_time?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      hr_missions: {
+        Row: {
+          created_at: string
+          date_shamsi: string
+          description: string | null
+          destination: string | null
+          id: string
+          subject: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          date_shamsi: string
+          description?: string | null
+          destination?: string | null
+          id?: string
+          subject?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          date_shamsi?: string
+          description?: string | null
+          destination?: string | null
+          id?: string
+          subject?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      hr_notification_alerts: {
+        Row: {
+          alert_date: string
+          alert_type: string
+          created_at: string
+          dismissed_until: string | null
+          hr_user_id: number
+          id: string
+          last_sent_at: string | null
+          message: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string | null
+          username: string
+        }
+        Insert: {
+          alert_date: string
+          alert_type: string
+          created_at?: string
+          dismissed_until?: string | null
+          hr_user_id: number
+          id?: string
+          last_sent_at?: string | null
+          message: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id?: string | null
+          username: string
+        }
+        Update: {
+          alert_date?: string
+          alert_type?: string
+          created_at?: string
+          dismissed_until?: string | null
+          hr_user_id?: number
+          id?: string
+          last_sent_at?: string | null
+          message?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      hr_overtime: {
+        Row: {
+          created_at: string
+          date_shamsi: string
+          hours: number
+          id: string
+          reason: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          date_shamsi: string
+          hours?: number
+          id?: string
+          reason?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          date_shamsi?: string
+          hours?: number
+          id?: string
+          reason?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      hr_profiles: {
+        Row: {
+          created_at: string
+          hr_user_id: number | null
+          id: string
+          on_call_colleagues: boolean
+          on_call_representatives: boolean
+          on_call_tickets: boolean
+          updated_at: string
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          created_at?: string
+          hr_user_id?: number | null
+          id?: string
+          on_call_colleagues?: boolean
+          on_call_representatives?: boolean
+          on_call_tickets?: boolean
+          updated_at?: string
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          created_at?: string
+          hr_user_id?: number | null
+          id?: string
+          on_call_colleagues?: boolean
+          on_call_representatives?: boolean
+          on_call_tickets?: boolean
+          updated_at?: string
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
+      hr_requests_log: {
+        Row: {
+          created_at: string
+          error: string | null
+          hr_user_id: number | null
+          id: string
+          legacy_payload: Json | null
+          payload: Json | null
+          request_type: string
+          response: Json | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          hr_user_id?: number | null
+          id?: string
+          legacy_payload?: Json | null
+          payload?: Json | null
+          request_type: string
+          response?: Json | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          hr_user_id?: number | null
+          id?: string
+          legacy_payload?: Json | null
+          payload?: Json | null
+          request_type?: string
+          response?: Json | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      hr_shifts: {
+        Row: {
+          created_at: string
+          end_time: string | null
+          id: string
+          notes: string | null
+          shift_date_shamsi: string
+          shift_type: string | null
+          start_time: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          shift_date_shamsi: string
+          shift_type?: string | null
+          start_time?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          shift_date_shamsi?: string
+          shift_type?: string | null
+          start_time?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      hr_users: {
+        Row: {
+          created_at: string
+          department: string | null
+          full_name: string | null
+          id: number
+          is_active: boolean
+          password_hash: string
+          personnel_code: string | null
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          full_name?: string | null
+          id: number
+          is_active?: boolean
+          password_hash: string
+          personnel_code?: string | null
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          full_name?: string | null
+          id?: number
+          is_active?: boolean
+          password_hash?: string
+          personnel_code?: string | null
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
       lab_results: {
         Row: {
           created_at: string
@@ -959,6 +1388,33 @@ export type Database = {
         Update: {
           id?: number
           name?: string | null
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
         }
         Relationships: []
       }
