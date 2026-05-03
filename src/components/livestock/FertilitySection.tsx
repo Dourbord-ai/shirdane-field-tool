@@ -206,6 +206,9 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
       case "abortion":
         setAbortionOpen(true);
         break;
+      case "calving":
+        setCalvingOpen(true);
+        break;
       default:
         toast({
           title: "به‌زودی",
