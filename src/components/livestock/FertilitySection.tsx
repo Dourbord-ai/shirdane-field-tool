@@ -287,7 +287,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
           {/* Mobile: Select dropdown */}
           <div className="md:hidden">
-            <label className="text-xs text-muted-foreground mb-1 block">نمایش رویدادها</label>
+            <label className="text-xs text-muted-foreground mb-1 block">نمایش بخش باروری</label>
             <Select value={activeTab} onValueChange={setActiveTab}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -302,11 +302,15 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
             </Select>
           </div>
 
-          {/* Desktop/tablet: tabs */}
-          <div className="hidden md:block overflow-x-auto -mx-1 px-1">
-            <TabsList className="flex w-max gap-1 bg-muted/50">
+          {/* Desktop/tablet: wrapping tabs (no horizontal scroll) */}
+          <div className="hidden md:block">
+            <TabsList className="flex flex-wrap h-auto w-full gap-1 bg-muted/50 p-1 justify-start">
               {TAB_DEFS.map((t) => (
-                <TabsTrigger key={t.key} value={t.key} className="text-xs whitespace-nowrap">
+                <TabsTrigger
+                  key={t.key}
+                  value={t.key}
+                  className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                >
                   {t.label}
                 </TabsTrigger>
               ))}
