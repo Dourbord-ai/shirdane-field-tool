@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical } from "lucide-react";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 
@@ -11,6 +11,7 @@ const modules = [
   { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها", key: "livestock" },
   { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار", key: "storage" },
   { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
+  { title: "منابع انسانی", icon: Users, description: "حضور و غیاب و درخواست‌ها", key: "hr" },
 ];
 
 export default function Dashboard() {
@@ -103,6 +104,19 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </button>
+              </div>
+            )}
+
+            {mod.key === "hr" && expandedModule === "hr" && (
+              <div className="mt-2 animate-fade-in">
+                <Button
+                  onClick={() => navigate("/hr")}
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold"
+                  size="lg"
+                >
+                  <Users className="w-5 h-5" />
+                  ورود به منابع انسانی
+                </Button>
               </div>
             )}
 
