@@ -31,6 +31,7 @@ import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
 import PregnancyTestRegistrationDialog from "./PregnancyTestRegistrationDialog";
 import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 import AbortionRegistrationDialog from "./AbortionRegistrationDialog";
+import CalvingRegistrationDialog from "./CalvingRegistrationDialog";
 
 type Props = {
   livestockId: number;
