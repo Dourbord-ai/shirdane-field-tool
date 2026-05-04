@@ -584,6 +584,36 @@ export type Database = {
         }
         Relationships: []
       }
+      fertility_event_audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          fertility_event_id: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          fertility_event_id: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          fertility_event_id?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       fertility_heat_types: {
         Row: {
           created_at: string
@@ -1105,10 +1135,14 @@ export type Database = {
       }
       livestock_fertility_events: {
         Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_user_id: string | null
           created_at: string
           event_date: string | null
           event_type: string
           id: string
+          is_cancelled: boolean
           legacy_record_id: number | null
           legacy_table_name: string | null
           livestock_id: number
@@ -1118,12 +1152,17 @@ export type Database = {
           operator_user_id: number | null
           result: string | null
           status_code: number | null
+          updated_at: string
         }
         Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
           created_at?: string
           event_date?: string | null
           event_type: string
           id?: string
+          is_cancelled?: boolean
           legacy_record_id?: number | null
           legacy_table_name?: string | null
           livestock_id: number
@@ -1133,12 +1172,17 @@ export type Database = {
           operator_user_id?: number | null
           result?: string | null
           status_code?: number | null
+          updated_at?: string
         }
         Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
           created_at?: string
           event_date?: string | null
           event_type?: string
           id?: string
+          is_cancelled?: boolean
           legacy_record_id?: number | null
           legacy_table_name?: string | null
           livestock_id?: number
@@ -1148,6 +1192,7 @@ export type Database = {
           operator_user_id?: number | null
           result?: string | null
           status_code?: number | null
+          updated_at?: string
         }
         Relationships: []
       }

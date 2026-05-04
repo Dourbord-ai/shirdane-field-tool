@@ -33,7 +33,10 @@ import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 import AbortionRegistrationDialog from "./AbortionRegistrationDialog";
 import CalvingRegistrationDialog from "./CalvingRegistrationDialog";
 import CreateCalvesFromCalvingDialog from "./CreateCalvesFromCalvingDialog";
-import { Baby } from "lucide-react";
+import CancelFertilityEventDialog from "./CancelFertilityEventDialog";
+import EditFertilityEventDialog from "./EditFertilityEventDialog";
+import { Switch } from "@/components/ui/switch";
+import { Baby, Pencil, Ban } from "lucide-react";
 
 type Props = {
   livestockId: number;
@@ -56,22 +59,39 @@ const TAB_DEFS: { key: string; label: string }[] = [
 function EventCard({
   e,
   onCreateCalves,
+  onEdit,
+  onCancel,
 }: {
   e: FertilityEvent;
   onCreateCalves?: (e: FertilityEvent) => void;
+  onEdit?: (e: FertilityEvent) => void;
+  onCancel?: (e: FertilityEvent) => void;
 }) {
   const calves = (e.metadata as any)?.calves as any[] | undefined;
   const hasCalves = e.event_type === "calving" && Array.isArray(calves) && calves.length > 0;
   const allCreated = hasCalves && calves!.every((c) => c?.created_cow_id);
+  const cancelled = !!e.is_cancelled;
+  const isLegacyReadOnly = !!e.legacy_table_name && e.legacy_table_name !== "manual";
   return (
-    <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+    <div
+      className={`rounded-lg border border-border bg-card p-3 space-y-1.5 ${
+        cancelled ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${eventBadgeClass(e.event_type)}`}>
-          {fertilityEventLabel(e.event_type)}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`text-[11px] px-2 py-0.5 rounded-full border ${eventBadgeClass(e.event_type)}`}>
+            {fertilityEventLabel(e.event_type)}
+          </span>
+          {cancelled && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
+              لغو شده
+            </span>
+          )}
+        </div>
         <span className="text-xs text-muted-foreground">{formatEventDate(e.event_date)}</span>
       </div>
-      {e.result && <p className="text-sm text-foreground break-words">{e.result}</p>}
+      {e.result && <p className={`text-sm break-words ${cancelled ? "line-through text-muted-foreground" : "text-foreground"}`}>{e.result}</p>}
       {e.notes && <p className="text-xs text-muted-foreground break-words">{e.notes}</p>}
       {e.operator_name && (
         <p className="text-[11px] text-muted-foreground">اپراتور: {e.operator_name}</p>
@@ -82,7 +102,10 @@ function EventCard({
           {e.legacy_record_id != null && <> #{e.legacy_record_id}</>}
         </p>
       )}
-      {hasCalves && onCreateCalves && (
+      {cancelled && e.cancel_reason && (
+        <p className="text-[11px] text-destructive">دلیل لغو: {e.cancel_reason}</p>
+      )}
+      {hasCalves && onCreateCalves && !cancelled && (
         <Button
           type="button"
           size="sm"
@@ -93,6 +116,36 @@ function EventCard({
           <Baby className="w-4 h-4" />
           {allCreated ? "مشاهده گوساله‌های ایجادشده" : "ایجاد دام از اطلاعات گوساله‌ها"}
         </Button>
+      )}
+      {!cancelled && (onEdit || onCancel) && (
+        <div className="flex gap-2 pt-1">
+          {onEdit && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1 h-8"
+              onClick={() => onEdit(e)}
+              disabled={isLegacyReadOnly}
+              title={isLegacyReadOnly ? "رویداد وارداتی قابل ویرایش نیست" : undefined}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              ویرایش
+            </Button>
+          )}
+          {onCancel && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1 h-8 text-destructive hover:bg-destructive/5"
+              onClick={() => onCancel(e)}
+            >
+              <Ban className="w-3.5 h-3.5" />
+              لغو عملیات
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -111,16 +164,26 @@ function EventList({
   events,
   emptyText,
   onCreateCalves,
+  onEdit,
+  onCancel,
 }: {
   events: FertilityEvent[];
   emptyText: string;
   onCreateCalves?: (e: FertilityEvent) => void;
+  onEdit?: (e: FertilityEvent) => void;
+  onCancel?: (e: FertilityEvent) => void;
 }) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
     <div className="space-y-2">
       {events.map((e) => (
-        <EventCard key={e.id} e={e} onCreateCalves={onCreateCalves} />
+        <EventCard
+          key={e.id}
+          e={e}
+          onCreateCalves={onCreateCalves}
+          onEdit={onEdit}
+          onCancel={onCancel}
+        />
       ))}
     </div>
   );
@@ -179,6 +242,9 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [abortionOpen, setAbortionOpen] = useState(false);
   const [calvingOpen, setCalvingOpen] = useState(false);
   const [calvesReviewEvent, setCalvesReviewEvent] = useState<FertilityEvent | null>(null);
+  const [editEvent, setEditEvent] = useState<FertilityEvent | null>(null);
+  const [cancelEvent, setCancelEvent] = useState<FertilityEvent | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState("summary");
 
@@ -203,18 +269,23 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
     };
   }, [livestockId, reloadKey]);
 
+  const visibleEvents = useMemo(
+    () => (showCancelled ? events : events.filter((e) => !e.is_cancelled)),
+    [events, showCancelled],
+  );
+
   const byType = useMemo(() => {
     const map: Record<string, FertilityEvent[]> = {};
-    for (const e of events) {
+    for (const e of visibleEvents) {
       const t = e.event_type;
       (map[t] ||= []).push(e);
     }
     return map;
-  }, [events]);
+  }, [visibleEvents]);
 
   const latestStatusEvent = useMemo(
-    () => events.find((e) => e.event_type === "fertility_status") ?? null,
-    [events],
+    () => visibleEvents.find((e) => e.event_type === "fertility_status") ?? null,
+    [visibleEvents],
   );
 
   function handleAction(key: ActionKey) {
@@ -339,6 +410,29 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         motherCowId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <EditFertilityEventDialog
+        open={!!editEvent}
+        onOpenChange={(o) => !o && setEditEvent(null)}
+        event={editEvent}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+      <CancelFertilityEventDialog
+        open={!!cancelEvent}
+        onOpenChange={(o) => !o && setCancelEvent(null)}
+        event={cancelEvent}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+
+      <div className="flex items-center justify-end gap-2 text-xs">
+        <Switch
+          id="show-cancelled-fertility"
+          checked={showCancelled}
+          onCheckedChange={setShowCancelled}
+        />
+        <label htmlFor="show-cancelled-fertility" className="text-muted-foreground cursor-pointer">
+          نمایش عملیات لغو شده
+        </label>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -380,7 +474,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
           {/* Summary */}
           <TabsContent value="summary" className="space-y-3">
-            {events.length === 0 ? (
+            {visibleEvents.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
                 <History className="w-8 h-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
@@ -391,10 +485,10 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
               <>
                 <div className="flex flex-wrap gap-2">
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-primary/10 text-primary border-primary/20 font-bold">
-                    مجموع رویدادها: {events.length.toLocaleString("fa-IR")}
+                    مجموع رویدادها: {visibleEvents.length.toLocaleString("fa-IR")}
                   </span>
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-secondary text-secondary-foreground border-border">
-                    آخرین رویداد: {formatEventDate(events[0]?.event_date)}
+                    آخرین رویداد: {formatEventDate(visibleEvents[0]?.event_date)}
                   </span>
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-accent text-accent-foreground border-border">
                     وضعیت: {fertilityLabel(latestStatus)}
@@ -431,23 +525,37 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
           {/* Full timeline */}
           <TabsContent value="all">
             <EventList
-              events={events}
+              events={visibleEvents}
               emptyText="رویدادی ثبت نشده است"
               onCreateCalves={setCalvesReviewEvent}
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
           {/* Per-type */}
           <TabsContent value="heat">
-            <EventList events={byType.heat ?? []} emptyText="رویداد فحلی ثبت نشده است" />
+            <EventList
+              events={byType.heat ?? []}
+              emptyText="رویداد فحلی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
           <TabsContent value="insemination">
-            <EventList events={byType.insemination ?? []} emptyText="تلقیحی ثبت نشده است" />
+            <EventList
+              events={byType.insemination ?? []}
+              emptyText="تلقیحی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
           <TabsContent value="pregnancy_test">
             <EventList
               events={byType.pregnancy_test ?? []}
               emptyText="تست آبستنی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
@@ -458,14 +566,26 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
               )}
               emptyText="رویداد زایش یا سقط ثبت نشده است"
               onCreateCalves={setCalvesReviewEvent}
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
           <TabsContent value="dry_off">
-            <EventList events={byType.dry_off ?? []} emptyText="خشک کردنی ثبت نشده است" />
+            <EventList
+              events={byType.dry_off ?? []}
+              emptyText="خشک کردنی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
           <TabsContent value="prescription">
-            <EventList events={byType.prescription ?? []} emptyText="نسخه/درمانی ثبت نشده است" />
+            <EventList
+              events={byType.prescription ?? []}
+              emptyText="نسخه/درمانی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
 
           <TabsContent value="rinse_clean">
@@ -474,6 +594,8 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                 (b.event_date ?? "").localeCompare(a.event_date ?? ""),
               )}
               emptyText="شستشو یا کلین تستی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
@@ -484,6 +606,8 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                 ...(byType.sync_detail ?? []),
               ].sort((a, b) => (b.event_date ?? "").localeCompare(a.event_date ?? ""))}
               emptyText="برنامه همزمان‌سازی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
         </Tabs>
