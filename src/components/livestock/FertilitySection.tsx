@@ -164,16 +164,26 @@ function EventList({
   events,
   emptyText,
   onCreateCalves,
+  onEdit,
+  onCancel,
 }: {
   events: FertilityEvent[];
   emptyText: string;
   onCreateCalves?: (e: FertilityEvent) => void;
+  onEdit?: (e: FertilityEvent) => void;
+  onCancel?: (e: FertilityEvent) => void;
 }) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
     <div className="space-y-2">
       {events.map((e) => (
-        <EventCard key={e.id} e={e} onCreateCalves={onCreateCalves} />
+        <EventCard
+          key={e.id}
+          e={e}
+          onCreateCalves={onCreateCalves}
+          onEdit={onEdit}
+          onCancel={onCancel}
+        />
       ))}
     </div>
   );
