@@ -71,8 +71,8 @@ export function useCertificates() {
 
   useEffect(() => {
     fetchAll();
-    const channel = supabase
-      .channel('certificates-realtime')
+    const channel = supabase.channel(`certificates-realtime-${Math.random().toString(36).slice(2)}`);
+    channel
       .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'certificates' }, () => fetchAll())
       .subscribe();
     return () => {
