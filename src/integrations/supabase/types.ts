@@ -373,6 +373,66 @@ export type Database = {
         }
         Relationships: []
       }
+      certificates: {
+        Row: {
+          attachment_urls: string[]
+          created_at: string
+          created_by: string | null
+          description: string | null
+          doc_number: string | null
+          doc_type: string
+          expiry_date_shamsi: string | null
+          id: number
+          image_url: string | null
+          issue_date_shamsi: string | null
+          issuer: string | null
+          renewal_custom_date_shamsi: string | null
+          renewal_lead_time: string | null
+          renewal_ticket_created_at: string | null
+          renewal_ticket_id: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          attachment_urls?: string[]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          doc_number?: string | null
+          doc_type?: string
+          expiry_date_shamsi?: string | null
+          id?: number
+          image_url?: string | null
+          issue_date_shamsi?: string | null
+          issuer?: string | null
+          renewal_custom_date_shamsi?: string | null
+          renewal_lead_time?: string | null
+          renewal_ticket_created_at?: string | null
+          renewal_ticket_id?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          attachment_urls?: string[]
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          doc_number?: string | null
+          doc_type?: string
+          expiry_date_shamsi?: string | null
+          id?: number
+          image_url?: string | null
+          issue_date_shamsi?: string | null
+          issuer?: string | null
+          renewal_custom_date_shamsi?: string | null
+          renewal_lead_time?: string | null
+          renewal_ticket_created_at?: string | null
+          renewal_ticket_id?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cow_factor_details: {
         Row: {
           cow_id: number

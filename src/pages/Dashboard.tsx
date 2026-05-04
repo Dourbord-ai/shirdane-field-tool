@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users } from "lucide-react";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 
@@ -12,6 +12,7 @@ const modules = [
   { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار", key: "storage" },
   { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
   { title: "منابع انسانی", icon: Users, description: "حضور و غیاب و درخواست‌ها", key: "hr" },
+  { title: "مدارک و مجوزها", icon: Award, description: "مدیریت گواهینامه‌ها و پروانه‌ها", key: "certificates" },
 ];
 
 export default function Dashboard() {
@@ -116,6 +117,19 @@ export default function Dashboard() {
                 >
                   <Users className="w-5 h-5" />
                   ورود به منابع انسانی
+                </Button>
+              </div>
+            )}
+
+            {mod.key === "certificates" && expandedModule === "certificates" && (
+              <div className="mt-2 animate-fade-in">
+                <Button
+                  onClick={() => navigate("/certificates")}
+                  className="w-full touch-target rounded-xl gap-2 text-body font-bold"
+                  size="lg"
+                >
+                  <Award className="w-5 h-5" />
+                  مشاهده مدارک و مجوزها
                 </Button>
               </div>
             )}
