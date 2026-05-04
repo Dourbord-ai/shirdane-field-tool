@@ -14,6 +14,8 @@ import LabResults from "./pages/LabResults";
 import Livestock from "./pages/Livestock";
 import LivestockProfile from "./pages/LivestockProfile";
 import HumanResources from "./pages/HumanResources";
+import Certificates from "./pages/Certificates";
+import CertificatesGuard from "./components/CertificatesGuard";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +40,14 @@ const App = () => (
               <Route path="/livestock" element={<Livestock />} />
               <Route path="/livestock/:id" element={<LivestockProfile />} />
               <Route path="/hr" element={<HumanResources />} />
+              <Route
+                path="/certificates"
+                element={
+                  <CertificatesGuard>
+                    <Certificates />
+                  </CertificatesGuard>
+                }
+              />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
