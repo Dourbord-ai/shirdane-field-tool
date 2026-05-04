@@ -151,6 +151,213 @@ export type Database = {
         }
         Relationships: []
       }
+      breeding_alerts: {
+        Row: {
+          alert_date: string
+          cow_id: number
+          created_at: string
+          description: string | null
+          expires_at: string | null
+          fertility_operation_id: number | null
+          id: string
+          reference_event_id: string | null
+          rule_id: string | null
+          status: string
+          title: string
+          workflow_id: string | null
+        }
+        Insert: {
+          alert_date?: string
+          cow_id: number
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          fertility_operation_id?: number | null
+          id?: string
+          reference_event_id?: string | null
+          rule_id?: string | null
+          status?: string
+          title: string
+          workflow_id?: string | null
+        }
+        Update: {
+          alert_date?: string
+          cow_id?: number
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          fertility_operation_id?: number | null
+          id?: string
+          reference_event_id?: string | null
+          rule_id?: string | null
+          status?: string
+          title?: string
+          workflow_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "breeding_alerts_fertility_operation_id_fkey"
+            columns: ["fertility_operation_id"]
+            isOneToOne: false
+            referencedRelation: "fertility_operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "breeding_alerts_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "breeding_workflow_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "breeding_alerts_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "breeding_workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      breeding_workflow_rule_conditions: {
+        Row: {
+          bool_value: boolean | null
+          condition_type: string
+          created_at: string
+          extra_json: Json
+          id: string
+          max_value: number | null
+          min_value: number | null
+          rule_id: string
+          text_value: string | null
+        }
+        Insert: {
+          bool_value?: boolean | null
+          condition_type: string
+          created_at?: string
+          extra_json?: Json
+          id?: string
+          max_value?: number | null
+          min_value?: number | null
+          rule_id: string
+          text_value?: string | null
+        }
+        Update: {
+          bool_value?: boolean | null
+          condition_type?: string
+          created_at?: string
+          extra_json?: Json
+          id?: string
+          max_value?: number | null
+          min_value?: number | null
+          rule_id?: string
+          text_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "breeding_workflow_rule_conditions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "breeding_workflow_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      breeding_workflow_rules: {
+        Row: {
+          alert_enabled: boolean
+          alert_group_id: string | null
+          created_at: string
+          description: string | null
+          duration_of_credit: number | null
+          fertility_operation_id: number
+          id: string
+          is_active: boolean
+          rule_order: number
+          title: string
+          updated_at: string
+          workflow_id: string
+        }
+        Insert: {
+          alert_enabled?: boolean
+          alert_group_id?: string | null
+          created_at?: string
+          description?: string | null
+          duration_of_credit?: number | null
+          fertility_operation_id: number
+          id?: string
+          is_active?: boolean
+          rule_order?: number
+          title: string
+          updated_at?: string
+          workflow_id: string
+        }
+        Update: {
+          alert_enabled?: boolean
+          alert_group_id?: string | null
+          created_at?: string
+          description?: string | null
+          duration_of_credit?: number | null
+          fertility_operation_id?: number
+          id?: string
+          is_active?: boolean
+          rule_order?: number
+          title?: string
+          updated_at?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "breeding_workflow_rules_fertility_operation_id_fkey"
+            columns: ["fertility_operation_id"]
+            isOneToOne: false
+            referencedRelation: "fertility_operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "breeding_workflow_rules_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "breeding_workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      breeding_workflows: {
+        Row: {
+          category: number
+          created_at: string
+          end_date: string | null
+          id: string
+          is_active: boolean
+          name: string
+          start_date: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          category?: number
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          start_date?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: number
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          start_date?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       buy_cattle_shoppingcenter: {
         Row: {
           id: number
@@ -632,6 +839,66 @@ export type Database = {
           id?: number
           is_active?: boolean
           name?: string
+        }
+        Relationships: []
+      }
+      fertility_operations: {
+        Row: {
+          created_at: string
+          id: number
+          is_active: boolean
+          name: string
+          operation_name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id: number
+          is_active?: boolean
+          name: string
+          operation_name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          is_active?: boolean
+          name?: string
+          operation_name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      fertility_statuses: {
+        Row: {
+          color: string
+          created_at: string
+          id: number
+          is_abortion: boolean
+          milking_state: string
+          name: string
+          pregnancy_state: string
+          sort_order: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id: number
+          is_abortion?: boolean
+          milking_state?: string
+          name: string
+          pregnancy_state?: string
+          sort_order?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: number
+          is_abortion?: boolean
+          milking_state?: string
+          name?: string
+          pregnancy_state?: string
+          sort_order?: number
         }
         Relationships: []
       }
@@ -1136,8 +1403,12 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by_user_id: string | null
           created_at: string
+          created_by: string | null
           event_date: string | null
+          event_time: string | null
           event_type: string
+          fertility_operation_id: number | null
+          fertility_status_id: number | null
           id: string
           is_cancelled: boolean
           legacy_record_id: number | null
@@ -1148,6 +1419,7 @@ export type Database = {
           operator_name: string | null
           operator_user_id: number | null
           result: string | null
+          result_code: string | null
           status_code: number | null
           updated_at: string
         }
@@ -1156,8 +1428,12 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by_user_id?: string | null
           created_at?: string
+          created_by?: string | null
           event_date?: string | null
+          event_time?: string | null
           event_type: string
+          fertility_operation_id?: number | null
+          fertility_status_id?: number | null
           id?: string
           is_cancelled?: boolean
           legacy_record_id?: number | null
@@ -1168,6 +1444,7 @@ export type Database = {
           operator_name?: string | null
           operator_user_id?: number | null
           result?: string | null
+          result_code?: string | null
           status_code?: number | null
           updated_at?: string
         }
@@ -1176,8 +1453,12 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by_user_id?: string | null
           created_at?: string
+          created_by?: string | null
           event_date?: string | null
+          event_time?: string | null
           event_type?: string
+          fertility_operation_id?: number | null
+          fertility_status_id?: number | null
           id?: string
           is_cancelled?: boolean
           legacy_record_id?: number | null
@@ -1188,10 +1469,26 @@ export type Database = {
           operator_name?: string | null
           operator_user_id?: number | null
           result?: string | null
+          result_code?: string | null
           status_code?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "livestock_fertility_events_fertility_operation_id_fkey"
+            columns: ["fertility_operation_id"]
+            isOneToOne: false
+            referencedRelation: "fertility_operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "livestock_fertility_events_fertility_status_id_fkey"
+            columns: ["fertility_status_id"]
+            isOneToOne: false
+            referencedRelation: "fertility_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       livestock_items: {
         Row: {
