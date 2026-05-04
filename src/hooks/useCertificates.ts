@@ -73,7 +73,7 @@ export function useCertificates() {
     fetchAll();
     const channel = supabase
       .channel('certificates-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => fetchAll())
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'certificates' }, () => fetchAll())
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
