@@ -474,7 +474,7 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
 
           {/* Summary */}
           <TabsContent value="summary" className="space-y-3">
-            {events.length === 0 ? (
+            {visibleEvents.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
                 <History className="w-8 h-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
@@ -485,10 +485,10 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
               <>
                 <div className="flex flex-wrap gap-2">
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-primary/10 text-primary border-primary/20 font-bold">
-                    مجموع رویدادها: {events.length.toLocaleString("fa-IR")}
+                    مجموع رویدادها: {visibleEvents.length.toLocaleString("fa-IR")}
                   </span>
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-secondary text-secondary-foreground border-border">
-                    آخرین رویداد: {formatEventDate(events[0]?.event_date)}
+                    آخرین رویداد: {formatEventDate(visibleEvents[0]?.event_date)}
                   </span>
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-accent text-accent-foreground border-border">
                     وضعیت: {fertilityLabel(latestStatus)}
