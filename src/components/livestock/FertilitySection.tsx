@@ -269,18 +269,23 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
     };
   }, [livestockId, reloadKey]);
 
+  const visibleEvents = useMemo(
+    () => (showCancelled ? events : events.filter((e) => !e.is_cancelled)),
+    [events, showCancelled],
+  );
+
   const byType = useMemo(() => {
     const map: Record<string, FertilityEvent[]> = {};
-    for (const e of events) {
+    for (const e of visibleEvents) {
       const t = e.event_type;
       (map[t] ||= []).push(e);
     }
     return map;
-  }, [events]);
+  }, [visibleEvents]);
 
   const latestStatusEvent = useMemo(
-    () => events.find((e) => e.event_type === "fertility_status") ?? null,
-    [events],
+    () => visibleEvents.find((e) => e.event_type === "fertility_status") ?? null,
+    [visibleEvents],
   );
 
   function handleAction(key: ActionKey) {
