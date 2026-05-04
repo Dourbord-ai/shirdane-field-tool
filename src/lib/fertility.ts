@@ -28,6 +28,11 @@ export type FertilityEvent = {
   legacy_table_name: string | null;
   legacy_record_id: number | null;
   created_at: string;
+  updated_at?: string | null;
+  is_cancelled?: boolean | null;
+  cancelled_at?: string | null;
+  cancelled_by_user_id?: string | null;
+  cancel_reason?: string | null;
 };
 
 export const FERTILITY_EVENT_LABELS: Record<string, string> = {
