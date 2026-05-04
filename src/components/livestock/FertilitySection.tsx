@@ -242,6 +242,9 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
   const [abortionOpen, setAbortionOpen] = useState(false);
   const [calvingOpen, setCalvingOpen] = useState(false);
   const [calvesReviewEvent, setCalvesReviewEvent] = useState<FertilityEvent | null>(null);
+  const [editEvent, setEditEvent] = useState<FertilityEvent | null>(null);
+  const [cancelEvent, setCancelEvent] = useState<FertilityEvent | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState("summary");
 
