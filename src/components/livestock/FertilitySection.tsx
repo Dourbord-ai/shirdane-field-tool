@@ -59,22 +59,39 @@ const TAB_DEFS: { key: string; label: string }[] = [
 function EventCard({
   e,
   onCreateCalves,
+  onEdit,
+  onCancel,
 }: {
   e: FertilityEvent;
   onCreateCalves?: (e: FertilityEvent) => void;
+  onEdit?: (e: FertilityEvent) => void;
+  onCancel?: (e: FertilityEvent) => void;
 }) {
   const calves = (e.metadata as any)?.calves as any[] | undefined;
   const hasCalves = e.event_type === "calving" && Array.isArray(calves) && calves.length > 0;
   const allCreated = hasCalves && calves!.every((c) => c?.created_cow_id);
+  const cancelled = !!e.is_cancelled;
+  const isLegacyReadOnly = !!e.legacy_table_name && e.legacy_table_name !== "manual";
   return (
-    <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+    <div
+      className={`rounded-lg border border-border bg-card p-3 space-y-1.5 ${
+        cancelled ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${eventBadgeClass(e.event_type)}`}>
-          {fertilityEventLabel(e.event_type)}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`text-[11px] px-2 py-0.5 rounded-full border ${eventBadgeClass(e.event_type)}`}>
+            {fertilityEventLabel(e.event_type)}
+          </span>
+          {cancelled && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
+              لغو شده
+            </span>
+          )}
+        </div>
         <span className="text-xs text-muted-foreground">{formatEventDate(e.event_date)}</span>
       </div>
-      {e.result && <p className="text-sm text-foreground break-words">{e.result}</p>}
+      {e.result && <p className={`text-sm break-words ${cancelled ? "line-through text-muted-foreground" : "text-foreground"}`}>{e.result}</p>}
       {e.notes && <p className="text-xs text-muted-foreground break-words">{e.notes}</p>}
       {e.operator_name && (
         <p className="text-[11px] text-muted-foreground">اپراتور: {e.operator_name}</p>
@@ -85,7 +102,10 @@ function EventCard({
           {e.legacy_record_id != null && <> #{e.legacy_record_id}</>}
         </p>
       )}
-      {hasCalves && onCreateCalves && (
+      {cancelled && e.cancel_reason && (
+        <p className="text-[11px] text-destructive">دلیل لغو: {e.cancel_reason}</p>
+      )}
+      {hasCalves && onCreateCalves && !cancelled && (
         <Button
           type="button"
           size="sm"
@@ -96,6 +116,36 @@ function EventCard({
           <Baby className="w-4 h-4" />
           {allCreated ? "مشاهده گوساله‌های ایجادشده" : "ایجاد دام از اطلاعات گوساله‌ها"}
         </Button>
+      )}
+      {!cancelled && (onEdit || onCancel) && (
+        <div className="flex gap-2 pt-1">
+          {onEdit && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1 h-8"
+              onClick={() => onEdit(e)}
+              disabled={isLegacyReadOnly}
+              title={isLegacyReadOnly ? "رویداد وارداتی قابل ویرایش نیست" : undefined}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              ویرایش
+            </Button>
+          )}
+          {onCancel && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1 h-8 text-destructive hover:bg-destructive/5"
+              onClick={() => onCancel(e)}
+            >
+              <Ban className="w-3.5 h-3.5" />
+              لغو عملیات
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
