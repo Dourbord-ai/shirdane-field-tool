@@ -33,7 +33,10 @@ import InseminationRegistrationDialog from "./InseminationRegistrationDialog";
 import AbortionRegistrationDialog from "./AbortionRegistrationDialog";
 import CalvingRegistrationDialog from "./CalvingRegistrationDialog";
 import CreateCalvesFromCalvingDialog from "./CreateCalvesFromCalvingDialog";
-import { Baby } from "lucide-react";
+import CancelFertilityEventDialog from "./CancelFertilityEventDialog";
+import EditFertilityEventDialog from "./EditFertilityEventDialog";
+import { Switch } from "@/components/ui/switch";
+import { Baby, Pencil, Ban } from "lucide-react";
 
 type Props = {
   livestockId: number;
