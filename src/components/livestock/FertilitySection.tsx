@@ -410,6 +410,29 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         motherCowId={livestockId}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />
+      <EditFertilityEventDialog
+        open={!!editEvent}
+        onOpenChange={(o) => !o && setEditEvent(null)}
+        event={editEvent}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+      <CancelFertilityEventDialog
+        open={!!cancelEvent}
+        onOpenChange={(o) => !o && setCancelEvent(null)}
+        event={cancelEvent}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
+
+      <div className="flex items-center justify-end gap-2 text-xs">
+        <Switch
+          id="show-cancelled-fertility"
+          checked={showCancelled}
+          onCheckedChange={setShowCancelled}
+        />
+        <label htmlFor="show-cancelled-fertility" className="text-muted-foreground cursor-pointer">
+          نمایش عملیات لغو شده
+        </label>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
