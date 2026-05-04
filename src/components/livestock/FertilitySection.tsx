@@ -525,23 +525,37 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
           {/* Full timeline */}
           <TabsContent value="all">
             <EventList
-              events={events}
+              events={visibleEvents}
               emptyText="رویدادی ثبت نشده است"
               onCreateCalves={setCalvesReviewEvent}
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
           {/* Per-type */}
           <TabsContent value="heat">
-            <EventList events={byType.heat ?? []} emptyText="رویداد فحلی ثبت نشده است" />
+            <EventList
+              events={byType.heat ?? []}
+              emptyText="رویداد فحلی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
           <TabsContent value="insemination">
-            <EventList events={byType.insemination ?? []} emptyText="تلقیحی ثبت نشده است" />
+            <EventList
+              events={byType.insemination ?? []}
+              emptyText="تلقیحی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
           <TabsContent value="pregnancy_test">
             <EventList
               events={byType.pregnancy_test ?? []}
               emptyText="تست آبستنی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
@@ -552,14 +566,26 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
               )}
               emptyText="رویداد زایش یا سقط ثبت نشده است"
               onCreateCalves={setCalvesReviewEvent}
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
           <TabsContent value="dry_off">
-            <EventList events={byType.dry_off ?? []} emptyText="خشک کردنی ثبت نشده است" />
+            <EventList
+              events={byType.dry_off ?? []}
+              emptyText="خشک کردنی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
           <TabsContent value="prescription">
-            <EventList events={byType.prescription ?? []} emptyText="نسخه/درمانی ثبت نشده است" />
+            <EventList
+              events={byType.prescription ?? []}
+              emptyText="نسخه/درمانی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
+            />
           </TabsContent>
 
           <TabsContent value="rinse_clean">
@@ -568,6 +594,8 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                 (b.event_date ?? "").localeCompare(a.event_date ?? ""),
               )}
               emptyText="شستشو یا کلین تستی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
 
@@ -578,6 +606,8 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
                 ...(byType.sync_detail ?? []),
               ].sort((a, b) => (b.event_date ?? "").localeCompare(a.event_date ?? ""))}
               emptyText="برنامه همزمان‌سازی ثبت نشده است"
+              onEdit={setEditEvent}
+              onCancel={setCancelEvent}
             />
           </TabsContent>
         </Tabs>
