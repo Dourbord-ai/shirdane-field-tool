@@ -16,6 +16,12 @@ import LivestockProfile from "./pages/LivestockProfile";
 import HumanResources from "./pages/HumanResources";
 import Certificates from "./pages/Certificates";
 import CertificatesGuard from "./components/CertificatesGuard";
+import FertilityGuard from "./components/FertilityGuard";
+import FertilityWorkflows from "./pages/fertility/FertilityWorkflows";
+import FertilityRules from "./pages/fertility/FertilityRules";
+import FertilityOperations from "./pages/fertility/FertilityOperations";
+import FertilityTimeline from "./pages/fertility/FertilityTimeline";
+import FertilityAlerts from "./pages/fertility/FertilityAlerts";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -48,6 +54,11 @@ const App = () => (
                   </CertificatesGuard>
                 }
               />
+              <Route path="/fertility/workflows" element={<FertilityGuard><FertilityWorkflows /></FertilityGuard>} />
+              <Route path="/fertility/rules" element={<FertilityGuard><FertilityRules /></FertilityGuard>} />
+              <Route path="/fertility/operations" element={<FertilityGuard><FertilityOperations /></FertilityGuard>} />
+              <Route path="/fertility/timeline" element={<FertilityGuard><FertilityTimeline /></FertilityGuard>} />
+              <Route path="/fertility/alerts" element={<FertilityGuard><FertilityAlerts /></FertilityGuard>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
