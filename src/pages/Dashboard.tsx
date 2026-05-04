@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { getSession } from "@/lib/auth";
 import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ const fertilityItems = [
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = getSession();
   const isAdmin = !!user && ((user as { isSuperAdmin?: boolean }).isSuperAdmin || (user as { role?: string }).role === "admin" || (user as { role?: string }).role === "super_admin");
   const visibleModules = modules.filter((m) => !(m as { adminOnly?: boolean }).adminOnly || isAdmin);
