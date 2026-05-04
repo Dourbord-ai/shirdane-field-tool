@@ -318,7 +318,7 @@ function ConditionsEditor({ ruleId, statuses }: { ruleId: string; statuses: { id
         text_value: c.text_value ?? null,
         extra_json: c.extra_json ?? {},
       };
-      const { error } = await supabase.from("breeding_workflow_rule_conditions").insert(payload);
+      const { error } = await supabase.from("breeding_workflow_rule_conditions").insert([payload]);
       if (error) throw error;
     },
     onSuccess: () => {
