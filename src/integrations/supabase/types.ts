@@ -1030,36 +1030,33 @@ export type Database = {
       }
       hr_users: {
         Row: {
-          created_at: string
-          department: string | null
-          full_name: string | null
+          app_username: string | null
+          created_at: string | null
+          first_name: string | null
           id: number
-          is_active: boolean
+          last_name: string | null
           password_hash: string
           personnel_code: string | null
-          updated_at: string
           username: string
         }
         Insert: {
-          created_at?: string
-          department?: string | null
-          full_name?: string | null
+          app_username?: string | null
+          created_at?: string | null
+          first_name?: string | null
           id: number
-          is_active?: boolean
+          last_name?: string | null
           password_hash: string
           personnel_code?: string | null
-          updated_at?: string
           username: string
         }
         Update: {
-          created_at?: string
-          department?: string | null
-          full_name?: string | null
+          app_username?: string | null
+          created_at?: string | null
+          first_name?: string | null
           id?: number
-          is_active?: boolean
+          last_name?: string | null
           password_hash?: string
           personnel_code?: string | null
-          updated_at?: string
           username?: string
         }
         Relationships: []
