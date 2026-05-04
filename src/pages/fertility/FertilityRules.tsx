@@ -316,9 +316,9 @@ function ConditionsEditor({ ruleId, statuses }: { ruleId: string; statuses: { id
         max_value: c.max_value ?? null,
         bool_value: c.bool_value ?? null,
         text_value: c.text_value ?? null,
-        extra_json: c.extra_json ?? {},
+        extra_json: (c.extra_json ?? {}) as never,
       };
-      const { error } = await supabase.from("breeding_workflow_rule_conditions").insert([payload]);
+      const { error } = await supabase.from("breeding_workflow_rule_conditions").insert(payload as never);
       if (error) throw error;
     },
     onSuccess: () => {
