@@ -2010,6 +2010,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ensure_app_users_for_hr_users: {
+        Args: { _default_password_hash?: string }
+        Returns: {
+          created_username: string
+          hr_user_id: number
+        }[]
+      }
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean
@@ -2017,6 +2024,15 @@ export type Database = {
       submit_cow_factor: {
         Args: { p_details: Json; p_factor: Json }
         Returns: Json
+      }
+      sync_hr_profiles_from_hr_users: {
+        Args: never
+        Returns: {
+          action: string
+          app_user_id: string
+          hr_user_id: number
+          username: string
+        }[]
       }
     }
     Enums: {
