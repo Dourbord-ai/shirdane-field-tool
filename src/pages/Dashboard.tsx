@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award } from "lucide-react";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 
@@ -13,11 +13,22 @@ const modules = [
   { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
   { title: "منابع انسانی", icon: Users, description: "حضور و غیاب و درخواست‌ها", key: "hr" },
   { title: "مدارک و مجوزها", icon: Award, description: "مدیریت گواهینامه‌ها و پروانه‌ها", key: "certificates" },
+  { title: "مدیریت باروری", icon: HeartPulse, description: "ورکفلو، قواعد، عملیات و هشدارهای باروری", key: "fertility", adminOnly: true },
+];
+
+const fertilityItems = [
+  { title: "ورکفلو باروری", route: "/fertility/workflows", icon: Settings },
+  { title: "تعریف قواعد", route: "/fertility/rules", icon: List },
+  { title: "ثبت عملیات باروری", route: "/fertility/operations", icon: PlusCircle },
+  { title: "تایم‌لاین باروری دام", route: "/fertility/timeline", icon: Activity },
+  { title: "هشدارهای باروری", route: "/fertility/alerts", icon: Bell },
 ];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = getSession();
+  const isAdmin = !!user && ((user as { isSuperAdmin?: boolean }).isSuperAdmin || (user as { role?: string }).role === "admin" || (user as { role?: string }).role === "super_admin");
+  const visibleModules = modules.filter((m) => !(m as { adminOnly?: boolean }).adminOnly || isAdmin);
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
   return (
@@ -34,7 +45,7 @@ export default function Dashboard() {
 
       {/* Module Cards */}
       <div className="space-y-3">
-        {modules.map((mod) => (
+        {visibleModules.map((mod) => (
           <div key={mod.key}>
             <button
               onClick={() => setExpandedModule(expandedModule === mod.key ? null : mod.key)}
@@ -131,6 +142,27 @@ export default function Dashboard() {
                   <Award className="w-5 h-5" />
                   مشاهده مدارک و مجوزها
                 </Button>
+              </div>
+            )}
+
+            {/* Fertility management — admin only */}
+            {mod.key === "fertility" && expandedModule === "fertility" && (
+              <div className="space-y-2 mt-2 animate-fade-in">
+                {fertilityItems.map((item) => {
+                  const active = location.pathname === item.route;
+                  return (
+                    <Button
+                      key={item.route}
+                      onClick={() => navigate(item.route)}
+                      variant={active ? "default" : "outline"}
+                      className={`w-full touch-target rounded-xl gap-2 text-body font-bold justify-start transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)] ${active ? "ring-2 ring-primary/40" : ""}`}
+                      size="lg"
+                    >
+                      <item.icon className="w-5 h-5" />
+                      {item.title}
+                    </Button>
+                  );
+                })}
               </div>
             )}
 
