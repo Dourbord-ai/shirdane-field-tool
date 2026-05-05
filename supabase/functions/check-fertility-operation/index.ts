@@ -170,11 +170,26 @@ Deno.serve(async (req) => {
     const messages: string[] = [];
 
     // --- 1) Cow basic checks
-    const { data: cow, error: cowErr } = await supabase
-      .from("cows")
-      .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date")
-      .eq("id", cow_id)
-      .maybeSingle();
+    let cow: any = null;
+    let cowErr: any = null;
+    {
+      const r = await supabase
+        .from("cows")
+        .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth")
+        .eq("id", cow_id)
+        .maybeSingle();
+      if (r.error) {
+        // retry without date_of_birth if column missing
+        const r2 = await supabase
+          .from("cows")
+          .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date")
+          .eq("id", cow_id)
+          .maybeSingle();
+        cow = r2.data; cowErr = r2.error;
+      } else {
+        cow = r.data; cowErr = r.error;
+      }
+    }
     if (cowErr) return json({ allowed: false, messages: ["خطا در بازیابی اطلاعات دام"] }, 500);
     if (!cow) return json({ allowed: false, messages: ["دام یافت نشد"] });
     if (cow.existancestatus !== 1) {
