@@ -160,6 +160,20 @@ export default function FertilityOperations() {
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} />
         </div>
 
+        {validationMessages.length > 0 && (
+          <Alert variant={validationKind === "error" ? "destructive" : "default"}>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>
+              {validationKind === "error" ? "عملیات مجاز نیست" : "هشدار"}
+            </AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc pr-5 space-y-1">
+                {validationMessages.map((m, i) => <li key={i}>{m}</li>)}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Button onClick={() => submit.mutate()} disabled={submit.isPending} className="w-full gap-2 touch-target">
           {submit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           ثبت عملیات
