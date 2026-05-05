@@ -27,6 +27,11 @@ type Cow = {
   purchase_price: number | null;
   supplier: string | null;
   purchase_invoice_number: string | null;
+  pre_entry_birth_date: string | null;
+  pre_entry_abortion_date: string | null;
+  pre_entry_dry_date: string | null;
+  pre_entry_period: number | null;
+  pre_entry_note: string | null;
 };
 
 type Event = {
