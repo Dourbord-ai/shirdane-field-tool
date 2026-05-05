@@ -430,6 +430,10 @@ function buildContext(
       if (lastFertilityStatus) break;
     }
   }
+  // Fallback to cow.last_fertility_status if no event-based status
+  if (!lastFertilityStatus && (cow as any).last_fertility_status != null) {
+    lastFertilityStatus = statusById.get(Number((cow as any).last_fertility_status)) ?? null;
+  }
 
   const pregnancy_state = lastFertilityStatus?.pregnancy_state ?? "unknown";
   const milking_state = lastFertilityStatus?.milking_state ?? (cow.is_dry ? "dry" : "unknown");
