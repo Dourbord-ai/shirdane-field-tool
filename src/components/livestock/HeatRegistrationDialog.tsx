@@ -228,7 +228,7 @@ export default function HeatRegistrationDialog({
                 <SelectContent>
                   {heatTypes.map((t) => (
                     <SelectItem key={t.id} value={String(t.id)}>
-                      {t.name}
+                      {t.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
