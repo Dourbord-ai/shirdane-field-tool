@@ -23,7 +23,7 @@ import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-type HeatType = { id: number; name: string };
+type HeatType = { id: number; title: string };
 type AppUser = { id: string; full_name: string | null; username: string };
 
 type Props = {
@@ -109,10 +109,11 @@ export default function HeatRegistrationDialog({
       setLoadingLookups(true);
       const [{ data: types }, { data: usersData }] = await Promise.all([
         supabase
-          .from("fertility_heat_types" as any)
-          .select("id, name")
+          .from("fertility_erotic_types" as any)
+          .select("id, title")
           .eq("is_active", true)
-          .order("id"),
+          .order("sort_order", { ascending: true })
+          .order("id", { ascending: true }),
         supabase
           .from("app_users")
           .select("id, full_name, username")
@@ -160,8 +161,8 @@ export default function HeatRegistrationDialog({
     const eventDate = `${dateStr} ${time}`;
 
     const metadata = {
-      heat_type_id: Number(heatTypeId),
-      heat_type_label: selectedType?.name ?? null,
+      erotic_type_id: Number(heatTypeId),
+      erotic_type_label: selectedType?.title ?? null,
       quality,
       discharge,
       uterine_infection: uterineInfection === "yes",
@@ -172,8 +173,10 @@ export default function HeatRegistrationDialog({
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
       livestock_id: livestockId,
       event_type: "heat",
+      fertility_operation_id: 1,
+      erotic_type_id: Number(heatTypeId),
       event_date: eventDate,
-      operator_user_id: null, // app_users.id is uuid; numeric column — store name in metadata
+      operator_user_id: null,
       operator_name: selectedUser?.full_name ?? selectedUser?.username ?? null,
       notes: description || null,
       legacy_table_name: "manual",
@@ -225,7 +228,7 @@ export default function HeatRegistrationDialog({
                 <SelectContent>
                   {heatTypes.map((t) => (
                     <SelectItem key={t.id} value={String(t.id)}>
-                      {t.name}
+                      {t.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
