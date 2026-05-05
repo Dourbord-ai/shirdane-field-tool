@@ -292,11 +292,23 @@ Deno.serve(async (req) => {
       return true;
     });
 
+    const debugPayload = () => ({
+      lastErotic: ctx.lastErotic,
+      lastInoculation: ctx.lastInoculation,
+      lastSync: ctx.lastSync,
+      lastBirth: ctx.lastBirth,
+      lastFertilityStatus: ctx.lastFertilityStatus,
+      pregnancy_state: ctx.pregnancy_state,
+      milking_state: ctx.milking_state,
+    });
+
     if (workflows.length === 0) {
       return json({
         allowed: true,
-        messages: ["هشدار: هیچ ورکفلو فعالی برای این دام یافت نشد. عملیات بدون اعتبارسنجی مجاز است."],
-        ...(debug ? { debug: ctx } : {}),
+        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
       });
     }
 
@@ -315,8 +327,10 @@ Deno.serve(async (req) => {
     if (rules.length === 0) {
       return json({
         allowed: true,
-        messages: ["هشدار: هیچ قاعده‌ای برای این عملیات تعریف نشده است. عملیات بدون اعتبارسنجی مجاز است."],
-        ...(debug ? { debug: ctx } : {}),
+        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
       });
     }
 
@@ -364,7 +378,7 @@ Deno.serve(async (req) => {
         messages,
         matched_rule_id: matchedRuleId,
         failed_rules: [],
-        ...(debug ? { debug: ctx } : {}),
+        ...(debug ? { debug: debugPayload() } : {}),
       });
     }
 
@@ -376,7 +390,7 @@ Deno.serve(async (req) => {
       ],
       matched_rule_id: null,
       failed_rules: failedRules,
-      ...(debug ? { debug: ctx } : {}),
+      ...(debug ? { debug: debugPayload() } : {}),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطای نامشخص";
