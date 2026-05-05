@@ -99,7 +99,7 @@ export default function FertilityOperations() {
         fertility_status_id: statusId ? Number(statusId) : null,
         notes: note || null,
         operator_name: user?.name || null,
-        metadata: { matched_rule_id: check?.matched_rule_id ?? null } as never,
+        metadata: { matched_rule_id: validation.matched_rule_id ?? null } as never,
         erotic_type_id: Number(opId) === 1 && eroticTypeId ? Number(eroticTypeId) : null,
       };
       const { error } = await supabase.from("livestock_fertility_events").insert(payload as never);
