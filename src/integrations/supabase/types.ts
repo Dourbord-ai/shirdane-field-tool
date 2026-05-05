@@ -851,6 +851,39 @@ export type Database = {
         }
         Relationships: []
       }
+      fertility_erotic_types: {
+        Row: {
+          code: string | null
+          created_at: string
+          description: string | null
+          id: number
+          is_active: boolean
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          is_active?: boolean
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          is_active?: boolean
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fertility_event_audit_logs: {
         Row: {
           action: string
@@ -1464,6 +1497,7 @@ export type Database = {
           cancelled_by_user_id: string | null
           created_at: string
           created_by: string | null
+          erotic_type_id: number | null
           event_date: string | null
           event_time: string | null
           event_type: string
@@ -1489,6 +1523,7 @@ export type Database = {
           cancelled_by_user_id?: string | null
           created_at?: string
           created_by?: string | null
+          erotic_type_id?: number | null
           event_date?: string | null
           event_time?: string | null
           event_type: string
@@ -1514,6 +1549,7 @@ export type Database = {
           cancelled_by_user_id?: string | null
           created_at?: string
           created_by?: string | null
+          erotic_type_id?: number | null
           event_date?: string | null
           event_time?: string | null
           event_type?: string
@@ -1534,6 +1570,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "livestock_fertility_events_erotic_type_id_fkey"
+            columns: ["erotic_type_id"]
+            isOneToOne: false
+            referencedRelation: "fertility_erotic_types"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "livestock_fertility_events_fertility_operation_id_fkey"
             columns: ["fertility_operation_id"]
