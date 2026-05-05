@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Body;
-    const cow_id = Number(body.cow_id);
+    const cow_id = Number(body.cow_id ?? body.livestock_id);
     const op_id = Number(body.fertility_operation_id);
     const event_date = body.event_date;
     const mode = body.mode ?? "insert";
