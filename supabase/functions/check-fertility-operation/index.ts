@@ -247,13 +247,32 @@ Deno.serve(async (req) => {
       timeline.push(simulated);
     }
 
-    timeline.sort((a, b) => (a.event_date ?? "").localeCompare(b.event_date ?? ""));
+    timeline.sort((a, b) => {
+      const da = parseDateToDays(a.event_date);
+      const db = parseDateToDays(b.event_date);
+      return (da ?? 0) - (db ?? 0);
+    });
+
+    // --- 3.5) Load latest weight (best-effort; table may not exist)
+    let weightVal: number | null = null;
+    try {
+      const { data: weightRow } = await supabase
+        .from("livestock_physical_records" as any)
+        .select("weight, record_date")
+        .eq("livestock_id", cow_id)
+        .lte("record_date", event_date)
+        .order("record_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      weightVal = (weightRow as any)?.weight ?? null;
+    } catch {
+      weightVal = null;
+    }
 
     // --- 4) Build context up to (and including) the simulated event date
     const ctx = buildContext(timeline, simulated, statusById, cow);
-    if (debug) {
-      // do not include full timeline in normal flow
-    }
+    ctx.weight = weightVal;
+    ctx.date_of_birth = (cow as any)?.date_of_birth ?? null;
 
     // --- 5) Load active workflows for this cow's category
     const cowCategory = inferCategory(cow, ctx);
@@ -265,8 +284,11 @@ Deno.serve(async (req) => {
 
     const workflows: Workflow[] = ((wfRows ?? []) as Workflow[]).filter((w) => {
       if (w.category !== 0 && w.category !== cowCategory) return false;
-      if (w.start_date && event_date < w.start_date) return false;
-      if (w.end_date && event_date > w.end_date) return false;
+      const ed = parseDateToDays(event_date);
+      const sd = parseDateToDays(w.start_date);
+      const edw = parseDateToDays(w.end_date);
+      if (sd != null && ed != null && ed < sd) return false;
+      if (edw != null && ed != null && ed > edw) return false;
       return true;
     });
 
