@@ -489,65 +489,612 @@ export type Database = {
           },
         ]
       }
+      cow_locations: {
+        Row: {
+          cow_id: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          event_date: string | null
+          id: number
+          is_deleted: boolean
+          location_id: number | null
+          old_cow_id: number | null
+          old_id: number | null
+          old_location_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          event_date?: string | null
+          id?: number
+          is_deleted?: boolean
+          location_id?: number | null
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_location_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          event_date?: string | null
+          id?: number
+          is_deleted?: boolean
+          location_id?: number | null
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_location_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cow_locations_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
+            referencedRelation: "cows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cow_locations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cow_statuses: {
+        Row: {
+          cow_id: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          event_date: string | null
+          id: number
+          is_deleted: boolean
+          old_cow_id: number | null
+          old_id: number | null
+          old_status_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          status_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          event_date?: string | null
+          id?: number
+          is_deleted?: boolean
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_status_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          status_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          event_date?: string | null
+          id?: number
+          is_deleted?: boolean
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_status_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          status_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cow_statuses_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
+            referencedRelation: "cows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cow_statuses_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cow_sync_details: {
+        Row: {
+          cow_sync_id: number | null
+          created_at: string
+          date_time: string | null
+          deleted_date: string | null
+          deleted_user_id: number | null
+          id: number
+          injection_date_time: string | null
+          injection_description: string | null
+          injection_registered_date: string | null
+          injection_registered_user_id: number | null
+          injector_user_id: number | null
+          is_deleted: boolean
+          medicine_id: number | null
+          old_cow_sync_id: number | null
+          old_id: number | null
+          old_medicine_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          status: number | null
+          updated_at: string
+        }
+        Insert: {
+          cow_sync_id?: number | null
+          created_at?: string
+          date_time?: string | null
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          injection_date_time?: string | null
+          injection_description?: string | null
+          injection_registered_date?: string | null
+          injection_registered_user_id?: number | null
+          injector_user_id?: number | null
+          is_deleted?: boolean
+          medicine_id?: number | null
+          old_cow_sync_id?: number | null
+          old_id?: number | null
+          old_medicine_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          status?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cow_sync_id?: number | null
+          created_at?: string
+          date_time?: string | null
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          injection_date_time?: string | null
+          injection_description?: string | null
+          injection_registered_date?: string | null
+          injection_registered_user_id?: number | null
+          injector_user_id?: number | null
+          is_deleted?: boolean
+          medicine_id?: number | null
+          old_cow_sync_id?: number | null
+          old_id?: number | null
+          old_medicine_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          status?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cow_sync_details_cow_sync_id_fkey"
+            columns: ["cow_sync_id"]
+            isOneToOne: false
+            referencedRelation: "cow_syncs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cow_syncs: {
+        Row: {
+          cow_id: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          description: string | null
+          event_date: string | null
+          id: number
+          inoculation_date_time: string | null
+          is_deleted: boolean
+          old_cow_id: number | null
+          old_id: number | null
+          old_sync_type_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          status: number | null
+          stop_date: string | null
+          stop_description: string | null
+          stop_registered_date: string | null
+          stop_registered_user_id: number | null
+          sync_type_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          description?: string | null
+          event_date?: string | null
+          id?: number
+          inoculation_date_time?: string | null
+          is_deleted?: boolean
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_sync_type_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          status?: number | null
+          stop_date?: string | null
+          stop_description?: string | null
+          stop_registered_date?: string | null
+          stop_registered_user_id?: number | null
+          sync_type_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          description?: string | null
+          event_date?: string | null
+          id?: number
+          inoculation_date_time?: string | null
+          is_deleted?: boolean
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_sync_type_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          status?: number | null
+          stop_date?: string | null
+          stop_description?: string | null
+          stop_registered_date?: string | null
+          stop_registered_user_id?: number | null
+          sync_type_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cow_syncs_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
+            referencedRelation: "cows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cow_syncs_sync_type_id_fkey"
+            columns: ["sync_type_id"]
+            isOneToOne: false
+            referencedRelation: "sync_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cow_types: {
+        Row: {
+          cow_id: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          event_date: string | null
+          id: number
+          is_deleted: boolean
+          old_cow_id: number | null
+          old_id: number | null
+          old_type_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          type_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          event_date?: string | null
+          id?: number
+          is_deleted?: boolean
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_type_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          type_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cow_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          event_date?: string | null
+          id?: number
+          is_deleted?: boolean
+          old_cow_id?: number | null
+          old_id?: number | null
+          old_type_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          type_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cow_types_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
+            referencedRelation: "cows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cow_types_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cows: {
         Row: {
+          birth_status: number | null
+          birth_weight: number | null
           bodynumber: number | null
           created_at: string
+          current_live_weight: number | null
+          current_meat_weight: number | null
+          date_of_birth: string | null
+          description: string | null
           earnumber: number | null
+          end_date_of_calf_milk: string | null
           existancestatus: number | null
           existancestatusdes: string | null
+          existence_date: string | null
+          existence_description: string | null
+          father_id: number | null
+          father_sperm_id: number | null
           id: number
           is_dry: boolean | null
+          is_pregnancy: boolean | null
+          last_abortion_date: string | null
+          last_birth_date: string | null
+          last_burn_horn_date: string | null
+          last_burn_horn_details: string | null
+          last_clean_test_date: string | null
+          last_dry_date: string | null
+          last_erotic_date: string | null
           last_fertility_status: number | null
+          last_fertility_status_date: string | null
+          last_hoof_trimming_date: string | null
+          last_hoof_trimming_details: string | null
+          last_inoculation_date: string | null
+          last_location_date: string | null
+          last_location_id: number | null
+          last_magnet_eating_date: string | null
+          last_magnet_eating_details: string | null
+          last_out_abortion_date: string | null
+          last_out_birth_date: string | null
+          last_out_dry_date: string | null
+          last_out_period: number | null
+          last_period: number | null
+          last_pregnancy_date: string | null
+          last_rinse_date: string | null
+          last_status_date: string | null
+          last_status_id: number | null
+          last_sync_date: string | null
+          last_type_date: string | null
+          last_type_id: number | null
+          mother_id: number | null
+          number_of_births: number | null
+          number_of_daughter: number | null
+          number_of_deaths: number | null
+          number_of_son: number | null
+          old_father_sperm_id: number | null
+          old_id: number | null
+          old_last_location_id: number | null
+          old_last_status_id: number | null
+          old_last_type_id: number | null
+          place_of_birth: number | null
           presence_status: number | null
           purchase_date: string | null
           purchase_invoice_number: string | null
           purchase_price: number | null
           sex: number | null
           sextype: string | null
+          start_date_of_calf_milk: string | null
           supplier: string | null
           tag_number: string | null
+          type_mother_inoculation: boolean | null
           updated_at: string
         }
         Insert: {
+          birth_status?: number | null
+          birth_weight?: number | null
           bodynumber?: number | null
           created_at?: string
+          current_live_weight?: number | null
+          current_meat_weight?: number | null
+          date_of_birth?: string | null
+          description?: string | null
           earnumber?: number | null
+          end_date_of_calf_milk?: string | null
           existancestatus?: number | null
           existancestatusdes?: string | null
+          existence_date?: string | null
+          existence_description?: string | null
+          father_id?: number | null
+          father_sperm_id?: number | null
           id: number
           is_dry?: boolean | null
+          is_pregnancy?: boolean | null
+          last_abortion_date?: string | null
+          last_birth_date?: string | null
+          last_burn_horn_date?: string | null
+          last_burn_horn_details?: string | null
+          last_clean_test_date?: string | null
+          last_dry_date?: string | null
+          last_erotic_date?: string | null
           last_fertility_status?: number | null
+          last_fertility_status_date?: string | null
+          last_hoof_trimming_date?: string | null
+          last_hoof_trimming_details?: string | null
+          last_inoculation_date?: string | null
+          last_location_date?: string | null
+          last_location_id?: number | null
+          last_magnet_eating_date?: string | null
+          last_magnet_eating_details?: string | null
+          last_out_abortion_date?: string | null
+          last_out_birth_date?: string | null
+          last_out_dry_date?: string | null
+          last_out_period?: number | null
+          last_period?: number | null
+          last_pregnancy_date?: string | null
+          last_rinse_date?: string | null
+          last_status_date?: string | null
+          last_status_id?: number | null
+          last_sync_date?: string | null
+          last_type_date?: string | null
+          last_type_id?: number | null
+          mother_id?: number | null
+          number_of_births?: number | null
+          number_of_daughter?: number | null
+          number_of_deaths?: number | null
+          number_of_son?: number | null
+          old_father_sperm_id?: number | null
+          old_id?: number | null
+          old_last_location_id?: number | null
+          old_last_status_id?: number | null
+          old_last_type_id?: number | null
+          place_of_birth?: number | null
           presence_status?: number | null
           purchase_date?: string | null
           purchase_invoice_number?: string | null
           purchase_price?: number | null
           sex?: number | null
           sextype?: string | null
+          start_date_of_calf_milk?: string | null
           supplier?: string | null
           tag_number?: string | null
+          type_mother_inoculation?: boolean | null
           updated_at?: string
         }
         Update: {
+          birth_status?: number | null
+          birth_weight?: number | null
           bodynumber?: number | null
           created_at?: string
+          current_live_weight?: number | null
+          current_meat_weight?: number | null
+          date_of_birth?: string | null
+          description?: string | null
           earnumber?: number | null
+          end_date_of_calf_milk?: string | null
           existancestatus?: number | null
           existancestatusdes?: string | null
+          existence_date?: string | null
+          existence_description?: string | null
+          father_id?: number | null
+          father_sperm_id?: number | null
           id?: number
           is_dry?: boolean | null
+          is_pregnancy?: boolean | null
+          last_abortion_date?: string | null
+          last_birth_date?: string | null
+          last_burn_horn_date?: string | null
+          last_burn_horn_details?: string | null
+          last_clean_test_date?: string | null
+          last_dry_date?: string | null
+          last_erotic_date?: string | null
           last_fertility_status?: number | null
+          last_fertility_status_date?: string | null
+          last_hoof_trimming_date?: string | null
+          last_hoof_trimming_details?: string | null
+          last_inoculation_date?: string | null
+          last_location_date?: string | null
+          last_location_id?: number | null
+          last_magnet_eating_date?: string | null
+          last_magnet_eating_details?: string | null
+          last_out_abortion_date?: string | null
+          last_out_birth_date?: string | null
+          last_out_dry_date?: string | null
+          last_out_period?: number | null
+          last_period?: number | null
+          last_pregnancy_date?: string | null
+          last_rinse_date?: string | null
+          last_status_date?: string | null
+          last_status_id?: number | null
+          last_sync_date?: string | null
+          last_type_date?: string | null
+          last_type_id?: number | null
+          mother_id?: number | null
+          number_of_births?: number | null
+          number_of_daughter?: number | null
+          number_of_deaths?: number | null
+          number_of_son?: number | null
+          old_father_sperm_id?: number | null
+          old_id?: number | null
+          old_last_location_id?: number | null
+          old_last_status_id?: number | null
+          old_last_type_id?: number | null
+          place_of_birth?: number | null
           presence_status?: number | null
           purchase_date?: string | null
           purchase_invoice_number?: string | null
           purchase_price?: number | null
           sex?: number | null
           sextype?: string | null
+          start_date_of_calf_milk?: string | null
           supplier?: string | null
           tag_number?: string | null
+          type_mother_inoculation?: boolean | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cows_father_sperm_id_fkey"
+            columns: ["father_sperm_id"]
+            isOneToOne: false
+            referencedRelation: "sperms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cows_last_location_id_fkey"
+            columns: ["last_location_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cows_last_status_id_fkey"
+            columns: ["last_status_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_statuses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cows_last_type_id_fkey"
+            columns: ["last_type_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_worker_items: {
         Row: {
@@ -1593,6 +2140,48 @@ export type Database = {
           },
         ]
       }
+      livestock_groups: {
+        Row: {
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          id: number
+          is_active: boolean
+          is_deleted: boolean
+          name: string
+          old_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          name: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          name?: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       livestock_items: {
         Row: {
           animal_number: string | null
@@ -1630,6 +2219,164 @@ export type Database = {
             columns: ["factor_id"]
             isOneToOne: false
             referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      livestock_locations: {
+        Row: {
+          code: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          desirable_capacity: number | null
+          id: number
+          is_active: boolean
+          is_deleted: boolean
+          length: number | null
+          max_capacity: number | null
+          name: string
+          old_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          updated_at: string
+          width: number | null
+        }
+        Insert: {
+          code?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          desirable_capacity?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          length?: number | null
+          max_capacity?: number | null
+          name: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+          width?: number | null
+        }
+        Update: {
+          code?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          desirable_capacity?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          length?: number | null
+          max_capacity?: number | null
+          name?: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+          width?: number | null
+        }
+        Relationships: []
+      }
+      livestock_statuses: {
+        Row: {
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          id: number
+          is_active: boolean
+          is_deleted: boolean
+          name: string
+          old_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          name: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          name?: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      livestock_types: {
+        Row: {
+          category_id: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          group_id: number | null
+          id: number
+          is_active: boolean
+          is_deleted: boolean
+          name: string
+          old_group_id: number | null
+          old_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          category_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          group_id?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          name: string
+          old_group_id?: number | null
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          group_id?: number | null
+          id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          name?: string
+          old_group_id?: number | null
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "livestock_types_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "livestock_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -1896,6 +2643,33 @@ export type Database = {
         }
         Relationships: []
       }
+      sperm_companies: {
+        Row: {
+          created_at: string
+          id: number
+          is_active: boolean
+          name: string
+          old_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          is_active?: boolean
+          name: string
+          old_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          is_active?: boolean
+          name?: string
+          old_id?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       spermbuy: {
         Row: {
           created_at: string
@@ -1943,20 +2717,94 @@ export type Database = {
       sperms: {
         Row: {
           code: string | null
+          company_id: number | null
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          father_id: number | null
+          flc: number | null
           id: number
+          is_active: boolean
+          is_deleted: boolean
+          lnms: number | null
+          milk: number | null
+          mother_id: number | null
           name: string | null
+          old_company_id: number | null
+          old_id: number | null
+          pl: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          regno: number | null
+          sce: number | null
+          threshold: number | null
+          tpi: number | null
+          udc: number | null
+          updated_at: string
         }
         Insert: {
           code?: string | null
+          company_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          father_id?: number | null
+          flc?: number | null
           id: number
+          is_active?: boolean
+          is_deleted?: boolean
+          lnms?: number | null
+          milk?: number | null
+          mother_id?: number | null
           name?: string | null
+          old_company_id?: number | null
+          old_id?: number | null
+          pl?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          regno?: number | null
+          sce?: number | null
+          threshold?: number | null
+          tpi?: number | null
+          udc?: number | null
+          updated_at?: string
         }
         Update: {
           code?: string | null
+          company_id?: number | null
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          father_id?: number | null
+          flc?: number | null
           id?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          lnms?: number | null
+          milk?: number | null
+          mother_id?: number | null
           name?: string | null
+          old_company_id?: number | null
+          old_id?: number | null
+          pl?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          regno?: number | null
+          sce?: number | null
+          threshold?: number | null
+          tpi?: number | null
+          udc?: number | null
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sperms_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "sperm_companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sync_queue: {
         Row: {
@@ -1993,6 +2841,110 @@ export type Database = {
           retry_count?: number
           status?: string
           synced_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sync_type_details: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: number
+          is_medical: boolean | null
+          medicine_id: number | null
+          old_id: number | null
+          old_medicine_id: number | null
+          old_sync_type_id: number | null
+          sufficient_amount: number | null
+          sync_type_id: number | null
+          taking_medication_time: number | null
+          taking_medication_type_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: number
+          is_medical?: boolean | null
+          medicine_id?: number | null
+          old_id?: number | null
+          old_medicine_id?: number | null
+          old_sync_type_id?: number | null
+          sufficient_amount?: number | null
+          sync_type_id?: number | null
+          taking_medication_time?: number | null
+          taking_medication_type_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: number
+          is_medical?: boolean | null
+          medicine_id?: number | null
+          old_id?: number | null
+          old_medicine_id?: number | null
+          old_sync_type_id?: number | null
+          sufficient_amount?: number | null
+          sync_type_id?: number | null
+          taking_medication_time?: number | null
+          taking_medication_type_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_type_details_sync_type_id_fkey"
+            columns: ["sync_type_id"]
+            isOneToOne: false
+            referencedRelation: "sync_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_types: {
+        Row: {
+          created_at: string
+          deleted_date: string | null
+          deleted_user_id: number | null
+          id: number
+          inoculation_time: number | null
+          is_active: boolean
+          is_deleted: boolean
+          medicine_and_times: string | null
+          name: string
+          old_id: number | null
+          registered_date: string | null
+          registered_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          inoculation_time?: number | null
+          is_active?: boolean
+          is_deleted?: boolean
+          medicine_and_times?: string | null
+          name: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_date?: string | null
+          deleted_user_id?: number | null
+          id?: number
+          inoculation_time?: number | null
+          is_active?: boolean
+          is_deleted?: boolean
+          medicine_and_times?: string | null
+          name?: string
+          old_id?: number | null
+          registered_date?: string | null
+          registered_user_id?: number | null
           updated_at?: string
         }
         Relationships: []
