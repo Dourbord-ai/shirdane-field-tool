@@ -195,8 +195,14 @@ Deno.serve(async (req) => {
     if (cow.existancestatus !== 1) {
       return json({ allowed: false, messages: ["این دام در گله موجود نیست و نمی‌توان عملیات باروری ثبت کرد"] });
     }
-    if (FEMALE_ONLY_OPS.has(op_id) && cow.sex !== 1) {
-      return json({ allowed: false, messages: ["این عملیات فقط برای دام ماده مجاز است"] });
+    if (FEMALE_ONLY_OPS.has(op_id) && !isFemaleCow(cow.sex, cow.sextype)) {
+      return json({
+        allowed: false,
+        messages: ["این عملیات فقط برای دام ماده مجاز است"],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: { cow_id, cow_sex: cow.sex, cow_sextype: cow.sextype, existancestatus: cow.existancestatus } } : {}),
+      });
     }
 
     // --- 2) Load reference data
