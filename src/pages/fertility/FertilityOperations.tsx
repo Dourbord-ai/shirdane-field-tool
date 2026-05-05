@@ -66,30 +66,24 @@ export default function FertilityOperations() {
       setValidationMessages([]);
       setValidationKind(null);
 
-      // 1) Server-side allowed check
-      const { data: check, error: checkErr } = await supabase.functions.invoke("check-fertility-operation", {
-        body: {
-          livestock_id: Number(cowId),
-          fertility_operation_id: Number(opId),
-          event_date: dateShamsi,
-          event_time: time || null,
-          result_code: resultCode || null,
-          fertility_status_id: statusId ? Number(statusId) : null,
-          mode: "insert",
-        },
+      // 1) Server-side allowed check via Edge Function
+      const validation = await checkFertilityOperation({
+        livestock_id: Number(cowId),
+        fertility_operation_id: Number(opId),
+        event_date: dateShamsi,
+        event_time: time || null,
+        result_code: resultCode || null,
+        fertility_status_id: statusId ? Number(statusId) : null,
       });
-      if (checkErr) throw new Error(checkErr.message || "خطا در بررسی مجاز بودن عملیات");
 
-      const msgs: string[] = Array.isArray(check?.messages) ? check.messages : [];
-
-      if (check && check.allowed === false) {
-        setValidationMessages(msgs.length ? msgs : ["این عملیات برای دام انتخاب‌شده مجاز نیست"]);
+      if (!validation.ok) {
+        setValidationMessages(validation.messages);
         setValidationKind("error");
-        throw new Error(msgs[0] || "این عملیات مجاز نیست");
+        throw new Error(validation.messages[0] || "این عملیات مجاز نیست");
       }
 
-      if (msgs.length) {
-        setValidationMessages(msgs);
+      if (validation.messages.length) {
+        setValidationMessages(validation.messages);
         setValidationKind("warning");
       }
 
