@@ -109,10 +109,11 @@ export default function HeatRegistrationDialog({
       setLoadingLookups(true);
       const [{ data: types }, { data: usersData }] = await Promise.all([
         supabase
-          .from("fertility_heat_types" as any)
-          .select("id, name")
+          .from("fertility_erotic_types" as any)
+          .select("id, title")
           .eq("is_active", true)
-          .order("id"),
+          .order("sort_order", { ascending: true })
+          .order("id", { ascending: true }),
         supabase
           .from("app_users")
           .select("id, full_name, username")
