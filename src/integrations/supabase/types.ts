@@ -911,6 +911,11 @@ export type Database = {
           old_last_status_id: number | null
           old_last_type_id: number | null
           place_of_birth: number | null
+          pre_entry_abortion_date: string | null
+          pre_entry_birth_date: string | null
+          pre_entry_dry_date: string | null
+          pre_entry_note: string | null
+          pre_entry_period: number | null
           presence_status: number | null
           purchase_date: string | null
           purchase_invoice_number: string | null
@@ -982,6 +987,11 @@ export type Database = {
           old_last_status_id?: number | null
           old_last_type_id?: number | null
           place_of_birth?: number | null
+          pre_entry_abortion_date?: string | null
+          pre_entry_birth_date?: string | null
+          pre_entry_dry_date?: string | null
+          pre_entry_note?: string | null
+          pre_entry_period?: number | null
           presence_status?: number | null
           purchase_date?: string | null
           purchase_invoice_number?: string | null
@@ -1053,6 +1063,11 @@ export type Database = {
           old_last_status_id?: number | null
           old_last_type_id?: number | null
           place_of_birth?: number | null
+          pre_entry_abortion_date?: string | null
+          pre_entry_birth_date?: string | null
+          pre_entry_dry_date?: string | null
+          pre_entry_note?: string | null
+          pre_entry_period?: number | null
           presence_status?: number | null
           purchase_date?: string | null
           purchase_invoice_number?: string | null
@@ -3015,6 +3030,10 @@ export type Database = {
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean
+      }
+      rebuild_cow_fertility_cache: {
+        Args: { p_cow_id: number }
+        Returns: undefined
       }
       submit_cow_factor: {
         Args: { p_details: Json; p_factor: Json }
