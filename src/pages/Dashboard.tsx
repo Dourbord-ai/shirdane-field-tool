@@ -170,7 +170,7 @@ export default function Dashboard() {
 
             {/* Livestock management — direct navigation */}
             {mod.key === "livestock" && expandedModule === "livestock" && (
-              <div className="mt-2 animate-fade-in">
+              <div className="space-y-2 mt-2 animate-fade-in">
                 <Button
                   onClick={() => navigate("/livestock")}
                   className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
@@ -179,6 +179,26 @@ export default function Dashboard() {
                   <ClipboardList className="w-5 h-5" />
                   مشاهده لیست دام‌ها
                 </Button>
+                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+                  <p className="text-sm font-bold text-muted-foreground px-1">تنظیمات پایه دام</p>
+                  {[
+                    { title: "گروه‌های دام", route: "/admin/livestock-groups" },
+                    { title: "انواع دام", route: "/admin/livestock-types" },
+                    { title: "وضعیت‌های دام", route: "/admin/livestock-statuses" },
+                    { title: "بهاربند / جایگاه دام", route: "/admin/livestock-locations" },
+                  ].map((it) => (
+                    <Button
+                      key={it.route}
+                      onClick={() => navigate(it.route)}
+                      variant="outline"
+                      className="w-full touch-target rounded-xl gap-2 text-body font-bold justify-start"
+                      size="lg"
+                    >
+                      <Settings className="w-5 h-5" />
+                      {it.title}
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
