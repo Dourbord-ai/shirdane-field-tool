@@ -25,6 +25,13 @@ import FertilityAlerts from "./pages/fertility/FertilityAlerts";
 import FertilityEroticTypes from "./pages/fertility/FertilityEroticTypes";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
+import LivestockGroupsAdmin from "./pages/admin/LivestockGroupsAdmin";
+import LivestockTypesAdmin from "./pages/admin/LivestockTypesAdmin";
+import LivestockStatusesAdmin from "./pages/admin/LivestockStatusesAdmin";
+import LivestockLocationsAdmin from "./pages/admin/LivestockLocationsAdmin";
+import SpermsAdmin from "./pages/admin/SpermsAdmin";
+import SyncTypesAdmin from "./pages/admin/SyncTypesAdmin";
+import SyncTypeDetailsAdmin from "./pages/admin/SyncTypeDetailsAdmin";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +68,13 @@ const App = () => (
               <Route path="/fertility/timeline" element={<FertilityGuard><FertilityTimeline /></FertilityGuard>} />
               <Route path="/fertility/alerts" element={<FertilityGuard><FertilityAlerts /></FertilityGuard>} />
               <Route path="/fertility/erotic-types" element={<FertilityGuard><FertilityEroticTypes /></FertilityGuard>} />
+              <Route path="/admin/livestock-groups" element={<LivestockGroupsAdmin />} />
+              <Route path="/admin/livestock-types" element={<LivestockTypesAdmin />} />
+              <Route path="/admin/livestock-statuses" element={<LivestockStatusesAdmin />} />
+              <Route path="/admin/livestock-locations" element={<LivestockLocationsAdmin />} />
+              <Route path="/admin/sperms" element={<SpermsAdmin />} />
+              <Route path="/admin/sync-types" element={<SyncTypesAdmin />} />
+              <Route path="/admin/sync-type-details" element={<SyncTypeDetailsAdmin />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

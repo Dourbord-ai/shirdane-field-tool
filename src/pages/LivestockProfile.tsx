@@ -10,6 +10,7 @@ import {
 } from "@/lib/livestock";
 import { Loader2, History } from "lucide-react";
 import FertilitySection from "@/components/livestock/FertilitySection";
+import CowHistoryTabs from "@/components/livestock/CowHistoryTabs";
 
 type Cow = {
   id: number;
@@ -174,6 +175,9 @@ export default function LivestockProfile() {
           latestStatus={cow.last_fertility_status}
         />
       )}
+
+      {/* Cow history tabs */}
+      <CowHistoryTabs cowId={cow.id} />
 
       {/* Section 3: Purchase info */}
       <Section title="اطلاعات خرید">
