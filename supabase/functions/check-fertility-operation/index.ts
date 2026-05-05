@@ -48,12 +48,51 @@ const FEMALE_ONLY_OPS = new Set<number>([
 
 interface Body {
   cow_id?: number;
+  livestock_id?: number;
   fertility_operation_id?: number;
   event_date?: string;
+  event_time?: string | null;
+  result_code?: string | null;
   fertility_status_id?: number | null;
   mode?: "insert" | "update" | "delete";
   event_id?: string;
   debug?: boolean;
+}
+
+// ---------- Jalali date helpers (mirror src/lib/jalali.ts) ----------
+function jalaliToGregorianDays(jy: number, jm: number, jd: number): number {
+  // returns absolute day number (used only for diff)
+  let jy2 = jy + 1595;
+  let days =
+    -355668 +
+    365 * jy2 +
+    Math.floor(jy2 / 33) * 8 +
+    Math.floor(((jy2 % 33) + 3) / 4) +
+    jd +
+    (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+  return days;
+}
+
+function parseDateToDays(s: string | null | undefined): number | null {
+  if (!s) return null;
+  // Strip time part if present
+  const datePart = s.trim().split(/[ T]/)[0];
+  // Jalali like 1403/05/12 or 1403-05-12
+  const jm = datePart.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (jm) {
+    const y = Number(jm[1]);
+    const mo = Number(jm[2]);
+    const d = Number(jm[3]);
+    if (y >= 1300 && y <= 1500) {
+      return jalaliToGregorianDays(y, mo, d);
+    }
+    // Gregorian
+    const t = Date.parse(`${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+    if (!Number.isNaN(t)) return Math.round(t / 86_400_000);
+  }
+  const t = Date.parse(datePart);
+  if (!Number.isNaN(t)) return Math.round(t / 86_400_000);
+  return null;
 }
 
 interface FertilityEvent {
@@ -110,7 +149,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Body;
-    const cow_id = Number(body.cow_id);
+    const cow_id = Number(body.cow_id ?? body.livestock_id);
     const op_id = Number(body.fertility_operation_id);
     const event_date = body.event_date;
     const mode = body.mode ?? "insert";
@@ -259,12 +298,11 @@ Deno.serve(async (req) => {
     }
 
     // --- 7) Evaluate rules: rules = OR, conditions inside a rule = AND
-    let anyRulePassed = false;
-    const failedReasons: string[] = [];
+    let matchedRuleId: string | null = null;
+    const failedRules: Array<{ rule_id: string; title: string; reasons: string[] }> = [];
 
     for (const rule of rules) {
       const ruleConds = conditionsByRule.get(rule.id) ?? [];
-      // A rule with zero conditions is treated as always-true
       let allOk = true;
       const reasons: string[] = [];
       for (const cond of ruleConds) {
@@ -275,21 +313,32 @@ Deno.serve(async (req) => {
         }
       }
       if (allOk) {
-        anyRulePassed = true;
+        matchedRuleId = rule.id;
         break;
       } else {
-        failedReasons.push(`«${rule.title}»: ${reasons.join(" و ")}`);
+        failedRules.push({ rule_id: rule.id, title: rule.title, reasons });
       }
     }
 
-    if (anyRulePassed) {
+    if (matchedRuleId) {
       messages.push("عملیات مطابق قواعد ورکفلو مجاز است");
-      return json({ allowed: true, messages, ...(debug ? { debug: ctx } : {}) });
+      return json({
+        allowed: true,
+        messages,
+        matched_rule_id: matchedRuleId,
+        failed_rules: [],
+        ...(debug ? { debug: ctx } : {}),
+      });
     }
 
     return json({
       allowed: false,
-      messages: ["هیچ‌یک از قواعد ورکفلو برای این عملیات برقرار نیست:", ...failedReasons],
+      messages: [
+        "هیچ‌یک از قواعد ورکفلو برای این عملیات برقرار نیست:",
+        ...failedRules.map((f) => `«${f.title}»: ${f.reasons.join(" و ")}`),
+      ],
+      matched_rule_id: null,
+      failed_rules: failedRules,
       ...(debug ? { debug: ctx } : {}),
     });
   } catch (e) {
@@ -381,6 +430,10 @@ function buildContext(
       if (lastFertilityStatus) break;
     }
   }
+  // Fallback to cow.last_fertility_status if no event-based status
+  if (!lastFertilityStatus && (cow as any).last_fertility_status != null) {
+    lastFertilityStatus = statusById.get(Number((cow as any).last_fertility_status)) ?? null;
+  }
 
   const pregnancy_state = lastFertilityStatus?.pregnancy_state ?? "unknown";
   const milking_state = lastFertilityStatus?.milking_state ?? (cow.is_dry ? "dry" : "unknown");
@@ -458,7 +511,10 @@ function evaluateCondition(c: Condition, ctx: Context): EvalResult {
     case "PregnancyDays":
       return evalRange(ctx.pregnancyDays, c, "روزهای آبستنی", "روز", false);
     case "FertilityStatus": {
-      const wanted = parseIdList(c.text_value, c.extra_json?.ids);
+      const wanted = parseIdList(
+        c.text_value,
+        (c.extra_json as any)?.status_ids ?? (c.extra_json as any)?.ids ?? (c.extra_json as any)?.ConditionFertilityStatusId,
+      );
       const cur = ctx.lastFertilityStatus?.id ?? null;
       if (wanted.length === 0) return { ok: true, message: "" };
       if (cur != null && wanted.includes(cur)) return { ok: true, message: "" };
@@ -547,26 +603,32 @@ function evalDaysSinceOrBool(
 
 function parseIdList(text: string | null, extra: unknown): number[] {
   const out: number[] = [];
-  if (Array.isArray(extra)) {
-    for (const v of extra) {
-      const n = Number(v);
-      if (Number.isFinite(n)) out.push(n);
+  const pushAll = (val: unknown) => {
+    if (val == null) return;
+    if (Array.isArray(val)) {
+      for (const v of val) {
+        const n = Number(v);
+        if (Number.isFinite(n)) out.push(n);
+      }
+    } else if (typeof val === "string") {
+      for (const part of val.split(/[,\-\s]+/)) {
+        const n = Number(part.trim());
+        if (Number.isFinite(n)) out.push(n);
+      }
+    } else if (typeof val === "number") {
+      if (Number.isFinite(val)) out.push(val);
     }
-  }
-  if (text) {
-    for (const part of text.split(",")) {
-      const n = Number(part.trim());
-      if (Number.isFinite(n)) out.push(n);
-    }
-  }
+  };
+  pushAll(extra);
+  pushAll(text);
   return out;
 }
 
 function daysBetween(a: string, b: string): number {
-  const da = Date.parse(a);
-  const db = Date.parse(b);
-  if (Number.isNaN(da) || Number.isNaN(db)) return 0;
-  return Math.round((db - da) / 86_400_000);
+  const da = parseDateToDays(a);
+  const db = parseDateToDays(b);
+  if (da == null || db == null) return 0;
+  return db - da;
 }
 
 function json(payload: unknown, status = 200) {
