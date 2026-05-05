@@ -497,11 +497,16 @@ function buildContext(
   let dateOfPregnancy: string | null = null;
   if (pregnancy_state === "pregnant" && lastInoculation?.event_date) {
     // ensure no birth/abortion happened after that insemination
-    const after = history.filter(
-      (e) =>
-        e.event_date! > lastInoculation.event_date! &&
-        (e.fertility_operation_id === OP.Birth || e.fertility_operation_id === OP.Abortion),
-    );
+    const inocDay = parseDateToDays(lastInoculation.event_date);
+    const after = history.filter((e) => {
+      const eventDay = parseDateToDays(e.event_date);
+      return (
+        eventDay != null &&
+        inocDay != null &&
+        eventDay > inocDay &&
+        (e.fertility_operation_id === OP.Birth || e.fertility_operation_id === OP.Abortion)
+      );
+    });
     if (after.length === 0) {
       dateOfPregnancy = lastInoculation.event_date;
       pregnancyDays = daysBetween(lastInoculation.event_date!, evDate);
