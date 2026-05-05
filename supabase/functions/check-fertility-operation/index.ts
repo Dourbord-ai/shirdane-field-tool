@@ -185,14 +185,14 @@ Deno.serve(async (req) => {
     {
       const r = await supabase
         .from("cows")
-        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth")
+        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
         .eq("id", cow_id)
         .maybeSingle();
       if (r.error) {
         // retry without date_of_birth if column missing
         const r2 = await supabase
           .from("cows")
-          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date")
+          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
           .eq("id", cow_id)
           .maybeSingle();
         cow = r2.data; cowErr = r2.error;
