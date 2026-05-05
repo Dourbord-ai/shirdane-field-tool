@@ -13,6 +13,7 @@ import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { toast } from "sonner";
 import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
 import { getSession } from "@/lib/auth";
+import { checkFertilityOperation } from "@/lib/fertilityValidation";
 
 interface EroticTypeOpt { id: number; title: string }
 
