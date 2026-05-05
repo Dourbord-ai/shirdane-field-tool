@@ -185,14 +185,14 @@ Deno.serve(async (req) => {
     {
       const r = await supabase
         .from("cows")
-        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth")
+        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
         .eq("id", cow_id)
         .maybeSingle();
       if (r.error) {
         // retry without date_of_birth if column missing
         const r2 = await supabase
           .from("cows")
-          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date")
+          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
           .eq("id", cow_id)
           .maybeSingle();
         cow = r2.data; cowErr = r2.error;
@@ -486,10 +486,16 @@ function buildContext(
   const lastErotic = findLastByOps([OP.Erotic]);
   const lastInoculation = findLastByOps([OP.Inoculation]);
   const lastPregnancyCheck = findLastByOps([OP.Pregnancy1, OP.Pregnancy2, OP.Pregnancy3, OP.Pregnancy4]);
-  const lastBirth = findLastByOps([OP.Birth]);
+  const cowAny = cow as any;
+  const baselineEvent = (date: string | null | undefined, op: number): FertilityEvent | null =>
+    date ? { id: "__pre_entry__", livestock_id: cow.id, fertility_operation_id: op, fertility_status_id: null, event_date: date, event_time: null, is_cancelled: false, metadata: { pre_entry: true } } : null;
+  const lastBirth = findLastByOps([OP.Birth])
+    ?? baselineEvent(cowAny.pre_entry_birth_date ?? cowAny.last_out_birth_date, OP.Birth);
   const lastSync = findLastByOps([OP.Sync]);
-  const lastAbortion = findLastByOps([OP.Abortion]);
-  const lastDry = findLastByOps([OP.Dry]);
+  const lastAbortion = findLastByOps([OP.Abortion])
+    ?? baselineEvent(cowAny.pre_entry_abortion_date ?? cowAny.last_out_abortion_date, OP.Abortion);
+  const lastDry = findLastByOps([OP.Dry])
+    ?? baselineEvent(cowAny.pre_entry_dry_date ?? cowAny.last_out_dry_date, OP.Dry);
 
   // Last status: walk backward to find the first event that carries a status id
   let lastFertilityStatus: FertilityStatus | null = null;
