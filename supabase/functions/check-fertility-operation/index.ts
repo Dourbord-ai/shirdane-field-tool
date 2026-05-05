@@ -497,7 +497,10 @@ function evaluateCondition(c: Condition, ctx: Context): EvalResult {
     case "PregnancyDays":
       return evalRange(ctx.pregnancyDays, c, "روزهای آبستنی", "روز", false);
     case "FertilityStatus": {
-      const wanted = parseIdList(c.text_value, c.extra_json?.ids);
+      const wanted = parseIdList(
+        c.text_value,
+        (c.extra_json as any)?.status_ids ?? (c.extra_json as any)?.ids ?? (c.extra_json as any)?.ConditionFertilityStatusId,
+      );
       const cur = ctx.lastFertilityStatus?.id ?? null;
       if (wanted.length === 0) return { ok: true, message: "" };
       if (cur != null && wanted.includes(cur)) return { ok: true, message: "" };
