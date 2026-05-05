@@ -589,18 +589,24 @@ function evalDaysSinceOrBool(
 
 function parseIdList(text: string | null, extra: unknown): number[] {
   const out: number[] = [];
-  if (Array.isArray(extra)) {
-    for (const v of extra) {
-      const n = Number(v);
-      if (Number.isFinite(n)) out.push(n);
+  const pushAll = (val: unknown) => {
+    if (val == null) return;
+    if (Array.isArray(val)) {
+      for (const v of val) {
+        const n = Number(v);
+        if (Number.isFinite(n)) out.push(n);
+      }
+    } else if (typeof val === "string") {
+      for (const part of val.split(/[,\-\s]+/)) {
+        const n = Number(part.trim());
+        if (Number.isFinite(n)) out.push(n);
+      }
+    } else if (typeof val === "number") {
+      if (Number.isFinite(val)) out.push(val);
     }
-  }
-  if (text) {
-    for (const part of text.split(",")) {
-      const n = Number(part.trim());
-      if (Number.isFinite(n)) out.push(n);
-    }
-  }
+  };
+  pushAll(extra);
+  pushAll(text);
   return out;
 }
 
