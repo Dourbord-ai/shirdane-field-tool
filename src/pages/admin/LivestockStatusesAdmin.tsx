@@ -1,11 +1,12 @@
-import SimpleCrudTable from "@/components/admin/SimpleCrudTable";
+import SoftDeleteCrudTable from "@/components/admin/SoftDeleteCrudTable";
+
 export default function LivestockStatusesAdmin() {
   return (
-    <SimpleCrudTable
+    <SoftDeleteCrudTable
       title="وضعیت‌های دام"
       table="livestock_statuses"
       fields={[
-        { key: "name", label: "نام", required: true },
+        { key: "name", label: "نام وضعیت دام", required: true },
         { key: "is_active", label: "فعال", type: "boolean" },
       ]}
     />
