@@ -449,10 +449,13 @@ function buildContext(
   const evDate = simulated.event_date!;
   // History = events strictly before the simulated event (so we evaluate the
   // simulated event against the state produced by everything that came before).
+  const evDay = parseDateToDays(evDate);
   const history = timeline.filter((e) => {
     if (!e.event_date) return false;
-    if (e.event_date < evDate) return true;
-    if (e.event_date === evDate && e.id !== simulated.id) return true;
+    const d = parseDateToDays(e.event_date);
+    if (d == null || evDay == null) return false;
+    if (d < evDay) return true;
+    if (d === evDay && e.id !== simulated.id) return true;
     return false;
   });
 
