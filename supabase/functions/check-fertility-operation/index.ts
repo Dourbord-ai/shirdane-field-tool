@@ -170,11 +170,26 @@ Deno.serve(async (req) => {
     const messages: string[] = [];
 
     // --- 1) Cow basic checks
-    const { data: cow, error: cowErr } = await supabase
-      .from("cows")
-      .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date")
-      .eq("id", cow_id)
-      .maybeSingle();
+    let cow: any = null;
+    let cowErr: any = null;
+    {
+      const r = await supabase
+        .from("cows")
+        .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth")
+        .eq("id", cow_id)
+        .maybeSingle();
+      if (r.error) {
+        // retry without date_of_birth if column missing
+        const r2 = await supabase
+          .from("cows")
+          .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date")
+          .eq("id", cow_id)
+          .maybeSingle();
+        cow = r2.data; cowErr = r2.error;
+      } else {
+        cow = r.data; cowErr = r.error;
+      }
+    }
     if (cowErr) return json({ allowed: false, messages: ["خطا در بازیابی اطلاعات دام"] }, 500);
     if (!cow) return json({ allowed: false, messages: ["دام یافت نشد"] });
     if (cow.existancestatus !== 1) {
@@ -232,13 +247,32 @@ Deno.serve(async (req) => {
       timeline.push(simulated);
     }
 
-    timeline.sort((a, b) => (a.event_date ?? "").localeCompare(b.event_date ?? ""));
+    timeline.sort((a, b) => {
+      const da = parseDateToDays(a.event_date);
+      const db = parseDateToDays(b.event_date);
+      return (da ?? 0) - (db ?? 0);
+    });
+
+    // --- 3.5) Load latest weight (best-effort; table may not exist)
+    let weightVal: number | null = null;
+    try {
+      const { data: weightRow } = await supabase
+        .from("livestock_physical_records" as any)
+        .select("weight, record_date")
+        .eq("livestock_id", cow_id)
+        .lte("record_date", event_date)
+        .order("record_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      weightVal = (weightRow as any)?.weight ?? null;
+    } catch {
+      weightVal = null;
+    }
 
     // --- 4) Build context up to (and including) the simulated event date
     const ctx = buildContext(timeline, simulated, statusById, cow);
-    if (debug) {
-      // do not include full timeline in normal flow
-    }
+    ctx.weight = weightVal;
+    ctx.date_of_birth = (cow as any)?.date_of_birth ?? null;
 
     // --- 5) Load active workflows for this cow's category
     const cowCategory = inferCategory(cow, ctx);
@@ -250,16 +284,31 @@ Deno.serve(async (req) => {
 
     const workflows: Workflow[] = ((wfRows ?? []) as Workflow[]).filter((w) => {
       if (w.category !== 0 && w.category !== cowCategory) return false;
-      if (w.start_date && event_date < w.start_date) return false;
-      if (w.end_date && event_date > w.end_date) return false;
+      const ed = parseDateToDays(event_date);
+      const sd = parseDateToDays(w.start_date);
+      const edw = parseDateToDays(w.end_date);
+      if (sd != null && ed != null && ed < sd) return false;
+      if (edw != null && ed != null && ed > edw) return false;
       return true;
+    });
+
+    const debugPayload = () => ({
+      lastErotic: ctx.lastErotic,
+      lastInoculation: ctx.lastInoculation,
+      lastSync: ctx.lastSync,
+      lastBirth: ctx.lastBirth,
+      lastFertilityStatus: ctx.lastFertilityStatus,
+      pregnancy_state: ctx.pregnancy_state,
+      milking_state: ctx.milking_state,
     });
 
     if (workflows.length === 0) {
       return json({
         allowed: true,
-        messages: ["هشدار: هیچ ورکفلو فعالی برای این دام یافت نشد. عملیات بدون اعتبارسنجی مجاز است."],
-        ...(debug ? { debug: ctx } : {}),
+        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
       });
     }
 
@@ -278,8 +327,10 @@ Deno.serve(async (req) => {
     if (rules.length === 0) {
       return json({
         allowed: true,
-        messages: ["هشدار: هیچ قاعده‌ای برای این عملیات تعریف نشده است. عملیات بدون اعتبارسنجی مجاز است."],
-        ...(debug ? { debug: ctx } : {}),
+        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
       });
     }
 
@@ -327,7 +378,7 @@ Deno.serve(async (req) => {
         messages,
         matched_rule_id: matchedRuleId,
         failed_rules: [],
-        ...(debug ? { debug: ctx } : {}),
+        ...(debug ? { debug: debugPayload() } : {}),
       });
     }
 
@@ -339,7 +390,7 @@ Deno.serve(async (req) => {
       ],
       matched_rule_id: null,
       failed_rules: failedRules,
-      ...(debug ? { debug: ctx } : {}),
+      ...(debug ? { debug: debugPayload() } : {}),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطای نامشخص";
@@ -504,8 +555,12 @@ interface EvalResult {
 
 function evaluateCondition(c: Condition, ctx: Context): EvalResult {
   switch (c.condition_type) {
-    case "Weight":
+    case "Weight": {
+      if (ctx.weight == null) {
+        return { ok: false, message: "اطلاعات وزن برای این دام ثبت نشده است" };
+      }
       return evalRange(ctx.weight, c, "وزن", "کیلوگرم", true);
+    }
     case "MilkRecord":
       return evalRange(ctx.milkAvg, c, "میانگین رکورد شیر", "کیلوگرم", true);
     case "PregnancyDays":
@@ -520,8 +575,21 @@ function evaluateCondition(c: Condition, ctx: Context): EvalResult {
       if (cur != null && wanted.includes(cur)) return { ok: true, message: "" };
       return { ok: false, message: `وضعیت باروری فعلی (${ctx.lastFertilityStatus?.name ?? "نامشخص"}) مجاز نیست` };
     }
-    case "Sync":
-      return evalDaysSinceOrBool(ctx.daysSince(ctx.lastSync?.event_date), c, "همزمان‌سازی فحلی");
+    case "Sync": {
+      const lastSync = ctx.lastSync;
+      const lastStatusId = ctx.lastFertilityStatus?.id ?? null;
+      if (c.bool_value === true) {
+        if (!lastSync) {
+          return { ok: false, message: "هیچ همزمان‌سازی قبلی ثبت نشده است" };
+        }
+        if (lastStatusId !== 21) {
+          return { ok: false, message: "دام در وضعیت مجاز برای سینک نیست" };
+        }
+        return { ok: true, message: "" };
+      }
+      const days = ctx.daysSince(lastSync?.event_date);
+      return evalDaysSinceOrBool(days, c, "همزمان‌سازی فحلی");
+    }
     case "Erotic":
       return evalDaysSinceOrBool(ctx.daysSince(ctx.lastErotic?.event_date), c, "فحلی");
     case "Inoculation":
