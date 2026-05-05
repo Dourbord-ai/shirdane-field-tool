@@ -23,7 +23,7 @@ import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-type HeatType = { id: number; name: string };
+type HeatType = { id: number; title: string };
 type AppUser = { id: string; full_name: string | null; username: string };
 
 type Props = {
