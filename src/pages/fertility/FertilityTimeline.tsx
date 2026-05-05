@@ -19,7 +19,10 @@ interface FertilityEvent {
   is_cancelled: boolean;
   result_code: string | null;
   created_at: string;
+  erotic_type_id: number | null;
 }
+
+interface EroticType { id: number; title: string }
 
 export default function FertilityTimeline() {
   const { data: cows = [] } = useCows();
@@ -38,12 +41,12 @@ export default function FertilityTimeline() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("livestock_fertility_events")
-        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at")
+        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at, erotic_type_id")
         .eq("livestock_id", Number(cowId))
         .order("event_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as FertilityEvent[];
+      return data as unknown as FertilityEvent[];
     },
   });
 
