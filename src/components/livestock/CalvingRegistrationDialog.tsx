@@ -87,6 +87,7 @@ export default function CalvingRegistrationDialog({
 }: Props) {
   const [loadingLookups, setLoadingLookups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
   const [calfCount, setCalfCount] = useState<number>(1);
   const [calves, setCalves] = useState<CalfState[]>([emptyCalf()]);
@@ -179,6 +180,7 @@ export default function CalvingRegistrationDialog({
 
     setSubmitting(true);
 
+    setValidationMessages([]);
     // Upload calf images if provided
     const calvesMeta: any[] = [];
     for (let i = 0; i < calves.length; i++) {
@@ -236,7 +238,7 @@ export default function CalvingRegistrationDialog({
     });
     if (!validation.ok) {
       setSubmitting(false);
-      window.alert(validation.messages.join("\n"));
+      setValidationMessages(validation.messages);
       return;
     }
     (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
@@ -601,6 +603,7 @@ export default function CalvingRegistrationDialog({
               ))}
             </div>
 
+            <FertilityValidationAlert messages={validationMessages} />
             <div className="flex gap-2 pt-2 sticky bottom-0 bg-background">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}

@@ -24,6 +24,7 @@ import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { checkFertilityOperation } from "@/lib/fertilityValidation";
+import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 
 type AppUser = { id: string; full_name: string | null; username: string };
 type SpermRow = { id: number; code: string | null; name: string | null };
@@ -115,6 +116,7 @@ export default function InseminationRegistrationDialog({
   const [maleCows, setMaleCows] = useState<MaleCow[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
   // type
   const [inseminationType, setInseminationType] = useState<InseminationType | "">("");
@@ -229,6 +231,7 @@ export default function InseminationRegistrationDialog({
 
     setSubmitting(true);
 
+    setValidationMessages([]);
     const selectedUser = users.find((u) => String(u.id) === operatorId);
     const dateStr = formatJalali(date);
     const eventDate = `${dateStr} ${time}`;
@@ -270,7 +273,7 @@ export default function InseminationRegistrationDialog({
     });
     if (!validation.ok) {
       setSubmitting(false);
-      window.alert(validation.messages.join("\n"));
+      setValidationMessages(validation.messages);
       return;
     }
     metadata.matched_rule_id = validation.matched_rule_id ?? null;
@@ -504,6 +507,7 @@ export default function InseminationRegistrationDialog({
               </div>
             </div>
 
+            <FertilityValidationAlert messages={validationMessages} />
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}

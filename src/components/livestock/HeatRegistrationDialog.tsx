@@ -23,6 +23,7 @@ import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { checkFertilityOperation } from "@/lib/fertilityValidation";
+import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 
 type HeatType = { id: number; title: string };
 type AppUser = { id: string; full_name: string | null; username: string };
@@ -92,6 +93,7 @@ export default function HeatRegistrationDialog({
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
   // form state
   const [heatTypeId, setHeatTypeId] = useState<string>("");
@@ -156,6 +158,7 @@ export default function HeatRegistrationDialog({
 
     setSubmitting(true);
 
+    setValidationMessages([]);
     const selectedType = heatTypes.find((t) => String(t.id) === heatTypeId);
     const selectedUser = users.find((u) => String(u.id) === operatorId);
     const dateStr = formatJalali(date);
@@ -169,7 +172,7 @@ export default function HeatRegistrationDialog({
     });
     if (!validation.ok) {
       setSubmitting(false);
-      window.alert(validation.messages.join("\n"));
+      setValidationMessages(validation.messages);
       return;
     }
 
@@ -343,6 +346,7 @@ export default function HeatRegistrationDialog({
               />
             </div>
 
+            <FertilityValidationAlert messages={validationMessages} />
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}

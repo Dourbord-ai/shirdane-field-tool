@@ -41,6 +41,7 @@ export default function RinseRegistrationDialog({
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
   const [operatorId, setOperatorId] = useState<string>("");
   const [reason, setReason] = useState("");
@@ -86,6 +87,7 @@ export default function RinseRegistrationDialog({
 
     setSubmitting(true);
 
+    setValidationMessages([]);
     const selectedUser = users.find((u) => String(u.id) === operatorId);
     const dateStr = formatJalali(date);
     const eventDate = `${dateStr} ${time}`;
@@ -106,7 +108,7 @@ export default function RinseRegistrationDialog({
     });
     if (!validation.ok) {
       setSubmitting(false);
-      window.alert(validation.messages.join("\n"));
+      setValidationMessages(validation.messages);
       return;
     }
     (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
@@ -217,6 +219,7 @@ export default function RinseRegistrationDialog({
               />
             </div>
 
+            <FertilityValidationAlert messages={validationMessages} />
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
