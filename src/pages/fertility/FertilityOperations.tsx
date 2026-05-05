@@ -157,9 +157,6 @@ export default function FertilityOperations() {
           </div>
         )}
 
-        <div style={{ display: 'none' }}>
-        </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>تاریخ</Label>
