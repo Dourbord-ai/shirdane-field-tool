@@ -46,6 +46,16 @@ const FEMALE_ONLY_OPS = new Set<number>([
   OP.Birth, OP.Dry, OP.Rinse, OP.CleanTest, OP.Pregnancy3, OP.Pregnancy4, OP.Sync,
 ]);
 
+function isFemaleCow(sex: unknown, sextype?: unknown): boolean {
+  if (sex === 1 || sex === "1") return true;
+  if (sex === 0 || sex === "0") return true;
+  const s = String(sex ?? "").trim().toLowerCase();
+  if (s === "female" || s === "ماده" || s === "f") return true;
+  const st = String(sextype ?? "").trim().toLowerCase();
+  if (st === "ماده" || st === "female" || st === "f") return true;
+  return false;
+}
+
 interface Body {
   cow_id?: number;
   livestock_id?: number;
