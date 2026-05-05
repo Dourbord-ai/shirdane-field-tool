@@ -602,10 +602,10 @@ function parseIdList(text: string | null, extra: unknown): number[] {
 }
 
 function daysBetween(a: string, b: string): number {
-  const da = Date.parse(a);
-  const db = Date.parse(b);
-  if (Number.isNaN(da) || Number.isNaN(db)) return 0;
-  return Math.round((db - da) / 86_400_000);
+  const da = parseDateToDays(a);
+  const db = parseDateToDays(b);
+  if (da == null || db == null) return 0;
+  return db - da;
 }
 
 function json(payload: unknown, status = 200) {
