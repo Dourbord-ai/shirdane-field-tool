@@ -184,6 +184,16 @@ export default function LivestockProfile() {
       {/* Cow history tabs */}
       <CowHistoryTabs cowId={cow.id} />
 
+      {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
+        <Section title="اطلاعات اولیه قبل از ورود به دامداری">
+          <Row label="تاریخ زایش قبل از ورود" value={cow.pre_entry_birth_date} />
+          <Row label="تاریخ سقط قبل از ورود" value={cow.pre_entry_abortion_date} />
+          <Row label="تاریخ خشکی قبل از ورود" value={cow.pre_entry_dry_date} />
+          <Row label="دوره/روزهای قبل از ورود" value={cow.pre_entry_period != null ? `${cow.pre_entry_period} روز` : null} />
+          <Row label="توضیحات" value={cow.pre_entry_note} />
+        </Section>
+      )}
+
       {/* Section 3: Purchase info */}
       <Section title="اطلاعات خرید">
         <Row label="تاریخ خرید" value={cow.purchase_date} />
