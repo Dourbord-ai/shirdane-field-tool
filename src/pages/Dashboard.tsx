@@ -22,6 +22,7 @@ const fertilityItems = [
   { title: "ثبت عملیات باروری", route: "/fertility/operations", icon: PlusCircle },
   { title: "تایم‌لاین باروری دام", route: "/fertility/timeline", icon: Activity },
   { title: "هشدارهای باروری", route: "/fertility/alerts", icon: Bell },
+  { title: "انواع فحلی", route: "/fertility/erotic-types", icon: Settings },
 ];
 
 export default function Dashboard() {

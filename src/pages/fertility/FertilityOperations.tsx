@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { toast } from "sonner";
 import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
 import { getSession } from "@/lib/auth";
+
+interface EroticTypeOpt { id: number; title: string }
 
 export default function FertilityOperations() {
   const qc = useQueryClient();
@@ -28,8 +30,25 @@ export default function FertilityOperations() {
   const [statusId, setStatusId] = useState<string>("");
   const [resultCode, setResultCode] = useState<string>("");
   const [note, setNote] = useState<string>("");
+  const [eroticTypeId, setEroticTypeId] = useState<string>("");
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [validationKind, setValidationKind] = useState<"error" | "warning" | null>(null);
+
+  const { data: eroticTypes = [] } = useQuery({
+    queryKey: ["fertility_erotic_types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fertility_erotic_types" as never)
+        .select("id, title")
+        .eq("is_active", true)
+        .order("sort_order").order("id");
+      if (error) throw error;
+      return (data ?? []) as EroticTypeOpt[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const isHeat = Number(opId) === 1;
 
   const cowOptions = useMemo(
     () => cows.map((c) => ({ value: String(c.id), label: cowLabel(c) })),
@@ -41,6 +60,7 @@ export default function FertilityOperations() {
       if (!cowId) throw new Error("لطفاً دام را انتخاب کنید");
       if (!opId) throw new Error("لطفاً عملیات باروری را انتخاب کنید");
       if (!dateShamsi) throw new Error("لطفاً تاریخ را انتخاب کنید");
+      if (Number(opId) === 1 && !eroticTypeId) throw new Error("لطفاً نوع فحلی را انتخاب کنید");
 
       setValidationMessages([]);
       setValidationKind(null);
@@ -85,6 +105,7 @@ export default function FertilityOperations() {
         notes: note || null,
         operator_name: user?.name || null,
         metadata: { matched_rule_id: check?.matched_rule_id ?? null } as never,
+        erotic_type_id: Number(opId) === 1 && eroticTypeId ? Number(eroticTypeId) : null,
       };
       const { error } = await supabase.from("livestock_fertility_events").insert(payload as never);
       if (error) throw error;
@@ -99,7 +120,7 @@ export default function FertilityOperations() {
       qc.invalidateQueries({ queryKey: ["cows_for_fertility"] });
       qc.invalidateQueries({ queryKey: ["fertility_timeline"] });
       toast.success("عملیات باروری با موفقیت ثبت شد");
-      setStatusId(""); setResultCode(""); setNote(""); setTime("");
+      setStatusId(""); setResultCode(""); setNote(""); setTime(""); setEroticTypeId("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -123,6 +144,18 @@ export default function FertilityOperations() {
             </SelectContent>
           </Select>
         </div>
+
+        {isHeat && (
+          <div>
+            <Label>نوع فحلی *</Label>
+            <Select value={eroticTypeId} onValueChange={setEroticTypeId}>
+              <SelectTrigger><SelectValue placeholder="انتخاب نوع فحلی" /></SelectTrigger>
+              <SelectContent>
+                {eroticTypes.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

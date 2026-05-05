@@ -19,13 +19,28 @@ interface FertilityEvent {
   is_cancelled: boolean;
   result_code: string | null;
   created_at: string;
+  erotic_type_id: number | null;
 }
+
+interface EroticType { id: number; title: string }
 
 export default function FertilityTimeline() {
   const { data: cows = [] } = useCows();
   const { data: ops = [] } = useFertilityOperations();
   const { data: statuses = [] } = useFertilityStatuses();
   const [cowId, setCowId] = useState<string>("");
+
+  const { data: eroticTypes = [] } = useQuery({
+    queryKey: ["fertility_erotic_types_all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fertility_erotic_types" as never)
+        .select("id, title");
+      if (error) throw error;
+      return (data ?? []) as EroticType[];
+    },
+    staleTime: 5 * 60_000,
+  });
 
   const cowOptions = useMemo(
     () => cows.map((c) => ({ value: String(c.id), label: cowLabel(c) })),
@@ -38,12 +53,12 @@ export default function FertilityTimeline() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("livestock_fertility_events")
-        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at")
+        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at, erotic_type_id")
         .eq("livestock_id", Number(cowId))
         .order("event_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as FertilityEvent[];
+      return data as unknown as FertilityEvent[];
     },
   });
 
@@ -77,7 +92,14 @@ export default function FertilityTimeline() {
               <div key={e.id} className={`rounded-xl bg-card border p-4 ${e.is_cancelled ? "border-destructive/30 opacity-70" : "border-border"}`}>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-body-lg font-bold text-foreground">{op?.name || e.event_type}</h3>
+                    <h3 className="text-body-lg font-bold text-foreground">
+                      {op?.name || e.event_type}
+                      {e.fertility_operation_id === 1 && e.erotic_type_id && (
+                        <span className="text-sm font-normal text-muted-foreground mr-2">
+                          — {eroticTypes.find((t) => t.id === e.erotic_type_id)?.title || ""}
+                        </span>
+                      )}
+                    </h3>
                     {st && (
                       <span className="text-xs px-2 py-0.5 rounded-full border" style={{ borderColor: st.color, color: st.color }}>
                         {st.name}

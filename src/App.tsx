@@ -22,6 +22,7 @@ import FertilityRules from "./pages/fertility/FertilityRules";
 import FertilityOperations from "./pages/fertility/FertilityOperations";
 import FertilityTimeline from "./pages/fertility/FertilityTimeline";
 import FertilityAlerts from "./pages/fertility/FertilityAlerts";
+import FertilityEroticTypes from "./pages/fertility/FertilityEroticTypes";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -59,6 +60,7 @@ const App = () => (
               <Route path="/fertility/operations" element={<FertilityGuard><FertilityOperations /></FertilityGuard>} />
               <Route path="/fertility/timeline" element={<FertilityGuard><FertilityTimeline /></FertilityGuard>} />
               <Route path="/fertility/alerts" element={<FertilityGuard><FertilityAlerts /></FertilityGuard>} />
+              <Route path="/fertility/erotic-types" element={<FertilityGuard><FertilityEroticTypes /></FertilityGuard>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
