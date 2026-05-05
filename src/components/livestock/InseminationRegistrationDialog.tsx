@@ -23,6 +23,7 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { checkFertilityOperation } from "@/lib/fertilityValidation";
 
 type AppUser = { id: string; full_name: string | null; username: string };
 type SpermRow = { id: number; code: string | null; name: string | null };
@@ -261,9 +262,23 @@ export default function InseminationRegistrationDialog({
       }
     }
 
+    const validation = await checkFertilityOperation({
+      livestock_id: livestockId,
+      fertility_operation_id: 2,
+      event_date: eventDate,
+      event_time: time || null,
+    });
+    if (!validation.ok) {
+      setSubmitting(false);
+      window.alert(validation.messages.join("\n"));
+      return;
+    }
+    metadata.matched_rule_id = validation.matched_rule_id ?? null;
+
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
       livestock_id: livestockId,
       event_type: "insemination",
+      fertility_operation_id: 2,
       event_date: eventDate,
       operator_user_id: null,
       operator_name: selectedUser?.full_name ?? selectedUser?.username ?? null,

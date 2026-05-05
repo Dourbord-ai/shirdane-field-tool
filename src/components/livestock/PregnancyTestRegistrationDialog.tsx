@@ -23,6 +23,14 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { checkFertilityOperation } from "@/lib/fertilityValidation";
+
+const TEST_TYPE_OP_ID: Record<string, number> = {
+  initial: 3,
+  final: 4,
+  extra: 11,
+  dry: 12,
+};
 
 type AppUser = { id: string; full_name: string | null; username: string };
 
@@ -130,9 +138,26 @@ export default function PregnancyTestRegistrationDialog({
       operator_name: operatorName,
     };
 
+    const opId = TEST_TYPE_OP_ID[testType];
+    const validation = await checkFertilityOperation({
+      livestock_id: livestockId,
+      fertility_operation_id: opId,
+      event_date: eventDate,
+      event_time: time || null,
+      result_code: String(statusCode),
+      fertility_status_id: statusCode,
+    });
+    if (!validation.ok) {
+      setSubmitting(false);
+      window.alert(validation.messages.join("\n"));
+      return;
+    }
+    (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
+
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
       livestock_id: livestockId,
       event_type: "pregnancy_test",
+      fertility_operation_id: opId,
       event_date: eventDate,
       operator_user_id: null,
       operator_name: operatorName,

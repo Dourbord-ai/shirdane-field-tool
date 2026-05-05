@@ -226,9 +226,25 @@ export default function CalvingRegistrationDialog({
       calves: calvesMeta,
     };
 
+    const { checkFertilityOperation } = await import("@/lib/fertilityValidation");
+    const validation = await checkFertilityOperation({
+      livestock_id: livestockId,
+      fertility_operation_id: 6,
+      event_date: eventDate,
+      event_time: time || null,
+      fertility_status_id: 12,
+    });
+    if (!validation.ok) {
+      setSubmitting(false);
+      window.alert(validation.messages.join("\n"));
+      return;
+    }
+    (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
+
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
       livestock_id: livestockId,
       event_type: "calving",
+      fertility_operation_id: 6,
       event_date: eventDate,
       notes: description || null,
       status_code: 12,
