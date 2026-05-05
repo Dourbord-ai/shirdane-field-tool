@@ -46,6 +46,16 @@ const FEMALE_ONLY_OPS = new Set<number>([
   OP.Birth, OP.Dry, OP.Rinse, OP.CleanTest, OP.Pregnancy3, OP.Pregnancy4, OP.Sync,
 ]);
 
+function isFemaleCow(sex: unknown, sextype?: unknown): boolean {
+  if (sex === 1 || sex === "1") return true;
+  if (sex === 0 || sex === "0") return true;
+  const s = String(sex ?? "").trim().toLowerCase();
+  if (s === "female" || s === "ماده" || s === "f") return true;
+  const st = String(sextype ?? "").trim().toLowerCase();
+  if (st === "ماده" || st === "female" || st === "f") return true;
+  return false;
+}
+
 interface Body {
   cow_id?: number;
   livestock_id?: number;
@@ -175,14 +185,14 @@ Deno.serve(async (req) => {
     {
       const r = await supabase
         .from("cows")
-        .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth")
+        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth")
         .eq("id", cow_id)
         .maybeSingle();
       if (r.error) {
         // retry without date_of_birth if column missing
         const r2 = await supabase
           .from("cows")
-          .select("id, sex, existancestatus, last_fertility_status, is_dry, purchase_date")
+          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date")
           .eq("id", cow_id)
           .maybeSingle();
         cow = r2.data; cowErr = r2.error;
@@ -195,8 +205,14 @@ Deno.serve(async (req) => {
     if (cow.existancestatus !== 1) {
       return json({ allowed: false, messages: ["این دام در گله موجود نیست و نمی‌توان عملیات باروری ثبت کرد"] });
     }
-    if (FEMALE_ONLY_OPS.has(op_id) && cow.sex !== 1) {
-      return json({ allowed: false, messages: ["این عملیات فقط برای دام ماده مجاز است"] });
+    if (FEMALE_ONLY_OPS.has(op_id) && !isFemaleCow(cow.sex, cow.sextype)) {
+      return json({
+        allowed: false,
+        messages: ["این عملیات فقط برای دام ماده مجاز است"],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: { cow_id, cow_sex: cow.sex, cow_sextype: cow.sextype, existancestatus: cow.existancestatus } } : {}),
+      });
     }
 
     // --- 2) Load reference data
