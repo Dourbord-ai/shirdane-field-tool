@@ -449,10 +449,13 @@ function buildContext(
   const evDate = simulated.event_date!;
   // History = events strictly before the simulated event (so we evaluate the
   // simulated event against the state produced by everything that came before).
+  const evDay = parseDateToDays(evDate);
   const history = timeline.filter((e) => {
     if (!e.event_date) return false;
-    if (e.event_date < evDate) return true;
-    if (e.event_date === evDate && e.id !== simulated.id) return true;
+    const d = parseDateToDays(e.event_date);
+    if (d == null || evDay == null) return false;
+    if (d < evDay) return true;
+    if (d === evDay && e.id !== simulated.id) return true;
     return false;
   });
 
@@ -494,11 +497,16 @@ function buildContext(
   let dateOfPregnancy: string | null = null;
   if (pregnancy_state === "pregnant" && lastInoculation?.event_date) {
     // ensure no birth/abortion happened after that insemination
-    const after = history.filter(
-      (e) =>
-        e.event_date! > lastInoculation.event_date! &&
-        (e.fertility_operation_id === OP.Birth || e.fertility_operation_id === OP.Abortion),
-    );
+    const inocDay = parseDateToDays(lastInoculation.event_date);
+    const after = history.filter((e) => {
+      const eventDay = parseDateToDays(e.event_date);
+      return (
+        eventDay != null &&
+        inocDay != null &&
+        eventDay > inocDay &&
+        (e.fertility_operation_id === OP.Birth || e.fertility_operation_id === OP.Abortion)
+      );
+    });
     if (after.length === 0) {
       dateOfPregnancy = lastInoculation.event_date;
       pregnancyDays = daysBetween(lastInoculation.event_date!, evDate);
