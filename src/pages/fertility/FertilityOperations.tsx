@@ -28,6 +28,8 @@ export default function FertilityOperations() {
   const [statusId, setStatusId] = useState<string>("");
   const [resultCode, setResultCode] = useState<string>("");
   const [note, setNote] = useState<string>("");
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
+  const [validationKind, setValidationKind] = useState<"error" | "warning" | null>(null);
 
   const cowOptions = useMemo(
     () => cows.map((c) => ({ value: String(c.id), label: cowLabel(c) })),
@@ -40,17 +42,34 @@ export default function FertilityOperations() {
       if (!opId) throw new Error("لطفاً عملیات باروری را انتخاب کنید");
       if (!dateShamsi) throw new Error("لطفاً تاریخ را انتخاب کنید");
 
+      setValidationMessages([]);
+      setValidationKind(null);
+
       // 1) Server-side allowed check
       const { data: check, error: checkErr } = await supabase.functions.invoke("check-fertility-operation", {
         body: {
-          cow_id: Number(cowId),
+          livestock_id: Number(cowId),
           fertility_operation_id: Number(opId),
           event_date: dateShamsi,
+          event_time: time || null,
+          result_code: resultCode || null,
+          fertility_status_id: statusId ? Number(statusId) : null,
+          mode: "insert",
         },
       });
       if (checkErr) throw new Error(checkErr.message || "خطا در بررسی مجاز بودن عملیات");
+
+      const msgs: string[] = Array.isArray(check?.messages) ? check.messages : [];
+
       if (check && check.allowed === false) {
-        throw new Error(check.message || "این عملیات برای دام انتخاب‌شده مجاز نیست");
+        setValidationMessages(msgs.length ? msgs : ["این عملیات برای دام انتخاب‌شده مجاز نیست"]);
+        setValidationKind("error");
+        throw new Error(msgs[0] || "این عملیات مجاز نیست");
+      }
+
+      if (msgs.length) {
+        setValidationMessages(msgs);
+        setValidationKind("warning");
       }
 
       // 2) Insert event
@@ -65,7 +84,7 @@ export default function FertilityOperations() {
         fertility_status_id: statusId ? Number(statusId) : null,
         notes: note || null,
         operator_name: user?.name || null,
-        metadata: {} as never,
+        metadata: { matched_rule_id: check?.matched_rule_id ?? null } as never,
       };
       const { error } = await supabase.from("livestock_fertility_events").insert(payload as never);
       if (error) throw error;
@@ -78,6 +97,7 @@ export default function FertilityOperations() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["livestock_fertility_events"] });
       qc.invalidateQueries({ queryKey: ["cows_for_fertility"] });
+      qc.invalidateQueries({ queryKey: ["fertility_timeline"] });
       toast.success("عملیات باروری با موفقیت ثبت شد");
       setStatusId(""); setResultCode(""); setNote(""); setTime("");
     },
