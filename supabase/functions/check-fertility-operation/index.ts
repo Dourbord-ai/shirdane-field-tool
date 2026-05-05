@@ -555,8 +555,12 @@ interface EvalResult {
 
 function evaluateCondition(c: Condition, ctx: Context): EvalResult {
   switch (c.condition_type) {
-    case "Weight":
+    case "Weight": {
+      if (ctx.weight == null) {
+        return { ok: false, message: "اطلاعات وزن برای این دام ثبت نشده است" };
+      }
       return evalRange(ctx.weight, c, "وزن", "کیلوگرم", true);
+    }
     case "MilkRecord":
       return evalRange(ctx.milkAvg, c, "میانگین رکورد شیر", "کیلوگرم", true);
     case "PregnancyDays":
@@ -571,8 +575,21 @@ function evaluateCondition(c: Condition, ctx: Context): EvalResult {
       if (cur != null && wanted.includes(cur)) return { ok: true, message: "" };
       return { ok: false, message: `وضعیت باروری فعلی (${ctx.lastFertilityStatus?.name ?? "نامشخص"}) مجاز نیست` };
     }
-    case "Sync":
-      return evalDaysSinceOrBool(ctx.daysSince(ctx.lastSync?.event_date), c, "همزمان‌سازی فحلی");
+    case "Sync": {
+      const lastSync = ctx.lastSync;
+      const lastStatusId = ctx.lastFertilityStatus?.id ?? null;
+      if (c.bool_value === true) {
+        if (!lastSync) {
+          return { ok: false, message: "هیچ همزمان‌سازی قبلی ثبت نشده است" };
+        }
+        if (lastStatusId !== 21) {
+          return { ok: false, message: "دام در وضعیت مجاز برای سینک نیست" };
+        }
+        return { ok: true, message: "" };
+      }
+      const days = ctx.daysSince(lastSync?.event_date);
+      return evalDaysSinceOrBool(days, c, "همزمان‌سازی فحلی");
+    }
     case "Erotic":
       return evalDaysSinceOrBool(ctx.daysSince(ctx.lastErotic?.event_date), c, "فحلی");
     case "Inoculation":
