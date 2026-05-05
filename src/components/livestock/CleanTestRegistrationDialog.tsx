@@ -54,6 +54,7 @@ export default function CleanTestRegistrationDialog({
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
   const [visitorId, setVisitorId] = useState<string>("");
   const [result, setResult] = useState<ResultValue | "">("");
@@ -99,6 +100,7 @@ export default function CleanTestRegistrationDialog({
 
     setSubmitting(true);
 
+    setValidationMessages([]);
     const selectedUser = users.find((u) => String(u.id) === visitorId);
     const dateStr = formatJalali(date);
     const eventDate = `${dateStr} ${time}`;
@@ -122,7 +124,7 @@ export default function CleanTestRegistrationDialog({
     });
     if (!validation.ok) {
       setSubmitting(false);
-      window.alert(validation.messages.join("\n"));
+      setValidationMessages(validation.messages);
       return;
     }
     (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
@@ -248,6 +250,7 @@ export default function CleanTestRegistrationDialog({
               />
             </div>
 
+            <FertilityValidationAlert messages={validationMessages} />
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}

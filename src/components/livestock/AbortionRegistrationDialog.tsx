@@ -32,6 +32,7 @@ export default function AbortionRegistrationDialog({
 }: Props) {
   const [loadingLookups, setLoadingLookups] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
   const [defaultPeriod, setDefaultPeriod] = useState<number>(1);
   const [useDefaultPeriod, setUseDefaultPeriod] = useState(true);
@@ -91,6 +92,7 @@ export default function AbortionRegistrationDialog({
 
     setSubmitting(true);
 
+    setValidationMessages([]);
     const eventDate = `${formatJalali(date)} ${time}`;
     const metadata = {
       period: finalPeriod,
@@ -110,7 +112,7 @@ export default function AbortionRegistrationDialog({
     });
     if (!validation.ok) {
       setSubmitting(false);
-      window.alert(validation.messages.join("\n"));
+      setValidationMessages(validation.messages);
       return;
     }
     (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
@@ -255,6 +257,7 @@ export default function AbortionRegistrationDialog({
               />
             </div>
 
+            <FertilityValidationAlert messages={validationMessages} />
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={submitting} className="flex-1">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
