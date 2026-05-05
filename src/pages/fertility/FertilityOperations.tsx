@@ -60,6 +60,7 @@ export default function FertilityOperations() {
       if (!cowId) throw new Error("لطفاً دام را انتخاب کنید");
       if (!opId) throw new Error("لطفاً عملیات باروری را انتخاب کنید");
       if (!dateShamsi) throw new Error("لطفاً تاریخ را انتخاب کنید");
+      if (Number(opId) === 1 && !eroticTypeId) throw new Error("لطفاً نوع فحلی را انتخاب کنید");
 
       setValidationMessages([]);
       setValidationKind(null);
@@ -104,6 +105,7 @@ export default function FertilityOperations() {
         notes: note || null,
         operator_name: user?.name || null,
         metadata: { matched_rule_id: check?.matched_rule_id ?? null } as never,
+        erotic_type_id: Number(opId) === 1 && eroticTypeId ? Number(eroticTypeId) : null,
       };
       const { error } = await supabase.from("livestock_fertility_events").insert(payload as never);
       if (error) throw error;
