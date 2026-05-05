@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { toast } from "sonner";
 import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
 import { getSession } from "@/lib/auth";
+
+interface EroticTypeOpt { id: number; title: string }
 
 export default function FertilityOperations() {
   const qc = useQueryClient();
@@ -28,8 +30,25 @@ export default function FertilityOperations() {
   const [statusId, setStatusId] = useState<string>("");
   const [resultCode, setResultCode] = useState<string>("");
   const [note, setNote] = useState<string>("");
+  const [eroticTypeId, setEroticTypeId] = useState<string>("");
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [validationKind, setValidationKind] = useState<"error" | "warning" | null>(null);
+
+  const { data: eroticTypes = [] } = useQuery({
+    queryKey: ["fertility_erotic_types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fertility_erotic_types" as never)
+        .select("id, title")
+        .eq("is_active", true)
+        .order("sort_order").order("id");
+      if (error) throw error;
+      return (data ?? []) as EroticTypeOpt[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const isHeat = Number(opId) === 1;
 
   const cowOptions = useMemo(
     () => cows.map((c) => ({ value: String(c.id), label: cowLabel(c) })),
