@@ -298,12 +298,11 @@ Deno.serve(async (req) => {
     }
 
     // --- 7) Evaluate rules: rules = OR, conditions inside a rule = AND
-    let anyRulePassed = false;
-    const failedReasons: string[] = [];
+    let matchedRuleId: string | null = null;
+    const failedRules: Array<{ rule_id: string; title: string; reasons: string[] }> = [];
 
     for (const rule of rules) {
       const ruleConds = conditionsByRule.get(rule.id) ?? [];
-      // A rule with zero conditions is treated as always-true
       let allOk = true;
       const reasons: string[] = [];
       for (const cond of ruleConds) {
@@ -314,21 +313,32 @@ Deno.serve(async (req) => {
         }
       }
       if (allOk) {
-        anyRulePassed = true;
+        matchedRuleId = rule.id;
         break;
       } else {
-        failedReasons.push(`«${rule.title}»: ${reasons.join(" و ")}`);
+        failedRules.push({ rule_id: rule.id, title: rule.title, reasons });
       }
     }
 
-    if (anyRulePassed) {
+    if (matchedRuleId) {
       messages.push("عملیات مطابق قواعد ورکفلو مجاز است");
-      return json({ allowed: true, messages, ...(debug ? { debug: ctx } : {}) });
+      return json({
+        allowed: true,
+        messages,
+        matched_rule_id: matchedRuleId,
+        failed_rules: [],
+        ...(debug ? { debug: ctx } : {}),
+      });
     }
 
     return json({
       allowed: false,
-      messages: ["هیچ‌یک از قواعد ورکفلو برای این عملیات برقرار نیست:", ...failedReasons],
+      messages: [
+        "هیچ‌یک از قواعد ورکفلو برای این عملیات برقرار نیست:",
+        ...failedRules.map((f) => `«${f.title}»: ${f.reasons.join(" و ")}`),
+      ],
+      matched_rule_id: null,
+      failed_rules: failedRules,
       ...(debug ? { debug: ctx } : {}),
     });
   } catch (e) {
