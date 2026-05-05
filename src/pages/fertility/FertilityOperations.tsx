@@ -120,7 +120,7 @@ export default function FertilityOperations() {
       qc.invalidateQueries({ queryKey: ["cows_for_fertility"] });
       qc.invalidateQueries({ queryKey: ["fertility_timeline"] });
       toast.success("عملیات باروری با موفقیت ثبت شد");
-      setStatusId(""); setResultCode(""); setNote(""); setTime("");
+      setStatusId(""); setResultCode(""); setNote(""); setTime(""); setEroticTypeId("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -143,6 +143,21 @@ export default function FertilityOperations() {
               {ops.map((o) => <SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>)}
             </SelectContent>
           </Select>
+        </div>
+
+        {isHeat && (
+          <div>
+            <Label>نوع فحلی *</Label>
+            <Select value={eroticTypeId} onValueChange={setEroticTypeId}>
+              <SelectTrigger><SelectValue placeholder="انتخاب نوع فحلی" /></SelectTrigger>
+              <SelectContent>
+                {eroticTypes.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <div style={{ display: 'none' }}>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
