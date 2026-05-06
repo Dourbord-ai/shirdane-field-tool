@@ -10,6 +10,7 @@ import {
   isFemale,
   dryLabel,
 } from "@/lib/livestock";
+import { toEnDigits } from "@/lib/digits";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Filter, Loader2, ChevronLeft } from "lucide-react";
+import { Search, SlidersHorizontal, Loader2, ChevronLeft, X, Droplet, Heart, Users } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
@@ -36,30 +37,76 @@ type Cow = {
   created_at: string;
 };
 
+type QuickKey = "all" | "in_herd" | "wet" | "dry" | "pregnant" | "inseminated" | "fresh" | "male";
+
+const QUICK_FILTERS: { key: QuickKey; label: string }[] = [
+  { key: "all", label: "همه" },
+  { key: "in_herd", label: "موجود در گله" },
+  { key: "wet", label: "دوشا" },
+  { key: "dry", label: "خشک" },
+  { key: "pregnant", label: "آبستن" },
+  { key: "inseminated", label: "تلقیح شده" },
+  { key: "fresh", label: "تازه‌زا" },
+  { key: "male", label: "نر" },
+];
+
 export default function Livestock() {
   const navigate = useNavigate();
   const [cows, setCows] = useState<Cow[]>([]);
+  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number }>(
+    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0 }
+  );
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  // filters
+  // search (debounced)
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [presenceFilter, setPresenceFilter] = useState<string>("all"); // all | 0..4
-  const [onlyInHerd, setOnlyInHerd] = useState(false);
-  const [dryFilter, setDryFilter] = useState<string>("all"); // all | dry | wet
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(toEnDigits(searchInput).trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // filters
+  const [quick, setQuick] = useState<QuickKey>("in_herd");
+  const [presenceFilter, setPresenceFilter] = useState<string>("all");
   const [fertilityFilter, setFertilityFilter] = useState<string>("all");
-  const [sexFilter, setSexFilter] = useState<string>("all"); // all | female | male
-  const [showFilters, setShowFilters] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset & fetch when filters change
+  // KPI counts
+  useEffect(() => {
+    let cancelled = false;
+    async function loadKpis() {
+      const head = (q: any) => q.select("id", { count: "exact", head: true });
+      const [t, h, w, d, p] = await Promise.all([
+        head(supabase.from("cows")),
+        head(supabase.from("cows")).eq("presence_status", 0),
+        head(supabase.from("cows")).eq("is_dry", false).eq("sextype", "ماده").eq("presence_status", 0),
+        head(supabase.from("cows")).eq("is_dry", true).eq("sextype", "ماده").eq("presence_status", 0),
+        head(supabase.from("cows")).eq("last_fertility_status", 8).eq("sextype", "ماده").eq("presence_status", 0),
+      ]);
+      if (cancelled) return;
+      setTotals({
+        total: t.count ?? 0,
+        in_herd: h.count ?? 0,
+        wet: w.count ?? 0,
+        dry: d.count ?? 0,
+        pregnant: p.count ?? 0,
+      });
+    }
+    loadKpis();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Reset paging when filters change
   useEffect(() => {
     setCows([]);
     setPage(0);
     setHasMore(true);
-  }, [search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter]);
+  }, [search, quick, presenceFilter, fertilityFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,43 +121,45 @@ export default function Livestock() {
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
-      if (search.trim()) {
-        const s = search.trim();
-        // tag_number is text; earnumber/bodynumber are numeric — best effort search
+      if (search) {
+        const n = Number(search);
         q = q.or(
-          `tag_number.ilike.%${s}%,earnumber.eq.${Number(s) || 0},bodynumber.eq.${Number(s) || 0}`,
+          `tag_number.ilike.%${search}%,earnumber.eq.${Number.isFinite(n) ? n : 0},bodynumber.eq.${Number.isFinite(n) ? n : 0}`,
         );
       }
-      if (onlyInHerd) {
-        q = q.eq("presence_status", 0);
-      } else if (presenceFilter !== "all") {
-        q = q.eq("presence_status", Number(presenceFilter));
+
+      // Quick chip rules
+      switch (quick) {
+        case "in_herd":
+          q = q.eq("presence_status", 0); break;
+        case "wet":
+          q = q.eq("is_dry", false).eq("sextype", "ماده").eq("presence_status", 0); break;
+        case "dry":
+          q = q.eq("is_dry", true).eq("sextype", "ماده").eq("presence_status", 0); break;
+        case "pregnant":
+          q = q.eq("last_fertility_status", 8).eq("sextype", "ماده").eq("presence_status", 0); break;
+        case "inseminated":
+          q = q.eq("last_fertility_status", 3).eq("sextype", "ماده").eq("presence_status", 0); break;
+        case "fresh":
+          q = q.eq("last_fertility_status", 12).eq("sextype", "ماده").eq("presence_status", 0); break;
+        case "male":
+          q = q.eq("sextype", "نر").eq("presence_status", 0); break;
       }
-      if (dryFilter === "dry") q = q.eq("is_dry", true).eq("sextype", "ماده");
-      if (dryFilter === "wet") q = q.eq("is_dry", false).eq("sextype", "ماده");
-      if (fertilityFilter !== "all") {
-        q = q.eq("last_fertility_status", Number(fertilityFilter)).eq("sextype", "ماده");
-      }
-      if (sexFilter === "female") q = q.or("sextype.eq.ماده,sex.eq.0");
-      if (sexFilter === "male") q = q.or("sextype.eq.نر,sex.eq.1");
+
+      if (presenceFilter !== "all") q = q.eq("presence_status", Number(presenceFilter));
+      if (fertilityFilter !== "all") q = q.eq("last_fertility_status", Number(fertilityFilter));
 
       const { data, error } = await q;
       if (cancelled) return;
-      if (error) {
-        console.error(error);
-        setLoading(false);
-        return;
-      }
+      if (error) { console.error(error); setLoading(false); return; }
       const rows = (data ?? []) as Cow[];
       setCows((prev) => (page === 0 ? rows : [...prev, ...rows]));
       setHasMore(rows.length === PAGE_SIZE);
       setLoading(false);
     }
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [page, search, presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter, hasMore]);
+    return () => { cancelled = true; };
+  }, [page, search, quick, presenceFilter, fertilityFilter, hasMore]);
 
   // Infinite scroll
   useEffect(() => {
@@ -118,84 +167,106 @@ export default function Livestock() {
     const el = sentinelRef.current;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loading && hasMore) {
-          setPage((p) => p + 1);
-        }
+        if (entries[0].isIntersecting && !loading && hasMore) setPage((p) => p + 1);
       },
-      { rootMargin: "200px" },
+      { rootMargin: "300px" },
     );
     io.observe(el);
     return () => io.disconnect();
   }, [loading, hasMore]);
 
-  const activeFilterCount = useMemo(() => {
-    let n = 0;
-    if (presenceFilter !== "all") n++;
-    if (onlyInHerd) n++;
-    if (dryFilter !== "all") n++;
-    if (fertilityFilter !== "all") n++;
-    if (sexFilter !== "all") n++;
-    return n;
-  }, [presenceFilter, onlyInHerd, dryFilter, fertilityFilter, sexFilter]);
+  const advancedActive = presenceFilter !== "all" || fertilityFilter !== "all";
+
+  const kpis = useMemo(() => ([
+    { key: "in_herd" as QuickKey, label: "موجود در گله", value: totals.in_herd, icon: Users, tone: "from-emerald-50 to-teal-50" },
+    { key: "wet" as QuickKey, label: "دوشا", value: totals.wet, icon: Droplet, tone: "from-sky-50 to-cyan-50" },
+    { key: "dry" as QuickKey, label: "خشک", value: totals.dry, icon: Droplet, tone: "from-amber-50 to-orange-50" },
+    { key: "pregnant" as QuickKey, label: "آبستن", value: totals.pregnant, icon: Heart, tone: "from-rose-50 to-pink-50" },
+  ]), [totals]);
 
   return (
-    <div className="py-4 space-y-4 animate-fade-in">
-      <div>
-        <h1 className="text-heading text-foreground">مدیریت دام</h1>
-        <p className="text-sm text-muted-foreground mt-1">لیست دام‌ها — برای جزئیات روی هر دام بزنید</p>
+    <div className="livestock-surface -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 space-y-4 animate-fade-in min-h-[calc(100vh-3.5rem)]">
+      {/* Header */}
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <h1 className="text-heading text-foreground">مدیریت دام</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            مجموع: <span className="tabular-nums font-semibold text-foreground">{totals.total.toLocaleString("fa-IR")}</span>
+          </p>
+        </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          inputMode="search"
-          placeholder="جستجو با شماره پلاک"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pr-9"
-        />
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        {kpis.map((k) => {
+          const Icon = k.icon;
+          const active = quick === k.key;
+          return (
+            <button
+              key={k.key}
+              onClick={() => setQuick(active ? "all" : k.key)}
+              className={`kpi-tile bg-gradient-to-br ${k.tone} ${active ? "ring-2 ring-primary/40 border-primary/40" : ""}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="kpi-label">{k.label}</span>
+                <Icon className="w-4 h-4 text-foreground/60" />
+              </div>
+              <span className="kpi-value">{(k.value ?? 0).toLocaleString("fa-IR")}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Quick toggle + filter button */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant={onlyInHerd ? "default" : "outline"}
-          size="sm"
-          onClick={() => setOnlyInHerd((v) => !v)}
-          className="rounded-full"
-        >
-          فقط موجود در گله
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowFilters((v) => !v)}
-          className="rounded-full gap-1"
-        >
-          <Filter className="w-4 h-4" />
-          فیلترها
-          {activeFilterCount > 0 && (
-            <span className="bg-primary text-primary-foreground text-xs rounded-full px-1.5">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
-      </div>
-
-      {showFilters && (
-        <div className="rounded-xl border border-border bg-card p-3 space-y-3 animate-fade-in">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">جنسیت</label>
-            <Select value={sexFilter} onValueChange={setSexFilter}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">همه</SelectItem>
-                <SelectItem value="female">ماده</SelectItem>
-                <SelectItem value="male">نر</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Sticky search */}
+      <div className="sticky top-14 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 backdrop-blur bg-background/80 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              inputMode="search"
+              placeholder="جستجوی فوری با شماره پلاک..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pr-9 pl-9 h-11 rounded-full bg-card"
+            />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput("")}
+                className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted"
+                aria-label="پاک کردن"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            )}
           </div>
+          <Button
+            variant={showAdvanced || advancedActive ? "default" : "outline"}
+            size="icon"
+            className="rounded-full h-11 w-11 shrink-0"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-label="فیلترهای پیشرفته"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Inline chip filters */}
+        <div className="flex gap-2 overflow-x-auto py-2 -mx-1 px-1 scrollbar-hide">
+          {QUICK_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setQuick(f.key)}
+              className={quick === f.key ? "chip-active whitespace-nowrap" : "chip-default whitespace-nowrap"}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Advanced (collapsible, compact) */}
+      {showAdvanced && (
+        <div className="rounded-2xl border border-border bg-card p-3 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">وضعیت حضور</label>
             <Select value={presenceFilter} onValueChange={setPresenceFilter}>
@@ -209,18 +280,7 @@ export default function Livestock() {
             </Select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">وضعیت دوشش (فقط ماده)</label>
-            <Select value={dryFilter} onValueChange={setDryFilter}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">همه</SelectItem>
-                <SelectItem value="wet">فقط دوشا</SelectItem>
-                <SelectItem value="dry">فقط خشک</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">آخرین وضعیت باروری (فقط ماده)</label>
+            <label className="text-xs text-muted-foreground mb-1 block">آخرین وضعیت باروری</label>
             <Select value={fertilityFilter} onValueChange={setFertilityFilter}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -231,27 +291,21 @@ export default function Livestock() {
               </SelectContent>
             </Select>
           </div>
-          {activeFilterCount > 0 && (
+          {advancedActive && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setPresenceFilter("all");
-                setOnlyInHerd(false);
-                setDryFilter("all");
-                setFertilityFilter("all");
-                setSexFilter("all");
-              }}
-              className="w-full"
+              className="sm:col-span-2"
+              onClick={() => { setPresenceFilter("all"); setFertilityFilter("all"); }}
             >
-              پاک کردن فیلترها
+              پاک کردن فیلترهای پیشرفته
             </Button>
           )}
         </div>
       )}
 
-      {/* List */}
-      <div className="space-y-2">
+      {/* Cow grid (hybrid: card on mobile, denser on desktop) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
         {cows.map((c) => {
           const female = isFemale(c.sextype, c.sex);
           const tag = c.tag_number || c.earnumber || c.bodynumber || "—";
@@ -259,22 +313,26 @@ export default function Livestock() {
             <button
               key={c.id}
               onClick={() => navigate(`/livestock/${c.id}`)}
-              className="w-full text-right rounded-xl border border-border bg-card p-4 active:bg-secondary transition-all hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.15)] hover:border-primary/20"
+              className="cow-card group"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-body-lg font-bold text-foreground">#{tag}</span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="cow-tag text-base">#{tag}</span>
                     <span className="text-xs text-muted-foreground">
                       {c.sextype || (c.sex === 0 ? "ماده" : c.sex === 1 ? "نر" : "—")}
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.presence_status)}`}>
                       {presenceLabel(c.presence_status)}
                     </span>
                     {female && (
-                      <span className="text-xs px-2 py-0.5 rounded-full border bg-secondary text-secondary-foreground border-border">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                        c.is_dry
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-sky-50 text-sky-700 border-sky-200"
+                      }`}>
                         {dryLabel(c.is_dry)}
                       </span>
                     )}
@@ -285,27 +343,27 @@ export default function Livestock() {
                     )}
                   </div>
                 </div>
-                <ChevronLeft className="w-5 h-5 text-muted-foreground shrink-0 mt-1" />
+                <ChevronLeft className="w-5 h-5 text-muted-foreground shrink-0 mt-1 group-hover:text-primary transition-colors" />
               </div>
             </button>
           );
         })}
 
         {loading && (
-          <div className="flex items-center justify-center py-6 text-muted-foreground">
+          <div className="col-span-full flex items-center justify-center py-6 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         )}
 
         {!loading && cows.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground text-sm">
+          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
             دامی با این فیلترها یافت نشد
           </div>
         )}
 
-        <div ref={sentinelRef} className="h-6" />
+        <div ref={sentinelRef} className="col-span-full h-6" />
         {!hasMore && cows.length > 0 && (
-          <p className="text-center text-xs text-muted-foreground py-2">پایان لیست</p>
+          <p className="col-span-full text-center text-xs text-muted-foreground py-2">پایان لیست</p>
         )}
       </div>
     </div>

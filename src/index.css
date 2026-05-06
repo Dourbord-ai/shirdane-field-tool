@@ -69,6 +69,26 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
 
     --header-height: 3.5rem;
+
+    /* Module color zoning — livestock (teal/emerald) */
+    --livestock: 168 55% 32%;
+    --livestock-soft: 168 40% 94%;
+    --livestock-ink: 168 45% 22%;
+
+    /* Layered surfaces — reduce eye fatigue */
+    --surface-1: 150 18% 97%;
+    --surface-2: 150 14% 94%;
+    --surface-3: 150 12% 90%;
+
+    /* Status tones */
+    --tone-success: 142 50% 36%;
+    --tone-success-soft: 142 50% 94%;
+    --tone-warn: 38 90% 50%;
+    --tone-warn-soft: 38 90% 94%;
+    --tone-danger: 0 72% 51%;
+    --tone-danger-soft: 0 72% 95%;
+    --tone-info: 210 70% 50%;
+    --tone-info-soft: 210 70% 95%;
   }
 }
 
@@ -110,5 +130,39 @@
   .card-dashboard-orange { @apply hover:border-accent/30; }
   .btn-primary {
     @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  }
+
+  /* Livestock module workspace — calm, layered, operational */
+  .livestock-surface {
+    background:
+      radial-gradient(1200px 400px at 100% -10%, hsl(var(--livestock) / 0.06), transparent 60%),
+      linear-gradient(180deg, hsl(var(--surface-1)), hsl(var(--surface-2)));
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors touch-target min-h-[36px];
+  }
+  .chip-default {
+    @apply chip bg-card border-border text-foreground hover:bg-secondary;
+  }
+  .chip-active {
+    @apply chip border-transparent text-primary-foreground;
+    background: linear-gradient(135deg, hsl(var(--livestock)), hsl(var(--primary)));
+  }
+  .kpi-tile {
+    @apply rounded-2xl border border-border bg-card p-3 sm:p-4 flex flex-col gap-1 transition-all hover:shadow-md hover:border-primary/30 cursor-pointer text-right;
+  }
+  .kpi-value { @apply text-xl sm:text-2xl font-bold tabular-nums text-foreground; }
+  .kpi-label { @apply text-xs text-muted-foreground; }
+
+  .cow-card {
+    @apply rounded-2xl border border-border bg-card p-3 sm:p-4 transition-all text-right
+           hover:border-primary/30 hover:shadow-[0_8px_24px_-12px_hsl(var(--livestock)/0.35)]
+           active:scale-[0.99];
+  }
+  .cow-tag {
+    @apply inline-flex items-center justify-center rounded-xl px-2.5 py-1 font-extrabold tabular-nums;
+    background: linear-gradient(135deg, hsl(var(--livestock-soft)), hsl(var(--surface-2)));
+    color: hsl(var(--livestock-ink));
+    border: 1px solid hsl(var(--livestock) / 0.18);
   }
 }
