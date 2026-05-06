@@ -192,14 +192,13 @@ Deno.serve(async (req) => {
     {
       const r = await supabase
         .from("cows")
-        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+        .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
         .eq("id", cow_id)
         .maybeSingle();
       if (r.error) {
-        // retry without date_of_birth if column missing
         const r2 = await supabase
           .from("cows")
-          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+          .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
           .eq("id", cow_id)
           .maybeSingle();
         cow = r2.data; cowErr = r2.error;
@@ -219,6 +218,31 @@ Deno.serve(async (req) => {
         matched_rule_id: null,
         failed_rules: [],
         ...(debug ? { debug: { cow_id, cow_sex: cow.sex, cow_sextype: cow.sextype, existancestatus: cow.existancestatus } } : {}),
+      });
+    }
+
+    // Determine workflow by livestock type group_id
+    let selected_workflow_id: string | null = null;
+    let group_id_val: number | null = null;
+    if (cow.last_type_id != null) {
+      const { data: typeRow } = await supabase
+        .from("livestock_types")
+        .select("id, group_id, name")
+        .eq("id", cow.last_type_id)
+        .maybeSingle();
+      group_id_val = (typeRow as any)?.group_id ?? null;
+    }
+    if (group_id_val === 2) {
+      selected_workflow_id = "00000000-0000-0000-0000-000000000012";
+    } else if (group_id_val === 6) {
+      selected_workflow_id = "00000000-0000-0000-0000-000000000013";
+    } else {
+      return json({
+        allowed: false,
+        messages: ["این نوع دام مشمول فرآیند باروری نیست"],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: { cow_id, last_type_id: cow.last_type_id, group_id: group_id_val } } : {}),
       });
     }
 
