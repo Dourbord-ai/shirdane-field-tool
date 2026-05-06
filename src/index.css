@@ -69,6 +69,26 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
 
     --header-height: 3.5rem;
+
+    /* Module color zoning — livestock (teal/emerald) */
+    --livestock: 168 55% 32%;
+    --livestock-soft: 168 40% 94%;
+    --livestock-ink: 168 45% 22%;
+
+    /* Layered surfaces — reduce eye fatigue */
+    --surface-1: 150 18% 97%;
+    --surface-2: 150 14% 94%;
+    --surface-3: 150 12% 90%;
+
+    /* Status tones */
+    --tone-success: 142 50% 36%;
+    --tone-success-soft: 142 50% 94%;
+    --tone-warn: 38 90% 50%;
+    --tone-warn-soft: 38 90% 94%;
+    --tone-danger: 0 72% 51%;
+    --tone-danger-soft: 0 72% 95%;
+    --tone-info: 210 70% 50%;
+    --tone-info-soft: 210 70% 95%;
   }
 }
 
