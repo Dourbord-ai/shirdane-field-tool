@@ -53,8 +53,8 @@ const QUICK_FILTERS: { key: QuickKey; label: string }[] = [
 export default function Livestock() {
   const navigate = useNavigate();
   const [cows, setCows] = useState<Cow[]>([]);
-  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number }>(
-    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0 }
+  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; inseminated: number; fresh: number }>(
+    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, inseminated: 0, fresh: 0 }
   );
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
@@ -76,17 +76,20 @@ export default function Livestock() {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // KPI counts
+  // KPI counts — treat NULL presence_status as "in herd" (legacy data)
   useEffect(() => {
     let cancelled = false;
     async function loadKpis() {
+      const inHerd = "presence_status.is.null,presence_status.eq.0";
       const head = (q: any) => q.select("id", { count: "exact", head: true });
-      const [t, h, w, d, p] = await Promise.all([
+      const [t, h, w, d, p, ins, fr] = await Promise.all([
         head(supabase.from("cows")),
-        head(supabase.from("cows")).eq("presence_status", 0),
-        head(supabase.from("cows")).eq("is_dry", false).eq("sextype", "ماده").eq("presence_status", 0),
-        head(supabase.from("cows")).eq("is_dry", true).eq("sextype", "ماده").eq("presence_status", 0),
-        head(supabase.from("cows")).eq("last_fertility_status", 8).eq("sextype", "ماده").eq("presence_status", 0),
+        head(supabase.from("cows")).or(inHerd),
+        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("is_dry", false),
+        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("is_dry", true),
+        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 8),
+        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 3),
+        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 12),
       ]);
       if (cancelled) return;
       setTotals({
@@ -95,6 +98,8 @@ export default function Livestock() {
         wet: w.count ?? 0,
         dry: d.count ?? 0,
         pregnant: p.count ?? 0,
+        inseminated: ins.count ?? 0,
+        fresh: fr.count ?? 0,
       });
     }
     loadKpis();
@@ -128,22 +133,23 @@ export default function Livestock() {
         );
       }
 
-      // Quick chip rules
+      // Quick chip rules — NULL presence_status counts as in_herd
+      const inHerd = "presence_status.is.null,presence_status.eq.0";
       switch (quick) {
         case "in_herd":
-          q = q.eq("presence_status", 0); break;
+          q = q.or(inHerd); break;
         case "wet":
-          q = q.eq("is_dry", false).eq("sextype", "ماده").eq("presence_status", 0); break;
+          q = q.or(inHerd).eq("sextype", "ماده").eq("is_dry", false); break;
         case "dry":
-          q = q.eq("is_dry", true).eq("sextype", "ماده").eq("presence_status", 0); break;
+          q = q.or(inHerd).eq("sextype", "ماده").eq("is_dry", true); break;
         case "pregnant":
-          q = q.eq("last_fertility_status", 8).eq("sextype", "ماده").eq("presence_status", 0); break;
+          q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 8); break;
         case "inseminated":
-          q = q.eq("last_fertility_status", 3).eq("sextype", "ماده").eq("presence_status", 0); break;
+          q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 3); break;
         case "fresh":
-          q = q.eq("last_fertility_status", 12).eq("sextype", "ماده").eq("presence_status", 0); break;
+          q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 12); break;
         case "male":
-          q = q.eq("sextype", "نر").eq("presence_status", 0); break;
+          q = q.or(inHerd).eq("sextype", "نر"); break;
       }
 
       if (presenceFilter !== "all") q = q.eq("presence_status", Number(presenceFilter));
