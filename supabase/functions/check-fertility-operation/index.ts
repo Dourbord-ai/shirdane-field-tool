@@ -490,16 +490,13 @@ function buildContext(
   cow: { id: number; sex: number | null; is_dry: boolean | null; purchase_date: string | null },
 ): Context {
   const evDate = simulated.event_date!;
-  // History = events strictly before the simulated event (so we evaluate the
-  // simulated event against the state produced by everything that came before).
-  const evDay = parseDateToDays(evDate);
+  // History = events strictly before the simulated event datetime.
+  // Same-datetime events are excluded to avoid circular validation.
+  const simKey = eventTimestampKey(simulated);
   const history = timeline.filter((e) => {
     if (!e.event_date) return false;
-    const d = parseDateToDays(e.event_date);
-    if (d == null || evDay == null) return false;
-    if (d < evDay) return true;
-    if (d === evDay && e.id !== simulated.id) return true;
-    return false;
+    if (e.id === simulated.id) return false;
+    return eventTimestampKey(e) < simKey;
   });
 
   const findLastByOps = (ops: number[]) => {
