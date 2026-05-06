@@ -48,12 +48,19 @@ const FEMALE_ONLY_OPS = new Set<number>([
 
 function isFemaleCow(sex: unknown, sextype?: unknown): boolean {
   if (sex === 1 || sex === "1") return true;
-  if (sex === 0 || sex === "0") return true;
-  const s = String(sex ?? "").trim().toLowerCase();
-  if (s === "female" || s === "ماده" || s === "f") return true;
+  if (sex === 0 || sex === "0") return false;
   const st = String(sextype ?? "").trim().toLowerCase();
   if (st === "ماده" || st === "female" || st === "f") return true;
   return false;
+}
+
+function normalizeTime(t: unknown): string {
+  if (!t) return "00:00:00";
+  return String(t).slice(0, 8);
+}
+
+function eventTimestampKey(e: { event_date: string | null; event_time: string | null }): string {
+  return `${e.event_date ?? "0000-00-00"}T${normalizeTime(e.event_time)}`;
 }
 
 interface Body {
@@ -185,14 +192,13 @@ Deno.serve(async (req) => {
     {
       const r = await supabase
         .from("cows")
-        .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+        .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
         .eq("id", cow_id)
         .maybeSingle();
       if (r.error) {
-        // retry without date_of_birth if column missing
         const r2 = await supabase
           .from("cows")
-          .select("id, sex, sextype, existancestatus, last_fertility_status, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+          .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
           .eq("id", cow_id)
           .maybeSingle();
         cow = r2.data; cowErr = r2.error;
@@ -215,6 +221,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Determine workflow by livestock type group_id
+    let selected_workflow_id: string | null = null;
+    let group_id_val: number | null = null;
+    if (cow.last_type_id != null) {
+      const { data: typeRow } = await supabase
+        .from("livestock_types")
+        .select("id, group_id, name")
+        .eq("id", cow.last_type_id)
+        .maybeSingle();
+      group_id_val = (typeRow as any)?.group_id ?? null;
+    }
+    if (group_id_val === 2) {
+      selected_workflow_id = "00000000-0000-0000-0000-000000000012";
+    } else if (group_id_val === 6) {
+      selected_workflow_id = "00000000-0000-0000-0000-000000000013";
+    } else {
+      return json({
+        allowed: false,
+        messages: ["این نوع دام مشمول فرآیند باروری نیست"],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: { cow_id, last_type_id: cow.last_type_id, group_id: group_id_val } } : {}),
+      });
+    }
+
     // --- 2) Load reference data
     const [statusesRes, eventsRes] = await Promise.all([
       supabase.from("fertility_statuses").select("id, name, pregnancy_state, milking_state, is_abortion"),
@@ -223,7 +254,8 @@ Deno.serve(async (req) => {
         .select("id, livestock_id, fertility_operation_id, fertility_status_id, event_date, event_time, is_cancelled, metadata")
         .eq("livestock_id", cow_id)
         .eq("is_cancelled", false)
-        .order("event_date", { ascending: true }),
+        .order("event_date", { ascending: true })
+        .order("event_time", { ascending: true }),
     ]);
 
     if (statusesRes.error || eventsRes.error) {
@@ -242,7 +274,7 @@ Deno.serve(async (req) => {
       fertility_operation_id: op_id,
       fertility_status_id: body.fertility_status_id ?? null,
       event_date: event_date,
-      event_time: null,
+      event_time: normalizeTime(body.event_time ?? "00:00:00"),
       is_cancelled: false,
       metadata: {},
     };
@@ -253,20 +285,23 @@ Deno.serve(async (req) => {
       timeline = timeline.filter((e) => e.id !== body.event_id);
       timeline.push(simulated);
     } else {
-      // insert: duplicate same op same date => block
+      // insert: duplicate same op same date+time => block
       const dup = timeline.some(
-        (e) => e.fertility_operation_id === op_id && e.event_date === event_date,
+        (e) =>
+          e.fertility_operation_id === op_id &&
+          e.event_date === event_date &&
+          normalizeTime(e.event_time) === normalizeTime(body.event_time ?? "00:00:00"),
       );
       if (dup) {
-        return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ ثبت شده است"] });
+        return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ و ساعت ثبت شده است"] });
       }
       timeline.push(simulated);
     }
 
     timeline.sort((a, b) => {
-      const da = parseDateToDays(a.event_date);
-      const db = parseDateToDays(b.event_date);
-      return (da ?? 0) - (db ?? 0);
+      const ka = eventTimestampKey(a);
+      const kb = eventTimestampKey(b);
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
 
     // --- 3.5) Load latest weight (best-effort; table may not exist)
@@ -290,23 +325,15 @@ Deno.serve(async (req) => {
     ctx.weight = weightVal;
     ctx.date_of_birth = (cow as any)?.date_of_birth ?? null;
 
-    // --- 5) Load active workflows for this cow's category
-    const cowCategory = inferCategory(cow, ctx);
+    // --- 5) Load the selected workflow only
     const { data: wfRows, error: wfErr } = await supabase
       .from("breeding_workflows")
       .select("id, name, category, start_date, end_date, is_active")
+      .eq("id", selected_workflow_id)
       .eq("is_active", true);
     if (wfErr) return json({ allowed: false, messages: ["خطا در بازیابی ورکفلوها"] }, 500);
 
-    const workflows: Workflow[] = ((wfRows ?? []) as Workflow[]).filter((w) => {
-      if (w.category !== 0 && w.category !== cowCategory) return false;
-      const ed = parseDateToDays(event_date);
-      const sd = parseDateToDays(w.start_date);
-      const edw = parseDateToDays(w.end_date);
-      if (sd != null && ed != null && ed < sd) return false;
-      if (edw != null && ed != null && ed > edw) return false;
-      return true;
-    });
+    const workflows: Workflow[] = (wfRows ?? []) as Workflow[];
 
     const debugPayload = () => ({
       lastErotic: ctx.lastErotic,
@@ -463,16 +490,13 @@ function buildContext(
   cow: { id: number; sex: number | null; is_dry: boolean | null; purchase_date: string | null },
 ): Context {
   const evDate = simulated.event_date!;
-  // History = events strictly before the simulated event (so we evaluate the
-  // simulated event against the state produced by everything that came before).
-  const evDay = parseDateToDays(evDate);
+  // History = events strictly before the simulated event datetime.
+  // Same-datetime events are excluded to avoid circular validation.
+  const simKey = eventTimestampKey(simulated);
   const history = timeline.filter((e) => {
     if (!e.event_date) return false;
-    const d = parseDateToDays(e.event_date);
-    if (d == null || evDay == null) return false;
-    if (d < evDay) return true;
-    if (d === evDay && e.id !== simulated.id) return true;
-    return false;
+    if (e.id === simulated.id) return false;
+    return eventTimestampKey(e) < simKey;
   });
 
   const findLastByOps = (ops: number[]) => {
@@ -506,9 +530,9 @@ function buildContext(
       if (lastFertilityStatus) break;
     }
   }
-  // Fallback to cow.last_fertility_status if no event-based status
-  if (!lastFertilityStatus && (cow as any).last_fertility_status != null) {
-    lastFertilityStatus = statusById.get(Number((cow as any).last_fertility_status)) ?? null;
+  // Fallback: status id = 1 ("بدون وضعیت") when no prior event has status
+  if (!lastFertilityStatus) {
+    lastFertilityStatus = statusById.get(1) ?? null;
   }
 
   const pregnancy_state = lastFertilityStatus?.pregnancy_state ?? "unknown";
