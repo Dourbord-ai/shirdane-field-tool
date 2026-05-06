@@ -530,9 +530,9 @@ function buildContext(
       if (lastFertilityStatus) break;
     }
   }
-  // Fallback to cow.last_fertility_status if no event-based status
-  if (!lastFertilityStatus && (cow as any).last_fertility_status != null) {
-    lastFertilityStatus = statusById.get(Number((cow as any).last_fertility_status)) ?? null;
+  // Fallback: status id = 1 ("بدون وضعیت") when no prior event has status
+  if (!lastFertilityStatus) {
+    lastFertilityStatus = statusById.get(1) ?? null;
   }
 
   const pregnancy_state = lastFertilityStatus?.pregnancy_state ?? "unknown";
