@@ -254,7 +254,8 @@ Deno.serve(async (req) => {
         .select("id, livestock_id, fertility_operation_id, fertility_status_id, event_date, event_time, is_cancelled, metadata")
         .eq("livestock_id", cow_id)
         .eq("is_cancelled", false)
-        .order("event_date", { ascending: true }),
+        .order("event_date", { ascending: true })
+        .order("event_time", { ascending: true }),
     ]);
 
     if (statusesRes.error || eventsRes.error) {
@@ -273,7 +274,7 @@ Deno.serve(async (req) => {
       fertility_operation_id: op_id,
       fertility_status_id: body.fertility_status_id ?? null,
       event_date: event_date,
-      event_time: null,
+      event_time: normalizeTime(body.event_time ?? "00:00:00"),
       is_cancelled: false,
       metadata: {},
     };
@@ -284,20 +285,23 @@ Deno.serve(async (req) => {
       timeline = timeline.filter((e) => e.id !== body.event_id);
       timeline.push(simulated);
     } else {
-      // insert: duplicate same op same date => block
+      // insert: duplicate same op same date+time => block
       const dup = timeline.some(
-        (e) => e.fertility_operation_id === op_id && e.event_date === event_date,
+        (e) =>
+          e.fertility_operation_id === op_id &&
+          e.event_date === event_date &&
+          normalizeTime(e.event_time) === normalizeTime(body.event_time ?? "00:00:00"),
       );
       if (dup) {
-        return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ ثبت شده است"] });
+        return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ و ساعت ثبت شده است"] });
       }
       timeline.push(simulated);
     }
 
     timeline.sort((a, b) => {
-      const da = parseDateToDays(a.event_date);
-      const db = parseDateToDays(b.event_date);
-      return (da ?? 0) - (db ?? 0);
+      const ka = eventTimestampKey(a);
+      const kb = eventTimestampKey(b);
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
 
     // --- 3.5) Load latest weight (best-effort; table may not exist)
@@ -321,23 +325,15 @@ Deno.serve(async (req) => {
     ctx.weight = weightVal;
     ctx.date_of_birth = (cow as any)?.date_of_birth ?? null;
 
-    // --- 5) Load active workflows for this cow's category
-    const cowCategory = inferCategory(cow, ctx);
+    // --- 5) Load the selected workflow only
     const { data: wfRows, error: wfErr } = await supabase
       .from("breeding_workflows")
       .select("id, name, category, start_date, end_date, is_active")
+      .eq("id", selected_workflow_id)
       .eq("is_active", true);
     if (wfErr) return json({ allowed: false, messages: ["خطا در بازیابی ورکفلوها"] }, 500);
 
-    const workflows: Workflow[] = ((wfRows ?? []) as Workflow[]).filter((w) => {
-      if (w.category !== 0 && w.category !== cowCategory) return false;
-      const ed = parseDateToDays(event_date);
-      const sd = parseDateToDays(w.start_date);
-      const edw = parseDateToDays(w.end_date);
-      if (sd != null && ed != null && ed < sd) return false;
-      if (edw != null && ed != null && ed > edw) return false;
-      return true;
-    });
+    const workflows: Workflow[] = (wfRows ?? []) as Workflow[];
 
     const debugPayload = () => ({
       lastErotic: ctx.lastErotic,
