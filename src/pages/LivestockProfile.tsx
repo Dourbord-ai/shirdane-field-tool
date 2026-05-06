@@ -221,14 +221,18 @@ export default function LivestockProfile() {
 
       {/* Fertility tabs (female only) */}
       {female && (
-        <FertilitySection
-          livestockId={cow.id}
-          latestStatus={cow.last_fertility_status}
-        />
+        <div id="fertility-section">
+          <FertilitySection
+            livestockId={cow.id}
+            latestStatus={cow.last_fertility_status}
+          />
+        </div>
       )}
 
       {/* Cow history tabs */}
-      <CowHistoryTabs cowId={cow.id} />
+      <div id="history-section">
+        <CowHistoryTabs cowId={cow.id} />
+      </div>
 
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
         <Section title="اطلاعات اولیه قبل از ورود به دامداری">
