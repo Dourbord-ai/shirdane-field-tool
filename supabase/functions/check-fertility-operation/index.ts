@@ -48,12 +48,19 @@ const FEMALE_ONLY_OPS = new Set<number>([
 
 function isFemaleCow(sex: unknown, sextype?: unknown): boolean {
   if (sex === 1 || sex === "1") return true;
-  if (sex === 0 || sex === "0") return true;
-  const s = String(sex ?? "").trim().toLowerCase();
-  if (s === "female" || s === "ماده" || s === "f") return true;
+  if (sex === 0 || sex === "0") return false;
   const st = String(sextype ?? "").trim().toLowerCase();
   if (st === "ماده" || st === "female" || st === "f") return true;
   return false;
+}
+
+function normalizeTime(t: unknown): string {
+  if (!t) return "00:00:00";
+  return String(t).slice(0, 8);
+}
+
+function eventTimestampKey(e: { event_date: string | null; event_time: string | null }): string {
+  return `${e.event_date ?? "0000-00-00"}T${normalizeTime(e.event_time)}`;
 }
 
 interface Body {
