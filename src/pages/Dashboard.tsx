@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell } from "lucide-react";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell, Layers, Tag, CircleDot, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 
@@ -179,25 +179,31 @@ export default function Dashboard() {
                   <ClipboardList className="w-5 h-5" />
                   مشاهده لیست دام‌ها
                 </Button>
-                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+                <div className="rounded-2xl border border-border bg-muted/30 p-3 space-y-2">
                   <p className="text-sm font-bold text-muted-foreground px-1">تنظیمات پایه دام</p>
-                  {[
-                    { title: "گروه‌های دام", route: "/admin/livestock-groups" },
-                    { title: "انواع دام", route: "/admin/livestock-types" },
-                    { title: "وضعیت‌های دام", route: "/admin/livestock-statuses" },
-                    { title: "بهاربند / جایگاه دام", route: "/admin/livestock-locations" },
-                  ].map((it) => (
-                    <Button
-                      key={it.route}
-                      onClick={() => navigate(it.route)}
-                      variant="outline"
-                      className="w-full touch-target rounded-xl gap-2 text-body font-bold justify-start"
-                      size="lg"
-                    >
-                      <Settings className="w-5 h-5" />
-                      {it.title}
-                    </Button>
-                  ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { title: "گروه‌های دام", description: "دسته‌بندی کلی", route: "/admin/livestock-groups", icon: Layers },
+                      { title: "انواع دام", description: "گاو، گوساله، تلیسه…", route: "/admin/livestock-types", icon: Tag },
+                      { title: "وضعیت‌های دام", description: "حضور و عملیاتی", route: "/admin/livestock-statuses", icon: CircleDot },
+                      { title: "بهاربند / جایگاه", description: "مکان فیزیکی", route: "/admin/livestock-locations", icon: Home },
+                    ].map((it) => (
+                      <button
+                        key={it.route}
+                        onClick={() => navigate(it.route)}
+                        className="settings-tile flex-col items-start sm:flex-row"
+                        aria-label={it.title}
+                      >
+                        <span className="settings-tile-icon">
+                          <it.icon className="w-5 h-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-foreground">{it.title}</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{it.description}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
