@@ -37,7 +37,7 @@ type Cow = {
   created_at: string;
 };
 
-type QuickKey = "all" | "in_herd" | "wet" | "dry" | "pregnant" | "inseminated" | "fresh" | "male";
+type QuickKey = "all" | "in_herd" | "wet" | "dry" | "pregnant" | "inseminated" | "fresh" | "male" | "female";
 
 const QUICK_FILTERS: { key: QuickKey; label: string }[] = [
   { key: "all", label: "همه" },
@@ -47,6 +47,7 @@ const QUICK_FILTERS: { key: QuickKey; label: string }[] = [
   { key: "pregnant", label: "آبستن" },
   { key: "inseminated", label: "تلقیح شده" },
   { key: "fresh", label: "تازه‌زا" },
+  { key: "female", label: "ماده" },
   { key: "male", label: "نر" },
 ];
 
@@ -150,6 +151,8 @@ export default function Livestock() {
           q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 12); break;
         case "male":
           q = q.or(inHerd).eq("sextype", "نر"); break;
+        case "female":
+          q = q.or(inHerd).eq("sextype", "ماده"); break;
       }
 
       if (presenceFilter !== "all") q = q.eq("presence_status", Number(presenceFilter));
