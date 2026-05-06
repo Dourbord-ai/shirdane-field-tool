@@ -8,7 +8,7 @@ import {
   isFemale,
   dryLabel,
 } from "@/lib/livestock";
-import { Loader2, History } from "lucide-react";
+import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart } from "lucide-react";
 import FertilitySection from "@/components/livestock/FertilitySection";
 import CowHistoryTabs from "@/components/livestock/CowHistoryTabs";
 
@@ -131,21 +131,67 @@ export default function LivestockProfile() {
   const inHerd = cow.presence_status === 0;
 
   return (
-    <div className="py-4 space-y-4 animate-fade-in">
-      {/* Header card */}
-      <div className="rounded-xl bg-primary/5 border border-primary/10 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted-foreground">شماره پلاک</p>
-            <h1 className="text-heading text-foreground mt-0.5">#{tag}</h1>
+    <div className="py-4 space-y-4 animate-fade-in livestock-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen">
+      {/* Back */}
+      <button
+        onClick={() => navigate("/livestock")}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowRight className="w-4 h-4" />
+        بازگشت به لیست دام‌ها
+      </button>
+
+      {/* Hero */}
+      <div className="cow-hero">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">شماره پلاک</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="cow-hero-tag">#{tag}</h1>
+              <span className={`text-xs px-2.5 py-1 rounded-full border ${presenceBadgeClass(cow.presence_status)}`}>
+                {presenceLabel(cow.presence_status)}
+              </span>
+              {female && (
+                <span className="chip-default">
+                  {dryLabel(cow.is_dry)}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground mt-1">
               {cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")}
+              {female && cow.last_fertility_status != null && (
+                <> • {fertilityLabel(cow.last_fertility_status)}</>
+              )}
             </p>
           </div>
-          <span className={`text-xs px-2.5 py-1 rounded-full border ${presenceBadgeClass(cow.presence_status)}`}>
-            {presenceLabel(cow.presence_status)}
-          </span>
         </div>
+
+        {/* Quick actions */}
+        {inHerd && (
+          <div className="grid grid-cols-4 gap-2 mt-4">
+            {female && (
+              <button className="quick-action" onClick={() => document.getElementById("fertility-section")?.scrollIntoView({ behavior: "smooth" })}>
+                <span className="quick-action-icon"><HeartPulse className="w-5 h-5" /></span>
+                <span className="text-xs font-medium">باروری</span>
+              </button>
+            )}
+            <button className="quick-action" onClick={() => document.getElementById("history-section")?.scrollIntoView({ behavior: "smooth" })}>
+              <span className="quick-action-icon"><Activity className="w-5 h-5" /></span>
+              <span className="text-xs font-medium">تاریخچه</span>
+            </button>
+            {female && (
+              <button className="quick-action">
+                <span className="quick-action-icon"><Milk className="w-5 h-5" /></span>
+                <span className="text-xs font-medium">دوشش</span>
+              </button>
+            )}
+            <button className="quick-action">
+              <span className="quick-action-icon"><ShoppingCart className="w-5 h-5" /></span>
+              <span className="text-xs font-medium">خرید</span>
+            </button>
+          </div>
+        )}
+
         {!inHerd && (
           <p className="mt-3 text-xs text-muted-foreground bg-muted/50 rounded-md px-2 py-1.5">
             این دام از گله خارج شده است — عملیات فروش، تلفات، کشتار یا خروج مجدد قابل ثبت نیست.
@@ -175,14 +221,18 @@ export default function LivestockProfile() {
 
       {/* Fertility tabs (female only) */}
       {female && (
-        <FertilitySection
-          livestockId={cow.id}
-          latestStatus={cow.last_fertility_status}
-        />
+        <div id="fertility-section">
+          <FertilitySection
+            livestockId={cow.id}
+            latestStatus={cow.last_fertility_status}
+          />
+        </div>
       )}
 
       {/* Cow history tabs */}
-      <CowHistoryTabs cowId={cow.id} />
+      <div id="history-section">
+        <CowHistoryTabs cowId={cow.id} />
+      </div>
 
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
         <Section title="اطلاعات اولیه قبل از ورود به دامداری">

@@ -63,8 +63,12 @@ export default function FertilityTimeline() {
   });
 
   return (
-    <div className="py-6 space-y-4 animate-fade-in" dir="rtl">
-      <h1 className="text-heading text-foreground">تایم‌لاین باروری دام</h1>
+    <div className="py-6 space-y-4 animate-fade-in fertility-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen" dir="rtl">
+      <div className="fertility-hero">
+        <p className="text-xs text-muted-foreground">ماژول باروری</p>
+        <h1 className="text-heading text-foreground mt-1">تایم‌لاین باروری دام</h1>
+        <p className="text-sm text-muted-foreground mt-1">مشاهده زمانی رویدادهای فحلی، تلقیح، آبستنی و زایش</p>
+      </div>
 
       <div className="rounded-xl bg-card border border-border p-4 space-y-2">
         <Label>انتخاب دام</Label>
