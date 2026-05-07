@@ -3,6 +3,7 @@
 // produce the same query.
 
 import { PRESENCE_STATUS_LABELS, FERTILITY_STATUS_LABELS } from "@/lib/livestock";
+import { IN_HERD_OR_STRING } from "@/lib/cowPresence";
 
 export type FilterCategory = "presence" | "milking" | "fertility" | "sex";
 
