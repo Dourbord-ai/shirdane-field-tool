@@ -341,7 +341,6 @@ Deno.serve(async (req) => {
     // --- 4) Build context up to (and including) the simulated event date
     const ctx = buildContext(timeline, simulated, statusById, cow);
     ctx.weight = weightVal;
-    ctx.date_of_birth = (cow as any)?.date_of_birth ?? null;
 
     // --- 5) Load the selected workflow only
     const { data: wfRows, error: wfErr } = await supabase
