@@ -33,7 +33,7 @@ type MaleCow = {
   tag_number: string | null;
   earnumber: number | null;
   bodynumber: number | null;
-  presence_status: number | null;
+  existancestatus: number | null;
 };
 
 type Props = {
@@ -149,7 +149,7 @@ export default function InseminationRegistrationDialog({
         supabase.from("sperms").select("id, code, name").order("name"),
         supabase
           .from("cows")
-          .select("id, tag_number, earnumber, bodynumber, presence_status, sex, sextype")
+          .select("id, tag_number, earnumber, bodynumber, existancestatus, sex, sextype")
           .or("sex.eq.2,sextype.eq.نر")
           .limit(1000),
       ]);
@@ -158,8 +158,8 @@ export default function InseminationRegistrationDialog({
       setSperms(((spermsRes.data as any[]) ?? []) as SpermRow[]);
       const cows = ((cowsRes.data as any[]) ?? []) as MaleCow[];
       cows.sort((a, b) => {
-        const ap = a.presence_status === 0 ? 0 : 1;
-        const bp = b.presence_status === 0 ? 0 : 1;
+        const ap = (a.existancestatus ?? 0) === 0 ? 0 : 1;
+        const bp = (b.existancestatus ?? 0) === 0 ? 0 : 1;
         return ap - bp;
       });
       setMaleCows(cows);
@@ -352,7 +352,7 @@ export default function InseminationRegistrationDialog({
                     {maleCows.map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>
                         {maleCowLabel(c)}
-                        {c.presence_status === 0 ? "" : "  (غایب)"}
+                        {(c.existancestatus ?? 0) === 0 ? "" : "  (غایب)"}
                       </SelectItem>
                     ))}
                   </SelectContent>
