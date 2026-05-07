@@ -274,14 +274,25 @@ Deno.serve(async (req) => {
 
     let timeline: FertilityEvent[] = (eventsRes.data ?? []) as FertilityEvent[];
 
+    // For delete mode: derive op_id / event_date from the existing event
+    if (mode === "delete") {
+      const existing = timeline.find((e) => e.id === body.event_id);
+      if (!existing) {
+        return json({ allowed: false, messages: ["رویداد موردنظر برای حذف یافت نشد"] }, 404);
+      }
+      op_id = existing.fertility_operation_id ?? op_id;
+      event_date = existing.event_date ?? event_date;
+      event_time = existing.event_time ?? event_time;
+    }
+
     // --- 3) Simulate the new event into the timeline
     const simulated: FertilityEvent = {
       id: body.event_id ?? "__simulated__",
       livestock_id: cow_id,
       fertility_operation_id: op_id,
       fertility_status_id: body.fertility_status_id ?? null,
-      event_date: event_date,
-      event_time: normalizeTime(body.event_time ?? "00:00:00"),
+      event_date: event_date!,
+      event_time: normalizeTime(event_time ?? "00:00:00"),
       is_cancelled: false,
       metadata: {},
     };
@@ -297,7 +308,7 @@ Deno.serve(async (req) => {
         (e) =>
           e.fertility_operation_id === op_id &&
           e.event_date === event_date &&
-          normalizeTime(e.event_time) === normalizeTime(body.event_time ?? "00:00:00"),
+          normalizeTime(e.event_time) === normalizeTime(event_time ?? "00:00:00"),
       );
       if (dup) {
         return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ و ساعت ثبت شده است"] });
