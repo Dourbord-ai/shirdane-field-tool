@@ -119,15 +119,15 @@ export function applyFilters(q: any, selectedIds: Iterable<string>) {
 function optToOrParts(opt: FilterOption): string[] {
   switch (opt.id) {
     case "presence:in_herd":
-      return ["presence_status.is.null", "presence_status.eq.0"];
+      return ["existancestatus.is.null", "existancestatus.eq.0"];
     case "presence:sold":
-      return ["presence_status.eq.1"];
+      return ["existancestatus.eq.1"];
     case "presence:died":
-      return ["presence_status.eq.2"];
+      return ["existancestatus.eq.2"];
     case "presence:slaughtered":
-      return ["presence_status.eq.3"];
+      return ["existancestatus.eq.3"];
     case "presence:other_exit":
-      return ["presence_status.eq.4"];
+      return ["existancestatus.eq.4"];
     case "milking:wet":
       return ["is_dry.eq.false"];
     case "milking:dry":
