@@ -16,9 +16,9 @@ export type FilterOption = {
   apply: (q: any) => any;
 };
 
-// Special "in herd" token: presence_status IS NULL OR = 0.
-// (legacy rows have NULL — must be treated as in herd)
-const IN_HERD_OR = "presence_status.is.null,presence_status.eq.0";
+// Single source of truth: cows.existancestatus.
+//   0 (or NULL) → in herd; 1 sold, 2 died, 3 slaughtered, 4 other.
+const IN_HERD_OR = IN_HERD_OR_STRING;
 
 // --- builders ---------------------------------------------------------------
 
@@ -31,10 +31,10 @@ const presenceOpt = (key: string, label: string, apply: FilterOption["apply"]): 
 
 export const PRESENCE_OPTIONS: FilterOption[] = [
   presenceOpt("in_herd", PRESENCE_STATUS_LABELS[0], (q) => q.or(IN_HERD_OR)),
-  presenceOpt("sold", PRESENCE_STATUS_LABELS[1], (q) => q.eq("presence_status", 1)),
-  presenceOpt("died", PRESENCE_STATUS_LABELS[2], (q) => q.eq("presence_status", 2)),
-  presenceOpt("slaughtered", PRESENCE_STATUS_LABELS[3], (q) => q.eq("presence_status", 3)),
-  presenceOpt("other_exit", PRESENCE_STATUS_LABELS[4], (q) => q.eq("presence_status", 4)),
+  presenceOpt("sold", PRESENCE_STATUS_LABELS[1], (q) => q.eq("existancestatus", 1)),
+  presenceOpt("died", PRESENCE_STATUS_LABELS[2], (q) => q.eq("existancestatus", 2)),
+  presenceOpt("slaughtered", PRESENCE_STATUS_LABELS[3], (q) => q.eq("existancestatus", 3)),
+  presenceOpt("other_exit", PRESENCE_STATUS_LABELS[4], (q) => q.eq("existancestatus", 4)),
 ];
 
 export const MILKING_OPTIONS: FilterOption[] = [
