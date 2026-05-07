@@ -149,7 +149,7 @@ export default function Livestock() {
       let q = supabase
         .from("cows")
         .select(
-          "id,tag_number,earnumber,bodynumber,sextype,sex,presence_status,is_dry,last_fertility_status,created_at",
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,last_fertility_status,created_at",
         )
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
