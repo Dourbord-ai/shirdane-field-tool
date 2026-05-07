@@ -131,7 +131,6 @@ export default function CreateCalvesFromCalvingDialog({
         sex: isFemale ? 0 : 1,
         sextype: isFemale ? "ماده" : "نر",
         existancestatus: isDead ? 2 : 0,
-        existancestatus: isDead ? 0 : 1,
         last_fertility_status: null,
         is_dry: isFemale ? null : null,
       };
