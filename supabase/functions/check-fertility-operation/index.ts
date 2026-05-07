@@ -167,16 +167,23 @@ Deno.serve(async (req) => {
   try {
     const body = (await req.json()) as Body;
     const cow_id = Number(body.cow_id ?? body.livestock_id);
-    const op_id = Number(body.fertility_operation_id);
-    const event_date = body.event_date;
+    let op_id = Number(body.fertility_operation_id);
+    let event_date = body.event_date;
+    let event_time = body.event_time ?? null;
     const mode = body.mode ?? "insert";
     const debug = !!body.debug;
 
-    if (!cow_id || !op_id || !event_date) {
-      return json({ allowed: false, messages: ["اطلاعات ورودی ناقص است"] }, 400);
-    }
-    if ((mode === "update" || mode === "delete") && !body.event_id) {
-      return json({ allowed: false, messages: ["شناسه رویداد برای ویرایش/حذف الزامی است"] }, 400);
+    if (mode === "delete") {
+      if (!cow_id || !body.event_id) {
+        return json({ allowed: false, messages: ["برای حذف، شناسه دام و شناسه رویداد الزامی است"] }, 400);
+      }
+    } else {
+      if (!cow_id || !op_id || !event_date) {
+        return json({ allowed: false, messages: ["اطلاعات ورودی ناقص است"] }, 400);
+      }
+      if (mode === "update" && !body.event_id) {
+        return json({ allowed: false, messages: ["شناسه رویداد برای ویرایش الزامی است"] }, 400);
+      }
     }
 
     const supabase = createClient(
@@ -267,14 +274,25 @@ Deno.serve(async (req) => {
 
     let timeline: FertilityEvent[] = (eventsRes.data ?? []) as FertilityEvent[];
 
+    // For delete mode: derive op_id / event_date from the existing event
+    if (mode === "delete") {
+      const existing = timeline.find((e) => e.id === body.event_id);
+      if (!existing) {
+        return json({ allowed: false, messages: ["رویداد موردنظر برای حذف یافت نشد"] }, 404);
+      }
+      op_id = existing.fertility_operation_id ?? op_id;
+      event_date = existing.event_date ?? event_date;
+      event_time = existing.event_time ?? event_time;
+    }
+
     // --- 3) Simulate the new event into the timeline
     const simulated: FertilityEvent = {
       id: body.event_id ?? "__simulated__",
       livestock_id: cow_id,
       fertility_operation_id: op_id,
       fertility_status_id: body.fertility_status_id ?? null,
-      event_date: event_date,
-      event_time: normalizeTime(body.event_time ?? "00:00:00"),
+      event_date: event_date!,
+      event_time: normalizeTime(event_time ?? "00:00:00"),
       is_cancelled: false,
       metadata: {},
     };
@@ -290,7 +308,7 @@ Deno.serve(async (req) => {
         (e) =>
           e.fertility_operation_id === op_id &&
           e.event_date === event_date &&
-          normalizeTime(e.event_time) === normalizeTime(body.event_time ?? "00:00:00"),
+          normalizeTime(e.event_time) === normalizeTime(event_time ?? "00:00:00"),
       );
       if (dup) {
         return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ و ساعت ثبت شده است"] });
@@ -323,17 +341,15 @@ Deno.serve(async (req) => {
     // --- 4) Build context up to (and including) the simulated event date
     const ctx = buildContext(timeline, simulated, statusById, cow);
     ctx.weight = weightVal;
-    ctx.date_of_birth = (cow as any)?.date_of_birth ?? null;
 
     // --- 5) Load the selected workflow only
     const { data: wfRows, error: wfErr } = await supabase
       .from("breeding_workflows")
       .select("id, name, category, start_date, end_date, is_active")
-      .eq("id", selected_workflow_id)
-      .eq("is_active", true);
+      .eq("id", selected_workflow_id);
     if (wfErr) return json({ allowed: false, messages: ["خطا در بازیابی ورکفلوها"] }, 500);
 
-    const workflows: Workflow[] = (wfRows ?? []) as Workflow[];
+    const allWorkflows: Workflow[] = (wfRows ?? []) as Workflow[];
 
     const debugPayload = () => ({
       lastErotic: ctx.lastErotic,
@@ -345,10 +361,21 @@ Deno.serve(async (req) => {
       milking_state: ctx.milking_state,
     });
 
+    if (allWorkflows.length === 0) {
+      return json({
+        allowed: false,
+        messages: ["ورکفلو باروری این نوع دام تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
+      });
+    }
+
+    const workflows = allWorkflows.filter((w) => w.is_active);
     if (workflows.length === 0) {
       return json({
-        allowed: true,
-        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        allowed: false,
+        messages: ["ورکفلو باروری این نوع دام فعال نیست."],
         matched_rule_id: null,
         failed_rules: [],
         ...(debug ? { debug: debugPayload() } : {}),
@@ -369,8 +396,8 @@ Deno.serve(async (req) => {
 
     if (rules.length === 0) {
       return json({
-        allowed: true,
-        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        allowed: false,
+        messages: ["برای این عملیات در ورکفلو این دام قانون فعالی تعریف نشده است."],
         matched_rule_id: null,
         failed_rules: [],
         ...(debug ? { debug: debugPayload() } : {}),
@@ -583,7 +610,7 @@ function buildContext(
     dateOfPregnancy,
     weight: null,
     milkAvg: null,
-    date_of_birth: null,
+    date_of_birth: (cow as any)?.date_of_birth ?? null,
     history,
   };
 }
