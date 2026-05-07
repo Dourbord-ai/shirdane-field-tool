@@ -39,8 +39,7 @@ export const fertilityLabel = (s: number | null | undefined) =>
 
 // Kept for backwards compatibility — delegates to the canonical helper in cowPresence.ts.
 export const isFemale = (sextype: string | null | undefined, sex?: number | null) =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require("@/lib/cowPresence").isFemaleCow({ sex: sex ?? null, sextype: sextype ?? null });
+  isFemaleCow({ sex: sex ?? null, sextype: sextype ?? null });
 
 export const dryLabel = (isDry: boolean | null | undefined) =>
   isDry == null ? "—" : isDry ? "خشک" : "دوشا";
