@@ -3,6 +3,7 @@
 // produce the same query.
 
 import { PRESENCE_STATUS_LABELS, FERTILITY_STATUS_LABELS } from "@/lib/livestock";
+import { IN_HERD_OR_STRING } from "@/lib/cowPresence";
 
 export type FilterCategory = "presence" | "milking" | "fertility" | "sex";
 
@@ -15,9 +16,9 @@ export type FilterOption = {
   apply: (q: any) => any;
 };
 
-// Special "in herd" token: presence_status IS NULL OR = 0.
-// (legacy rows have NULL — must be treated as in herd)
-const IN_HERD_OR = "presence_status.is.null,presence_status.eq.0";
+// Single source of truth: cows.existancestatus.
+//   0 (or NULL) → in herd; 1 sold, 2 died, 3 slaughtered, 4 other.
+const IN_HERD_OR = IN_HERD_OR_STRING;
 
 // --- builders ---------------------------------------------------------------
 
@@ -30,10 +31,10 @@ const presenceOpt = (key: string, label: string, apply: FilterOption["apply"]): 
 
 export const PRESENCE_OPTIONS: FilterOption[] = [
   presenceOpt("in_herd", PRESENCE_STATUS_LABELS[0], (q) => q.or(IN_HERD_OR)),
-  presenceOpt("sold", PRESENCE_STATUS_LABELS[1], (q) => q.eq("presence_status", 1)),
-  presenceOpt("died", PRESENCE_STATUS_LABELS[2], (q) => q.eq("presence_status", 2)),
-  presenceOpt("slaughtered", PRESENCE_STATUS_LABELS[3], (q) => q.eq("presence_status", 3)),
-  presenceOpt("other_exit", PRESENCE_STATUS_LABELS[4], (q) => q.eq("presence_status", 4)),
+  presenceOpt("sold", PRESENCE_STATUS_LABELS[1], (q) => q.eq("existancestatus", 1)),
+  presenceOpt("died", PRESENCE_STATUS_LABELS[2], (q) => q.eq("existancestatus", 2)),
+  presenceOpt("slaughtered", PRESENCE_STATUS_LABELS[3], (q) => q.eq("existancestatus", 3)),
+  presenceOpt("other_exit", PRESENCE_STATUS_LABELS[4], (q) => q.eq("existancestatus", 4)),
 ];
 
 export const MILKING_OPTIONS: FilterOption[] = [
@@ -118,15 +119,15 @@ export function applyFilters(q: any, selectedIds: Iterable<string>) {
 function optToOrParts(opt: FilterOption): string[] {
   switch (opt.id) {
     case "presence:in_herd":
-      return ["presence_status.is.null", "presence_status.eq.0"];
+      return ["existancestatus.is.null", "existancestatus.eq.0"];
     case "presence:sold":
-      return ["presence_status.eq.1"];
+      return ["existancestatus.eq.1"];
     case "presence:died":
-      return ["presence_status.eq.2"];
+      return ["existancestatus.eq.2"];
     case "presence:slaughtered":
-      return ["presence_status.eq.3"];
+      return ["existancestatus.eq.3"];
     case "presence:other_exit":
-      return ["presence_status.eq.4"];
+      return ["existancestatus.eq.4"];
     case "milking:wet":
       return ["is_dry.eq.false"];
     case "milking:dry":

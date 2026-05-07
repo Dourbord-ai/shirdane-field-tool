@@ -38,13 +38,13 @@ type Cow = {
   bodynumber: number | null;
   sextype: string | null;
   sex: number | null;
-  presence_status: number | null;
+  existancestatus: number | null;
   is_dry: boolean | null;
   last_fertility_status: number | null;
   created_at: string;
 };
 
-const IN_HERD_OR = "presence_status.is.null,presence_status.eq.0";
+import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 
 export default function Livestock() {
   const navigate = useNavigate();
@@ -149,7 +149,7 @@ export default function Livestock() {
       let q = supabase
         .from("cows")
         .select(
-          "id,tag_number,earnumber,bodynumber,sextype,sex,presence_status,is_dry,last_fertility_status,created_at",
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,last_fertility_status,created_at",
         )
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
@@ -371,8 +371,8 @@ export default function Livestock() {
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.presence_status)}`}>
-                      {presenceLabel(c.presence_status)}
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.existancestatus ?? 0)}`}>
+                      {presenceLabel(c.existancestatus ?? 0)}
                     </span>
                     {female && (
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${
