@@ -172,11 +172,17 @@ Deno.serve(async (req) => {
     const mode = body.mode ?? "insert";
     const debug = !!body.debug;
 
-    if (!cow_id || !op_id || !event_date) {
-      return json({ allowed: false, messages: ["اطلاعات ورودی ناقص است"] }, 400);
-    }
-    if ((mode === "update" || mode === "delete") && !body.event_id) {
-      return json({ allowed: false, messages: ["شناسه رویداد برای ویرایش/حذف الزامی است"] }, 400);
+    if (mode === "delete") {
+      if (!cow_id || !body.event_id) {
+        return json({ allowed: false, messages: ["برای حذف، شناسه دام و شناسه رویداد الزامی است"] }, 400);
+      }
+    } else {
+      if (!cow_id || !op_id || !event_date) {
+        return json({ allowed: false, messages: ["اطلاعات ورودی ناقص است"] }, 400);
+      }
+      if (mode === "update" && !body.event_id) {
+        return json({ allowed: false, messages: ["شناسه رویداد برای ویرایش الزامی است"] }, 400);
+      }
     }
 
     const supabase = createClient(
