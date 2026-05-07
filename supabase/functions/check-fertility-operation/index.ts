@@ -215,8 +215,16 @@ Deno.serve(async (req) => {
     }
     if (cowErr) return json({ allowed: false, messages: ["خطا در بازیابی اطلاعات دام"] }, 500);
     if (!cow) return json({ allowed: false, messages: ["دام یافت نشد"] });
-    if (cow.existancestatus !== 1) {
-      return json({ allowed: false, messages: ["این دام در گله موجود نیست و نمی‌توان عملیات باروری ثبت کرد"] });
+    // Single source of truth for "in herd": existancestatus IS NULL or = 0.
+    // (1=sold, 2=died, 3=slaughtered, 4=other_exit are NOT in herd.)
+    const existance = (cow as any).existancestatus;
+    const presentInHerd = existance == null || existance === 0;
+    if (!presentInHerd) {
+      return json({
+        allowed: false,
+        messages: ["این دام در گله موجود نیست و نمی‌توان عملیات باروری ثبت کرد"],
+        ...(debug ? { debug: { cow_id, existancestatus: existance } } : {}),
+      });
     }
     if (FEMALE_ONLY_OPS.has(op_id) && !isFemaleCow(cow.sex, cow.sextype)) {
       return json({
