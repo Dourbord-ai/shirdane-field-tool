@@ -128,7 +128,7 @@ export default function LivestockProfile() {
 
   const female = isFemale(cow.sextype, cow.sex);
   const tag = cow.tag_number || cow.earnumber || cow.bodynumber || "—";
-  const inHerd = cow.presence_status === 0;
+  const inHerd = (cow.existancestatus ?? 0) === 0;
 
   return (
     <div className="py-4 space-y-4 animate-fade-in livestock-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen">
@@ -148,8 +148,8 @@ export default function LivestockProfile() {
             <p className="text-xs text-muted-foreground">شماره پلاک</p>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="cow-hero-tag">#{tag}</h1>
-              <span className={`text-xs px-2.5 py-1 rounded-full border ${presenceBadgeClass(cow.presence_status)}`}>
-                {presenceLabel(cow.presence_status)}
+              <span className={`text-xs px-2.5 py-1 rounded-full border ${presenceBadgeClass((cow.existancestatus ?? 0))}`}>
+                {presenceLabel((cow.existancestatus ?? 0))}
               </span>
               {female && (
                 <span className="chip-default">
@@ -204,7 +204,7 @@ export default function LivestockProfile() {
         <Row label="شماره پلاک" value={tag} />
         <Row label="نوع دام" value="گاو" />
         <Row label="جنسیت" value={cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")} />
-        <Row label="وضعیت حضور" value={presenceLabel(cow.presence_status)} />
+        <Row label="وضعیت حضور" value={presenceLabel((cow.existancestatus ?? 0))} />
         <Row
           label="تاریخ ورود"
           value={cow.created_at ? new Date(cow.created_at).toLocaleDateString("fa-IR") : "—"}
