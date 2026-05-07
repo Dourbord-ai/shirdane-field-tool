@@ -53,7 +53,7 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "dry_off", label: "خشک کردن" },
   { key: "prescription", label: "درمان / نسخه" },
   { key: "rinse_clean", label: "شستشو و کلین تست" },
-  { key: "sync", label: "همزمان‌سازی فحلی" },
+  { key: "sync", label: "پروتکل همزمان‌سازی" },
 ];
 
 function EventCard({
@@ -224,7 +224,7 @@ const ACTION_GROUPS: { title: string; actions: { key: ActionKey; label: string }
       { key: "rinse", label: "ثبت شستشو" },
       { key: "clean_test", label: "ثبت کلین تست" },
       { key: "prescription", label: "ثبت درمان / نسخه" },
-      { key: "sync", label: "ثبت همزمان‌سازی فحلی" },
+      { key: "sync", label: "شروع پروتکل همزمان‌سازی" },
     ],
   },
 ];

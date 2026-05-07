@@ -2,7 +2,7 @@ import SimpleCrudTable from "@/components/admin/SimpleCrudTable";
 export default function SyncTypesAdmin() {
   return (
     <SimpleCrudTable
-      title="انواع همزمان‌سازی"
+      title="پروتکل‌های همزمان‌سازی باروری"
       table="sync_types"
       fields={[
         { key: "name", label: "نام", required: true },
