@@ -610,7 +610,7 @@ function buildContext(
     dateOfPregnancy,
     weight: null,
     milkAvg: null,
-    date_of_birth: null,
+    date_of_birth: (cow as any)?.date_of_birth ?? null,
     history,
   };
 }
