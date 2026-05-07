@@ -130,7 +130,7 @@ export default function CreateCalvesFromCalvingDialog({
         bodynumber: bodyNum && !isNaN(bodyNum) ? bodyNum : null,
         sex: isFemale ? 0 : 1,
         sextype: isFemale ? "ماده" : "نر",
-        presence_status: isDead ? 2 : 0,
+        existancestatus: isDead ? 2 : 0,
         existancestatus: isDead ? 0 : 1,
         last_fertility_status: null,
         is_dry: isFemale ? null : null,
