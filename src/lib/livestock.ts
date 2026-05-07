@@ -1,4 +1,5 @@
 // Livestock domain constants & helpers
+import { isFemaleCow } from "@/lib/cowPresence";
 
 export const PRESENCE_STATUS_LABELS: Record<number, string> = {
   0: "موجود در گله",
@@ -36,8 +37,9 @@ export const presenceLabel = (s: number | null | undefined) =>
 export const fertilityLabel = (s: number | null | undefined) =>
   s == null ? "—" : FERTILITY_STATUS_LABELS[s] ?? "نامشخص";
 
+// Kept for backwards compatibility — delegates to the canonical helper in cowPresence.ts.
 export const isFemale = (sextype: string | null | undefined, sex?: number | null) =>
-  sextype === "ماده" || sex === 0;
+  isFemaleCow({ sex: sex ?? null, sextype: sextype ?? null });
 
 export const dryLabel = (isDry: boolean | null | undefined) =>
   isDry == null ? "—" : isDry ? "خشک" : "دوشا";

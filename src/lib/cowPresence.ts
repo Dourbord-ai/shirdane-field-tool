@@ -41,3 +41,30 @@ export const EXISTANCE_LABELS: Record<number, string> = {
 
 export const existanceLabel = (v: number | null | undefined) =>
   v == null ? "موجود در گله" : EXISTANCE_LABELS[v] ?? "نامشخص";
+
+// ─── Sex (single source of truth) ────────────────────────────────────────────
+// Verified against DB: cows.sex = 0 → ماده (female), cows.sex = 1 → نر (male).
+// `sextype` is the display label (may be NULL). `sex` is canonical.
+export type CowSexFields = {
+  sex?: number | null;
+  sextype?: string | null;
+};
+
+export function isFemaleCow(cow: CowSexFields | null | undefined): boolean {
+  if (!cow) return false;
+  if (cow.sex === 0) return true;
+  if (cow.sex === 1) return false;
+  if (cow.sextype === "ماده") return true;
+  return false;
+}
+
+export function isMaleCow(cow: CowSexFields | null | undefined): boolean {
+  if (!cow) return false;
+  if (cow.sex === 1) return true;
+  if (cow.sex === 0) return false;
+  if (cow.sextype === "نر") return true;
+  return false;
+}
+
+export const sexLabel = (cow: CowSexFields | null | undefined) =>
+  isFemaleCow(cow) ? "ماده" : isMaleCow(cow) ? "نر" : "نامشخص";
