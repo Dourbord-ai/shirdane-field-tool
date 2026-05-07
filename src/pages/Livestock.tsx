@@ -38,13 +38,13 @@ type Cow = {
   bodynumber: number | null;
   sextype: string | null;
   sex: number | null;
-  presence_status: number | null;
+  existancestatus: number | null;
   is_dry: boolean | null;
   last_fertility_status: number | null;
   created_at: string;
 };
 
-const IN_HERD_OR = "presence_status.is.null,presence_status.eq.0";
+import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 
 export default function Livestock() {
   const navigate = useNavigate();
