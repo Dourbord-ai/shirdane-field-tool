@@ -1,4 +1,5 @@
 // Livestock domain constants & helpers
+import { isFemaleCow } from "@/lib/cowPresence";
 
 export const PRESENCE_STATUS_LABELS: Record<number, string> = {
   0: "موجود در گله",
