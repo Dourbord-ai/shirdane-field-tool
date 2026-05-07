@@ -10,6 +10,13 @@ import {
   isFemale,
   dryLabel,
 } from "@/lib/livestock";
+import {
+  QUICK_CHIPS,
+  applyFilters,
+  getOption,
+  presenceIdFromStatus,
+  fertilityIdFromStatus,
+} from "@/lib/livestockFilters";
 import { toEnDigits } from "@/lib/digits";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,19 +44,7 @@ type Cow = {
   created_at: string;
 };
 
-type QuickKey = "all" | "in_herd" | "wet" | "dry" | "pregnant" | "inseminated" | "fresh" | "male" | "female";
-
-const QUICK_FILTERS: { key: QuickKey; label: string }[] = [
-  { key: "all", label: "همه" },
-  { key: "in_herd", label: "موجود در گله" },
-  { key: "wet", label: "دوشا" },
-  { key: "dry", label: "خشک" },
-  { key: "pregnant", label: "آبستن" },
-  { key: "inseminated", label: "تلقیح شده" },
-  { key: "fresh", label: "تازه‌زا" },
-  { key: "female", label: "ماده" },
-  { key: "male", label: "نر" },
-];
+const IN_HERD_OR = "presence_status.is.null,presence_status.eq.0";
 
 export default function Livestock() {
   const navigate = useNavigate();
@@ -69,28 +64,60 @@ export default function Livestock() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // filters
-  const [quick, setQuick] = useState<QuickKey>("in_herd");
-  const [presenceFilter, setPresenceFilter] = useState<string>("all");
-  const [fertilityFilter, setFertilityFilter] = useState<string>("all");
+  // -------- Unified filter state --------
+  // Single source of truth: a Set of filter ids (e.g. "presence:in_herd").
+  // Both quick chips and advanced dropdowns write into this set.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(["presence:in_herd"]),
+  );
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const selectedKey = useMemo(() => Array.from(selected).sort().join("|"), [selected]);
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Advanced single-select dropdown helpers: replace any existing id in the
+  // same category so the dropdown always reflects exactly one choice.
+  const setSingleInCategory = (prefix: string, id: string | null) => {
+    setSelected((prev) => {
+      const next = new Set(Array.from(prev).filter((x) => !x.startsWith(prefix)));
+      if (id) next.add(id);
+      return next;
+    });
+  };
+
+  const presenceFilter = useMemo(() => {
+    const id = Array.from(selected).find((x) => x.startsWith("presence:"));
+    return id ? id.split(":")[1] : "all";
+  }, [selectedKey]);
+
+  const fertilityFilter = useMemo(() => {
+    const id = Array.from(selected).find((x) => x.startsWith("fertility:"));
+    return id ? id.split(":")[1] : "all";
+  }, [selectedKey]);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // KPI counts — treat NULL presence_status as "in herd" (legacy data)
+  // KPI counts — treat NULL presence_status as "in herd"
   useEffect(() => {
     let cancelled = false;
     async function loadKpis() {
-      const inHerd = "presence_status.is.null,presence_status.eq.0";
       const head = (q: any) => q.select("id", { count: "exact", head: true });
       const [t, h, w, d, p, ins, fr] = await Promise.all([
         head(supabase.from("cows")),
-        head(supabase.from("cows")).or(inHerd),
-        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("is_dry", false),
-        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("is_dry", true),
-        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 8),
-        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 3),
-        head(supabase.from("cows")).or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 12),
+        head(supabase.from("cows")).or(IN_HERD_OR),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", false),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 8),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 3),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 12),
       ]);
       if (cancelled) return;
       setTotals({
@@ -112,7 +139,7 @@ export default function Livestock() {
     setCows([]);
     setPage(0);
     setHasMore(true);
-  }, [search, quick, presenceFilter, fertilityFilter]);
+  }, [search, selectedKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,29 +161,8 @@ export default function Livestock() {
         );
       }
 
-      // Quick chip rules — NULL presence_status counts as in_herd
-      const inHerd = "presence_status.is.null,presence_status.eq.0";
-      switch (quick) {
-        case "in_herd":
-          q = q.or(inHerd); break;
-        case "wet":
-          q = q.or(inHerd).eq("sextype", "ماده").eq("is_dry", false); break;
-        case "dry":
-          q = q.or(inHerd).eq("sextype", "ماده").eq("is_dry", true); break;
-        case "pregnant":
-          q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 8); break;
-        case "inseminated":
-          q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 3); break;
-        case "fresh":
-          q = q.or(inHerd).eq("sextype", "ماده").eq("last_fertility_status", 12); break;
-        case "male":
-          q = q.or(inHerd).eq("sextype", "نر"); break;
-        case "female":
-          q = q.or(inHerd).eq("sextype", "ماده"); break;
-      }
-
-      if (presenceFilter !== "all") q = q.eq("presence_status", Number(presenceFilter));
-      if (fertilityFilter !== "all") q = q.eq("last_fertility_status", Number(fertilityFilter));
+      // Single shared filter pipeline — used by both quick chips and advanced
+      q = applyFilters(q, selected);
 
       const { data, error } = await q;
       if (cancelled) return;
@@ -168,7 +174,7 @@ export default function Livestock() {
     }
     load();
     return () => { cancelled = true; };
-  }, [page, search, quick, presenceFilter, fertilityFilter, hasMore]);
+  }, [page, search, selectedKey, hasMore]);
 
   // Infinite scroll
   useEffect(() => {
@@ -184,14 +190,19 @@ export default function Livestock() {
     return () => io.disconnect();
   }, [loading, hasMore]);
 
-  const advancedActive = presenceFilter !== "all" || fertilityFilter !== "all";
-
   const kpis = useMemo(() => ([
-    { key: "in_herd" as QuickKey, label: "موجود در گله", value: totals.in_herd, icon: Users, tone: "from-emerald-50 to-teal-50" },
-    { key: "wet" as QuickKey, label: "دوشا", value: totals.wet, icon: Droplet, tone: "from-sky-50 to-cyan-50" },
-    { key: "dry" as QuickKey, label: "خشک", value: totals.dry, icon: Droplet, tone: "from-amber-50 to-orange-50" },
-    { key: "pregnant" as QuickKey, label: "آبستن", value: totals.pregnant, icon: Heart, tone: "from-rose-50 to-pink-50" },
+    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd, icon: Users, tone: "from-emerald-50 to-teal-50" },
+    { id: "milking:wet", label: "دوشا", value: totals.wet, icon: Droplet, tone: "from-sky-50 to-cyan-50" },
+    { id: "milking:dry", label: "خشک", value: totals.dry, icon: Droplet, tone: "from-amber-50 to-orange-50" },
+    { id: "fertility:8", label: "آبستن", value: totals.pregnant, icon: Heart, tone: "from-rose-50 to-pink-50" },
   ]), [totals]);
+
+  const selectedList = useMemo(
+    () => Array.from(selected).map((id) => ({ id, opt: getOption(id) })).filter((x) => x.opt),
+    [selectedKey],
+  );
+
+  const clearAll = () => setSelected(new Set());
 
   return (
     <div className="livestock-surface -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 space-y-4 animate-fade-in min-h-[calc(100vh-3.5rem)]">
@@ -209,11 +220,11 @@ export default function Livestock() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {kpis.map((k) => {
           const Icon = k.icon;
-          const active = quick === k.key;
+          const active = selected.has(k.id);
           return (
             <button
-              key={k.key}
-              onClick={() => setQuick(active ? "all" : k.key)}
+              key={k.id}
+              onClick={() => toggle(k.id)}
               className={`kpi-tile bg-gradient-to-br ${k.tone} ${active ? "ring-2 ring-primary/40 border-primary/40" : ""}`}
             >
               <div className="flex items-center justify-between">
@@ -249,7 +260,7 @@ export default function Livestock() {
             )}
           </div>
           <Button
-            variant={showAdvanced || advancedActive ? "default" : "outline"}
+            variant={showAdvanced ? "default" : "outline"}
             size="icon"
             className="rounded-full h-11 w-11 shrink-0"
             onClick={() => setShowAdvanced((v) => !v)}
@@ -259,26 +270,58 @@ export default function Livestock() {
           </Button>
         </div>
 
-        {/* Inline chip filters */}
+        {/* Multi-select shortcut chips */}
         <div className="flex gap-2 overflow-x-auto py-2 -mx-1 px-1 scrollbar-hide">
-          {QUICK_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setQuick(f.key)}
-              className={quick === f.key ? "chip-active whitespace-nowrap" : "chip-default whitespace-nowrap"}
-            >
-              {f.label}
-            </button>
-          ))}
+          {QUICK_CHIPS.map((f) => {
+            const active = selected.has(f.id);
+            return (
+              <button
+                key={f.id}
+                onClick={() => toggle(f.id)}
+                aria-pressed={active}
+                className={`${active ? "chip-active" : "chip-default"} whitespace-nowrap`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      {/* Selected filter summary */}
+      {selectedList.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">فیلترهای فعال:</span>
+          {selectedList.map(({ id, opt }) => (
+            <button
+              key={id}
+              onClick={() => toggle(id)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs hover:bg-primary/15"
+            >
+              {opt!.label}
+              <X className="w-3 h-3" />
+            </button>
+          ))}
+          <button
+            onClick={clearAll}
+            className="text-xs text-muted-foreground hover:text-destructive underline-offset-2 hover:underline mr-1"
+          >
+            پاک کردن همه فیلترها
+          </button>
+        </div>
+      )}
 
       {/* Advanced (collapsible, compact) */}
       {showAdvanced && (
         <div className="rounded-2xl border border-border bg-card p-3 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">وضعیت حضور</label>
-            <Select value={presenceFilter} onValueChange={setPresenceFilter}>
+            <Select
+              value={presenceFilter}
+              onValueChange={(v) =>
+                setSingleInCategory("presence:", v === "all" ? null : presenceIdFromStatus(v))
+              }
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">همه</SelectItem>
@@ -290,7 +333,12 @@ export default function Livestock() {
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">آخرین وضعیت باروری</label>
-            <Select value={fertilityFilter} onValueChange={setFertilityFilter}>
+            <Select
+              value={fertilityFilter}
+              onValueChange={(v) =>
+                setSingleInCategory("fertility:", v === "all" ? null : fertilityIdFromStatus(v))
+              }
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">همه</SelectItem>
@@ -300,20 +348,10 @@ export default function Livestock() {
               </SelectContent>
             </Select>
           </div>
-          {advancedActive && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="sm:col-span-2"
-              onClick={() => { setPresenceFilter("all"); setFertilityFilter("all"); }}
-            >
-              پاک کردن فیلترهای پیشرفته
-            </Button>
-          )}
         </div>
       )}
 
-      {/* Cow grid (hybrid: card on mobile, denser on desktop) */}
+      {/* Cow grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
         {cows.map((c) => {
           const female = isFemale(c.sextype, c.sex);
