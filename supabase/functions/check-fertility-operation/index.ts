@@ -347,11 +347,10 @@ Deno.serve(async (req) => {
     const { data: wfRows, error: wfErr } = await supabase
       .from("breeding_workflows")
       .select("id, name, category, start_date, end_date, is_active")
-      .eq("id", selected_workflow_id)
-      .eq("is_active", true);
+      .eq("id", selected_workflow_id);
     if (wfErr) return json({ allowed: false, messages: ["خطا در بازیابی ورکفلوها"] }, 500);
 
-    const workflows: Workflow[] = (wfRows ?? []) as Workflow[];
+    const allWorkflows: Workflow[] = (wfRows ?? []) as Workflow[];
 
     const debugPayload = () => ({
       lastErotic: ctx.lastErotic,
@@ -363,10 +362,21 @@ Deno.serve(async (req) => {
       milking_state: ctx.milking_state,
     });
 
+    if (allWorkflows.length === 0) {
+      return json({
+        allowed: false,
+        messages: ["ورکفلو باروری این نوع دام تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
+      });
+    }
+
+    const workflows = allWorkflows.filter((w) => w.is_active);
     if (workflows.length === 0) {
       return json({
-        allowed: true,
-        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        allowed: false,
+        messages: ["ورکفلو باروری این نوع دام فعال نیست."],
         matched_rule_id: null,
         failed_rules: [],
         ...(debug ? { debug: debugPayload() } : {}),
@@ -387,8 +397,8 @@ Deno.serve(async (req) => {
 
     if (rules.length === 0) {
       return json({
-        allowed: true,
-        messages: ["برای این عملیات قانون فعالی تعریف نشده است."],
+        allowed: false,
+        messages: ["برای این عملیات در ورکفلو این دام قانون فعالی تعریف نشده است."],
         matched_rule_id: null,
         failed_rules: [],
         ...(debug ? { debug: debugPayload() } : {}),
