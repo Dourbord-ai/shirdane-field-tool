@@ -371,8 +371,8 @@ export default function Livestock() {
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.presence_status)}`}>
-                      {presenceLabel(c.presence_status)}
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.existancestatus ?? 0)}`}>
+                      {presenceLabel(c.existancestatus ?? 0)}
                     </span>
                     {female && (
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${
