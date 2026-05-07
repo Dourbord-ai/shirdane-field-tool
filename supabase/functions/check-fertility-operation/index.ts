@@ -46,11 +46,16 @@ const FEMALE_ONLY_OPS = new Set<number>([
   OP.Birth, OP.Dry, OP.Rinse, OP.CleanTest, OP.Pregnancy3, OP.Pregnancy4, OP.Sync,
 ]);
 
+// Single source of truth for cow sex in this project (verified against DB):
+//   cows.sex = 0  ⇔  sextype = "ماده"  (female)
+//   cows.sex = 1  ⇔  sextype = "نر"    (male)
+// sextype is the human label and may be NULL; sex is the canonical numeric field.
 function isFemaleCow(sex: unknown, sextype?: unknown): boolean {
-  if (sex === 1 || sex === "1") return true;
-  if (sex === 0 || sex === "0") return false;
-  const st = String(sextype ?? "").trim().toLowerCase();
-  if (st === "ماده" || st === "female" || st === "f") return true;
+  if (sex === 0 || sex === "0") return true;
+  if (sex === 1 || sex === "1") return false;
+  const st = String(sextype ?? "").trim();
+  if (st === "ماده") return true;
+  if (st === "نر") return false;
   return false;
 }
 
