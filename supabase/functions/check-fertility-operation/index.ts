@@ -167,8 +167,9 @@ Deno.serve(async (req) => {
   try {
     const body = (await req.json()) as Body;
     const cow_id = Number(body.cow_id ?? body.livestock_id);
-    const op_id = Number(body.fertility_operation_id);
-    const event_date = body.event_date;
+    let op_id = Number(body.fertility_operation_id);
+    let event_date = body.event_date;
+    let event_time = body.event_time ?? null;
     const mode = body.mode ?? "insert";
     const debug = !!body.debug;
 
