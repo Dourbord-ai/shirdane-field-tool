@@ -95,25 +95,26 @@ function jalaliToGregorianDays(jy: number, jm: number, jd: number): number {
   return days;
 }
 
+function gregorianDateToDays(y: number, m: number, d: number): number {
+  return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+}
+
 function parseDateToDays(s: string | null | undefined): number | null {
   if (!s) return null;
   // Strip time part if present
-  const datePart = s.trim().split(/[ T]/)[0];
-  // Jalali like 1403/05/12 or 1403-05-12
-  const jm = datePart.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-  if (jm) {
-    const y = Number(jm[1]);
-    const mo = Number(jm[2]);
-    const d = Number(jm[3]);
-    if (y >= 1300 && y <= 1500) {
-      return jalaliToGregorianDays(y, mo, d);
-    }
-    // Gregorian
-    const t = Date.parse(`${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
-    if (!Number.isNaN(t)) return Math.round(t / 86_400_000);
+  const datePart = String(s).trim().split(/[ T]/)[0];
+  const m = datePart.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (y >= 1300 && y <= 1500) {
+    return jalaliToGregorianDays(y, mo, d);
   }
-  const t = Date.parse(datePart);
-  if (!Number.isNaN(t)) return Math.round(t / 86_400_000);
+  if (y > 1900) {
+    return gregorianDateToDays(y, mo, d);
+  }
   return null;
 }
 
