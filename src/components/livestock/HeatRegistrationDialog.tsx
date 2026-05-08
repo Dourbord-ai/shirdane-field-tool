@@ -209,6 +209,7 @@ export default function HeatRegistrationDialog({
       return;
     }
 
+    await syncCowFertilityCache(livestockId);
     toast.success("فحلی با موفقیت ثبت شد");
     reset();
     onOpenChange(false);
