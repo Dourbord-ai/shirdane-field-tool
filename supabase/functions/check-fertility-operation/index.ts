@@ -81,9 +81,9 @@ interface Body {
   debug?: boolean;
 }
 
-// ---------- Jalali date helpers (mirror src/lib/jalali.ts) ----------
-function jalaliToGregorianDays(jy: number, jm: number, jd: number): number {
-  // returns absolute day number (used only for diff)
+// ---------- Date helpers — unified to Unix-epoch days ----------
+// Convert Jalali (Shamsi) y/m/d to Gregorian {year, month, day}
+function jalaliToGregorian(jy: number, jm: number, jd: number): { year: number; month: number; day: number } {
   let jy2 = jy + 1595;
   let days =
     -355668 +
@@ -92,16 +92,33 @@ function jalaliToGregorianDays(jy: number, jm: number, jd: number): number {
     Math.floor(((jy2 % 33) + 3) / 4) +
     jd +
     (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
-  return days;
+  let gy = 400 * Math.floor(days / 146097);
+  days %= 146097;
+  if (days > 36524) {
+    gy += 100 * Math.floor(--days / 36524);
+    days %= 36524;
+    if (days >= 365) days++;
+  }
+  gy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) {
+    gy += Math.floor((days - 1) / 365);
+    days = (days - 1) % 365;
+  }
+  let gd = days + 1;
+  const sal_a = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gm = 0;
+  for (gm = 0; gm < 13 && gd > sal_a[gm]; gm++) gd -= sal_a[gm];
+  return { year: gy, month: gm, day: gd };
 }
 
 function gregorianDateToDays(y: number, m: number, d: number): number {
   return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
 }
 
+// Unified parser: ALWAYS returns Unix-epoch days regardless of calendar.
 function parseDateToDays(s: string | null | undefined): number | null {
   if (!s) return null;
-  // Strip time part if present
   const datePart = String(s).trim().split(/[ T]/)[0];
   const m = datePart.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
   if (!m) return null;
@@ -110,7 +127,8 @@ function parseDateToDays(s: string | null | undefined): number | null {
   const d = Number(m[3]);
   if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
   if (y >= 1300 && y <= 1500) {
-    return jalaliToGregorianDays(y, mo, d);
+    const g = jalaliToGregorian(y, mo, d);
+    return gregorianDateToDays(g.year, g.month, g.day);
   }
   if (y > 1900) {
     return gregorianDateToDays(y, mo, d);
