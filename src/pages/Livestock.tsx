@@ -270,8 +270,13 @@ export default function Livestock() {
           </Button>
         </div>
 
-        {/* Multi-select shortcut chips */}
-        <div className="flex gap-2 overflow-x-auto py-2 -mx-1 px-1 scrollbar-hide">
+        {/* Multi-select shortcut chips — horizontally scrollable on mobile */}
+        <div
+          className="chips-scroller"
+          dir="rtl"
+          role="listbox"
+          aria-label="فیلترهای سریع"
+        >
           {QUICK_CHIPS.map((f) => {
             const active = selected.has(f.id);
             return (
@@ -279,6 +284,8 @@ export default function Livestock() {
                 key={f.id}
                 onClick={() => toggle(f.id)}
                 aria-pressed={active}
+                role="option"
+                aria-selected={active}
                 className={`${active ? "chip-active" : "chip-default"} whitespace-nowrap`}
               >
                 {f.label}
