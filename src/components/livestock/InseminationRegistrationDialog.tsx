@@ -299,6 +299,7 @@ export default function InseminationRegistrationDialog({
       return;
     }
 
+    await syncCowFertilityCache(livestockId);
     toast.success("تلقیح با موفقیت ثبت شد");
     reset();
     onOpenChange(false);
