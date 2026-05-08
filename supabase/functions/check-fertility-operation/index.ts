@@ -392,11 +392,21 @@ Deno.serve(async (req) => {
           : null;
       return {
         cow_id,
+        op_id,
         event_date: ctx.event_date,
+        event_time: simulated.event_time,
         cow_date_of_birth: ctx.date_of_birth,
         parsed_birth_days,
         parsed_event_days,
         calculated_age_days,
+        history_count: ctx.history.length,
+        history_events: ctx.history.map((e) => ({
+          id: e.id,
+          operation_id: e.fertility_operation_id,
+          status_id: e.fertility_status_id,
+          event_date: e.event_date,
+          event_time: e.event_time,
+        })),
         lastErotic: ctx.lastErotic,
         lastInoculation: ctx.lastInoculation,
         lastSync: ctx.lastSync,
