@@ -79,11 +79,15 @@ export default function LivestockProfile() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       if (!id) return;
-      setLoading(true);
+      if (refreshKey === 0) setLoading(true);
       const numId = Number(id);
       const [{ data: cowData, error: cowErr }, { data: evData }] = await Promise.all([
         supabase.from("cows").select("*").eq("id", numId).maybeSingle(),
@@ -93,6 +97,7 @@ export default function LivestockProfile() {
           .eq("cow_id", numId)
           .order("created_at", { ascending: false }),
       ]);
+      if (cancelled) return;
       if (cowErr || !cowData) {
         setNotFound(true);
       } else {
@@ -102,6 +107,36 @@ export default function LivestockProfile() {
       setLoading(false);
     }
     load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refreshKey]);
+
+  // Realtime: subscribe to changes for this cow + its fertility events
+  useEffect(() => {
+    if (!id) return;
+    const numId = Number(id);
+    const channel = supabase
+      .channel(`cow-profile-${numId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "cows", filter: `id=eq.${numId}` },
+        () => refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "livestock_fertility_events", filter: `livestock_id=eq.${numId}` },
+        () => refresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "livestock_events", filter: `cow_id=eq.${numId}` },
+        () => refresh(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   if (loading) {
