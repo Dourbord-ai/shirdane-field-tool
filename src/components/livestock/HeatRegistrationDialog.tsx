@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { checkFertilityOperation } from "@/lib/fertilityValidation";
 import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 
 type HeatType = { id: number; title: string };
 type AppUser = { id: string; full_name: string | null; username: string };
