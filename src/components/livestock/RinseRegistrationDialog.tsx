@@ -135,6 +135,7 @@ export default function RinseRegistrationDialog({
       return;
     }
 
+    await syncCowFertilityCache(livestockId);
     toast.success("شستشو با موفقیت ثبت شد");
     reset();
     onOpenChange(false);

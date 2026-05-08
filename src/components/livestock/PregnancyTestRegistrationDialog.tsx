@@ -180,6 +180,7 @@ export default function PregnancyTestRegistrationDialog({
       return;
     }
 
+    await syncCowFertilityCache(livestockId);
     toast.success("تست آبستنی با موفقیت ثبت شد");
     reset();
     onOpenChange(false);

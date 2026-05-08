@@ -153,6 +153,7 @@ export default function CleanTestRegistrationDialog({
       return;
     }
 
+    await syncCowFertilityCache(livestockId);
     toast.success("کلین تست با موفقیت ثبت شد");
     reset();
     onOpenChange(false);

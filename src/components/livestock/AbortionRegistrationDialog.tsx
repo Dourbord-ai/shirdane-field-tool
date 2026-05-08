@@ -151,6 +151,7 @@ export default function AbortionRegistrationDialog({
     if (cowErr) {
       toast.error("سقط ثبت شد ولی به‌روزرسانی دام انجام نشد: " + cowErr.message);
     } else {
+      await syncCowFertilityCache(livestockId);
       toast.success("سقط با موفقیت ثبت شد");
     }
 
