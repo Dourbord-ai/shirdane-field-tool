@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 import {
   Dialog,
   DialogContent,
@@ -116,6 +117,7 @@ export default function EditFertilityEventDialog({
       toast.error("خطا در ذخیره: " + error.message);
       return;
     }
+    if (event?.livestock_id) await syncCowFertilityCache(event.livestock_id);
     toast.success("رویداد به‌روزرسانی شد");
     onOpenChange(false);
     onSuccess?.();

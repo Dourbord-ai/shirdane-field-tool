@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 import {
   Dialog,
   DialogContent,
@@ -298,6 +299,7 @@ export default function InseminationRegistrationDialog({
       return;
     }
 
+    await syncCowFertilityCache(livestockId);
     toast.success("تلقیح با موفقیت ثبت شد");
     reset();
     onOpenChange(false);

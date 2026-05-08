@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,7 @@ export default function CancelFertilityEventDialog({
       toast.error("خطا در لغو عملیات: " + error.message);
       return;
     }
+    if (event?.livestock_id) await syncCowFertilityCache(event.livestock_id);
     toast.success("عملیات لغو شد");
     setReason("");
     onOpenChange(false);

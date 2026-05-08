@@ -1,6 +1,7 @@
 import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 import {
   Dialog,
   DialogContent,
@@ -272,6 +273,7 @@ export default function CalvingRegistrationDialog({
     if (cowErr) {
       toast.error("زایش ثبت شد ولی به‌روزرسانی دام انجام نشد: " + cowErr.message);
     } else {
+      await syncCowFertilityCache(livestockId);
       toast.success("زایش با موفقیت ثبت شد");
     }
 
