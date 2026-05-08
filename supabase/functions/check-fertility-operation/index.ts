@@ -595,16 +595,36 @@ function buildContext(
   const lastDry = findLastByOps([OP.Dry])
     ?? baselineEvent(cowAny.pre_entry_dry_date ?? cowAny.last_out_dry_date, OP.Dry);
 
-  // Last status: walk backward to find the first event that carries a status id
+  // Last status: derived from timeline events strictly before the simulated event.
+  // Walk backward through history; the most recent meaningful event wins:
+  //   1) If the event has an explicit fertility_status_id, use it.
+  //   2) Else, infer an implicit status from its operation (Erotic→فحل شده, etc.)
+  // Only fall back to "بدون وضعیت" (id=1) if no meaningful prior event exists.
+  // IMPORTANT: do NOT read cows.last_fertility_status — timeline is the source of truth.
+  const OP_IMPLIED_STATUS: Record<number, number> = {
+    [OP.Erotic]: 2,        // فحل شده
+    [OP.Inoculation]: 3,   // تلقیح شده
+    [OP.Abortion]: 9,      // سقط کرده
+    [OP.Birth]: 12,        // تازه زا
+    [OP.Dry]: 10,          // باز خشک
+    [OP.Rinse]: 14,        // شستشو شده
+    [OP.CleanTest]: 15,    // کلین تست مثبت
+    [OP.Sync]: 21,         // همزمان سازی فحلی
+  };
   let lastFertilityStatus: FertilityStatus | null = null;
   for (let i = history.length - 1; i >= 0; i--) {
-    const sid = history[i].fertility_status_id;
+    const ev = history[i];
+    const sid = ev.fertility_status_id;
     if (sid != null) {
-      lastFertilityStatus = statusById.get(sid) ?? null;
-      if (lastFertilityStatus) break;
+      const s = statusById.get(sid);
+      if (s) { lastFertilityStatus = s; break; }
+    }
+    const opId = ev.fertility_operation_id;
+    if (opId != null && OP_IMPLIED_STATUS[opId] != null) {
+      const implied = statusById.get(OP_IMPLIED_STATUS[opId]);
+      if (implied) { lastFertilityStatus = implied; break; }
     }
   }
-  // Fallback: status id = 1 ("بدون وضعیت") when no prior event has status
   if (!lastFertilityStatus) {
     lastFertilityStatus = statusById.get(1) ?? null;
   }
