@@ -149,15 +149,25 @@
       linear-gradient(180deg, hsl(var(--surface-1)), hsl(var(--surface-2)));
   }
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors touch-target min-h-[36px];
+    @apply inline-flex items-center gap-1 rounded-full border px-3.5 py-2 text-xs sm:text-sm font-medium transition-all touch-target min-h-[40px] shrink-0 select-none;
   }
   .chip-default {
-    @apply chip bg-card border-border text-foreground hover:bg-secondary;
+    @apply chip bg-card border-border text-foreground hover:bg-secondary active:scale-[0.97];
   }
   .chip-active {
-    @apply chip border-transparent text-primary-foreground;
+    @apply chip border-transparent text-primary-foreground shadow-md ring-2 ring-primary/30 active:scale-[0.97];
     background: linear-gradient(135deg, hsl(var(--livestock)), hsl(var(--primary)));
   }
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .chips-scroller {
+    @apply flex gap-2 overflow-x-auto py-2 px-1 -mx-1 scrollbar-hide snap-x;
+    scroll-padding-inline: 0.25rem;
+  }
+  .chips-scroller > * { @apply snap-start; }
   .kpi-tile {
     @apply rounded-2xl border border-border bg-card p-3 sm:p-4 flex flex-col gap-1 transition-all hover:shadow-md hover:border-primary/30 cursor-pointer text-right;
   }
