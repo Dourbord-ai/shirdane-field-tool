@@ -386,7 +386,8 @@ Deno.serve(async (req) => {
         lastFertilityStatus: ctx.lastFertilityStatus,
         pregnancy_state: ctx.pregnancy_state,
         milking_state: ctx.milking_state,
-      };
+    };
+    console.log("[check-fertility-operation] debug", debugPayload());
     };
 
     if (allWorkflows.length === 0) {
