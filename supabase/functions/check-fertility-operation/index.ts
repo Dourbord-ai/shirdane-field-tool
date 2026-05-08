@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       if (r.error) {
         const r2 = await supabase
           .from("cows")
-          .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+          .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
           .eq("id", cow_id)
           .maybeSingle();
         cow = r2.data; cowErr = r2.error;
