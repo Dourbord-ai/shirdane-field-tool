@@ -365,15 +365,29 @@ Deno.serve(async (req) => {
 
     const allWorkflows: Workflow[] = (wfRows ?? []) as Workflow[];
 
-    const debugPayload = () => ({
-      lastErotic: ctx.lastErotic,
-      lastInoculation: ctx.lastInoculation,
-      lastSync: ctx.lastSync,
-      lastBirth: ctx.lastBirth,
-      lastFertilityStatus: ctx.lastFertilityStatus,
-      pregnancy_state: ctx.pregnancy_state,
-      milking_state: ctx.milking_state,
-    });
+    const debugPayload = () => {
+      const parsed_birth_days = parseDateToDays(ctx.date_of_birth);
+      const parsed_event_days = parseDateToDays(ctx.event_date);
+      const calculated_age_days =
+        parsed_birth_days != null && parsed_event_days != null
+          ? parsed_event_days - parsed_birth_days
+          : null;
+      return {
+        cow_id,
+        event_date: ctx.event_date,
+        cow_date_of_birth: ctx.date_of_birth,
+        parsed_birth_days,
+        parsed_event_days,
+        calculated_age_days,
+        lastErotic: ctx.lastErotic,
+        lastInoculation: ctx.lastInoculation,
+        lastSync: ctx.lastSync,
+        lastBirth: ctx.lastBirth,
+        lastFertilityStatus: ctx.lastFertilityStatus,
+        pregnancy_state: ctx.pregnancy_state,
+        milking_state: ctx.milking_state,
+      };
+    };
 
     if (allWorkflows.length === 0) {
       return json({
