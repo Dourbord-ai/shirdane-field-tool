@@ -1,6 +1,7 @@
 import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 import {
   Dialog,
   DialogContent,

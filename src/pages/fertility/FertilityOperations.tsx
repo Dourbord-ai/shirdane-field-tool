@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
