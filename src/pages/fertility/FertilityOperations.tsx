@@ -105,6 +105,7 @@ export default function FertilityOperations() {
       };
       const { error } = await supabase.from("livestock_fertility_events").insert(payload as never);
       if (error) throw error;
+      await syncCowFertilityCache(Number(cowId));
 
       // 3) Update last_fertility_status if provided
       if (statusId) {
