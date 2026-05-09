@@ -250,9 +250,29 @@ export default function LivestockProfile() {
         </div>
       )}
 
-      {/* Cow history tabs */}
-      <div id="history-section">
-        <CowHistoryTabs cowId={cow.id} />
+      {/* Cow profile change management: location/type/status */}
+      <div id="history-section" className="space-y-4">
+        <CowChangeSection
+          cowId={cow.id}
+          kind="location"
+          currentRefId={cow.last_location_id}
+          currentDate={cow.last_location_date}
+          onChanged={refresh}
+        />
+        <CowChangeSection
+          cowId={cow.id}
+          kind="type"
+          currentRefId={cow.last_type_id}
+          currentDate={cow.last_type_date}
+          onChanged={refresh}
+        />
+        <CowChangeSection
+          cowId={cow.id}
+          kind="status"
+          currentRefId={cow.last_status_id}
+          currentDate={cow.last_status_date}
+          onChanged={refresh}
+        />
       </div>
 
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
