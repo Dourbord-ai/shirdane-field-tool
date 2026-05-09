@@ -11,6 +11,7 @@ import {
 import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart } from "lucide-react";
 import FertilitySection from "@/components/livestock/FertilitySection";
 import CowChangeSection from "@/components/livestock/CowChangeSection";
+import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
 
 type Cow = {
   id: number;
