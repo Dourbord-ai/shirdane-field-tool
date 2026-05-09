@@ -877,6 +877,7 @@ export type Database = {
           last_burn_horn_date: string | null
           last_burn_horn_details: string | null
           last_clean_test_date: string | null
+          last_daily_milk_total: number | null
           last_dry_date: string | null
           last_erotic_date: string | null
           last_fertility_status: number | null
@@ -888,6 +889,8 @@ export type Database = {
           last_location_id: number | null
           last_magnet_eating_date: string | null
           last_magnet_eating_details: string | null
+          last_milk_amount: number | null
+          last_milk_record_date: string | null
           last_out_abortion_date: string | null
           last_out_birth_date: string | null
           last_out_dry_date: string | null
@@ -954,6 +957,7 @@ export type Database = {
           last_burn_horn_date?: string | null
           last_burn_horn_details?: string | null
           last_clean_test_date?: string | null
+          last_daily_milk_total?: number | null
           last_dry_date?: string | null
           last_erotic_date?: string | null
           last_fertility_status?: number | null
@@ -965,6 +969,8 @@ export type Database = {
           last_location_id?: number | null
           last_magnet_eating_date?: string | null
           last_magnet_eating_details?: string | null
+          last_milk_amount?: number | null
+          last_milk_record_date?: string | null
           last_out_abortion_date?: string | null
           last_out_birth_date?: string | null
           last_out_dry_date?: string | null
@@ -1031,6 +1037,7 @@ export type Database = {
           last_burn_horn_date?: string | null
           last_burn_horn_details?: string | null
           last_clean_test_date?: string | null
+          last_daily_milk_total?: number | null
           last_dry_date?: string | null
           last_erotic_date?: string | null
           last_fertility_status?: number | null
@@ -1042,6 +1049,8 @@ export type Database = {
           last_location_id?: number | null
           last_magnet_eating_date?: string | null
           last_magnet_eating_details?: string | null
+          last_milk_amount?: number | null
+          last_milk_record_date?: string | null
           last_out_abortion_date?: string | null
           last_out_birth_date?: string | null
           last_out_dry_date?: string | null
@@ -2298,6 +2307,65 @@ export type Database = {
         }
         Relationships: []
       }
+      livestock_milk_records: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_user_id: number | null
+          created_at: string
+          description: string | null
+          id: number
+          is_cancelled: boolean
+          livestock_id: number
+          milk_amount: number
+          period: number
+          record_date: string
+          registered_at: string
+          registered_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_user_id?: number | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          is_cancelled?: boolean
+          livestock_id: number
+          milk_amount: number
+          period: number
+          record_date: string
+          registered_at?: string
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_user_id?: number | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          is_cancelled?: boolean
+          livestock_id?: number
+          milk_amount?: number
+          period?: number
+          record_date?: string
+          registered_at?: string
+          registered_user_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "livestock_milk_records_livestock_id_fkey"
+            columns: ["livestock_id"]
+            isOneToOne: false
+            referencedRelation: "cows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       livestock_physical_statuses: {
         Row: {
           back: number | null
@@ -3131,6 +3199,7 @@ export type Database = {
         Args: { p_cow_id: number }
         Returns: undefined
       }
+      rebuild_cow_milk_cache: { Args: { p_cow_id: number }; Returns: undefined }
       rebuild_cow_physical_cache: {
         Args: { p_cow_id: number }
         Returns: undefined

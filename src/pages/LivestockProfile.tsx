@@ -12,6 +12,7 @@ import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart 
 import FertilitySection from "@/components/livestock/FertilitySection";
 import CowChangeSection from "@/components/livestock/CowChangeSection";
 import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
+import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
 
 type Cow = {
   id: number;
@@ -277,6 +278,8 @@ export default function LivestockProfile() {
       </div>
 
       <PhysicalStatusSection cowId={cow.id} onChanged={refresh} />
+
+      <MilkRecordsSection cowId={cow.id} isFemale={female} onChanged={refresh} />
 
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
         <Section title="اطلاعات اولیه قبل از ورود به دامداری">
