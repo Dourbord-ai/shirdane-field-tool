@@ -893,6 +893,7 @@ export type Database = {
           last_out_dry_date: string | null
           last_out_period: number | null
           last_period: number | null
+          last_physical_status_date: string | null
           last_pregnancy_date: string | null
           last_rinse_date: string | null
           last_status_date: string | null
@@ -969,6 +970,7 @@ export type Database = {
           last_out_dry_date?: string | null
           last_out_period?: number | null
           last_period?: number | null
+          last_physical_status_date?: string | null
           last_pregnancy_date?: string | null
           last_rinse_date?: string | null
           last_status_date?: string | null
@@ -1045,6 +1047,7 @@ export type Database = {
           last_out_dry_date?: string | null
           last_out_period?: number | null
           last_period?: number | null
+          last_physical_status_date?: string | null
           last_pregnancy_date?: string | null
           last_rinse_date?: string | null
           last_status_date?: string | null
@@ -2295,6 +2298,95 @@ export type Database = {
         }
         Relationships: []
       }
+      livestock_physical_statuses: {
+        Row: {
+          back: number | null
+          body_score: number | null
+          brisket: number | null
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_user_id: string | null
+          created_at: string
+          description: string | null
+          feet_score: number | null
+          id: number
+          image_path: string | null
+          image_url: string | null
+          is_cancelled: boolean
+          legs_score: number | null
+          livestock_id: number
+          record_date: string
+          registered_at: string
+          registered_user_id: string | null
+          stature: number | null
+          tails_head: number | null
+          teat_height: number | null
+          udder_height: number | null
+          updated_at: string
+          weight: number | null
+        }
+        Insert: {
+          back?: number | null
+          body_score?: number | null
+          brisket?: number | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_user_id?: string | null
+          created_at?: string
+          description?: string | null
+          feet_score?: number | null
+          id?: number
+          image_path?: string | null
+          image_url?: string | null
+          is_cancelled?: boolean
+          legs_score?: number | null
+          livestock_id: number
+          record_date: string
+          registered_at?: string
+          registered_user_id?: string | null
+          stature?: number | null
+          tails_head?: number | null
+          teat_height?: number | null
+          udder_height?: number | null
+          updated_at?: string
+          weight?: number | null
+        }
+        Update: {
+          back?: number | null
+          body_score?: number | null
+          brisket?: number | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_user_id?: string | null
+          created_at?: string
+          description?: string | null
+          feet_score?: number | null
+          id?: number
+          image_path?: string | null
+          image_url?: string | null
+          is_cancelled?: boolean
+          legs_score?: number | null
+          livestock_id?: number
+          record_date?: string
+          registered_at?: string
+          registered_user_id?: string | null
+          stature?: number | null
+          tails_head?: number | null
+          teat_height?: number | null
+          udder_height?: number | null
+          updated_at?: string
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "livestock_physical_statuses_livestock_id_fkey"
+            columns: ["livestock_id"]
+            isOneToOne: false
+            referencedRelation: "cows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       livestock_statuses: {
         Row: {
           created_at: string
@@ -3036,6 +3128,10 @@ export type Database = {
         Returns: undefined
       }
       rebuild_cow_location_cache: {
+        Args: { p_cow_id: number }
+        Returns: undefined
+      }
+      rebuild_cow_physical_cache: {
         Args: { p_cow_id: number }
         Returns: undefined
       }
