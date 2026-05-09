@@ -327,7 +327,7 @@ export default function MilkRecordQuick() {
   return (
     <div
       dir="rtl"
-      className={`fixed inset-0 z-[60] overflow-hidden transition-colors duration-700 ${isNight ? "text-slate-100" : "text-slate-900"}`}
+      className={`min-h-screen w-full overflow-y-auto transition-colors duration-700 ${isNight ? "text-slate-100" : "text-slate-900"}`}
       style={{ background: meta.gradient }}
     >
       {/* Animated atmosphere overlays */}
@@ -342,9 +342,10 @@ export default function MilkRecordQuick() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className="text-center">
-          <div className="text-xs opacity-70">{todayLabel}</div>
-          <div className="text-sm font-bold">ثبت رکورد شیر</div>
+        <div className="text-center leading-tight">
+          <div className="text-xl font-black tracking-wide">{todayInfo.weekdayName}</div>
+          <div className="text-base font-bold opacity-90">{todayLabel}</div>
+          <div className="text-[11px] opacity-70 mt-0.5">ثبت رکورد شیر</div>
         </div>
         <div className={`backdrop-blur-md ${isNight ? "bg-white/10" : "bg-white/40"} rounded-full p-2.5 flex items-center gap-1`}>
           {online ? <Wifi className="w-4 h-4 text-emerald-600" /> : <WifiOff className="w-4 h-4 text-rose-500" />}
