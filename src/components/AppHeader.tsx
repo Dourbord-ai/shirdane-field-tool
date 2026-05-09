@@ -1,10 +1,12 @@
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, User, Milk } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function AppHeader() {
   const navigate = useNavigate();
   const location = useLocation();
   const isDashboard = location.pathname === "/" || location.pathname === "/dashboard";
+  const isQuickMilk = location.pathname.startsWith("/milk-record/quick");
+  if (isQuickMilk) return null;
 
   return (
     <header className="fixed top-0 inset-x-0 z-50 h-14 bg-card border-b border-border flex items-center justify-between px-4 shadow-sm">
