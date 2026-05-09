@@ -496,45 +496,12 @@ export default function MilkRecordQuick() {
         )}
       </motion.div>
 
-      {/* Recent strip */}
-      {entries.length > 0 && (
-        <div className="relative z-10 px-4 mt-4">
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-none">
-            {[...entries].slice(-12).reverse().map((e) => {
-              const realIdx = entries.findIndex((x) => x.localId === e.localId);
-              const active = activeIdx === realIdx;
-              return (
-                <button
-                  key={e.localId}
-                  onClick={() => openHistory(realIdx)}
-                  className={`shrink-0 rounded-2xl px-3 py-2 text-right backdrop-blur-md transition active:scale-95 ${
-                    active
-                      ? `bg-gradient-to-br ${meta.accent} text-white shadow-lg`
-                      : isNight ? "bg-white/10" : "bg-white/45"
-                  }`}
-                >
-                  <div className="text-[10px] opacity-80">گوش {e.ear_tag}</div>
-                  <div className="text-sm font-black">{e.milk_amount} kg</div>
-                  <div className="text-[9px] opacity-70 flex items-center gap-1">
-                    {PERIOD_META[e.period].label}
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-                      e.status === "synced" ? "bg-emerald-400" : e.status === "error" ? "bg-rose-400" : "bg-amber-400"
-                    }`} />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Sticky submit */}
-      <div className="absolute bottom-0 inset-x-0 z-20 px-4 pb-5 pt-3 pointer-events-none">
+        {/* Submit button — directly under the card */}
         <motion.button
           whileTap={{ scale: 0.96 }}
           onClick={handleSubmit}
           disabled={submitting}
-          className={`pointer-events-auto w-full h-16 rounded-2xl font-black text-lg text-white shadow-2xl bg-gradient-to-br ${meta.accent} disabled:opacity-60 flex items-center justify-center gap-2 active:shadow-inner relative overflow-hidden`}
+          className={`mt-4 w-full h-16 rounded-2xl font-black text-lg text-white shadow-2xl bg-gradient-to-br ${meta.accent} disabled:opacity-60 flex items-center justify-center gap-2 active:shadow-inner relative overflow-hidden`}
         >
           {submitting ? (
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -551,7 +518,54 @@ export default function MilkRecordQuick() {
           )}
           <SuccessGlow trigger={successPulse} />
         </motion.button>
-      </div>
+      </motion.div>
+
+      {/* Last 3 session log — newest on top, drops oldest after 3 */}
+      {entries.length > 0 && (
+        <div className="relative z-10 px-4 mt-4 pb-8">
+          <div className="text-[11px] font-bold opacity-70 mb-2 px-1">
+            آخرین ثبت‌ها در این جلسه
+          </div>
+          <div className="flex flex-col gap-2">
+            <AnimatePresence initial={false}>
+              {[...entries].slice(-3).reverse().map((e) => {
+                const realIdx = entries.findIndex((x) => x.localId === e.localId);
+                const active = activeIdx === realIdx;
+                return (
+                  <motion.button
+                    layout
+                    key={e.localId}
+                    initial={{ opacity: 0, y: -12, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 12, scale: 0.96 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    onClick={() => openHistory(realIdx)}
+                    className={`w-full flex items-center justify-between rounded-2xl px-4 py-3 backdrop-blur-md text-right active:scale-[0.98] transition ${
+                      active
+                        ? `bg-gradient-to-br ${meta.accent} text-white shadow-lg`
+                        : isNight ? "bg-white/10 ring-1 ring-white/10" : "bg-white/55 ring-1 ring-white/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-block w-2 h-2 rounded-full ${
+                        e.status === "synced" ? "bg-emerald-400" : e.status === "error" ? "bg-rose-400" : "bg-amber-400"
+                      }`} />
+                      <div>
+                        <div className="text-[11px] opacity-80">گوش {toPersianDigits(e.ear_tag)}</div>
+                        <div className="text-[10px] opacity-70">{PERIOD_META[e.period].label}</div>
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black">
+                      {toPersianDigits(e.milk_amount)}
+                      <span className="text-xs font-bold opacity-70 mr-1">kg</span>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
