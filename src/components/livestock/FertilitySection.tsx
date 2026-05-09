@@ -41,6 +41,7 @@ import { Baby, Pencil, Ban } from "lucide-react";
 type Props = {
   livestockId: number;
   latestStatus: number | null;
+  onOperationSaved?: () => void;
 };
 
 const TAB_DEFS: { key: string; label: string }[] = [
@@ -229,7 +230,7 @@ const ACTION_GROUPS: { title: string; actions: { key: ActionKey; label: string }
   },
 ];
 
-export default function FertilitySection({ livestockId, latestStatus }: Props) {
+export default function FertilitySection({ livestockId, latestStatus, onOperationSaved }: Props) {
   const { toast } = useToast();
   const [events, setEvents] = useState<FertilityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -365,62 +366,62 @@ export default function FertilitySection({ livestockId, latestStatus }: Props) {
         open={heatOpen}
         onOpenChange={setHeatOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <RinseRegistrationDialog
         open={rinseOpen}
         onOpenChange={setRinseOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <CleanTestRegistrationDialog
         open={cleanTestOpen}
         onOpenChange={setCleanTestOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <InseminationRegistrationDialog
         open={inseminationOpen}
         onOpenChange={setInseminationOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <PregnancyTestRegistrationDialog
         open={pregnancyTestOpen}
         onOpenChange={setPregnancyTestOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <AbortionRegistrationDialog
         open={abortionOpen}
         onOpenChange={setAbortionOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <CalvingRegistrationDialog
         open={calvingOpen}
         onOpenChange={setCalvingOpen}
         livestockId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <CreateCalvesFromCalvingDialog
         open={!!calvesReviewEvent}
         onOpenChange={(o) => !o && setCalvesReviewEvent(null)}
         event={calvesReviewEvent}
         motherCowId={livestockId}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <EditFertilityEventDialog
         open={!!editEvent}
         onOpenChange={(o) => !o && setEditEvent(null)}
         event={editEvent}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
       <CancelFertilityEventDialog
         open={!!cancelEvent}
         onOpenChange={(o) => !o && setCancelEvent(null)}
         event={cancelEvent}
-        onSuccess={() => setReloadKey((k) => k + 1)}
+        onSuccess={() => { setReloadKey((k) => k + 1); onOperationSaved?.(); }}
       />
 
       <div className="flex items-center justify-end gap-2 text-xs">
