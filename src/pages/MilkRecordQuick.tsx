@@ -18,7 +18,8 @@ import {
   Pencil,
   Plus,
 } from "lucide-react";
-import { todayJalali, formatJalali, gregorianToJalali } from "@/lib/jalali";
+import { todayJalali, formatJalali, gregorianToJalali, toPersianDigits } from "@/lib/jalali";
+import { getShamsiToday } from "@/lib/shamsiNow";
 
 type Period = 1 | 2 | 3;
 
