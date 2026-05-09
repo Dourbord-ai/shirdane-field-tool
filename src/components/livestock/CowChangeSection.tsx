@@ -306,7 +306,7 @@ function CowChangeFormDialog({
     if (!open) return;
     if (editing) {
       setRefId(editing.ref_id ? String(editing.ref_id) : "");
-      setDate(editing.event_date ? parseJalali(editing.event_date) ?? todayJalali() : todayJalali());
+      setDate(parseJalaliString(editing.event_date) ?? todayJalali());
       setDescription(editing.description ?? "");
     } else {
       setRefId("");
