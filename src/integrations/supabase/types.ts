@@ -3035,6 +3035,15 @@ export type Database = {
         Args: { p_cow_id: number }
         Returns: undefined
       }
+      rebuild_cow_location_cache: {
+        Args: { p_cow_id: number }
+        Returns: undefined
+      }
+      rebuild_cow_status_cache: {
+        Args: { p_cow_id: number }
+        Returns: undefined
+      }
+      rebuild_cow_type_cache: { Args: { p_cow_id: number }; Returns: undefined }
       submit_cow_factor: {
         Args: { p_details: Json; p_factor: Json }
         Returns: Json
