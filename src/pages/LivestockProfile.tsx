@@ -12,6 +12,7 @@ import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart 
 import FertilitySection from "@/components/livestock/FertilitySection";
 import CowChangeSection from "@/components/livestock/CowChangeSection";
 import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
+import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
 
 type Cow = {
   id: number;
