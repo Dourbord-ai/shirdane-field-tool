@@ -22,7 +22,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
-import { JalaliDate, formatJalali, parseJalali, todayJalali } from "@/lib/jalali";
+import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+
+function parseJalaliString(s: string | null): JalaliDate | null {
+  if (!s) return null;
+  // Convert Persian digits to ASCII
+  const ascii = s.replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+  const m = ascii.match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  if (!m) return null;
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+}
 import { toast } from "sonner";
 import { Loader2, Pencil, Trash2, Plus, MapPin, Tag, HeartPulse } from "lucide-react";
 
