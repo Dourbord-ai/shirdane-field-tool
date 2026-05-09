@@ -10,7 +10,7 @@ import {
 } from "@/lib/livestock";
 import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart } from "lucide-react";
 import FertilitySection from "@/components/livestock/FertilitySection";
-import CowHistoryTabs from "@/components/livestock/CowHistoryTabs";
+import CowChangeSection from "@/components/livestock/CowChangeSection";
 
 type Cow = {
   id: number;
@@ -22,6 +22,12 @@ type Cow = {
   existancestatus: number | null;
   is_dry: boolean | null;
   last_fertility_status: number | null;
+  last_location_id: number | null;
+  last_location_date: string | null;
+  last_type_id: number | null;
+  last_type_date: string | null;
+  last_status_id: number | null;
+  last_status_date: string | null;
   created_at: string;
   purchase_date: string | null;
   purchase_price: number | null;
@@ -244,9 +250,29 @@ export default function LivestockProfile() {
         </div>
       )}
 
-      {/* Cow history tabs */}
-      <div id="history-section">
-        <CowHistoryTabs cowId={cow.id} />
+      {/* Cow profile change management: location/type/status */}
+      <div id="history-section" className="space-y-4">
+        <CowChangeSection
+          cowId={cow.id}
+          kind="location"
+          currentRefId={cow.last_location_id}
+          currentDate={cow.last_location_date}
+          onChanged={refresh}
+        />
+        <CowChangeSection
+          cowId={cow.id}
+          kind="type"
+          currentRefId={cow.last_type_id}
+          currentDate={cow.last_type_date}
+          onChanged={refresh}
+        />
+        <CowChangeSection
+          cowId={cow.id}
+          kind="status"
+          currentRefId={cow.last_status_id}
+          currentDate={cow.last_status_date}
+          onChanged={refresh}
+        />
       </div>
 
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
