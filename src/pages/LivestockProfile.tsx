@@ -22,6 +22,12 @@ type Cow = {
   existancestatus: number | null;
   is_dry: boolean | null;
   last_fertility_status: number | null;
+  last_location_id: number | null;
+  last_location_date: string | null;
+  last_type_id: number | null;
+  last_type_date: string | null;
+  last_status_id: number | null;
+  last_status_date: string | null;
   created_at: string;
   purchase_date: string | null;
   purchase_price: number | null;
