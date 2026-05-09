@@ -132,10 +132,8 @@ export default function MilkRecordQuick() {
   // initial focus
   useEffect(() => { earRef.current?.focus(); }, []);
 
-  const todayLabel = useMemo(() => {
-    const j = todayJalali();
-    return formatJalali(j);
-  }, []);
+  const todayInfo = useMemo(() => getShamsiToday(new Date()), []);
+  const todayLabel = useMemo(() => toPersianDigits(formatJalali(todayJalali())), []);
 
   const editing = activeIdx !== null ? entries[activeIdx] : null;
 
