@@ -494,7 +494,6 @@ export default function MilkRecordQuick() {
             </button>
           </div>
         )}
-      </motion.div>
 
         {/* Submit button — directly under the card */}
         <motion.button
