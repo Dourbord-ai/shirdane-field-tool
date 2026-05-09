@@ -276,6 +276,8 @@ export default function LivestockProfile() {
         />
       </div>
 
+      <PhysicalStatusSection cowId={cow.id} onChanged={refresh} />
+
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
         <Section title="اطلاعات اولیه قبل از ورود به دامداری">
           <Row label="تاریخ زایش قبل از ورود" value={cow.pre_entry_birth_date} />
