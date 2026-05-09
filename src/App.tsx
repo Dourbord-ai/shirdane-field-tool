@@ -13,6 +13,7 @@ import MilkReceipts from "./pages/MilkReceipts";
 import LabResults from "./pages/LabResults";
 import Livestock from "./pages/Livestock";
 import LivestockProfile from "./pages/LivestockProfile";
+import MilkRecordQuick from "./pages/MilkRecordQuick";
 import HumanResources from "./pages/HumanResources";
 import Certificates from "./pages/Certificates";
 import CertificatesGuard from "./components/CertificatesGuard";
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/receipts/lab" element={<LabResults />} />
               <Route path="/livestock" element={<Livestock />} />
               <Route path="/livestock/:id" element={<LivestockProfile />} />
+              <Route path="/milk-record/quick" element={<MilkRecordQuick />} />
               <Route path="/hr" element={<HumanResources />} />
               <Route
                 path="/certificates"

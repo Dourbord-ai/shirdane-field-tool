@@ -1,13 +1,14 @@
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, User, Milk } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function AppHeader() {
   const navigate = useNavigate();
   const location = useLocation();
   const isDashboard = location.pathname === "/" || location.pathname === "/dashboard";
+  if (location.pathname.startsWith("/milk-record/quick")) return null;
 
   return (
-    <header className="fixed top-0 inset-x-0 z-50 h-14 bg-card border-b border-border flex items-center justify-between px-4 shadow-sm">
+    <header className="fixed top-0 inset-x-0 z-50 h-14 bg-card border-b border-border flex items-center justify-between px-3 gap-2 shadow-sm">
       {/* Right side: profile */}
       <button
         onClick={() => navigate("/profile")}
@@ -17,15 +18,25 @@ export default function AppHeader() {
         <User className="w-6 h-6" />
       </button>
 
-      {/* Center: brand — tapping navigates to dashboard */}
-      <button
-        onClick={() => navigate("/dashboard")}
-        className="text-lg font-bold text-primary select-none active:opacity-70 transition-opacity"
-      >
-        شیردانه
-      </button>
+      {/* Center: brand + quick milk action */}
+      <div className="flex-1 flex items-center justify-center gap-2">
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="text-lg font-bold text-primary select-none active:opacity-70 transition-opacity"
+        >
+          شیردانه
+        </button>
+        <button
+          onClick={() => navigate("/milk-record/quick")}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md active:scale-95 transition"
+          aria-label="ثبت رکورد شیر"
+        >
+          <Milk className="w-3.5 h-3.5" />
+          ثبت رکورد شیر
+        </button>
+      </div>
 
-      {/* Left side: back button — always visible except on dashboard */}
+      {/* Left side */}
       {isDashboard ? (
         <button
           onClick={() => {
