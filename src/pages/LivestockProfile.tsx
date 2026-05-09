@@ -10,7 +10,7 @@ import {
 } from "@/lib/livestock";
 import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart } from "lucide-react";
 import FertilitySection from "@/components/livestock/FertilitySection";
-import CowHistoryTabs from "@/components/livestock/CowHistoryTabs";
+import CowChangeSection from "@/components/livestock/CowChangeSection";
 
 type Cow = {
   id: number;
