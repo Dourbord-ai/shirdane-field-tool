@@ -112,32 +112,8 @@ export default function LivestockProfile() {
     };
   }, [id, refreshKey]);
 
-  // Realtime: subscribe to changes for this cow + its fertility events
-  useEffect(() => {
-    if (!id) return;
-    const numId = Number(id);
-    const channel = supabase
-      .channel(`cow-profile-${numId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "cows", filter: `id=eq.${numId}` },
-        () => refresh(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "livestock_fertility_events", filter: `livestock_id=eq.${numId}` },
-        () => refresh(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "livestock_events", filter: `cow_id=eq.${numId}` },
-        () => refresh(),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [id]);
+  // Note: no realtime/polling — profile refreshes only after a successful user action
+  // via the onOperationSaved callback passed to FertilitySection.
 
   if (loading) {
     return (
