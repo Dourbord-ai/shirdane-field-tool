@@ -260,6 +260,10 @@ export default function LivestockProfile() {
           <FertilitySection
             livestockId={cow.id}
             latestStatus={cow.last_fertility_status}
+            onOperationSaved={() => {
+              console.log("Fertility operation saved; refreshing cow profile UI", cow.id);
+              refresh();
+            }}
           />
         </div>
       )}
