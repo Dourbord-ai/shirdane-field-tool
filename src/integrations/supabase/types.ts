@@ -2162,6 +2162,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           legacy_id: number | null
+          legacy_request_type_code: number | null
           paid_transaction_id: string | null
           party_id: string | null
           payment_request_id: string | null
@@ -2178,6 +2179,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
+          legacy_request_type_code?: number | null
           paid_transaction_id?: string | null
           party_id?: string | null
           payment_request_id?: string | null
@@ -2194,6 +2196,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
+          legacy_request_type_code?: number | null
           paid_transaction_id?: string | null
           party_id?: string | null
           payment_request_id?: string | null
@@ -2237,6 +2240,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           legacy_id: number | null
+          legacy_request_type_code: number | null
           request_type: string | null
           requested_by: string | null
           status: string | null
@@ -2255,6 +2259,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
+          legacy_request_type_code?: number | null
           request_type?: string | null
           requested_by?: string | null
           status?: string | null
@@ -2273,6 +2278,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
+          legacy_request_type_code?: number | null
           request_type?: string | null
           requested_by?: string | null
           status?: string | null

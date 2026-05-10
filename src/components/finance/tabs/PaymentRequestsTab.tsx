@@ -9,12 +9,14 @@ import { PartySelector } from "@/components/finance/selectors";
 import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 
 interface PR {
   id: string;
   title: string | null;
   description: string | null;
   request_type: string | null;
+  legacy_request_type_code: number | null;
   status: string | null;
   total_amount: number | null;
   confirmed_amount: number | null;
@@ -35,14 +37,17 @@ export default function PaymentRequestsTab() {
   const [requests, setRequests] = useState<PR[]>([]);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<PR | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string>(""); // "" = همه موارد
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [typeFilter]);
   async function load() {
-    const { data } = await supabase
+    let q = supabase
       .from("finance_payment_requests")
       .select("*")
       .eq("is_deleted", false)
       .order("created_at", { ascending: false });
+    if (typeFilter) q = q.eq("legacy_request_type_code", Number(typeFilter));
+    const { data } = await q;
     setRequests((data as PR[]) || []);
   }
 
@@ -50,7 +55,19 @@ export default function PaymentRequestsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold">درخواست‌های پرداخت</h2>
-        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+        <div className="flex items-center gap-2">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">همه موارد</option>
+            {PAYMENT_REQUEST_TYPES.map((t) => (
+              <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
+            ))}
+          </select>
+          <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -60,6 +77,7 @@ export default function PaymentRequestsTab() {
               <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
               <FinanceStatusBadge status={r.status} />
             </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{getPaymentRequestTypeLabel(r.legacy_request_type_code)}</p>
             {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
             <div className="mt-3 pt-3 border-t flex items-center justify-between">
               <JalaliDateCell value={r.created_at} />
@@ -81,7 +99,7 @@ export default function PaymentRequestsTab() {
 }
 
 function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [type, setType] = useState("payment");
+  const [typeCode, setTypeCode] = useState<number | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [items, setItems] = useState<PRItem[]>([{ party_id: null, amount: 0, amount_type: "debtor", description: "" }]);
@@ -90,12 +108,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   const total = items.reduce((s, i) => s + (i.amount || 0), 0);
 
   async function save() {
+    if (!typeCode) return toast.error("نوع درخواست را انتخاب کنید");
     if (!title) return toast.error("عنوان لیست را وارد کنید");
     if (items.some((i) => !i.party_id || !i.amount)) return toast.error("ذینفع و مبلغ هر آیتم الزامی است");
     setSaving(true);
     try {
+      const code = Number(typeCode);
+      const typeKey = getPaymentRequestTypeKey(code);
       const { data: pr, error } = await supabase.from("finance_payment_requests").insert({
-        title, description, request_type: type, status: "draft", total_amount: total,
+        title, description, request_type: typeKey, legacy_request_type_code: code, status: "draft", total_amount: total,
       }).select("id").single();
       if (error || !pr) throw error || new Error("insert failed");
       await supabase.from("finance_payment_request_items").insert(
@@ -106,6 +127,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           amount_type: i.amount_type,
           description: i.description,
           status: "pending",
+          legacy_request_type_code: code,
         })),
       );
       toast.success("درخواست ثبت شد");
@@ -125,11 +147,16 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
         <div className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">نوع درخواست</Label>
-              <select value={type} onChange={(e) => setType(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                <option value="payment">پرداخت</option>
-                <option value="settlement">تسویه</option>
-                <option value="other">سایر</option>
+              <Label className="text-xs">نوع درخواست <span className="text-destructive">*</span></Label>
+              <select
+                value={typeCode === "" ? "" : String(typeCode)}
+                onChange={(e) => setTypeCode(e.target.value ? Number(e.target.value) : "")}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">انتخاب کنید…</option>
+                {PAYMENT_REQUEST_TYPES.map((t) => (
+                  <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-1.5">
@@ -259,6 +286,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
           <div>
             <h3 className="font-bold">{pr.title || "درخواست پرداخت"}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{getPaymentRequestTypeLabel(pr.legacy_request_type_code)}</p>
             <div className="flex items-center gap-2 mt-1">
               <FinanceStatusBadge status={pr.status} />
               <JalaliDateCell value={pr.created_at} />
