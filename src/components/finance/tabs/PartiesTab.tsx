@@ -4,9 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { MoneyCell, FinanceStatusBadge, SepidarStatusBadge } from "@/components/finance/atoms";
-import { partyName } from "@/lib/finance";
-import { Plus, Pencil, X, Send } from "lucide-react";
+import { MoneyCell, SepidarStatusBadge } from "@/components/finance/atoms";
+import {
+  partyName,
+  partyApprovalLabel,
+  PARTY_APPROVAL_STATUS_LABEL,
+  syncPartyToSepidar,
+  isPartyReadyForPosting,
+} from "@/lib/finance";
+import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface Party {
@@ -27,22 +33,54 @@ interface Party {
   description: string | null;
   balance: number | null;
   status: string | null;
+  // approval workflow
+  approval_status: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_by: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  // sepidar
   sepidar_sync_status: string | null;
+  sepidar_party_id: number | null;
+  sepidar_dl_id: number | null;
+  sepidar_dl_code: number | null;
+  sepidar_account_id: number | null;
+  sepidar_full_name: string | null;
+  sepidar_synced_at: string | null;
+  sepidar_sync_attempts: number | null;
+  sepidar_error_message: string | null;
 }
 
 const EMPTY: Partial<Party> = {
   ownership_type: "individual", nationality: "iranian", first_name: "", last_name: "",
   company_name: "", national_code: "", national_id: "", identification_code: "",
   mobile: "", telephone: "", address: "", postal_code: "", branch_code: "",
-  description: "", status: "active",
+  description: "", status: "active", approval_status: "pending_approval",
 };
+
+function ApprovalBadge({ status }: { status: string | null | undefined }) {
+  const label = partyApprovalLabel(status);
+  const color =
+    status === "synced_to_sepidar"
+      ? "bg-emerald-100 text-emerald-800"
+      : status === "approved"
+      ? "bg-sky-100 text-sky-800"
+      : status === "rejected"
+      ? "bg-rose-100 text-rose-800"
+      : status === "sync_failed"
+      ? "bg-amber-100 text-amber-800"
+      : status === "inactive"
+      ? "bg-muted text-muted-foreground"
+      : "bg-slate-100 text-slate-800";
+  return <span className={`text-[10px] px-2 py-0.5 rounded-full ${color}`}>{label}</span>;
+}
 
 export default function PartiesTab() {
   const [parties, setParties] = useState<Party[]>([]);
   const [q, setQ] = useState("");
   const [filterOwnership, setFilterOwnership] = useState("");
-  const [filterNationality, setFilterNationality] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterApproval, setFilterApproval] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Party> | null>(null);
   const [detail, setDetail] = useState<Party | null>(null);
@@ -60,8 +98,7 @@ export default function PartiesTab() {
 
   const filtered = parties.filter((p) => {
     if (filterOwnership && p.ownership_type !== filterOwnership) return false;
-    if (filterNationality && p.nationality !== filterNationality) return false;
-    if (filterStatus && p.status !== filterStatus) return false;
+    if (filterApproval && p.approval_status !== filterApproval) return false;
     if (q) {
       const s = `${partyName(p)} ${p.national_code || ""} ${p.national_id || ""} ${p.identification_code || ""}`.toLowerCase();
       if (!s.includes(q.toLowerCase())) return false;
@@ -78,17 +115,14 @@ export default function PartiesTab() {
       if (error) return toast.error(error.message);
       toast.success("ذینفع ویرایش شد");
     } else {
+      // New beneficiaries always start in pending_approval
+      payload.approval_status = "pending_approval";
+      payload.sepidar_sync_status = "not_synced";
       const { error } = await supabase.from("finance_parties").insert(payload);
       if (error) return toast.error(error.message);
-      toast.success("ذینفع ثبت شد");
+      toast.success("ذینفع ثبت شد — در انتظار تایید مدیریت");
     }
     setOpen(false); setEditing(null); void load();
-  }
-
-  async function syncSepidar(p: Party) {
-    await supabase.from("finance_parties").update({ sepidar_sync_status: "syncing" }).eq("id", p.id);
-    toast.info("درخواست ثبت سپیدار ارسال شد (placeholder)");
-    void load();
   }
 
   return (
@@ -100,22 +134,20 @@ export default function PartiesTab() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Input placeholder="جستجو..." value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={filterOwnership} onChange={(e) => setFilterOwnership(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
           <option value="">مالکیت</option>
           <option value="individual">حقیقی</option>
           <option value="legal">حقوقی</option>
         </select>
-        <select value={filterNationality} onChange={(e) => setFilterNationality(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          <option value="">تابعیت</option>
-          <option value="iranian">ایرانی</option>
-          <option value="foreign">خارجی</option>
-        </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          <option value="">وضعیت</option>
-          <option value="active">فعال</option>
-          <option value="inactive">غیرفعال</option>
+        <select value={filterApproval} onChange={(e) => setFilterApproval(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+          <option value="">وضعیت تایید / سپیدار</option>
+          <option value="pending_approval">در انتظار تایید</option>
+          <option value="approved">تایید شده</option>
+          <option value="synced_to_sepidar">ثبت‌شده در سپیدار</option>
+          <option value="sync_failed">خطای سپیدار</option>
+          <option value="rejected">رد شده</option>
         </select>
       </div>
 
@@ -127,11 +159,15 @@ export default function PartiesTab() {
                 <h3 className="font-bold truncate">{partyName(p)}</h3>
                 <p className="text-xs text-muted-foreground">{p.ownership_type === "legal" ? "حقوقی" : "حقیقی"} • {p.nationality === "foreign" ? "خارجی" : "ایرانی"}</p>
               </div>
-              <SepidarStatusBadge status={p.sepidar_sync_status} />
+              <div className="flex flex-col items-end gap-1">
+                <ApprovalBadge status={p.approval_status} />
+                <SepidarStatusBadge status={p.sepidar_sync_status} />
+              </div>
             </div>
             <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
               {p.national_code && <p>کد ملی: <span className="font-mono">{p.national_code}</span></p>}
-              {p.mobile && <p>موبایل: <span className="font-mono" dir="ltr">{p.mobile}</span></p>}
+              {p.sepidar_dl_code != null && <p>کد تفصیل: <span className="font-mono">{p.sepidar_dl_code}</span></p>}
+              {p.sepidar_party_id != null && <p>شناسه طرف حساب سپیدار: <span className="font-mono">{p.sepidar_party_id}</span></p>}
             </div>
             <div className="mt-3 pt-3 border-t flex items-center justify-between">
               <span className="text-xs text-muted-foreground">مانده</span>
@@ -150,7 +186,16 @@ export default function PartiesTab() {
         <PartyDialog editing={editing} onChange={setEditing} onClose={() => { setOpen(false); setEditing(null); }} onSave={save} />
       )}
       {detail && (
-        <PartyDetailDrawer party={detail} onClose={() => setDetail(null)} onEdit={() => { setEditing(detail); setOpen(true); setDetail(null); }} onSync={() => syncSepidar(detail)} />
+        <PartyDetailDrawer
+          party={detail}
+          onClose={() => setDetail(null)}
+          onEdit={() => { setEditing(detail); setOpen(true); setDetail(null); }}
+          onChanged={async () => {
+            const { data } = await supabase.from("finance_parties").select("*").eq("id", detail.id).maybeSingle();
+            if (data) setDetail(data as Party);
+            void load();
+          }}
+        />
       )}
     </div>
   );
@@ -165,6 +210,11 @@ function PartyDialog({ editing, onChange, onClose, onSave }: { editing: Partial<
           <h3 className="font-bold">{editing.id ? "ویرایش ذینفع" : "ذینفع جدید"}</h3>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="w-4 h-4" /></Button>
         </div>
+        {!editing.id && (
+          <div className="mx-4 mt-3 rounded-lg border bg-amber-50 text-amber-900 text-xs p-2">
+            پس از ثبت، این ذینفع در وضعیت «در انتظار تایید مدیریت» قرار می‌گیرد و تا تایید و ثبت در سپیدار، در صدور سند نهایی قابل استفاده نیست.
+          </div>
+        )}
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs">نوع مالکیت</Label>
@@ -214,13 +264,80 @@ function Field({ label, children, full }: { label: string; children: React.React
   return (<div className={full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}><Label className="text-xs">{label}</Label>{children}</div>);
 }
 
-function PartyDetailDrawer({ party, onClose, onEdit, onSync }: { party: Party; onClose: () => void; onEdit: () => void; onSync: () => void }) {
+function PartyDetailDrawer({
+  party, onClose, onEdit, onChanged,
+}: {
+  party: Party;
+  onClose: () => void;
+  onEdit: () => void;
+  onChanged: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [showRejectBox, setShowRejectBox] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [showError, setShowError] = useState(false);
+
+  const ready = isPartyReadyForPosting(party);
+  const canApprove = party.approval_status === "pending_approval" || party.approval_status === "rejected";
+  const canReject = party.approval_status === "pending_approval" || party.approval_status === "approved";
+  const canSync = party.approval_status === "approved";
+  const canRetry = party.approval_status === "sync_failed";
+
+  async function approve() {
+    setBusy(true);
+    const { error } = await supabase
+      .from("finance_parties")
+      .update({
+        approval_status: "approved",
+        approved_at: new Date().toISOString(),
+        rejected_at: null, rejected_by: null, rejection_reason: null,
+      })
+      .eq("id", party.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("اطلاعات تایید شد — اکنون می‌توانید در سپیدار ثبت کنید");
+    await onChanged();
+  }
+
+  async function reject() {
+    if (!rejectReason.trim()) return toast.error("دلیل رد را وارد کنید");
+    setBusy(true);
+    const { error } = await supabase
+      .from("finance_parties")
+      .update({
+        approval_status: "rejected",
+        rejected_at: new Date().toISOString(),
+        rejection_reason: rejectReason.trim(),
+        approved_at: null, approved_by: null,
+      })
+      .eq("id", party.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("اطلاعات رد شد");
+    setShowRejectBox(false); setRejectReason("");
+    await onChanged();
+  }
+
+  async function sync() {
+    setBusy(true);
+    try {
+      const res = await syncPartyToSepidar(party.id);
+      if (res.sepidar_sync_status === "synced") toast.success("در سپیدار ثبت شد");
+      else toast.error(res.error_message || "خطا در ثبت سپیدار");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "خطا");
+    } finally {
+      setBusy(false);
+      await onChanged();
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
       <div className="bg-card border-l shadow-lg w-full max-w-md h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
-          <div>
-            <h3 className="font-bold">{partyName(party)}</h3>
+          <div className="min-w-0">
+            <h3 className="font-bold truncate">{partyName(party)}</h3>
             <p className="text-xs text-muted-foreground">{party.ownership_type === "legal" ? "حقوقی" : "حقیقی"}</p>
           </div>
           <div className="flex gap-1">
@@ -228,11 +345,21 @@ function PartyDetailDrawer({ party, onClose, onEdit, onSync }: { party: Party; o
             <Button size="icon" variant="ghost" onClick={onClose}><X className="w-4 h-4" /></Button>
           </div>
         </div>
+
         <div className="p-4 space-y-4">
+          {/* Posting readiness banner */}
+          {!ready && (
+            <div className="rounded-lg border bg-amber-50 text-amber-900 text-xs p-2 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>این ذینفع تا کامل شدن ثبت در سپیدار، در صدور سند نهایی قابل انتخاب نیست.</span>
+            </div>
+          )}
+
           <div className="rounded-xl border p-3">
             <p className="text-xs text-muted-foreground">مانده</p>
             <MoneyCell value={party.balance} className="text-xl" positive={(party.balance || 0) > 0} negative={(party.balance || 0) < 0} />
           </div>
+
           <div className="space-y-1.5 text-sm">
             {party.national_code && <Row label="کد ملی" value={party.national_code} />}
             {party.national_id && <Row label="شناسه ملی" value={party.national_id} />}
@@ -241,14 +368,77 @@ function PartyDetailDrawer({ party, onClose, onEdit, onSync }: { party: Party; o
             {party.postal_code && <Row label="کد پستی" value={party.postal_code} />}
             {party.address && <Row label="آدرس" value={party.address} />}
           </div>
-          <div className="rounded-xl border p-3 space-y-2">
+
+          {/* Approval & Sepidar registration */}
+          <div className="rounded-xl border p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">وضعیت سپیدار</span>
-              <SepidarStatusBadge status={party.sepidar_sync_status} />
+              <h4 className="font-bold text-sm">وضعیت تایید و ثبت در سپیدار</h4>
+              <ApprovalBadge status={party.approval_status} />
             </div>
-            <Button size="sm" className="w-full" onClick={onSync}>
-              <Send className="w-4 h-4 ml-1" /> ثبت در سپیدار
-            </Button>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <Row label="وضعیت تایید" value={partyApprovalLabel(party.approval_status)} />
+              <Row label="وضعیت سپیدار" value={party.sepidar_sync_status || "—"} />
+              <Row label="کد DL" value={party.sepidar_dl_id != null ? String(party.sepidar_dl_id) : "—"} />
+              <Row label="کد تفصیل" value={party.sepidar_dl_code != null ? String(party.sepidar_dl_code) : "—"} />
+              <Row label="شناسه طرف حساب" value={party.sepidar_party_id != null ? String(party.sepidar_party_id) : "—"} />
+              <Row label="شناسه حساب" value={party.sepidar_account_id != null ? String(party.sepidar_account_id) : "—"} />
+              <Row label="عنوان در سپیدار" value={party.sepidar_full_name || "—"} />
+              <Row label="تعداد تلاش" value={String(party.sepidar_sync_attempts ?? 0)} />
+            </div>
+
+            {party.rejection_reason && (
+              <div className="rounded-md bg-rose-50 text-rose-900 text-xs p-2">
+                دلیل رد: {party.rejection_reason}
+              </div>
+            )}
+
+            {party.sepidar_error_message && (
+              <div className="space-y-1">
+                <Button size="sm" variant="outline" className="w-full" onClick={() => setShowError((s) => !s)}>
+                  <AlertTriangle className="w-4 h-4 ml-1" /> مشاهده خطای سپیدار
+                </Button>
+                {showError && (
+                  <div className="rounded-md bg-rose-50 text-rose-900 text-xs p-2 break-words">
+                    {party.sepidar_error_message}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              {canApprove && (
+                <Button size="sm" disabled={busy} onClick={approve}>
+                  <CheckCircle2 className="w-4 h-4 ml-1" /> تایید اطلاعات
+                </Button>
+              )}
+              {canReject && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => setShowRejectBox((s) => !s)}>
+                  <XCircle className="w-4 h-4 ml-1" /> رد اطلاعات
+                </Button>
+              )}
+              {canSync && (
+                <Button size="sm" className="col-span-2" disabled={busy} onClick={sync}>
+                  <Send className="w-4 h-4 ml-1" /> ثبت در سپیدار
+                </Button>
+              )}
+              {canRetry && (
+                <Button size="sm" className="col-span-2" disabled={busy} onClick={sync}>
+                  <RefreshCw className="w-4 h-4 ml-1" /> تلاش مجدد ثبت در سپیدار
+                </Button>
+              )}
+            </div>
+
+            {showRejectBox && (
+              <div className="space-y-2 rounded-md border p-2">
+                <Label className="text-xs">دلیل رد اطلاعات</Label>
+                <Textarea rows={2} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => { setShowRejectBox(false); setRejectReason(""); }}>انصراف</Button>
+                  <Button size="sm" variant="destructive" disabled={busy} onClick={reject}>ثبت رد</Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -264,3 +454,6 @@ function Row({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+// Re-export status labels for consumers
+export { PARTY_APPROVAL_STATUS_LABEL };

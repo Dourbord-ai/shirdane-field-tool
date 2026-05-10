@@ -1981,6 +1981,9 @@ export type Database = {
       finance_parties: {
         Row: {
           address: string | null
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           balance: number | null
           branch_code: string | null
           company_name: string | null
@@ -2002,18 +2005,28 @@ export type Database = {
           ownership_type: string | null
           postal_code: string | null
           raw_legacy_status: Json | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
           request_balance: number | null
           sepidar_account_id: number | null
           sepidar_dl_code: number | null
+          sepidar_dl_id: number | null
           sepidar_error_message: string | null
+          sepidar_full_name: string | null
           sepidar_party_id: number | null
+          sepidar_sync_attempts: number
           sepidar_sync_status: string | null
+          sepidar_synced_at: string | null
           status: string | null
           telephone: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           balance?: number | null
           branch_code?: string | null
           company_name?: string | null
@@ -2035,18 +2048,28 @@ export type Database = {
           ownership_type?: string | null
           postal_code?: string | null
           raw_legacy_status?: Json | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
           request_balance?: number | null
           sepidar_account_id?: number | null
           sepidar_dl_code?: number | null
+          sepidar_dl_id?: number | null
           sepidar_error_message?: string | null
+          sepidar_full_name?: string | null
           sepidar_party_id?: number | null
+          sepidar_sync_attempts?: number
           sepidar_sync_status?: string | null
+          sepidar_synced_at?: string | null
           status?: string | null
           telephone?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           balance?: number | null
           branch_code?: string | null
           company_name?: string | null
@@ -2068,12 +2091,19 @@ export type Database = {
           ownership_type?: string | null
           postal_code?: string | null
           raw_legacy_status?: Json | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
           request_balance?: number | null
           sepidar_account_id?: number | null
           sepidar_dl_code?: number | null
+          sepidar_dl_id?: number | null
           sepidar_error_message?: string | null
+          sepidar_full_name?: string | null
           sepidar_party_id?: number | null
+          sepidar_sync_attempts?: number
           sepidar_sync_status?: string | null
+          sepidar_synced_at?: string | null
           status?: string | null
           telephone?: string | null
           updated_at?: string
@@ -2471,9 +2501,11 @@ export type Database = {
       finance_sepidar_sync_logs: {
         Row: {
           created_at: string
+          entity_type: string | null
           error_message: string | null
           id: string
           operation_type: string | null
+          party_id: string | null
           request_payload: Json | null
           response_payload: Json | null
           status: string | null
@@ -2481,9 +2513,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          entity_type?: string | null
           error_message?: string | null
           id?: string
           operation_type?: string | null
+          party_id?: string | null
           request_payload?: Json | null
           response_payload?: Json | null
           status?: string | null
@@ -2491,15 +2525,24 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          entity_type?: string | null
           error_message?: string | null
           id?: string
           operation_type?: string | null
+          party_id?: string | null
           request_payload?: Json | null
           response_payload?: Json | null
           status?: string | null
           voucher_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "finance_sepidar_sync_logs_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "finance_sepidar_sync_logs_voucher_id_fkey"
             columns: ["voucher_id"]

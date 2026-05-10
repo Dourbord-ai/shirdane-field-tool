@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/finance/atoms";
 import { PartySelector } from "@/components/finance/selectors";
-import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
+import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName, assertPartiesReadyForPosting } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
@@ -254,6 +254,14 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
       const creditorTotal = items.filter((i) => i.amount_type === "creditor").reduce((s, i) => s + Number(i.amount || 0), 0);
       if (Math.abs(debtorTotal - creditorTotal) > 0.01) {
         toast.error("جمع بدهکار/بستانکار آیتم‌ها متوازن نیست — نیاز به تخصیص پرداخت دارد");
+        setBusy(false);
+        return;
+      }
+      // Block posting if any beneficiary is not yet synced to Sepidar
+      try {
+        await assertPartiesReadyForPosting(items.map((i) => i.party_id).filter((x): x is string => !!x));
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "ذینفع نامعتبر");
         setBusy(false);
         return;
       }
