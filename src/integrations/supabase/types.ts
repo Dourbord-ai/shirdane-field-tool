@@ -1576,6 +1576,7 @@ export type Database = {
           creditor_amount_column_index: number | null
           date_column_index: number | null
           debtor_amount_column_index: number | null
+          description: string | null
           description_column_indexes: number[]
           doc_number_column_index: number | null
           file_type: string
@@ -1595,6 +1596,7 @@ export type Database = {
           creditor_amount_column_index?: number | null
           date_column_index?: number | null
           debtor_amount_column_index?: number | null
+          description?: string | null
           description_column_indexes?: number[]
           doc_number_column_index?: number | null
           file_type: string
@@ -1614,6 +1616,7 @@ export type Database = {
           creditor_amount_column_index?: number | null
           date_column_index?: number | null
           debtor_amount_column_index?: number | null
+          description?: string | null
           description_column_indexes?: number[]
           doc_number_column_index?: number | null
           file_type?: string
