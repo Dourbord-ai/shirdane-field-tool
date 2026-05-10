@@ -77,6 +77,7 @@ export default function PaymentRequestsTab() {
               <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
               <FinanceStatusBadge status={r.status} />
             </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{getPaymentRequestTypeLabel(r.legacy_request_type_code)}</p>
             {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
             <div className="mt-3 pt-3 border-t flex items-center justify-between">
               <JalaliDateCell value={r.created_at} />
