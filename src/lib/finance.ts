@@ -78,6 +78,36 @@ export const RECEIVE_ID_STATUS_LABEL: Record<string, string> = {
   cancelled: "لغو شده",
 };
 
+// Payment request header statuses
+export const PAYMENT_REQUEST_STATUS_LABEL: Record<string, string> = {
+  draft: "پیش‌نویس",
+  pending_approval: "در انتظار تایید مدیریت",
+  approved: "تایید شده",
+  partially_paid: "پرداخت ناقص",
+  paid: "پرداخت کامل",
+  rejected: "رد شده",
+  cancelled: "لغو شده",
+};
+
+// Payment request item statuses
+export const PAYMENT_ITEM_STATUS_LABEL: Record<string, string> = {
+  pending_approval: "در انتظار تایید",
+  approved: "تایید شده",
+  partially_paid: "پرداخت ناقص",
+  paid: "پرداخت شده",
+  sync_failed: "خطای ثبت سند",
+  cancelled: "لغو شده",
+  rejected: "رد شده",
+};
+
+// Payment allocation statuses
+export const PAYMENT_ALLOCATION_STATUS_LABEL: Record<string, string> = {
+  pending_sync: "در انتظار ثبت سند",
+  synced: "ثبت سند شده",
+  sync_failed: "خطای ثبت سپیدار",
+  cancelled: "لغو شده",
+};
+
 export function receiveIdStatusLabel(s: string | null | undefined): string {
   return (s && RECEIVE_ID_STATUS_LABEL[s]) || s || "—";
 }
