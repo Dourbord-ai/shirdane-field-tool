@@ -472,6 +472,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
       if (!error) inserted++;
     }
+    if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
     const total = parsed.length;
     const valid = parsed.filter((r) => r.status === "valid").length;
