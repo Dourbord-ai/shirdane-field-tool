@@ -79,7 +79,7 @@ export function FinanceStatusBadge({ status }: { status: string | null | undefin
         STATUS_TONES[key] || "bg-muted text-muted-foreground",
       )}
     >
-      {OP_STATUS_LABEL[key] || ASSIGNMENT_STATUS_LABEL[key] || key}
+      {OP_STATUS_LABEL[key] || ASSIGNMENT_STATUS_LABEL[key] || RECEIVE_ID_STATUS_LABEL[key] || key}
     </span>
   );
 }
