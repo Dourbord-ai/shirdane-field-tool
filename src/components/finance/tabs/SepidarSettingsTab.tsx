@@ -17,6 +17,9 @@ interface Settings {
   default_payment_account_id: number | null;
   default_party_debit_account_id: number | null;
   default_party_credit_account_id: number | null;
+  default_creditor_payment_account_id: number | null;
+  default_prepayment_account_id: number | null;
+  default_on_account_payment_account_id: number | null;
 }
 
 interface Log {
