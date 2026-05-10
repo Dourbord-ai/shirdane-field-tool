@@ -528,7 +528,7 @@ function SepidarAccountPicker({ onClose, onPick }: { onClose: () => void; onPick
                   <Th>شماره حساب</Th>
                   <Th>بانک</Th>
                   <Th>وضعیت</Th>
-                  <Th></Th>
+                  <Th>{" "}</Th>
                 </tr>
               </thead>
               <tbody>
