@@ -305,11 +305,6 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
 
 function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
   const [items, setItems] = useState<PRItem[]>([]);
-  const [settings, setSettings] = useState<{
-    default_creditor_payment_account_id: number | null;
-    default_prepayment_account_id: number | null;
-    default_on_account_payment_account_id: number | null;
-  } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -318,12 +313,6 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
       .select("*, party:finance_parties(ownership_type,first_name,last_name,company_name,balance)")
       .eq("payment_request_id", pr.id)
       .then(({ data }) => setItems((data as never[]) || []));
-    supabase
-      .from("finance_sepidar_settings")
-      .select("default_creditor_payment_account_id,default_prepayment_account_id,default_on_account_payment_account_id")
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setSettings(data as never));
   }, [pr.id]);
 
   function validateAllForApproval(): string | null {
