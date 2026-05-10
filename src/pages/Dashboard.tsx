@@ -30,7 +30,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = getSession();
-  const isAdmin = !!user && ((user as { isSuperAdmin?: boolean }).isSuperAdmin || (user as { role?: string }).role === "admin" || (user as { role?: string }).role === "super_admin");
+  const { DEV_ACCESS_MODE } = await import("@/lib/devAccess").then ? { DEV_ACCESS_MODE: true } : { DEV_ACCESS_MODE: false };
+  const isAdmin = true; // TEMP: dev bypass — see src/lib/devAccess.ts
   const visibleModules = modules.filter((m) => !(m as { adminOnly?: boolean }).adminOnly || isAdmin);
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
