@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell, Layers, Tag, CircleDot, Home } from "lucide-react";
+import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell, Layers, Tag, CircleDot, Home, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 
@@ -11,6 +11,7 @@ const modules = [
   { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها", key: "livestock" },
   { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار", key: "storage" },
   { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
+  { title: "امور مالی", icon: Wallet, description: "بانک‌ها، تراکنش‌ها، اسناد و سپیدار", key: "finance" },
   { title: "منابع انسانی", icon: Users, description: "حضور و غیاب و درخواست‌ها", key: "hr" },
   { title: "مدارک و مجوزها", icon: Award, description: "مدیریت گواهینامه‌ها و پروانه‌ها", key: "certificates" },
   { title: "مدیریت باروری", icon: HeartPulse, description: "ورکفلو، قواعد، عملیات و هشدارهای باروری", key: "fertility", adminOnly: true },
@@ -118,6 +119,15 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </button>
+              </div>
+            )}
+
+            {mod.key === "finance" && expandedModule === "finance" && (
+              <div className="mt-2 animate-fade-in">
+                <Button onClick={() => navigate("/finance")} className="w-full touch-target rounded-xl gap-2 text-body font-bold" size="lg">
+                  <Wallet className="w-5 h-5" />
+                  ورود به امور مالی
+                </Button>
               </div>
             )}
 

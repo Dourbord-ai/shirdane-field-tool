@@ -1569,6 +1569,960 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_bank_transactions: {
+        Row: {
+          amount: number | null
+          assigned_operation_id: string | null
+          assigned_operation_type: string | null
+          assignment_status: string | null
+          balance_after: number | null
+          bank_id: string | null
+          card_number: string | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          deposit_amount: number | null
+          description: string | null
+          document_number: string | null
+          fee_amount: number | null
+          id: string
+          imported_at: string | null
+          imported_by: string | null
+          imported_file_name: string | null
+          is_deleted: boolean | null
+          last_four_digits_card_number: string | null
+          legacy_id: number | null
+          match_bank_name: string | null
+          match_content: string | null
+          match_name: string | null
+          match_type: number | null
+          original_file_name: string | null
+          raw_data: Json | null
+          reference_number: string | null
+          source_type: string | null
+          tracking_number: string | null
+          transaction_datetime: string | null
+          transaction_jalali_date: string | null
+          transaction_type: string | null
+          updated_at: string
+          withdraw_amount: number | null
+        }
+        Insert: {
+          amount?: number | null
+          assigned_operation_id?: string | null
+          assigned_operation_type?: string | null
+          assignment_status?: string | null
+          balance_after?: number | null
+          bank_id?: string | null
+          card_number?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deposit_amount?: number | null
+          description?: string | null
+          document_number?: string | null
+          fee_amount?: number | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          imported_file_name?: string | null
+          is_deleted?: boolean | null
+          last_four_digits_card_number?: string | null
+          legacy_id?: number | null
+          match_bank_name?: string | null
+          match_content?: string | null
+          match_name?: string | null
+          match_type?: number | null
+          original_file_name?: string | null
+          raw_data?: Json | null
+          reference_number?: string | null
+          source_type?: string | null
+          tracking_number?: string | null
+          transaction_datetime?: string | null
+          transaction_jalali_date?: string | null
+          transaction_type?: string | null
+          updated_at?: string
+          withdraw_amount?: number | null
+        }
+        Update: {
+          amount?: number | null
+          assigned_operation_id?: string | null
+          assigned_operation_type?: string | null
+          assignment_status?: string | null
+          balance_after?: number | null
+          bank_id?: string | null
+          card_number?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deposit_amount?: number | null
+          description?: string | null
+          document_number?: string | null
+          fee_amount?: number | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          imported_file_name?: string | null
+          is_deleted?: boolean | null
+          last_four_digits_card_number?: string | null
+          legacy_id?: number | null
+          match_bank_name?: string | null
+          match_content?: string | null
+          match_name?: string | null
+          match_type?: number | null
+          original_file_name?: string | null
+          raw_data?: Json | null
+          reference_number?: string | null
+          source_type?: string | null
+          tracking_number?: string | null
+          transaction_datetime?: string | null
+          transaction_jalali_date?: string | null
+          transaction_type?: string | null
+          updated_at?: string
+          withdraw_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_bank_transactions_bank_id_fkey"
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_bank_transfers: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          fee_amount: number | null
+          fee_party_id: string | null
+          from_amount: number | null
+          from_bank_id: string | null
+          from_transaction_id: string | null
+          has_fee: boolean | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          status: string | null
+          to_amount: number | null
+          to_bank_id: string | null
+          to_transaction_id: string | null
+          transfer_datetime: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fee_amount?: number | null
+          fee_party_id?: string | null
+          from_amount?: number | null
+          from_bank_id?: string | null
+          from_transaction_id?: string | null
+          has_fee?: boolean | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          status?: string | null
+          to_amount?: number | null
+          to_bank_id?: string | null
+          to_transaction_id?: string | null
+          transfer_datetime?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fee_amount?: number | null
+          fee_party_id?: string | null
+          from_amount?: number | null
+          from_bank_id?: string | null
+          from_transaction_id?: string | null
+          has_fee?: boolean | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          status?: string | null
+          to_amount?: number | null
+          to_bank_id?: string | null
+          to_transaction_id?: string | null
+          transfer_datetime?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_bank_transfers_fee_party_id_fkey"
+            columns: ["fee_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_bank_transfers_from_bank_id_fkey"
+            columns: ["from_bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_bank_transfers_from_transaction_id_fkey"
+            columns: ["from_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_bank_transfers_to_bank_id_fkey"
+            columns: ["to_bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_bank_transfers_to_transaction_id_fkey"
+            columns: ["to_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_banks: {
+        Row: {
+          account_holder_name: string | null
+          account_number: string | null
+          api_start_date: string | null
+          bank_name: string | null
+          card_number: string | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          iban_number: string | null
+          id: string
+          is_active: boolean | null
+          is_api_enabled: boolean | null
+          is_cheque: boolean | null
+          is_deleted: boolean | null
+          is_official: boolean | null
+          last_balance: number | null
+          last_update: string | null
+          legacy_id: number | null
+          notes: string | null
+          old_balance: number | null
+          online_balance: number | null
+          sepidar_account_id: number | null
+          sepidar_dl_id: number | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_holder_name?: string | null
+          account_number?: string | null
+          api_start_date?: string | null
+          bank_name?: string | null
+          card_number?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          iban_number?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_api_enabled?: boolean | null
+          is_cheque?: boolean | null
+          is_deleted?: boolean | null
+          is_official?: boolean | null
+          last_balance?: number | null
+          last_update?: string | null
+          legacy_id?: number | null
+          notes?: string | null
+          old_balance?: number | null
+          online_balance?: number | null
+          sepidar_account_id?: number | null
+          sepidar_dl_id?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_holder_name?: string | null
+          account_number?: string | null
+          api_start_date?: string | null
+          bank_name?: string | null
+          card_number?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          iban_number?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_api_enabled?: boolean | null
+          is_cheque?: boolean | null
+          is_deleted?: boolean | null
+          is_official?: boolean | null
+          last_balance?: number | null
+          last_update?: string | null
+          legacy_id?: number | null
+          notes?: string | null
+          old_balance?: number | null
+          online_balance?: number | null
+          sepidar_account_id?: number | null
+          sepidar_dl_id?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      finance_parties: {
+        Row: {
+          address: string | null
+          balance: number | null
+          branch_code: string | null
+          company_name: string | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          description: string | null
+          economic_code: string | null
+          first_name: string | null
+          id: string
+          identification_code: string | null
+          is_deleted: boolean | null
+          last_name: string | null
+          legacy_id: number | null
+          mobile: string | null
+          national_code: string | null
+          national_id: string | null
+          nationality: string | null
+          ownership_type: string | null
+          postal_code: string | null
+          raw_legacy_status: Json | null
+          request_balance: number | null
+          sepidar_account_id: number | null
+          sepidar_dl_code: number | null
+          sepidar_error_message: string | null
+          sepidar_party_id: number | null
+          sepidar_sync_status: string | null
+          status: string | null
+          telephone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          balance?: number | null
+          branch_code?: string | null
+          company_name?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          economic_code?: string | null
+          first_name?: string | null
+          id?: string
+          identification_code?: string | null
+          is_deleted?: boolean | null
+          last_name?: string | null
+          legacy_id?: number | null
+          mobile?: string | null
+          national_code?: string | null
+          national_id?: string | null
+          nationality?: string | null
+          ownership_type?: string | null
+          postal_code?: string | null
+          raw_legacy_status?: Json | null
+          request_balance?: number | null
+          sepidar_account_id?: number | null
+          sepidar_dl_code?: number | null
+          sepidar_error_message?: string | null
+          sepidar_party_id?: number | null
+          sepidar_sync_status?: string | null
+          status?: string | null
+          telephone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          balance?: number | null
+          branch_code?: string | null
+          company_name?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          economic_code?: string | null
+          first_name?: string | null
+          id?: string
+          identification_code?: string | null
+          is_deleted?: boolean | null
+          last_name?: string | null
+          legacy_id?: number | null
+          mobile?: string | null
+          national_code?: string | null
+          national_id?: string | null
+          nationality?: string | null
+          ownership_type?: string | null
+          postal_code?: string | null
+          raw_legacy_status?: Json | null
+          request_balance?: number | null
+          sepidar_account_id?: number | null
+          sepidar_dl_code?: number | null
+          sepidar_error_message?: string | null
+          sepidar_party_id?: number | null
+          sepidar_sync_status?: string | null
+          status?: string | null
+          telephone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      finance_party_transfers: {
+        Row: {
+          amount: number | null
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          from_party_id: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          status: string | null
+          title: string | null
+          to_party_id: string | null
+          transfer_datetime: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          from_party_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          status?: string | null
+          title?: string | null
+          to_party_id?: string | null
+          transfer_datetime?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          from_party_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          status?: string | null
+          title?: string | null
+          to_party_id?: string | null
+          transfer_datetime?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_party_transfers_from_party_id_fkey"
+            columns: ["from_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_party_transfers_to_party_id_fkey"
+            columns: ["to_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_payment_request_items: {
+        Row: {
+          amount: number | null
+          amount_type: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_request_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          amount_type?: string | null
+          confirmed_amount?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          paid_transaction_id?: string | null
+          party_id?: string | null
+          payment_request_id?: string | null
+          status?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          amount_type?: string | null
+          confirmed_amount?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          paid_transaction_id?: string | null
+          party_id?: string | null
+          payment_request_id?: string | null
+          status?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_payment_request_items_paid_transaction_id_fkey"
+            columns: ["paid_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_request_items_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_request_items_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payment_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_payment_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          confirmed_amount: number | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          description: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          request_type: string | null
+          requested_by: string | null
+          status: string | null
+          title: string | null
+          total_amount: number | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          confirmed_amount?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          request_type?: string | null
+          requested_by?: string | null
+          status?: string | null
+          title?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          confirmed_amount?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          request_type?: string | null
+          requested_by?: string | null
+          status?: string | null
+          title?: string | null
+          total_amount?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      finance_receive_identifications: {
+        Row: {
+          amount: number | null
+          approved_at: string | null
+          approved_by: string | null
+          bank_id: string | null
+          bank_transaction_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          party_id: string | null
+          status: string | null
+          title: string | null
+          transaction_datetime: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          bank_id?: string | null
+          bank_transaction_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          party_id?: string | null
+          status?: string | null
+          title?: string | null
+          transaction_datetime?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          bank_id?: string | null
+          bank_transaction_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          party_id?: string | null
+          status?: string | null
+          title?: string | null
+          transaction_datetime?: string | null
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_receive_identifications_bank_id_fkey"
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_receive_identifications_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_receive_identifications_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_sepidar_settings: {
+        Row: {
+          bridge_base_url: string | null
+          bridge_enabled: boolean | null
+          created_at: string
+          default_bank_fee_party_id: string | null
+          default_party_credit_account_id: number | null
+          default_party_debit_account_id: number | null
+          default_payment_account_id: number | null
+          default_receive_account_id: number | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          bridge_base_url?: string | null
+          bridge_enabled?: boolean | null
+          created_at?: string
+          default_bank_fee_party_id?: string | null
+          default_party_credit_account_id?: number | null
+          default_party_debit_account_id?: number | null
+          default_payment_account_id?: number | null
+          default_receive_account_id?: number | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          bridge_base_url?: string | null
+          bridge_enabled?: boolean | null
+          created_at?: string
+          default_bank_fee_party_id?: string | null
+          default_party_credit_account_id?: number | null
+          default_party_debit_account_id?: number | null
+          default_payment_account_id?: number | null
+          default_receive_account_id?: number | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_sepidar_settings_default_bank_fee_party_id_fkey"
+            columns: ["default_bank_fee_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_sepidar_sync_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          operation_type: string | null
+          request_payload: Json | null
+          response_payload: Json | null
+          status: string | null
+          voucher_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          operation_type?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          status?: string | null
+          voucher_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          operation_type?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          status?: string | null
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_sepidar_sync_logs_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_voucher_items: {
+        Row: {
+          account_type: string | null
+          bank_id: string | null
+          created_at: string
+          credit: number | null
+          debit: number | null
+          description: string | null
+          id: string
+          party_id: string | null
+          row_number: number | null
+          sepidar_account_id: number | null
+          sepidar_dl_id: number | null
+          sepidar_party_id: number | null
+          sepidar_voucher_item_id: number | null
+          voucher_id: string | null
+        }
+        Insert: {
+          account_type?: string | null
+          bank_id?: string | null
+          created_at?: string
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          id?: string
+          party_id?: string | null
+          row_number?: number | null
+          sepidar_account_id?: number | null
+          sepidar_dl_id?: number | null
+          sepidar_party_id?: number | null
+          sepidar_voucher_item_id?: number | null
+          voucher_id?: string | null
+        }
+        Update: {
+          account_type?: string | null
+          bank_id?: string | null
+          created_at?: string
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          id?: string
+          party_id?: string | null
+          row_number?: number | null
+          sepidar_account_id?: number | null
+          sepidar_dl_id?: number | null
+          sepidar_party_id?: number | null
+          sepidar_voucher_item_id?: number | null
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_voucher_items_bank_id_fkey"
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_voucher_items_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_voucher_items_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_vouchers: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          sepidar_daily_number: number | null
+          sepidar_error_message: string | null
+          sepidar_extra_data_id: number | null
+          sepidar_reference_number: number | null
+          sepidar_sync_attempts: number | null
+          sepidar_sync_status: string | null
+          sepidar_synced_at: string | null
+          sepidar_voucher_id: number | null
+          sepidar_voucher_number: number | null
+          source_operation_id: string | null
+          source_operation_type: string | null
+          status: string | null
+          title: string | null
+          total_credit: number | null
+          total_debit: number | null
+          updated_at: string
+          voucher_date: string | null
+          voucher_number: number | null
+          voucher_type: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          sepidar_daily_number?: number | null
+          sepidar_error_message?: string | null
+          sepidar_extra_data_id?: number | null
+          sepidar_reference_number?: number | null
+          sepidar_sync_attempts?: number | null
+          sepidar_sync_status?: string | null
+          sepidar_synced_at?: string | null
+          sepidar_voucher_id?: number | null
+          sepidar_voucher_number?: number | null
+          source_operation_id?: string | null
+          source_operation_type?: string | null
+          status?: string | null
+          title?: string | null
+          total_credit?: number | null
+          total_debit?: number | null
+          updated_at?: string
+          voucher_date?: string | null
+          voucher_number?: number | null
+          voucher_type?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          legacy_id?: number | null
+          sepidar_daily_number?: number | null
+          sepidar_error_message?: string | null
+          sepidar_extra_data_id?: number | null
+          sepidar_reference_number?: number | null
+          sepidar_sync_attempts?: number | null
+          sepidar_sync_status?: string | null
+          sepidar_synced_at?: string | null
+          sepidar_voucher_id?: number | null
+          sepidar_voucher_number?: number | null
+          source_operation_id?: string | null
+          source_operation_type?: string | null
+          status?: string | null
+          title?: string | null
+          total_credit?: number | null
+          total_debit?: number | null
+          updated_at?: string
+          voucher_date?: string | null
+          voucher_number?: number | null
+          voucher_type?: string | null
+        }
+        Relationships: []
+      }
       hr_attendance: {
         Row: {
           created_at: string
