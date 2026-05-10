@@ -113,8 +113,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         <select value={filterAssign} onChange={(e) => setFilterAssign(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
           <option value="">وضعیت تخصیص</option>
           <option value="unassigned">تخصیص نشده</option>
+          <option value="assigning">در حال تخصیص</option>
           <option value="assigned">تخصیص شده</option>
-          <option value="partially_assigned">تخصیص ناقص</option>
+          <option value="rejected">رد شده</option>
+          <option value="cancelled">لغو شده</option>
         </select>
         <Input placeholder="شرح..." value={filterDescr} onChange={(e) => setFilterDescr(e.target.value)} />
       </div>
