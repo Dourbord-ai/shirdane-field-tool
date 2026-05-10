@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
 interface KPI {
   totalBankBalance: number;
   unassignedTx: number;
+  assigningTx: number;
+  pendingReceiveId: number;
+  unassignedCreditor: number;
+  unassignedDebtor: number;
   openRequests: number;
   partiesDebit: number;
   partiesCredit: number;
@@ -32,6 +36,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
   const [kpi, setKpi] = useState<KPI>({
     totalBankBalance: 0,
     unassignedTx: 0,
+    assigningTx: 0,
+    pendingReceiveId: 0,
+    unassignedCreditor: 0,
+    unassignedDebtor: 0,
     openRequests: 0,
     partiesDebit: 0,
     partiesCredit: 0,
@@ -44,17 +52,25 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
   }, []);
 
   async function load() {
-    const [banks, unassigned, openReq, parties, notSynced, failed] = await Promise.all([
-      supabase.from("finance_banks").select("last_balance,online_balance").eq("is_deleted", false).eq("is_active", true),
+    const [banks, unassigned, assigning, pendingRi, openReq, parties, notSynced, failed] = await Promise.all([
+      supabase.from("finance_banks").select("last_balance,online_balance,unassigned_creditor_balance,unassigned_debtor_balance").eq("is_deleted", false).eq("is_active", true),
       supabase.from("finance_bank_transactions").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("assignment_status", "unassigned"),
+      supabase.from("finance_bank_transactions").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("assignment_status", "assigning"),
+      supabase.from("finance_receive_identifications").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("status", "pending_approval"),
       supabase.from("finance_payment_requests").select("id", { count: "exact", head: true }).eq("is_deleted", false).in("status", ["draft", "pending_approval", "approved"]),
       supabase.from("finance_parties").select("balance").eq("is_deleted", false),
       supabase.from("finance_vouchers").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("sepidar_sync_status", "not_synced"),
       supabase.from("finance_vouchers").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("sepidar_sync_status", "failed"),
     ]);
     let total = 0;
-    ((banks.data as { last_balance: number | null; online_balance: number | null }[]) || []).forEach(
-      (b) => (total += Number(b.online_balance || b.last_balance || 0)),
+    let creditor = 0;
+    let debtor = 0;
+    ((banks.data as { last_balance: number | null; online_balance: number | null; unassigned_creditor_balance: number | null; unassigned_debtor_balance: number | null }[]) || []).forEach(
+      (b) => {
+        total += Number(b.online_balance || b.last_balance || 0);
+        creditor += Number(b.unassigned_creditor_balance || 0);
+        debtor += Number(b.unassigned_debtor_balance || 0);
+      },
     );
     let debit = 0;
     let credit = 0;
@@ -66,6 +82,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
     setKpi({
       totalBankBalance: total,
       unassignedTx: unassigned.count || 0,
+      assigningTx: assigning.count || 0,
+      pendingReceiveId: pendingRi.count || 0,
+      unassignedCreditor: creditor,
+      unassignedDebtor: debtor,
       openRequests: openReq.count || 0,
       partiesDebit: debit,
       partiesCredit: credit,
