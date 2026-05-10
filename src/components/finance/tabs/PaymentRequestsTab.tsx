@@ -9,12 +9,14 @@ import { PartySelector } from "@/components/finance/selectors";
 import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 
 interface PR {
   id: string;
   title: string | null;
   description: string | null;
   request_type: string | null;
+  legacy_request_type_code: number | null;
   status: string | null;
   total_amount: number | null;
   confirmed_amount: number | null;
