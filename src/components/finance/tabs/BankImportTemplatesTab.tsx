@@ -133,8 +133,17 @@ export default function BankImportTemplatesTab() {
               <Field label="عنوان" full>
                 <Input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
               </Field>
-              <Field label="کد بانک">
-                <Input type="number" value={edit.bank_name_code ?? ""} onChange={(e) => setEdit({ ...edit, bank_name_code: e.target.value === "" ? null : Number(e.target.value) })} />
+              <Field label="کد + نام بانک">
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={edit.bank_name_code ?? ""}
+                  onChange={(e) => setEdit({ ...edit, bank_name_code: e.target.value === "" ? null : Number(e.target.value) })}
+                >
+                  <option value="">— انتخاب نشده —</option>
+                  {LEGACY_BANK_CODES.map((b) => (
+                    <option key={b.code} value={b.code}>{b.code} - {b.name}</option>
+                  ))}
+                </select>
               </Field>
               <Field label="نوع فایل">
                 <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={edit.file_type} onChange={(e) => setEdit({ ...edit, file_type: e.target.value as T["file_type"] })}>
