@@ -77,6 +77,7 @@ export default function Finance() {
         {tab === "party-transfer" && <PartyTransferTab />}
         {tab === "parties" && <PartiesTab />}
         {tab === "vouchers" && <VouchersTab />}
+        {tab === "import-templates" && <BankImportTemplatesTab />}
         {tab === "sepidar" && <SepidarSettingsTab />}
       </div>
     </div>
