@@ -7,8 +7,9 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import type { BankImportTemplate } from "@/lib/bankImport";
+import { LEGACY_BANK_CODES, legacyBankLabel } from "@/lib/legacyBanks";
 
-type T = BankImportTemplate;
+type T = BankImportTemplate & { description?: string | null };
 
 const EMPTY: Omit<T, "id"> = {
   title: "",
@@ -25,6 +26,7 @@ const EMPTY: Omit<T, "id"> = {
   needs_rtl_cleanup: false,
   time_24_fix: false,
   is_active: true,
+  description: "",
 };
 
 export default function BankImportTemplatesTab() {
@@ -92,7 +94,8 @@ export default function BankImportTemplatesTab() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-bold">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">کد {t.bank_name_code} · {t.file_type.toUpperCase()}</p>
+                  <p className="text-xs text-muted-foreground">بانک: {legacyBankLabel(t.bank_name_code)} · {t.file_type.toUpperCase()} {!t.is_active && <span className="text-amber-700">· غیرفعال</span>}</p>
+                  {t.description && <p className="text-[11px] text-muted-foreground mt-1">{t.description}</p>}
                 </div>
                 <div className="flex gap-1">
                   <Button size="icon" variant="ghost" onClick={() => setEdit(t)}><Pencil className="w-4 h-4" /></Button>
@@ -130,8 +133,17 @@ export default function BankImportTemplatesTab() {
               <Field label="عنوان" full>
                 <Input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
               </Field>
-              <Field label="کد بانک">
-                <Input type="number" value={edit.bank_name_code ?? ""} onChange={(e) => setEdit({ ...edit, bank_name_code: e.target.value === "" ? null : Number(e.target.value) })} />
+              <Field label="کد + نام بانک">
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={edit.bank_name_code ?? ""}
+                  onChange={(e) => setEdit({ ...edit, bank_name_code: e.target.value === "" ? null : Number(e.target.value) })}
+                >
+                  <option value="">— انتخاب نشده —</option>
+                  {LEGACY_BANK_CODES.map((b) => (
+                    <option key={b.code} value={b.code}>{b.code} - {b.name}</option>
+                  ))}
+                </select>
               </Field>
               <Field label="نوع فایل">
                 <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={edit.file_type} onChange={(e) => setEdit({ ...edit, file_type: e.target.value as T["file_type"] })}>
@@ -152,6 +164,9 @@ export default function BankImportTemplatesTab() {
                   onChange={(e) => setEdit({ ...edit, description_column_indexes: e.target.value.split(",").map((s) => Number(s.trim())).filter((n) => !isNaN(n)) })}
                   placeholder="3,4"
                 />
+              </Field>
+              <Field label="توضیحات قالب" full>
+                <Input value={edit.description ?? ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="مثلاً: قالب بانک گردشگری هنوز تعریف نشده است" />
               </Field>
               <ToggleRow label="هدر دارد" v={edit.has_header} on={(b) => setEdit({ ...edit, has_header: b })} />
               <ToggleRow label="پاکسازی RTL" v={edit.needs_rtl_cleanup} on={(b) => setEdit({ ...edit, needs_rtl_cleanup: b })} />

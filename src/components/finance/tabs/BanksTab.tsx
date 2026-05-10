@@ -8,6 +8,7 @@ import { MoneyCell, JalaliDateCell } from "@/components/finance/atoms";
 import { Plus, Pencil, Power, Eye, RefreshCw, X, Link2, Search, CheckCircle2, AlertTriangle, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { LEGACY_BANK_CODES, legacyBankLabel } from "@/lib/legacyBanks";
 
 type MappingStatus = "not_mapped" | "mapped" | "needs_review";
 
@@ -34,6 +35,7 @@ interface Bank {
   sepidar_mapping_status: MappingStatus | null;
   sepidar_mapping_note: string | null;
   sepidar_last_checked_at: string | null;
+  legacy_bank_name_code: number | null;
 }
 
 interface SepidarCacheRow {
@@ -55,6 +57,7 @@ const EMPTY: Partial<Bank> = {
   sepidar_dl_id: null, sepidar_dl_code: "", sepidar_account_id: null,
   sepidar_bank_account_id: null, sepidar_full_title: "",
   sepidar_mapping_status: "not_mapped", sepidar_mapping_note: "",
+  legacy_bank_name_code: null,
 };
 
 const MAPPING_LABEL: Record<MappingStatus, string> = {
@@ -185,6 +188,11 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {b.legacy_bank_name_code != null && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                      {legacyBankLabel(b.legacy_bank_name_code)}
+                    </span>
+                  )}
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-bold", MAPPING_TONE[ms])}>
                     سپیدار: {MAPPING_LABEL[ms]}
                   </span>
@@ -262,6 +270,18 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
               <Field label="شماره حساب"><Input dir="ltr" value={editing.account_number || ""} onChange={(e) => setEditing({ ...editing, account_number: e.target.value })} /></Field>
               <Field label="شبا"><Input dir="ltr" value={editing.iban_number || ""} onChange={(e) => setEditing({ ...editing, iban_number: e.target.value })} /></Field>
               <Field label="شماره کارت"><Input dir="ltr" value={editing.card_number || ""} onChange={(e) => setEditing({ ...editing, card_number: e.target.value })} /></Field>
+              <Field label="کد بانک در سیستم قدیم">
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={editing.legacy_bank_name_code ?? ""}
+                  onChange={(e) => setEditing({ ...editing, legacy_bank_name_code: e.target.value === "" ? null : Number(e.target.value) })}
+                >
+                  <option value="">— انتخاب نشده —</option>
+                  {LEGACY_BANK_CODES.map((b) => (
+                    <option key={b.code} value={b.code}>{b.code} - {b.name}</option>
+                  ))}
+                </select>
+              </Field>
               <div className="sm:col-span-2 grid grid-cols-3 gap-2">
                 <Toggle label="رسمی" checked={!!editing.is_official} onChange={(v) => setEditing({ ...editing, is_official: v })} />
                 <Toggle label="API فعال" checked={!!editing.is_api_enabled} onChange={(v) => setEditing({ ...editing, is_api_enabled: v })} />

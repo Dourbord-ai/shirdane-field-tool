@@ -18,6 +18,7 @@ export interface BankImportTemplate {
   needs_rtl_cleanup: boolean;
   time_24_fix: boolean;
   is_active: boolean;
+  description?: string | null;
 }
 
 export interface ParsedRow {

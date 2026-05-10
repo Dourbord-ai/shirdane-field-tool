@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
 import { parseMoney, partyName } from "@/lib/finance";
-import { Plus, Upload, Download, X, Trash2, FileText } from "lucide-react";
+import { legacyBankLabel } from "@/lib/legacyBanks";
+import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface Tx {
@@ -295,7 +296,7 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
 
 function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [bankId, setBankId] = useState<string | null>(null);
-  const [bankInfo, setBankInfo] = useState<{ import_template_id: string | null; legacy_bank_name_code: number | null } | null>(null);
+  const [bankInfo, setBankInfo] = useState<{ title: string | null; bank_name: string | null; import_template_id: string | null; legacy_bank_name_code: number | null } | null>(null);
   const [templates, setTemplates] = useState<import("@/lib/bankImport").BankImportTemplate[]>([]);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -310,26 +311,42 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     void supabase
       .from("finance_bank_import_templates")
       .select("*")
-      .eq("is_active", true)
       .order("bank_name_code", { ascending: true })
       .then(({ data }) => setTemplates((data as unknown as import("@/lib/bankImport").BankImportTemplate[]) || []));
   }, []);
 
   useEffect(() => {
+    setTemplateId(null);
+    setParsed([]);
+    setSummary(null);
     if (!bankId) { setBankInfo(null); return; }
     void supabase
       .from("finance_banks")
-      .select("import_template_id,legacy_bank_name_code")
+      .select("title,bank_name,import_template_id,legacy_bank_name_code")
       .eq("id", bankId)
       .maybeSingle()
       .then(({ data }) => {
-        const info = data as { import_template_id: string | null; legacy_bank_name_code: number | null } | null;
+        const info = data as { title: string | null; bank_name: string | null; import_template_id: string | null; legacy_bank_name_code: number | null } | null;
         setBankInfo(info);
-        if (info?.import_template_id) setTemplateId(info.import_template_id);
       });
   }, [bankId]);
 
+  // Auto-select template based on bank: explicit mapping first, then legacy code
+  useEffect(() => {
+    if (!bankInfo || templates.length === 0) return;
+    if (bankInfo.import_template_id) {
+      setTemplateId(bankInfo.import_template_id);
+      return;
+    }
+    if (bankInfo.legacy_bank_name_code != null) {
+      const m = templates.find((t) => t.bank_name_code === bankInfo.legacy_bank_name_code);
+      if (m) setTemplateId(m.id);
+    }
+  }, [bankInfo, templates]);
+
   const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId]);
+  const templateActive = !!selectedTemplate?.is_active;
+  const noActiveTemplate = !!bankId && !!bankInfo && !templateActive;
 
   async function preview() {
     setSummary(null);
@@ -337,6 +354,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     if (!title.trim() || !description.trim()) return toast.error("اطلاعات ضروری تکمیل نشده است");
     if (!file) return toast.error("اطلاعات ضروری تکمیل نشده است");
     if (!selectedTemplate) return toast.error("قالب خواندن فایل را انتخاب کنید");
+    if (!selectedTemplate.is_active) return toast.error("برای این بانک هنوز قالب خواندن فایل تعریف نشده است");
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
     if (!["xls", "xlsx", "csv"].includes(ext)) return toast.error("فرمت فایل مجاز نیست");
@@ -426,8 +444,11 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
             <div className="space-y-1.5">
               <Label className="text-xs">بانک *</Label>
               <BankSelector value={bankId} onChange={setBankId} />
-              {bankInfo && bankInfo.legacy_bank_name_code != null && (
-                <p className="text-[11px] text-muted-foreground">کد بانک قدیمی: {bankInfo.legacy_bank_name_code}</p>
+              {bankInfo && (
+                <p className="text-[11px] text-muted-foreground">
+                  {bankInfo.title || bankInfo.bank_name || "—"}
+                  {bankInfo.legacy_bank_name_code != null && <> · کد قدیمی: {legacyBankLabel(bankInfo.legacy_bank_name_code)}</>}
+                </p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -439,11 +460,28 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
               >
                 <option value="">— انتخاب کنید —</option>
                 {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.title} (کد {t.bank_name_code})</option>
+                  <option key={t.id} value={t.id}>
+                    {t.title} ({legacyBankLabel(t.bank_name_code)}){!t.is_active ? " — غیرفعال" : ""}
+                  </option>
                 ))}
               </select>
+              {selectedTemplate && (
+                <p className="text-[11px] text-muted-foreground">
+                  {selectedTemplate.title} · {selectedTemplate.file_type.toUpperCase()}
+                  {!selectedTemplate.is_active && <span className="text-amber-700"> · غیرفعال</span>}
+                </p>
+              )}
             </div>
           </div>
+
+          {noActiveTemplate && (
+            <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                {selectedTemplate?.description || "برای این بانک هنوز قالب خواندن فایل تعریف نشده است"}
+              </span>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">عنوان *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً: گردش بانک ملت اردیبهشت" />
@@ -458,7 +496,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={preview} disabled={previewing || !file}>
+            <Button variant="outline" onClick={preview} disabled={previewing || !file || !templateActive}>
               {previewing ? "در حال پردازش…" : "پیش‌نمایش"}
             </Button>
           </div>
@@ -515,7 +553,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         </div>
         <div className="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-card">
           <Button variant="outline" onClick={onClose}>انصراف</Button>
-          <Button onClick={importAll} disabled={saving || parsed.filter((r) => r.status === "valid").length === 0}>
+          <Button onClick={importAll} disabled={saving || !templateActive || parsed.filter((r) => r.status === "valid").length === 0}>
             ثبت نهایی
           </Button>
         </div>
