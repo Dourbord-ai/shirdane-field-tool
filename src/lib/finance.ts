@@ -63,9 +63,24 @@ export const OP_STATUS_LABEL: Record<string, string> = {
 
 export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
   unassigned: "تخصیص نشده",
+  assigning: "در حال تخصیص",
   assigned: "تخصیص شده",
+  rejected: "رد شده",
+  cancelled: "لغو شده",
   partially_assigned: "تخصیص ناقص",
 };
+
+export const RECEIVE_ID_STATUS_LABEL: Record<string, string> = {
+  pending_approval: "در انتظار تایید",
+  approved: "تایید شده",
+  sync_failed: "خطای سپیدار",
+  rejected: "رد شده",
+  cancelled: "لغو شده",
+};
+
+export function receiveIdStatusLabel(s: string | null | undefined): string {
+  return (s && RECEIVE_ID_STATUS_LABEL[s]) || s || "—";
+}
 
 export const SEPIDAR_STATUS_LABEL: Record<string, string> = {
   not_synced: "ثبت نشده در سپیدار",
