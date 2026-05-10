@@ -1823,7 +1823,13 @@ export type Database = {
           old_balance: number | null
           online_balance: number | null
           sepidar_account_id: number | null
+          sepidar_bank_account_id: number | null
+          sepidar_dl_code: string | null
           sepidar_dl_id: number | null
+          sepidar_full_title: string | null
+          sepidar_last_checked_at: string | null
+          sepidar_mapping_note: string | null
+          sepidar_mapping_status: string
           title: string | null
           updated_at: string
         }
@@ -1850,7 +1856,13 @@ export type Database = {
           old_balance?: number | null
           online_balance?: number | null
           sepidar_account_id?: number | null
+          sepidar_bank_account_id?: number | null
+          sepidar_dl_code?: string | null
           sepidar_dl_id?: number | null
+          sepidar_full_title?: string | null
+          sepidar_last_checked_at?: string | null
+          sepidar_mapping_note?: string | null
+          sepidar_mapping_status?: string
           title?: string | null
           updated_at?: string
         }
@@ -1877,7 +1889,13 @@ export type Database = {
           old_balance?: number | null
           online_balance?: number | null
           sepidar_account_id?: number | null
+          sepidar_bank_account_id?: number | null
+          sepidar_dl_code?: string | null
           sepidar_dl_id?: number | null
+          sepidar_full_title?: string | null
+          sepidar_last_checked_at?: string | null
+          sepidar_mapping_note?: string | null
+          sepidar_mapping_status?: string
           title?: string | null
           updated_at?: string
         }
@@ -2271,6 +2289,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      finance_sepidar_bank_accounts_cache: {
+        Row: {
+          account_number: string | null
+          bank_name: string | null
+          created_at: string
+          fetched_at: string
+          id: string
+          is_active: boolean
+          raw: Json | null
+          sepidar_account_id: number | null
+          sepidar_bank_account_id: number
+          sepidar_dl_code: string | null
+          sepidar_dl_id: number | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          bank_name?: string | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          is_active?: boolean
+          raw?: Json | null
+          sepidar_account_id?: number | null
+          sepidar_bank_account_id: number
+          sepidar_dl_code?: string | null
+          sepidar_dl_id?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          bank_name?: string | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          is_active?: boolean
+          raw?: Json | null
+          sepidar_account_id?: number | null
+          sepidar_bank_account_id?: number
+          sepidar_dl_code?: string | null
+          sepidar_dl_id?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       finance_sepidar_settings: {
         Row: {
