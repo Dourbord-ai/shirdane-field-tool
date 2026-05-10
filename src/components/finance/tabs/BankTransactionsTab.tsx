@@ -444,8 +444,11 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
             <div className="space-y-1.5">
               <Label className="text-xs">بانک *</Label>
               <BankSelector value={bankId} onChange={setBankId} />
-              {bankInfo && bankInfo.legacy_bank_name_code != null && (
-                <p className="text-[11px] text-muted-foreground">کد بانک قدیمی: {bankInfo.legacy_bank_name_code}</p>
+              {bankInfo && (
+                <p className="text-[11px] text-muted-foreground">
+                  {bankInfo.title || bankInfo.bank_name || "—"}
+                  {bankInfo.legacy_bank_name_code != null && <> · کد قدیمی: {legacyBankLabel(bankInfo.legacy_bank_name_code)}</>}
+                </p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -457,11 +460,28 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
               >
                 <option value="">— انتخاب کنید —</option>
                 {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.title} (کد {t.bank_name_code})</option>
+                  <option key={t.id} value={t.id}>
+                    {t.title} ({legacyBankLabel(t.bank_name_code)}){!t.is_active ? " — غیرفعال" : ""}
+                  </option>
                 ))}
               </select>
+              {selectedTemplate && (
+                <p className="text-[11px] text-muted-foreground">
+                  {selectedTemplate.title} · {selectedTemplate.file_type.toUpperCase()}
+                  {!selectedTemplate.is_active && <span className="text-amber-700"> · غیرفعال</span>}
+                </p>
+              )}
             </div>
           </div>
+
+          {noActiveTemplate && (
+            <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                {selectedTemplate?.description || "برای این بانک هنوز قالب خواندن فایل تعریف نشده است"}
+              </span>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">عنوان *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً: گردش بانک ملت اردیبهشت" />
