@@ -188,6 +188,11 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {b.legacy_bank_name_code != null && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                      {legacyBankLabel(b.legacy_bank_name_code)}
+                    </span>
+                  )}
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-bold", MAPPING_TONE[ms])}>
                     سپیدار: {MAPPING_LABEL[ms]}
                   </span>
