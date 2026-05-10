@@ -369,27 +369,34 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         return;
       }
 
-      // Build voucher items: each PR item is debited to the appropriate party account.
-      // Bank credit lines are not generated here — final allocation to a bank happens in the payment step.
+      // Build voucher items: each PR item is debited to the appropriate party account
+      // (creditor / prepayment / on_account). The credit side is a single pending-bank
+      // line — final allocation to a real bank happens at the payment step.
+      const totalDebit = items.reduce((s, i) => s + Number(i.amount || 0), 0);
+      const debitItems = items.map((i) => {
+        const accountKind =
+          i.amount_type_code === 1 ? "party_creditor"
+          : i.amount_type_code === 2 ? "party_prepayment"
+          : i.amount_type_code === 3 ? "party_on_account"
+          : "party";
+        return {
+          party_id: i.party_id,
+          account_type: accountKind,
+          debit: Number(i.amount || 0),
+          credit: 0,
+          description: [i.description, `(${getPaymentAmountTypeLabel(i.amount_type_code).split(" - ")[1] || ""})`].filter(Boolean).join(" "),
+        };
+      });
       const v = await createVoucher({
         voucher_type: "payment_request",
         source_operation_type: "payment_request",
         source_operation_id: pr.id,
         title: pr.title || "درخواست پرداخت",
         description: pr.description,
-        items: items.map((i) => ({
-          party_id: i.party_id,
-          account_type: "party",
-          // Map per amount_type_code to the right default party account placeholder
-          legacy_account_id:
-            i.amount_type_code === 1 ? settings?.default_creditor_payment_account_id ?? null
-            : i.amount_type_code === 2 ? settings?.default_prepayment_account_id ?? null
-            : i.amount_type_code === 3 ? settings?.default_on_account_payment_account_id ?? null
-            : null,
-          debit: Number(i.amount || 0),
-          credit: 0,
-          description: i.description,
-        })),
+        items: [
+          ...debitItems,
+          { account_type: "bank_pending", debit: 0, credit: totalDebit, description: "اعتبار بانک — در انتظار تخصیص" },
+        ],
       });
       await supabase.from("finance_payment_requests").update({ status: "posted" }).eq("id", pr.id);
       await sepidarSyncPlaceholder(v.id, "post_voucher");
