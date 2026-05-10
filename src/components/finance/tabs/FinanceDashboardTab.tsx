@@ -96,6 +96,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
 
   const cards = [
     { label: "جمع موجودی بانک‌ها", value: kpi.totalBankBalance, type: "money" as const, icon: Wallet, tone: "from-emerald-500 to-teal-600", onClick: () => onTabChange("banks") },
+    { label: "واریزهای تخصیص‌نیافته", value: kpi.unassignedCreditor, type: "money" as const, icon: ArrowDownToLine, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("transactions") },
+    { label: "برداشت‌های تخصیص‌نیافته", value: kpi.unassignedDebtor, type: "money" as const, icon: TrendingDown, tone: "from-rose-500 to-red-600", onClick: () => onTabChange("transactions") },
+    { label: "تراکنش‌های در حال تخصیص", value: kpi.assigningTx, type: "count" as const, icon: AlertCircle, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("transactions") },
+    { label: "درخواست‌های شناسایی در انتظار تایید", value: kpi.pendingReceiveId, type: "count" as const, icon: ClipboardList, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("receive-id") },
     { label: "تراکنش‌های تخصیص نشده", value: kpi.unassignedTx, type: "count" as const, icon: AlertCircle, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("transactions") },
     { label: "درخواست‌های پرداخت باز", value: kpi.openRequests, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
     { label: "مانده بدهکار ذینفعان", value: kpi.partiesDebit, type: "money" as const, icon: TrendingDown, tone: "from-red-500 to-rose-600", onClick: () => onTabChange("parties") },
