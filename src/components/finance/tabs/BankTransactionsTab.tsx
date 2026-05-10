@@ -354,6 +354,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     if (!title.trim() || !description.trim()) return toast.error("اطلاعات ضروری تکمیل نشده است");
     if (!file) return toast.error("اطلاعات ضروری تکمیل نشده است");
     if (!selectedTemplate) return toast.error("قالب خواندن فایل را انتخاب کنید");
+    if (!selectedTemplate.is_active) return toast.error("برای این بانک هنوز قالب خواندن فایل تعریف نشده است");
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
     if (!["xls", "xlsx", "csv"].includes(ext)) return toast.error("فرمت فایل مجاز نیست");
