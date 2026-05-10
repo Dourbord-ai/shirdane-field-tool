@@ -292,6 +292,7 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
       if (error.code === "23505") return toast.error("تراکنش تکراری");
       return toast.error(error.message);
     }
+    await recalculateBankUnassignedBalances(bankId);
     toast.success("ثبت شد");
     onDone();
   }
