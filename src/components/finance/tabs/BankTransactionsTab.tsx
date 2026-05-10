@@ -213,9 +213,19 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     : <MoneyCell value={t.withdraw_amount} negative />}
                 </div>
                 {t.description && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{t.description}</p>}
-                <div className="mt-2 flex gap-1">
+                <div className="mt-2 flex gap-1 flex-wrap">
+                  {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
+                    <Button size="sm" variant="outline" onClick={() => setOpenReceiveId(t)}>
+                      <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
+                    </Button>
+                  )}
+                  {t.assignment_status === "assigning" && (
+                    <span className="text-[11px] text-amber-700">در انتظار تایید مدیر</span>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => setOpenRaw(t)}><FileText className="w-3 h-3 ml-1" /> جزئیات</Button>
-                  <Button size="sm" variant="ghost" onClick={() => softDelete(t)}><Trash2 className="w-3 h-3 ml-1" /> حذف</Button>
+                  {t.assignment_status === "unassigned" && (
+                    <Button size="sm" variant="ghost" onClick={() => softDelete(t)}><Trash2 className="w-3 h-3 ml-1" /> حذف</Button>
+                  )}
                 </div>
               </div>
             ))}
