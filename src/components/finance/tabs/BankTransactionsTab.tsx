@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
-import { parseMoney, partyName } from "@/lib/finance";
+import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
 import { legacyBankLabel } from "@/lib/legacyBanks";
-import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle } from "lucide-react";
+import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
+import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Tx {
@@ -27,6 +28,8 @@ interface Tx {
   card_number: string | null;
   source_type: string | null;
   assignment_status: string | null;
+  assigned_operation_type: string | null;
+  assigned_operation_id: string | null;
   raw_data: unknown;
 }
 
@@ -42,6 +45,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openManual, setOpenManual] = useState(false);
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
+  const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -82,6 +86,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq("id", t.id);
     if (error) return toast.error(error.message);
+    if (t.bank_id) await recalculateBankUnassignedBalances(t.bank_id);
     toast.success("حذف شد");
     void load();
   }
@@ -110,8 +115,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         <select value={filterAssign} onChange={(e) => setFilterAssign(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
           <option value="">وضعیت تخصیص</option>
           <option value="unassigned">تخصیص نشده</option>
+          <option value="assigning">در حال تخصیص</option>
           <option value="assigned">تخصیص شده</option>
-          <option value="partially_assigned">تخصیص ناقص</option>
+          <option value="rejected">رد شده</option>
+          <option value="cancelled">لغو شده</option>
         </select>
         <Input placeholder="شرح..." value={filterDescr} onChange={(e) => setFilterDescr(e.target.value)} />
       </div>
@@ -152,9 +159,34 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     <td className="p-2 text-xs">{t.source_type || "—"}</td>
                     <td className="p-2"><FinanceStatusBadge status={t.assignment_status} /></td>
                     <td className="p-2">
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 flex-wrap items-center">
+                        {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setOpenReceiveId(t)}>
+                            <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
+                          </Button>
+                        )}
+                        {t.assignment_status === "unassigned" && t.transaction_type === "withdraw" && (
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های پرداخت")}>
+                            <ArrowUpFromLine className="w-3 h-3 ml-1" /> ثبت پرداخت
+                          </Button>
+                        )}
+                        {t.assignment_status === "unassigned" && (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => toast.info("اتصال به انتقال بین بانکی از تب مربوطه")}>
+                            <ArrowLeftRight className="w-3 h-3 ml-1" /> انتقال بانکی
+                          </Button>
+                        )}
+                        {t.assignment_status === "assigning" && (
+                          <span className="text-[11px] text-amber-700 inline-flex items-center gap-1">
+                            <Link2 className="w-3 h-3" /> در انتظار تایید مدیر
+                          </span>
+                        )}
+                        {t.assignment_status === "assigned" && t.assigned_operation_type === "receive_identification" && (
+                          <span className="text-[11px] text-emerald-700">شناسایی شده</span>
+                        )}
                         <Button size="icon" variant="ghost" title="جزئیات خام" onClick={() => setOpenRaw(t)}><FileText className="w-3.5 h-3.5" /></Button>
-                        <Button size="icon" variant="ghost" title="حذف نرم" onClick={() => softDelete(t)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        {t.assignment_status === "unassigned" && (
+                          <Button size="icon" variant="ghost" title="حذف نرم" onClick={() => softDelete(t)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -181,9 +213,19 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     : <MoneyCell value={t.withdraw_amount} negative />}
                 </div>
                 {t.description && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{t.description}</p>}
-                <div className="mt-2 flex gap-1">
+                <div className="mt-2 flex gap-1 flex-wrap">
+                  {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
+                    <Button size="sm" variant="outline" onClick={() => setOpenReceiveId(t)}>
+                      <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
+                    </Button>
+                  )}
+                  {t.assignment_status === "assigning" && (
+                    <span className="text-[11px] text-amber-700">در انتظار تایید مدیر</span>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => setOpenRaw(t)}><FileText className="w-3 h-3 ml-1" /> جزئیات</Button>
-                  <Button size="sm" variant="ghost" onClick={() => softDelete(t)}><Trash2 className="w-3 h-3 ml-1" /> حذف</Button>
+                  {t.assignment_status === "unassigned" && (
+                    <Button size="sm" variant="ghost" onClick={() => softDelete(t)}><Trash2 className="w-3 h-3 ml-1" /> حذف</Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -196,6 +238,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
+      {openReceiveId && (
+        <NewReceiveIdDialog
+          presetTxId={openReceiveId.id}
+          onClose={() => setOpenReceiveId(null)}
+          onDone={() => { setOpenReceiveId(null); void load(); }}
+        />
+      )}
       {openRaw && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setOpenRaw(null)}>
           <div className="bg-card rounded-xl border shadow-lg w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -243,6 +292,7 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
       if (error.code === "23505") return toast.error("تراکنش تکراری");
       return toast.error(error.message);
     }
+    await recalculateBankUnassignedBalances(bankId);
     toast.success("ثبت شد");
     onDone();
   }
@@ -422,6 +472,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
       if (!error) inserted++;
     }
+    if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
     const total = parsed.length;
     const valid = parsed.filter((r) => r.status === "valid").length;

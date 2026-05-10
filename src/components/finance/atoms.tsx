@@ -6,6 +6,7 @@ import {
   OP_STATUS_LABEL,
   ASSIGNMENT_STATUS_LABEL,
   SEPIDAR_STATUS_LABEL,
+  RECEIVE_ID_STATUS_LABEL,
 } from "@/lib/finance";
 
 export function MoneyCell({
@@ -58,8 +59,10 @@ const STATUS_TONES: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800",
   deleted: "bg-red-100 text-red-800",
   unassigned: "bg-amber-100 text-amber-800",
+  assigning: "bg-blue-100 text-blue-800",
   assigned: "bg-emerald-100 text-emerald-800",
   partially_assigned: "bg-blue-100 text-blue-800",
+  sync_failed: "bg-red-100 text-red-800",
   not_synced: "bg-muted text-muted-foreground",
   syncing: "bg-blue-100 text-blue-800",
   synced: "bg-emerald-100 text-emerald-800",
@@ -76,7 +79,7 @@ export function FinanceStatusBadge({ status }: { status: string | null | undefin
         STATUS_TONES[key] || "bg-muted text-muted-foreground",
       )}
     >
-      {OP_STATUS_LABEL[key] || ASSIGNMENT_STATUS_LABEL[key] || key}
+      {OP_STATUS_LABEL[key] || ASSIGNMENT_STATUS_LABEL[key] || RECEIVE_ID_STATUS_LABEL[key] || key}
     </span>
   );
 }

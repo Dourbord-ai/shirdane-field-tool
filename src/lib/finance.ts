@@ -63,9 +63,24 @@ export const OP_STATUS_LABEL: Record<string, string> = {
 
 export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
   unassigned: "تخصیص نشده",
+  assigning: "در حال تخصیص",
   assigned: "تخصیص شده",
+  rejected: "رد شده",
+  cancelled: "لغو شده",
   partially_assigned: "تخصیص ناقص",
 };
+
+export const RECEIVE_ID_STATUS_LABEL: Record<string, string> = {
+  pending_approval: "در انتظار تایید",
+  approved: "تایید شده",
+  sync_failed: "خطای سپیدار",
+  rejected: "رد شده",
+  cancelled: "لغو شده",
+};
+
+export function receiveIdStatusLabel(s: string | null | undefined): string {
+  return (s && RECEIVE_ID_STATUS_LABEL[s]) || s || "—";
+}
 
 export const SEPIDAR_STATUS_LABEL: Record<string, string> = {
   not_synced: "ثبت نشده در سپیدار",
@@ -315,4 +330,269 @@ export async function assertPartiesReadyForPosting(partyIds: string[]): Promise<
     const names = blocked.map((p) => partyName(p as never)).join("، ");
     throw new Error(`ذینفعان زیر در سپیدار ثبت نشده‌اند و قابل ارسال در سند نیستند: ${names}`);
   }
+}
+
+// ---------- Bank unassigned balance recalculation ----------
+export async function recalculateBankUnassignedBalances(bankId: string): Promise<void> {
+  if (!bankId) return;
+  const { data } = await supabase
+    .from("finance_bank_transactions")
+    .select("transaction_type, deposit_amount, withdraw_amount")
+    .eq("bank_id", bankId)
+    .eq("is_deleted", false)
+    .in("assignment_status", ["unassigned", "assigning"]);
+  let cred = 0;
+  let deb = 0;
+  for (const r of (data || []) as { transaction_type: string | null; deposit_amount: number | null; withdraw_amount: number | null }[]) {
+    if (r.transaction_type === "deposit") cred += Number(r.deposit_amount || 0);
+    else if (r.transaction_type === "withdraw") deb += Number(r.withdraw_amount || 0);
+  }
+  await supabase
+    .from("finance_banks")
+    .update({ unassigned_creditor_balance: cred, unassigned_debtor_balance: deb })
+    .eq("id", bankId);
+}
+
+// ---------- Voucher → Sepidar placeholder ----------
+export interface SepidarVoucherResponse {
+  status: "synced" | "failed";
+  error_message: string | null;
+}
+
+export async function syncVoucherToSepidar(voucherId: string): Promise<SepidarVoucherResponse> {
+  await supabase
+    .from("finance_vouchers")
+    .update({ sepidar_sync_status: "syncing" })
+    .eq("id", voucherId);
+
+  // Placeholder: real Sepidar bridge not connected yet.
+  await new Promise((r) => setTimeout(r, 400));
+  const response: SepidarVoucherResponse = {
+    status: "failed",
+    error_message: "پل سپیدار هنوز متصل نشده است (placeholder)",
+  };
+
+  await supabase.from("finance_sepidar_sync_logs").insert({
+    voucher_id: voucherId,
+    operation_type: "post_voucher",
+    request_payload: { voucher_id: voucherId } as never,
+    response_payload: response as never,
+    status: response.status === "synced" ? "success" : "failed",
+    error_message: response.error_message,
+  } as never);
+
+  await supabase
+    .from("finance_vouchers")
+    .update({
+      sepidar_sync_status: response.status,
+      sepidar_error_message: response.error_message,
+      status: response.status === "synced" ? "posted" : "draft",
+    })
+    .eq("id", voucherId);
+
+  return response;
+}
+
+// ---------- Receive Identification workflow ----------
+export interface CreateReceiveIdInput {
+  bank_transaction_id: string;
+  party_id: string;
+  bank_id: string;
+  amount: number;
+  transaction_datetime: string | null;
+  title: string;
+  description?: string | null;
+}
+
+export async function createReceiveIdentification(input: CreateReceiveIdInput): Promise<{ id: string }> {
+  // Block double-assignment
+  const { data: tx } = await supabase
+    .from("finance_bank_transactions")
+    .select("assignment_status")
+    .eq("id", input.bank_transaction_id)
+    .maybeSingle();
+  if (!tx) throw new Error("تراکنش یافت نشد");
+  if (tx.assignment_status && tx.assignment_status !== "unassigned" && tx.assignment_status !== "rejected") {
+    throw new Error("این تراکنش قبلاً به عملیات دیگری متصل شده است");
+  }
+
+  const { data: ri, error } = await supabase
+    .from("finance_receive_identifications")
+    .insert({
+      title: input.title || "شناسایی دریافت",
+      description: input.description ?? null,
+      party_id: input.party_id,
+      bank_id: input.bank_id,
+      bank_transaction_id: input.bank_transaction_id,
+      amount: input.amount,
+      transaction_datetime: input.transaction_datetime,
+      status: "pending_approval",
+      sepidar_sync_status: "not_synced",
+    })
+    .select("id")
+    .single();
+  if (error || !ri) throw error || new Error("درج درخواست شناسایی دریافت ناموفق بود");
+
+  await supabase
+    .from("finance_bank_transactions")
+    .update({
+      assignment_status: "assigning",
+      assigned_operation_type: "receive_identification",
+      assigned_operation_id: ri.id,
+    })
+    .eq("id", input.bank_transaction_id);
+
+  await recalculateBankUnassignedBalances(input.bank_id);
+  return ri;
+}
+
+export async function approveReceiveIdentification(receiveIdId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data: ri, error } = await supabase
+    .from("finance_receive_identifications")
+    .select("*")
+    .eq("id", receiveIdId)
+    .maybeSingle();
+  if (error || !ri) throw error || new Error("درخواست یافت نشد");
+  if (ri.status !== "pending_approval" && ri.status !== "sync_failed") {
+    throw new Error("این درخواست در وضعیت قابل تایید نیست");
+  }
+  if (!ri.party_id || !ri.bank_id || !ri.bank_transaction_id) {
+    throw new Error("اطلاعات درخواست ناقص است");
+  }
+
+  // Validate beneficiary is synced to Sepidar
+  await assertPartiesReadyForPosting([ri.party_id]);
+
+  // Validate bank is mapped to Sepidar
+  const { data: bank } = await supabase
+    .from("finance_banks")
+    .select("sepidar_dl_id, sepidar_account_id, title, bank_name")
+    .eq("id", ri.bank_id)
+    .maybeSingle();
+  if (!bank?.sepidar_dl_id || !bank?.sepidar_account_id) {
+    throw new Error(`بانک «${bank?.title || bank?.bank_name || ""}» در سپیدار نگاشت نشده است`);
+  }
+
+  let voucherId = ri.voucher_id as string | null;
+  if (!voucherId) {
+    const v = await createVoucher({
+      voucher_type: "receive_identification",
+      source_operation_type: "receive_identification",
+      source_operation_id: ri.id,
+      title: ri.title || "شناسایی دریافت",
+      description: ri.description,
+      items: [
+        { bank_id: ri.bank_id, account_type: "bank", debit: Number(ri.amount || 0), credit: 0, description: "بانک" },
+        { party_id: ri.party_id, account_type: "party", debit: 0, credit: Number(ri.amount || 0), description: "ذینفع" },
+      ],
+    });
+    voucherId = v.id;
+    await supabase
+      .from("finance_receive_identifications")
+      .update({ voucher_id: voucherId })
+      .eq("id", ri.id);
+  }
+
+  const sync = await syncVoucherToSepidar(voucherId);
+  if (sync.status === "synced") {
+    await supabase
+      .from("finance_receive_identifications")
+      .update({
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        sepidar_sync_status: "synced",
+        sepidar_error_message: null,
+        sepidar_sync_attempts: (ri.sepidar_sync_attempts ?? 0) + 1,
+      })
+      .eq("id", ri.id);
+    await supabase
+      .from("finance_bank_transactions")
+      .update({
+        assignment_status: "assigned",
+        assigned_operation_type: "receive_identification",
+        assigned_operation_id: ri.id,
+      })
+      .eq("id", ri.bank_transaction_id);
+
+    // Update party balance
+    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", ri.party_id).maybeSingle();
+    const newBal = Number(party?.balance || 0) + Number(ri.amount || 0);
+    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", ri.party_id);
+
+    await recalculateBankUnassignedBalances(ri.bank_id);
+    return { ok: true };
+  } else {
+    await supabase
+      .from("finance_receive_identifications")
+      .update({
+        status: "sync_failed",
+        sepidar_sync_status: "failed",
+        sepidar_error_message: sync.error_message,
+        sepidar_sync_attempts: (ri.sepidar_sync_attempts ?? 0) + 1,
+      })
+      .eq("id", ri.id);
+    // Transaction stays in 'assigning'
+    return { ok: false, error: sync.error_message || "خطا در ثبت سپیدار" };
+  }
+}
+
+export async function rejectReceiveIdentification(receiveIdId: string, reason: string): Promise<void> {
+  const { data: ri } = await supabase
+    .from("finance_receive_identifications")
+    .select("bank_id, bank_transaction_id, status")
+    .eq("id", receiveIdId)
+    .maybeSingle();
+  if (!ri) throw new Error("درخواست یافت نشد");
+  if (ri.status === "approved") throw new Error("درخواست تایید شده قابل رد نیست");
+
+  await supabase
+    .from("finance_receive_identifications")
+    .update({
+      status: "rejected",
+      rejected_at: new Date().toISOString(),
+      rejection_reason: reason,
+    })
+    .eq("id", receiveIdId);
+
+  if (ri.bank_transaction_id) {
+    await supabase
+      .from("finance_bank_transactions")
+      .update({
+        assignment_status: "unassigned",
+        assigned_operation_type: null,
+        assigned_operation_id: null,
+      })
+      .eq("id", ri.bank_transaction_id);
+  }
+  if (ri.bank_id) await recalculateBankUnassignedBalances(ri.bank_id);
+}
+
+export async function cancelReceiveIdentification(receiveIdId: string): Promise<void> {
+  const { data: ri } = await supabase
+    .from("finance_receive_identifications")
+    .select("bank_id, bank_transaction_id, status")
+    .eq("id", receiveIdId)
+    .maybeSingle();
+  if (!ri) throw new Error("درخواست یافت نشد");
+  if (ri.status === "approved") throw new Error("درخواست تایید شده قابل لغو نیست");
+
+  await supabase
+    .from("finance_receive_identifications")
+    .update({
+      status: "cancelled",
+      cancelled_at: new Date().toISOString(),
+    })
+    .eq("id", receiveIdId);
+
+  if (ri.bank_transaction_id) {
+    await supabase
+      .from("finance_bank_transactions")
+      .update({
+        assignment_status: "unassigned",
+        assigned_operation_type: null,
+        assigned_operation_id: null,
+      })
+      .eq("id", ri.bank_transaction_id);
+  }
+  if (ri.bank_id) await recalculateBankUnassignedBalances(ri.bank_id);
 }

@@ -1896,6 +1896,8 @@ export type Database = {
           sepidar_mapping_note: string | null
           sepidar_mapping_status: string
           title: string | null
+          unassigned_creditor_balance: number
+          unassigned_debtor_balance: number
           updated_at: string
         }
         Insert: {
@@ -1931,6 +1933,8 @@ export type Database = {
           sepidar_mapping_note?: string | null
           sepidar_mapping_status?: string
           title?: string | null
+          unassigned_creditor_balance?: number
+          unassigned_debtor_balance?: number
           updated_at?: string
         }
         Update: {
@@ -1966,6 +1970,8 @@ export type Database = {
           sepidar_mapping_note?: string | null
           sepidar_mapping_status?: string
           title?: string | null
+          unassigned_creditor_balance?: number
+          unassigned_debtor_balance?: number
           updated_at?: string
         }
         Relationships: [
@@ -2325,6 +2331,8 @@ export type Database = {
           approved_by: string | null
           bank_id: string | null
           bank_transaction_id: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -2333,6 +2341,12 @@ export type Database = {
           is_deleted: boolean | null
           legacy_id: number | null
           party_id: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          sepidar_error_message: string | null
+          sepidar_sync_attempts: number
+          sepidar_sync_status: string | null
           status: string | null
           title: string | null
           transaction_datetime: string | null
@@ -2345,6 +2359,8 @@ export type Database = {
           approved_by?: string | null
           bank_id?: string | null
           bank_transaction_id?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -2353,6 +2369,12 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           party_id?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          sepidar_error_message?: string | null
+          sepidar_sync_attempts?: number
+          sepidar_sync_status?: string | null
           status?: string | null
           title?: string | null
           transaction_datetime?: string | null
@@ -2365,6 +2387,8 @@ export type Database = {
           approved_by?: string | null
           bank_id?: string | null
           bank_transaction_id?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -2373,6 +2397,12 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           party_id?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          sepidar_error_message?: string | null
+          sepidar_sync_attempts?: number
+          sepidar_sync_status?: string | null
           status?: string | null
           title?: string | null
           transaction_datetime?: string | null
