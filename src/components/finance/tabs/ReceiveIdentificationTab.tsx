@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,10 +94,10 @@ export default function ReceiveIdentificationTab() {
     try {
       const res = await approveReceiveIdentification(ri.id);
       if (res.ok) toast.success("تایید شد و سند صادر گردید");
-      else toast.error(res.error || "خطا در ثبت سپیدار");
+      else toastFinanceError(toast, res.error || new Error("خطا در ثبت سپیدار"));
       void load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا");
+      toastFinanceError(toast, e);
     } finally {
       setBusyId(null);
     }
@@ -110,7 +111,7 @@ export default function ReceiveIdentificationTab() {
       toast.success("لغو شد");
       void load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا");
+      toastFinanceError(toast, e);
     } finally {
       setBusyId(null);
     }
@@ -269,7 +270,7 @@ function NewReceiveIdDialog({ onClose, onDone, presetTxId }: { onClose: () => vo
       toast.success("درخواست در انتظار تایید مدیر ثبت شد");
       onDone();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا در ثبت");
+      toastFinanceError(toast, e);
     } finally {
       setSaving(false);
     }
@@ -333,7 +334,7 @@ function RejectDialog({ ri, onClose, onDone }: { ri: RI; onClose: () => void; on
       toast.success("درخواست رد شد");
       onDone();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا");
+      toastFinanceError(toast, e);
     } finally {
       setSaving(false);
     }

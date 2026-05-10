@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +71,7 @@ export default function PartyTransferTab() {
       toast.success("انتقال ثبت و سند داخلی صادر شد");
       setFromParty(null); setToParty(null); setAmount(""); setTitle(""); setDescription("");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا در ثبت");
+      toastFinanceError(toast, e);
     } finally {
       setSaving(false);
     }

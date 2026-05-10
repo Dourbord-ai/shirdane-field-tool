@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,7 +86,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       .from("finance_bank_transactions")
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq("id", t.id);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     if (t.bank_id) await recalculateBankUnassignedBalances(t.bank_id);
     toast.success("حذف شد");
     void load();
@@ -290,7 +291,7 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
     setSaving(false);
     if (error) {
       if (error.code === "23505") return toast.error("تراکنش تکراری");
-      return toast.error(error.message);
+      return toastFinanceError(toast, error);
     }
     await recalculateBankUnassignedBalances(bankId);
     toast.success("ثبت شد");
@@ -441,7 +442,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       setParsed(list);
       toast.success(`${list.length} ردیف خوانده شد`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "خطا در خواندن فایل");
+      toastFinanceError(toast, e);
     } finally {
       setPreviewing(false);
     }
