@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
 import { parseMoney, partyName } from "@/lib/finance";
-import { Plus, Upload, Download, X, Trash2, FileText } from "lucide-react";
+import { legacyBankLabel } from "@/lib/legacyBanks";
+import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface Tx {
