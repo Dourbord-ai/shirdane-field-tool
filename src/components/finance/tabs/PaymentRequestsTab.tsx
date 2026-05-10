@@ -164,7 +164,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       const code = Number(typeCode);
       const typeKey = getPaymentRequestTypeKey(code);
       const { data: pr, error } = await supabase.from("finance_payment_requests").insert({
-        title, description, request_type: typeKey, legacy_request_type_code: code, status: "draft", total_amount: total,
+        title, description, request_type: typeKey, legacy_request_type_code: code, status: "pending_approval", total_amount: total, total_paid_amount: 0, remaining_amount: total,
       }).select("id").single();
       if (error || !pr) throw error || new Error("insert failed");
       await supabase.from("finance_payment_request_items").insert(
