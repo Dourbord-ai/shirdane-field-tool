@@ -286,6 +286,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
           <div>
             <h3 className="font-bold">{pr.title || "درخواست پرداخت"}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{getPaymentRequestTypeLabel(pr.legacy_request_type_code)}</p>
             <div className="flex items-center gap-2 mt-1">
               <FinanceStatusBadge status={pr.status} />
               <JalaliDateCell value={pr.created_at} />
