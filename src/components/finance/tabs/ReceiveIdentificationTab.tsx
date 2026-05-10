@@ -11,11 +11,10 @@ import {
   approveReceiveIdentification,
   rejectReceiveIdentification,
   cancelReceiveIdentification,
-  receiveIdStatusLabel,
   partyName,
 } from "@/lib/finance";
 import { toast } from "sonner";
-import { CheckCircle2, X, Plus, RefreshCcw, XCircle, Eye } from "lucide-react";
+import { CheckCircle2, X, Plus, XCircle } from "lucide-react";
 
 interface RI {
   id: string;
