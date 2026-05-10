@@ -251,11 +251,11 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
     party_id: partyId,
     entity_type: "party",
     operation_type: "SpAddSepidarBankParty",
-    request_payload: requestPayload,
-    response_payload: response as unknown as Record<string, unknown>,
+    request_payload: requestPayload as never,
+    response_payload: response as never,
     status: response.sepidar_sync_status === "synced" ? "success" : "failed",
     error_message: response.error_message,
-  });
+  } as never);
 
   if (response.sepidar_sync_status === "synced") {
     await supabase
