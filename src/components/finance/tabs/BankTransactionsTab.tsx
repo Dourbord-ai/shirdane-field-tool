@@ -43,6 +43,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openManual, setOpenManual] = useState(false);
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
+  const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
