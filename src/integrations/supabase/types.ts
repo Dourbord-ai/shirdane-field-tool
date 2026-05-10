@@ -2192,6 +2192,7 @@ export type Database = {
         Row: {
           amount: number | null
           amount_type: string | null
+          amount_type_code: number | null
           confirmed_amount: number | null
           created_at: string
           description: string | null
@@ -2209,6 +2210,7 @@ export type Database = {
         Insert: {
           amount?: number | null
           amount_type?: string | null
+          amount_type_code?: number | null
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
@@ -2226,6 +2228,7 @@ export type Database = {
         Update: {
           amount?: number | null
           amount_type?: string | null
+          amount_type_code?: number | null
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
@@ -2487,9 +2490,12 @@ export type Database = {
           bridge_enabled: boolean | null
           created_at: string
           default_bank_fee_party_id: string | null
+          default_creditor_payment_account_id: number | null
+          default_on_account_payment_account_id: number | null
           default_party_credit_account_id: number | null
           default_party_debit_account_id: number | null
           default_payment_account_id: number | null
+          default_prepayment_account_id: number | null
           default_receive_account_id: number | null
           id: string
           updated_at: string
@@ -2499,9 +2505,12 @@ export type Database = {
           bridge_enabled?: boolean | null
           created_at?: string
           default_bank_fee_party_id?: string | null
+          default_creditor_payment_account_id?: number | null
+          default_on_account_payment_account_id?: number | null
           default_party_credit_account_id?: number | null
           default_party_debit_account_id?: number | null
           default_payment_account_id?: number | null
+          default_prepayment_account_id?: number | null
           default_receive_account_id?: number | null
           id?: string
           updated_at?: string
@@ -2511,9 +2520,12 @@ export type Database = {
           bridge_enabled?: boolean | null
           created_at?: string
           default_bank_fee_party_id?: string | null
+          default_creditor_payment_account_id?: number | null
+          default_on_account_payment_account_id?: number | null
           default_party_credit_account_id?: number | null
           default_party_debit_account_id?: number | null
           default_payment_account_id?: number | null
+          default_prepayment_account_id?: number | null
           default_receive_account_id?: number | null
           id?: string
           updated_at?: string
