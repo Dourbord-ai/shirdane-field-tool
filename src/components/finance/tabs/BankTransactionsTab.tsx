@@ -496,7 +496,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={preview} disabled={previewing || !file}>
+            <Button variant="outline" onClick={preview} disabled={previewing || !file || !templateActive}>
               {previewing ? "در حال پردازش…" : "پیش‌نمایش"}
             </Button>
           </div>
