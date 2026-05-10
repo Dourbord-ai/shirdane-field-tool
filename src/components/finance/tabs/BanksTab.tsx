@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,11 +102,11 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
     delete (payload as { id?: string }).id;
     if (editing.id) {
       const { error } = await supabase.from("finance_banks").update(payload as never).eq("id", editing.id);
-      if (error) return toast.error(error.message);
+      if (error) return toastFinanceError(toast, error);
       toast.success("بانک ویرایش شد");
     } else {
       const { error } = await supabase.from("finance_banks").insert(payload as never);
-      if (error) return toast.error(error.message);
+      if (error) return toastFinanceError(toast, error);
       toast.success("بانک ثبت شد");
     }
     setOpen(false);
@@ -115,7 +116,7 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
 
   async function toggleActive(b: Bank) {
     const { error } = await supabase.from("finance_banks").update({ is_active: !b.is_active }).eq("id", b.id);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     toast.success(b.is_active ? "غیرفعال شد" : "فعال شد");
     void load();
   }
@@ -497,7 +498,7 @@ function SepidarAccountPicker({ onClose, onPick }: { onClose: () => void; onPick
     ];
     const { error } = await supabase.from("finance_sepidar_bank_accounts_cache" as never).insert(demo as never);
     setSeeding(false);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     toast.success("داده‌های نمونه افزوده شد");
     void load();
   }

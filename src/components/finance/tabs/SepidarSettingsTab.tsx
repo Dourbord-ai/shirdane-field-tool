@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +55,7 @@ export default function SepidarSettingsTab() {
       default_prepayment_account_id: s.default_prepayment_account_id,
       default_on_account_payment_account_id: s.default_on_account_payment_account_id,
     }).eq("id", s.id);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     toast.success("ذخیره شد");
   }
 

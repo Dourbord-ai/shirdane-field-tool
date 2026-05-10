@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,7 @@ export default function BankImportTemplatesTab() {
       .from("finance_bank_import_templates")
       .select("*")
       .order("bank_name_code", { ascending: true });
-    if (error) toast.error(error.message);
+    if (error) toastFinanceError(toast, error);
     setList((data as unknown as T[]) || []);
     setLoading(false);
   }
@@ -57,10 +58,10 @@ export default function BankImportTemplatesTab() {
         .from("finance_bank_import_templates")
         .update(payload as never)
         .eq("id", edit.id);
-      if (error) return toast.error(error.message);
+      if (error) return toastFinanceError(toast, error);
     } else {
       const { error } = await supabase.from("finance_bank_import_templates").insert(payload as never);
-      if (error) return toast.error(error.message);
+      if (error) return toastFinanceError(toast, error);
     }
     toast.success("ذخیره شد");
     setEdit(null);
@@ -70,7 +71,7 @@ export default function BankImportTemplatesTab() {
   async function remove(t: T) {
     if (!confirm(`حذف ${t.title}؟`)) return;
     const { error } = await supabase.from("finance_bank_import_templates").delete().eq("id", t.id);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     toast.success("حذف شد");
     void load();
   }

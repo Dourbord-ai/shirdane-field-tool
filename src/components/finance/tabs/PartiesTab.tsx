@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,14 +113,14 @@ export default function PartiesTab() {
     delete (payload as { id?: string }).id;
     if (editing.id) {
       const { error } = await supabase.from("finance_parties").update(payload).eq("id", editing.id);
-      if (error) return toast.error(error.message);
+      if (error) return toastFinanceError(toast, error);
       toast.success("ذینفع ویرایش شد");
     } else {
       // New beneficiaries always start in pending_approval
       payload.approval_status = "pending_approval";
       payload.sepidar_sync_status = "not_synced";
       const { error } = await supabase.from("finance_parties").insert(payload);
-      if (error) return toast.error(error.message);
+      if (error) return toastFinanceError(toast, error);
       toast.success("ذینفع ثبت شد — در انتظار تایید مدیریت");
     }
     setOpen(false); setEditing(null); void load();
@@ -294,7 +295,7 @@ function PartyDetailDrawer({
       })
       .eq("id", party.id);
     setBusy(false);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     toast.success("اطلاعات تایید شد — اکنون می‌توانید در سپیدار ثبت کنید");
     await onChanged();
   }
@@ -312,7 +313,7 @@ function PartyDetailDrawer({
       })
       .eq("id", party.id);
     setBusy(false);
-    if (error) return toast.error(error.message);
+    if (error) return toastFinanceError(toast, error);
     toast.success("اطلاعات رد شد");
     setShowRejectBox(false); setRejectReason("");
     await onChanged();
@@ -323,9 +324,9 @@ function PartyDetailDrawer({
     try {
       const res = await syncPartyToSepidar(party.id);
       if (res.sepidar_sync_status === "synced") toast.success("در سپیدار ثبت شد");
-      else toast.error(res.error_message || "خطا در ثبت سپیدار");
+      else toastFinanceError(toast, res.error_message || new Error("خطا در ثبت سپیدار"));
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا");
+      toastFinanceError(toast, e);
     } finally {
       setBusy(false);
       await onChanged();

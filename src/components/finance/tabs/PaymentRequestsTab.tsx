@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,7 +183,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       toast.success("درخواست ثبت شد");
       onDone();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا در ثبت");
+      toastFinanceError(toast, e);
     } finally { setSaving(false); }
   }
 
@@ -377,7 +378,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
       toast.success("درخواست تایید شد");
       await reload();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا");
+      toastFinanceError(toast, e);
     } finally { setBusy(false); }
   }
   async function reject() {
@@ -500,9 +501,9 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                             try {
                               const r = await retryPaymentAllocationSync(a.id);
                               if (r.ok) toast.success("ثبت سند انجام شد");
-                              else toast.error(r.error || "خطا");
+                              else toastFinanceError(toast, r.error || new Error("خطا"));
                               await reload();
-                            } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "خطا"); }
+                            } catch (e: unknown) { toastFinanceError(toast, e); }
                             finally { setBusy(false); }
                           }}>
                             <RefreshCw className="w-3.5 h-3.5 ml-1" /> تلاش مجدد
@@ -512,7 +513,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                           if (!confirm("لغو تخصیص؟")) return;
                           setBusy(true);
                           try { await cancelPaymentAllocation(a.id); toast.success("لغو شد"); await reload(); }
-                          catch (e: unknown) { toast.error(e instanceof Error ? e.message : "خطا"); }
+                          catch (e: unknown) { toastFinanceError(toast, e); }
                           finally { setBusy(false); }
                         }}>
                           <XCircle className="w-3.5 h-3.5 ml-1" /> لغو تخصیص
@@ -615,10 +616,10 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
         amount: allocAmount,
       });
       if (r.ok) toast.success("تخصیص و سند داخلی ثبت شد");
-      else toast.error(r.error || "تخصیص ثبت شد ولی ثبت سپیدار ناموفق بود");
+      else toastFinanceError(toast, r.error || new Error("تخصیص ثبت شد ولی ثبت سپیدار ناموفق بود"));
       onDone();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "خطا");
+      toastFinanceError(toast, e);
     } finally { setBusy(false); }
   }
 
