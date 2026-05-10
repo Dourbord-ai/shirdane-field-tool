@@ -13,8 +13,9 @@ import {
   syncPartyToSepidar,
   isPartyReadyForPosting,
 } from "@/lib/finance";
-import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle, GitCompareArrows } from "lucide-react";
 import { toast } from "sonner";
+import BeneficiaryStatementCompareDialog from "@/components/finance/BeneficiaryStatementCompareDialog";
 
 interface Party {
   id: string;
