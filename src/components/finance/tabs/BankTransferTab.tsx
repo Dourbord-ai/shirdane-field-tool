@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TransactionSelector, PartySelector } from "@/components/finance/selectors";
-import { createVoucher, sepidarSyncPlaceholder, parseMoney, formatMoney } from "@/lib/finance";
+import { createVoucher, sepidarSyncPlaceholder, parseMoney, formatMoney, type VoucherItemInput } from "@/lib/finance";
 import { toast } from "sonner";
 import { CheckCircle2 } from "lucide-react";
 
@@ -58,7 +58,7 @@ export default function BankTransferTab() {
         .select("id").single();
       if (error || !tr) throw error || new Error("insert failed");
 
-      const items = [
+      const items: VoucherItemInput[] = [
         { bank_id: toTx.bank_id, account_type: "bank", debit: toAmount, credit: 0, description: "بانک مقصد" },
         { bank_id: fromTx.bank_id, account_type: "bank", debit: 0, credit: fromAmount, description: "بانک مبدا" },
       ];
@@ -69,7 +69,7 @@ export default function BankTransferTab() {
           debit: computedFee,
           credit: 0,
           description: "کارمزد انتقال",
-        } as { party_id: string | null; account_type: string; debit: number; credit: number; description: string; bank_id?: never });
+        });
       }
       const v = await createVoucher({
         voucher_type: "bank_transfer",
