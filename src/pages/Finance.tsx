@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LayoutDashboard, Building2, ArrowRightLeft, ClipboardList, ArrowDownToLine, ArrowLeftRight, Repeat, Users, FileText, Settings } from "lucide-react";
+import { LayoutDashboard, Building2, ArrowRightLeft, ClipboardList, ArrowDownToLine, ArrowLeftRight, Repeat, Users, FileText, Settings, FileSpreadsheet } from "lucide-react";
+import BankImportTemplatesTab from "@/components/finance/tabs/BankImportTemplatesTab";
 import { cn } from "@/lib/utils";
 import FinanceDashboardTab from "@/components/finance/tabs/FinanceDashboardTab";
 import BanksTab from "@/components/finance/tabs/BanksTab";
@@ -23,6 +24,7 @@ const TABS = [
   { key: "party-transfer", label: "انتقال بین ذینفع", icon: Repeat },
   { key: "parties", label: "ذینفعان", icon: Users },
   { key: "vouchers", label: "اسناد مالی", icon: FileText },
+  { key: "import-templates", label: "قالب‌های فایل بانکی", icon: FileSpreadsheet },
   { key: "sepidar", label: "تنظیمات سپیدار", icon: Settings },
 ];
 
@@ -75,6 +77,7 @@ export default function Finance() {
         {tab === "party-transfer" && <PartyTransferTab />}
         {tab === "parties" && <PartiesTab />}
         {tab === "vouchers" && <VouchersTab />}
+        {tab === "import-templates" && <BankImportTemplatesTab />}
         {tab === "sepidar" && <SepidarSettingsTab />}
       </div>
     </div>

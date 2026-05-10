@@ -1569,6 +1569,66 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_bank_import_templates: {
+        Row: {
+          bank_name_code: number | null
+          created_at: string
+          creditor_amount_column_index: number | null
+          date_column_index: number | null
+          debtor_amount_column_index: number | null
+          description_column_indexes: number[]
+          doc_number_column_index: number | null
+          file_type: string
+          has_header: boolean
+          id: string
+          is_active: boolean
+          needs_rtl_cleanup: boolean
+          row_validation_column_index: number | null
+          time_24_fix: boolean
+          time_column_index: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          bank_name_code?: number | null
+          created_at?: string
+          creditor_amount_column_index?: number | null
+          date_column_index?: number | null
+          debtor_amount_column_index?: number | null
+          description_column_indexes?: number[]
+          doc_number_column_index?: number | null
+          file_type: string
+          has_header?: boolean
+          id?: string
+          is_active?: boolean
+          needs_rtl_cleanup?: boolean
+          row_validation_column_index?: number | null
+          time_24_fix?: boolean
+          time_column_index?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          bank_name_code?: number | null
+          created_at?: string
+          creditor_amount_column_index?: number | null
+          date_column_index?: number | null
+          debtor_amount_column_index?: number | null
+          description_column_indexes?: number[]
+          doc_number_column_index?: number | null
+          file_type?: string
+          has_header?: boolean
+          id?: string
+          is_active?: boolean
+          needs_rtl_cleanup?: boolean
+          row_validation_column_index?: number | null
+          time_24_fix?: boolean
+          time_column_index?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       finance_bank_transactions: {
         Row: {
           amount: number | null
@@ -1811,6 +1871,7 @@ export type Database = {
           deleted_by: string | null
           iban_number: string | null
           id: string
+          import_template_id: string | null
           is_active: boolean | null
           is_api_enabled: boolean | null
           is_cheque: boolean | null
@@ -1818,6 +1879,7 @@ export type Database = {
           is_official: boolean | null
           last_balance: number | null
           last_update: string | null
+          legacy_bank_name_code: number | null
           legacy_id: number | null
           notes: string | null
           old_balance: number | null
@@ -1844,6 +1906,7 @@ export type Database = {
           deleted_by?: string | null
           iban_number?: string | null
           id?: string
+          import_template_id?: string | null
           is_active?: boolean | null
           is_api_enabled?: boolean | null
           is_cheque?: boolean | null
@@ -1851,6 +1914,7 @@ export type Database = {
           is_official?: boolean | null
           last_balance?: number | null
           last_update?: string | null
+          legacy_bank_name_code?: number | null
           legacy_id?: number | null
           notes?: string | null
           old_balance?: number | null
@@ -1877,6 +1941,7 @@ export type Database = {
           deleted_by?: string | null
           iban_number?: string | null
           id?: string
+          import_template_id?: string | null
           is_active?: boolean | null
           is_api_enabled?: boolean | null
           is_cheque?: boolean | null
@@ -1884,6 +1949,7 @@ export type Database = {
           is_official?: boolean | null
           last_balance?: number | null
           last_update?: string | null
+          legacy_bank_name_code?: number | null
           legacy_id?: number | null
           notes?: string | null
           old_balance?: number | null
@@ -1899,7 +1965,15 @@ export type Database = {
           title?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "finance_banks_import_template_id_fkey"
+            columns: ["import_template_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_import_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       finance_parties: {
         Row: {

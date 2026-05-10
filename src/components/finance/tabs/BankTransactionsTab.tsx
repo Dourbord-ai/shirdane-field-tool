@@ -295,105 +295,232 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
 
 function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [bankId, setBankId] = useState<string | null>(null);
+  const [bankInfo, setBankInfo] = useState<{ import_template_id: string | null; legacy_bank_name_code: number | null } | null>(null);
+  const [templates, setTemplates] = useState<import("@/lib/bankImport").BankImportTemplate[]>([]);
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [fileName, setFileName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [parsed, setParsed] = useState<import("@/lib/bankImport").ParsedRow[]>([]);
+  const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [summary, setSummary] = useState<{ total: number; valid: number; duplicate: number; invalid: number; inserted: number } | null>(null);
 
-  async function onFile(f: File | null) {
-    if (!f) return;
-    setFileName(f.name);
-    const text = await f.text();
-    // Naive CSV parser (xlsx libs not added). Expect: date,type,amount,reference,description
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) return toast.error("فایل خالی است");
-    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-    const out: Record<string, string>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i].split(",");
-      const r: Record<string, string> = {};
-      headers.forEach((h, idx) => (r[h] = (parts[idx] || "").trim()));
-      out.push(r);
+  useEffect(() => {
+    void supabase
+      .from("finance_bank_import_templates")
+      .select("*")
+      .eq("is_active", true)
+      .order("bank_name_code", { ascending: true })
+      .then(({ data }) => setTemplates((data as unknown as import("@/lib/bankImport").BankImportTemplate[]) || []));
+  }, []);
+
+  useEffect(() => {
+    if (!bankId) { setBankInfo(null); return; }
+    void supabase
+      .from("finance_banks")
+      .select("import_template_id,legacy_bank_name_code")
+      .eq("id", bankId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const info = data as { import_template_id: string | null; legacy_bank_name_code: number | null } | null;
+        setBankInfo(info);
+        if (info?.import_template_id) setTemplateId(info.import_template_id);
+      });
+  }, [bankId]);
+
+  const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId]);
+
+  async function preview() {
+    setSummary(null);
+    if (!bankId) return toast.error("اطلاعات ضروری تکمیل نشده است");
+    if (!title.trim() || !description.trim()) return toast.error("اطلاعات ضروری تکمیل نشده است");
+    if (!file) return toast.error("اطلاعات ضروری تکمیل نشده است");
+    if (!selectedTemplate) return toast.error("قالب خواندن فایل را انتخاب کنید");
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (!["xls", "xlsx", "csv"].includes(ext)) return toast.error("فرمت فایل مجاز نیست");
+
+    setPreviewing(true);
+    try {
+      const { readFileRows, parseRowsWithTemplate } = await import("@/lib/bankImport");
+      const rows = await readFileRows(file, selectedTemplate);
+      const list = parseRowsWithTemplate(rows, selectedTemplate);
+      if (list.length === 0) {
+        toast.error("اطلاعات قابل ثبت در فایل پیدا نشد");
+        setParsed([]);
+        return;
+      }
+      // duplicate check against db
+      const validList = list.filter((r) => r.status === "valid");
+      if (validList.length > 0) {
+        const datetimes = validList.map((r) => r.transaction_datetime!).filter(Boolean);
+        const { data: existing } = await supabase
+          .from("finance_bank_transactions")
+          .select("transaction_datetime,amount,document_number,transaction_type")
+          .eq("bank_id", bankId)
+          .in("transaction_datetime", datetimes);
+        const set = new Set(
+          ((existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []).map(
+            (e) => `${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`,
+          ),
+        );
+        for (const r of validList) {
+          const key = `${r.transaction_datetime}|${r.amount}|${r.document_number || ""}|${r.transaction_type}`;
+          if (set.has(key)) { r.status = "duplicate"; r.status_reason = "تکراری"; }
+        }
+      }
+      setParsed(list);
+      toast.success(`${list.length} ردیف خوانده شد`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در خواندن فایل");
+    } finally {
+      setPreviewing(false);
     }
-    setRows(out);
-    toast.success(`${out.length} ردیف خوانده شد`);
   }
 
   async function importAll() {
-    if (!bankId) return toast.error("بانک را انتخاب کنید");
-    if (rows.length === 0) return toast.error("ردیفی برای ورود نیست");
+    if (!bankId || !file) return;
+    const validRows = parsed.filter((r) => r.status === "valid");
+    if (validRows.length === 0) return toast.error("ردیف معتبری برای ثبت نیست");
     setSaving(true);
-    let inserted = 0, skipped = 0;
-    for (const r of rows) {
-      const dateStr = r.date || r["تاریخ"] || "";
-      const amt = parseMoney(r.amount || r["مبلغ"] || "0");
-      const type = (r.type || r["نوع"] || "").toLowerCase();
-      const isDeposit = type.includes("deposit") || type.includes("واریز") || type === "1";
-      const txType = isDeposit ? "deposit" : "withdraw";
+    let inserted = 0;
+    for (const r of validRows) {
       const payload = {
         bank_id: bankId,
-        transaction_datetime: dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
-        transaction_type: txType,
-        deposit_amount: isDeposit ? amt : 0,
-        withdraw_amount: isDeposit ? 0 : amt,
-        amount: amt,
-        description: r.description || r["شرح"] || description,
-        reference_number: r.reference || r["مرجع"] || null,
-        source_type: "excel" as const,
+        transaction_datetime: r.transaction_datetime,
+        transaction_type: r.transaction_type,
+        deposit_amount: r.deposit,
+        withdraw_amount: r.withdraw,
+        amount: r.amount,
+        description: r.description || description,
+        document_number: r.document_number || null,
+        source_type: selectedTemplate?.file_type === "csv" ? "csv" : "excel",
         assignment_status: "unassigned",
-        original_file_name: fileName,
-        imported_file_name: title || fileName,
-        raw_data: r,
+        original_file_name: file.name,
+        imported_file_name: title,
+        raw_data: r.raw as unknown as Record<string, unknown>,
       };
-      const { error } = await supabase.from("finance_bank_transactions").insert(payload);
-      if (error) { skipped++; } else { inserted++; }
+      const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
+      if (!error) inserted++;
     }
     setSaving(false);
-    toast.success(`${inserted} ردیف ثبت، ${skipped} ردیف رد شد (تکراری)`);
+    const total = parsed.length;
+    const valid = parsed.filter((r) => r.status === "valid").length;
+    const dup = parsed.filter((r) => r.status === "duplicate").length;
+    const inv = parsed.filter((r) => r.status === "invalid").length;
+    setSummary({ total, valid, duplicate: dup, invalid: inv, inserted });
+    toast.success(`${inserted} ردیف ثبت شد`);
     onDone();
   }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-card rounded-t-2xl sm:rounded-2xl border shadow-lg w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
+      <div className="bg-card rounded-t-2xl sm:rounded-2xl border shadow-lg w-full max-w-3xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card z-10">
           <h3 className="font-bold">آپلود فایل تراکنش‌ها</h3>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="w-4 h-4" /></Button>
         </div>
         <div className="p-4 space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">بانک</Label>
-            <BankSelector value={bankId} onChange={setBankId} />
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">بانک *</Label>
+              <BankSelector value={bankId} onChange={setBankId} />
+              {bankInfo && bankInfo.legacy_bank_name_code != null && (
+                <p className="text-[11px] text-muted-foreground">کد بانک قدیمی: {bankInfo.legacy_bank_name_code}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">قالب خواندن فایل *</Label>
+              <select
+                value={templateId || ""}
+                onChange={(e) => setTemplateId(e.target.value || null)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— انتخاب کنید —</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.title} (کد {t.bank_name_code})</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">عنوان</Label>
+            <Label className="text-xs">عنوان *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً: گردش بانک ملت اردیبهشت" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">توضیحات</Label>
+            <Label className="text-xs">توضیحات *</Label>
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">فایل تراکنش‌ها (CSV)</Label>
-            <Input type="file" accept=".csv,.txt" onChange={(e) => onFile(e.target.files?.[0] || null)} />
-            <p className="text-[11px] text-muted-foreground">ستون‌ها: date, type (deposit|withdraw), amount, reference, description</p>
+            <Label className="text-xs">فایل تراکنش‌ها * (xls / xlsx / csv)</Label>
+            <Input type="file" accept=".xls,.xlsx,.csv" onChange={(e) => { setFile(e.target.files?.[0] || null); setParsed([]); setSummary(null); }} />
           </div>
-          {rows.length > 0 && (
-            <div className="rounded-lg border overflow-x-auto max-h-64">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40 sticky top-0"><tr>{Object.keys(rows[0]).map((h) => <th key={h} className="p-2 text-right">{h}</th>)}</tr></thead>
-                <tbody>{rows.slice(0, 50).map((r, i) => (<tr key={i} className="border-t">{Object.keys(rows[0]).map((h) => <td key={h} className="p-2">{r[h]}</td>)}</tr>))}</tbody>
-              </table>
-              {rows.length > 50 && <p className="p-2 text-xs text-center text-muted-foreground">و {rows.length - 50} ردیف دیگر…</p>}
-            </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={preview} disabled={previewing || !file}>
+              {previewing ? "در حال پردازش…" : "پیش‌نمایش"}
+            </Button>
+          </div>
+
+          {parsed.length > 0 && (
+            <>
+              <div className="rounded-lg border overflow-x-auto max-h-80">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 sticky top-0">
+                    <tr className="text-right">
+                      <th className="p-2">ردیف</th>
+                      <th className="p-2">تاریخ</th>
+                      <th className="p-2">ساعت</th>
+                      <th className="p-2">واریز</th>
+                      <th className="p-2">برداشت</th>
+                      <th className="p-2">شماره سند</th>
+                      <th className="p-2">توضیحات</th>
+                      <th className="p-2">وضعیت</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsed.map((r) => (
+                      <tr key={r.index} className={
+                        r.status === "valid" ? "border-t" :
+                        r.status === "duplicate" ? "border-t bg-amber-500/10" :
+                        "border-t bg-destructive/10"
+                      }>
+                        <td className="p-2">{r.index}</td>
+                        <td className="p-2 font-mono">{r.date}</td>
+                        <td className="p-2 font-mono">{r.time}</td>
+                        <td className="p-2 font-mono text-emerald-700">{r.deposit ? r.deposit.toLocaleString() : "—"}</td>
+                        <td className="p-2 font-mono text-rose-700">{r.withdraw ? r.withdraw.toLocaleString() : "—"}</td>
+                        <td className="p-2 font-mono">{r.document_number || "—"}</td>
+                        <td className="p-2 max-w-[260px] truncate">{r.description || "—"}</td>
+                        <td className="p-2">
+                          {r.status === "valid" && <span className="text-emerald-700">معتبر</span>}
+                          {r.status === "duplicate" && <span className="text-amber-700">تکراری</span>}
+                          {r.status === "invalid" && <span className="text-rose-700">{r.status_reason || "نامعتبر"}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <span>کل: {parsed.length}</span>
+                <span className="text-emerald-700">معتبر: {parsed.filter((r) => r.status === "valid").length}</span>
+                <span className="text-amber-700">تکراری: {parsed.filter((r) => r.status === "duplicate").length}</span>
+                <span className="text-rose-700">خطادار: {parsed.filter((r) => r.status === "invalid").length}</span>
+                {summary && <span className="font-bold">ثبت‌شده: {summary.inserted}</span>}
+              </div>
+            </>
           )}
         </div>
         <div className="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-card">
           <Button variant="outline" onClick={onClose}>انصراف</Button>
-          <Button onClick={importAll} disabled={saving || rows.length === 0}>ثبت همه</Button>
+          <Button onClick={importAll} disabled={saving || parsed.filter((r) => r.status === "valid").length === 0}>
+            ثبت نهایی
+          </Button>
         </div>
       </div>
     </div>
   );
 }
+
