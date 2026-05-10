@@ -256,6 +256,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         toast.error("جمع بدهکار/بستانکار آیتم‌ها متوازن نیست — نیاز به تخصیص پرداخت دارد");
         setBusy(false);
         return;
+      }
       // Block posting if any beneficiary is not yet synced to Sepidar
       try {
         await assertPartiesReadyForPosting(items.map((i) => i.party_id).filter((x): x is string => !!x));
