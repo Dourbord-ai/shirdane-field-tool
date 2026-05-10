@@ -7,8 +7,9 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import type { BankImportTemplate } from "@/lib/bankImport";
+import { LEGACY_BANK_CODES, legacyBankLabel } from "@/lib/legacyBanks";
 
-type T = BankImportTemplate;
+type T = BankImportTemplate & { description?: string | null };
 
 const EMPTY: Omit<T, "id"> = {
   title: "",
