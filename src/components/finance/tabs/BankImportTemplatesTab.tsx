@@ -26,6 +26,7 @@ const EMPTY: Omit<T, "id"> = {
   needs_rtl_cleanup: false,
   time_24_fix: false,
   is_active: true,
+  description: "",
 };
 
 export default function BankImportTemplatesTab() {
