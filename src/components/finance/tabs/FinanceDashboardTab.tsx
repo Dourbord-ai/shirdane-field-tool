@@ -45,6 +45,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
     unassignedCreditor: 0,
     unassignedDebtor: 0,
     openRequests: 0,
+    approvedNotPaid: 0,
+    partiallyPaid: 0,
+    withdrawAssigning: 0,
+    paymentSyncErrors: 0,
     partiesDebit: 0,
     partiesCredit: 0,
     vouchersNotSynced: 0,
@@ -56,7 +60,7 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
   }, []);
 
   async function load() {
-    const [banks, unassigned, assigning, pendingRi, openReq, parties, notSynced, failed] = await Promise.all([
+    const [banks, unassigned, assigning, pendingRi, openReq, parties, notSynced, failed, approvedNotPaid, partial, withdrawAssigning, payErrors] = await Promise.all([
       supabase.from("finance_banks").select("last_balance,online_balance,unassigned_creditor_balance,unassigned_debtor_balance").eq("is_deleted", false).eq("is_active", true),
       supabase.from("finance_bank_transactions").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("assignment_status", "unassigned"),
       supabase.from("finance_bank_transactions").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("assignment_status", "assigning"),
@@ -65,6 +69,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
       supabase.from("finance_parties").select("balance").eq("is_deleted", false),
       supabase.from("finance_vouchers").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("sepidar_sync_status", "not_synced"),
       supabase.from("finance_vouchers").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("sepidar_sync_status", "failed"),
+      supabase.from("finance_payment_requests").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("status", "approved"),
+      supabase.from("finance_payment_requests").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("status", "partially_paid"),
+      supabase.from("finance_bank_transactions").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("transaction_type", "withdraw").eq("assignment_status", "assigning"),
+      supabase.from("finance_payment_allocations").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("status", "sync_failed"),
     ]);
     let total = 0;
     let creditor = 0;
@@ -91,6 +99,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
       unassignedCreditor: creditor,
       unassignedDebtor: debtor,
       openRequests: openReq.count || 0,
+      approvedNotPaid: approvedNotPaid.count || 0,
+      partiallyPaid: partial.count || 0,
+      withdrawAssigning: withdrawAssigning.count || 0,
+      paymentSyncErrors: payErrors.count || 0,
       partiesDebit: debit,
       partiesCredit: credit,
       vouchersNotSynced: notSynced.count || 0,
@@ -106,6 +118,10 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
     { label: "درخواست‌های شناسایی در انتظار تایید", value: kpi.pendingReceiveId, type: "count" as const, icon: ClipboardList, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("receive-id") },
     { label: "تراکنش‌های تخصیص نشده", value: kpi.unassignedTx, type: "count" as const, icon: AlertCircle, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("transactions") },
     { label: "درخواست‌های پرداخت باز", value: kpi.openRequests, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
+    { label: "درخواست‌های پرداخت تایید‌شده اما پرداخت‌نشده", value: kpi.approvedNotPaid, type: "count" as const, icon: ClipboardList, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("payment-requests") },
+    { label: "درخواست‌های پرداخت ناقص", value: kpi.partiallyPaid, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
+    { label: "تراکنش‌های برداشت در حال تخصیص", value: kpi.withdrawAssigning, type: "count" as const, icon: TrendingDown, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("transactions") },
+    { label: "خطاهای ثبت سند پرداخت", value: kpi.paymentSyncErrors, type: "count" as const, icon: AlertTriangle, tone: "from-red-500 to-pink-600", onClick: () => onTabChange("payment-requests") },
     { label: "مانده بدهکار ذینفعان", value: kpi.partiesDebit, type: "money" as const, icon: TrendingDown, tone: "from-red-500 to-rose-600", onClick: () => onTabChange("parties") },
     { label: "مانده بستانکار ذینفعان", value: kpi.partiesCredit, type: "money" as const, icon: TrendingUp, tone: "from-emerald-500 to-green-600", onClick: () => onTabChange("parties") },
     { label: "اسناد ثبت‌نشده در سپیدار", value: kpi.vouchersNotSynced, type: "count" as const, icon: FileX, tone: "from-slate-500 to-slate-700", onClick: () => onTabChange("vouchers") },
