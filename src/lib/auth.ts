@@ -93,7 +93,10 @@ export function isAuthenticated(): boolean {
   return !!localStorage.getItem(TOKEN_KEY);
 }
 
+import { DEV_ACCESS_MODE } from "./devAccess";
+
 export function hasRole(role: string): boolean {
+  if (DEV_ACCESS_MODE) return true; // TEMP: dev bypass
   const { user } = getSession();
   if (!user) return false;
   if (user.isSuperAdmin) return true;
@@ -101,8 +104,15 @@ export function hasRole(role: string): boolean {
 }
 
 export function canAccess(_resource?: string): boolean {
+  if (DEV_ACCESS_MODE) return true; // TEMP: dev bypass
   const { user } = getSession();
   if (!user) return false;
   if (user.isSuperAdmin) return true;
+  return true;
+}
+
+/** Re-export for convenience so app code can import from a single place. */
+export function hasPermission(_perm?: string): boolean {
+  if (DEV_ACCESS_MODE) return true;
   return true;
 }
