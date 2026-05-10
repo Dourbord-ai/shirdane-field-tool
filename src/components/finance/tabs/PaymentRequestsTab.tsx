@@ -6,8 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/finance/atoms";
 import { PartySelector } from "@/components/finance/selectors";
-import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName, assertPartiesReadyForPosting } from "@/lib/finance";
-import { Plus, X, CheckCircle2, Trash2, AlertTriangle } from "lucide-react";
+import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime } from "@/lib/finance";
+import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
@@ -164,7 +164,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       const code = Number(typeCode);
       const typeKey = getPaymentRequestTypeKey(code);
       const { data: pr, error } = await supabase.from("finance_payment_requests").insert({
-        title, description, request_type: typeKey, legacy_request_type_code: code, status: "draft", total_amount: total,
+        title, description, request_type: typeKey, legacy_request_type_code: code, status: "pending_approval", total_amount: total, total_paid_amount: 0, remaining_amount: total,
       }).select("id").single();
       if (error || !pr) throw error || new Error("insert failed");
       await supabase.from("finance_payment_request_items").insert(
@@ -175,7 +175,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           amount_type_code: i.amount_type_code,
           amount_type: i.amount_type,
           description: i.description,
-          status: "pending",
+          status: "pending_approval",
           legacy_request_type_code: code,
         })),
       );
@@ -303,19 +303,61 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   );
 }
 
+interface PRItemFull {
+  id: string;
+  party_id: string | null;
+  amount: number;
+  paid_amount: number | null;
+  remaining_amount: number | null;
+  amount_type_code: number;
+  amount_type: string;
+  description: string | null;
+  status: string | null;
+  party?: PartyLite & { id?: string };
+}
+
+interface AllocationRow {
+  id: string;
+  payment_request_item_id: string;
+  bank_transaction_id: string;
+  bank_id: string | null;
+  amount: number;
+  status: string;
+  sepidar_sync_status: string;
+  sepidar_error_message: string | null;
+  allocation_datetime: string;
+  bank?: { title: string | null; bank_name: string | null } | null;
+  bank_transaction?: { transaction_jalali_date: string | null; document_number: string | null; description: string | null } | null;
+}
+
 function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
-  const [items, setItems] = useState<PRItem[]>([]);
+  const [items, setItems] = useState<PRItemFull[]>([]);
+  const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [allocItem, setAllocItem] = useState<PRItemFull | null>(null);
+  const [headerRefresh, setHeaderRefresh] = useState<PR>(pr);
 
-  useEffect(() => {
-    supabase
-      .from("finance_payment_request_items")
-      .select("*, party:finance_parties(ownership_type,first_name,last_name,company_name,balance)")
-      .eq("payment_request_id", pr.id)
-      .then(({ data }) => setItems((data as never[]) || []));
-  }, [pr.id]);
+  async function reload() {
+    const [itemsRes, allocRes, headerRes] = await Promise.all([
+      supabase
+        .from("finance_payment_request_items")
+        .select("*, party:finance_parties(ownership_type,first_name,last_name,company_name,balance)")
+        .eq("payment_request_id", pr.id),
+      supabase
+        .from("finance_payment_allocations")
+        .select("*, bank:finance_banks(title,bank_name), bank_transaction:finance_bank_transactions(transaction_jalali_date,document_number,description)")
+        .eq("payment_request_id", pr.id)
+        .eq("is_deleted", false)
+        .order("allocation_datetime", { ascending: false }),
+      supabase.from("finance_payment_requests").select("*").eq("id", pr.id).maybeSingle(),
+    ]);
+    setItems((itemsRes.data as never[]) || []);
+    setAllocations((allocRes.data as never[]) || []);
+    if (headerRes.data) setHeaderRefresh(headerRes.data as PR);
+  }
+  useEffect(() => { void reload(); }, [pr.id]);
 
-  function validateAllForApproval(): string | null {
+  function validateForApproval(): string | null {
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
       if (it.amount_type_code === 1) {
@@ -327,84 +369,39 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
   }
 
   async function approve() {
-    const err = validateAllForApproval();
+    const err = validateForApproval();
     if (err) return toast.error(err);
     setBusy(true);
-    await supabase.from("finance_payment_requests").update({ status: "approved", approved_at: new Date().toISOString(), confirmed_amount: pr.total_amount }).eq("id", pr.id);
-    toast.success("تایید شد");
-    setBusy(false);
-    onClose();
-  }
-  async function reject() {
-    setBusy(true);
-    await supabase.from("finance_payment_requests").update({ status: "rejected" }).eq("id", pr.id);
-    toast.success("لغو تایید شد");
-    setBusy(false);
-    onClose();
-  }
-  async function postVoucher() {
-    setBusy(true);
     try {
-      // Re-validate creditor balances at post-time
-      const err = validateAllForApproval();
-      if (err) { toast.error(err); setBusy(false); return; }
-
-      // Block posting if any beneficiary is not yet synced to Sepidar
-      try {
-        await assertPartiesReadyForPosting(items.map((i) => i.party_id).filter((x): x is string => !!x));
-      } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "ذینفع نامعتبر");
-        setBusy(false);
-        return;
-      }
-
-      // Build voucher items: each PR item is debited to the appropriate party account
-      // (creditor / prepayment / on_account). The credit side is a single pending-bank
-      // line — final allocation to a real bank happens at the payment step.
-      const totalDebit = items.reduce((s, i) => s + Number(i.amount || 0), 0);
-      const debitItems = items.map((i) => {
-        const accountKind =
-          i.amount_type_code === 1 ? "party_creditor"
-          : i.amount_type_code === 2 ? "party_prepayment"
-          : i.amount_type_code === 3 ? "party_on_account"
-          : "party";
-        return {
-          party_id: i.party_id,
-          account_type: accountKind,
-          debit: Number(i.amount || 0),
-          credit: 0,
-          description: [i.description, `(${getPaymentAmountTypeLabel(i.amount_type_code).split(" - ")[1] || ""})`].filter(Boolean).join(" "),
-        };
-      });
-      const v = await createVoucher({
-        voucher_type: "payment_request",
-        source_operation_type: "payment_request",
-        source_operation_id: pr.id,
-        title: pr.title || "درخواست پرداخت",
-        description: pr.description,
-        items: [
-          ...debitItems,
-          { account_type: "bank_pending", debit: 0, credit: totalDebit, description: "اعتبار بانک — در انتظار تخصیص" },
-        ],
-      });
-      await supabase.from("finance_payment_requests").update({ status: "posted" }).eq("id", pr.id);
-      await sepidarSyncPlaceholder(v.id, "post_voucher");
-      toast.success("سند داخلی صادر شد");
-      onClose();
+      await approvePaymentRequest(pr.id);
+      toast.success("درخواست تایید شد");
+      await reload();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "خطا");
     } finally { setBusy(false); }
   }
+  async function reject() {
+    setBusy(true);
+    await supabase.from("finance_payment_requests").update({ status: "rejected" }).eq("id", pr.id);
+    toast.success("رد شد");
+    setBusy(false);
+    onClose();
+  }
+
+  const headerTotal = Number(headerRefresh.total_amount || 0);
+  const headerPaid = Number((headerRefresh as PR & { total_paid_amount?: number }).total_paid_amount || 0);
+  const headerRemaining = Math.max(0, headerTotal - headerPaid);
+  const headerStatus = headerRefresh.status;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
-      <div className="bg-card border-l shadow-lg w-full max-w-lg h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
+      <div className="bg-card border-l shadow-lg w-full max-w-2xl h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card z-10">
           <div>
             <h3 className="font-bold">{pr.title || "درخواست پرداخت"}</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">{getPaymentRequestTypeLabel(pr.legacy_request_type_code)}</p>
             <div className="flex items-center gap-2 mt-1">
-              <FinanceStatusBadge status={pr.status} />
+              <FinanceStatusBadge status={headerStatus} />
               <JalaliDateCell value={pr.created_at} />
             </div>
           </div>
@@ -412,61 +409,285 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         </div>
         <div className="p-4 space-y-4">
           {pr.description && <p className="text-sm text-muted-foreground">{pr.description}</p>}
+
+          {/* Header summary */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg border p-2">
+              <div className="text-[11px] text-muted-foreground">مبلغ کل</div>
+              <MoneyCell value={headerTotal} className="text-sm" />
+            </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-[11px] text-muted-foreground">پرداخت‌شده</div>
+              <MoneyCell value={headerPaid} className="text-sm" positive />
+            </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-[11px] text-muted-foreground">مانده</div>
+              <MoneyCell value={headerRemaining} className="text-sm" negative={headerRemaining > 0} />
+            </div>
+          </div>
+
+          {/* Items table */}
           <div className="rounded-xl border divide-y">
             {items.map((i, idx) => {
-              const bal = Number(i.party?.balance || 0);
-              const available = bal <= 0 ? Math.abs(bal) : 0;
-              const isCreditor = i.amount_type_code === 1;
-              const shortage = isCreditor && Number(i.amount) > available + 1e-6;
+              const amt = Number(i.amount || 0);
+              const paid = Number(i.paid_amount || 0);
+              const remaining = Math.max(0, amt - paid);
+              const canAllocate = ["approved", "partially_paid", "sync_failed"].includes(String(i.status)) && remaining > 0;
               return (
-                <div key={i.id || idx} className="p-3 space-y-1.5">
+                <div key={i.id || idx} className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-bold text-sm truncate">{i.party ? partyName(i.party) : "—"}</p>
                       {i.description && <p className="text-xs text-muted-foreground truncate">{i.description}</p>}
                     </div>
-                    <div className="text-right shrink-0">
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <FinanceStatusBadge status={i.status} />
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         {getPaymentAmountTypeLabel(i.amount_type_code)}
                       </span>
-                      <MoneyCell value={i.amount} className="text-sm block" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                      <span className="text-muted-foreground">مانده فعلی ذینفع</span>
-                      <MoneyCell value={bal} className="text-[11px]" />
+                      <span className="text-muted-foreground">درخواستی</span>
+                      <MoneyCell value={amt} className="text-[11px]" />
                     </div>
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                      <span className="text-muted-foreground">مبلغ مجاز قابل پرداخت</span>
-                      <MoneyCell value={isCreditor ? available : Number(i.amount || 0)} className="text-[11px]" />
+                      <span className="text-muted-foreground">پرداخت شده</span>
+                      <MoneyCell value={paid} className="text-[11px]" />
+                    </div>
+                    <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                      <span className="text-muted-foreground">مانده</span>
+                      <MoneyCell value={remaining} className="text-[11px]" />
                     </div>
                   </div>
-                  {shortage && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      مانده بستانکاری ذینفع برای این مبلغ کافی نیست
-                    </div>
+                  {canAllocate && (
+                    <Button size="sm" variant="outline" className="w-full" onClick={() => setAllocItem(i)}>
+                      <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
+                    </Button>
                   )}
                 </div>
               );
             })}
           </div>
-          <div className="rounded-xl border p-3 flex justify-between">
-            <span className="text-xs text-muted-foreground">جمع کل</span>
-            <MoneyCell value={pr.total_amount} />
-          </div>
+
+          {/* Allocations list */}
+          {allocations.length > 0 && (
+            <div className="rounded-xl border">
+              <div className="p-2 border-b bg-muted/40 text-sm font-bold">تخصیص‌های پرداخت</div>
+              <div className="divide-y">
+                {allocations.map((a) => (
+                  <div key={a.id} className="p-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs">
+                        <span className="font-bold">{a.bank?.title || a.bank?.bank_name || "بانک"}</span>
+                        <span className="text-muted-foreground"> — سند: {a.bank_transaction?.document_number || "—"}</span>
+                      </div>
+                      <FinanceStatusBadge status={a.status} />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{a.bank_transaction?.transaction_jalali_date || formatJalaliDateTime(a.allocation_datetime)}</span>
+                      <MoneyCell value={a.amount} className="text-[11px]" />
+                    </div>
+                    {a.sepidar_error_message && (
+                      <div className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">{a.sepidar_error_message}</div>
+                    )}
+                    {a.status !== "synced" && a.status !== "cancelled" && (
+                      <div className="flex gap-2">
+                        {a.status === "sync_failed" && (
+                          <Button size="sm" variant="outline" disabled={busy} onClick={async () => {
+                            setBusy(true);
+                            try {
+                              const r = await retryPaymentAllocationSync(a.id);
+                              if (r.ok) toast.success("ثبت سند انجام شد");
+                              else toast.error(r.error || "خطا");
+                              await reload();
+                            } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "خطا"); }
+                            finally { setBusy(false); }
+                          }}>
+                            <RefreshCw className="w-3.5 h-3.5 ml-1" /> تلاش مجدد
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={async () => {
+                          if (!confirm("لغو تخصیص؟")) return;
+                          setBusy(true);
+                          try { await cancelPaymentAllocation(a.id); toast.success("لغو شد"); await reload(); }
+                          catch (e: unknown) { toast.error(e instanceof Error ? e.message : "خطا"); }
+                          finally { setBusy(false); }
+                        }}>
+                          <XCircle className="w-3.5 h-3.5 ml-1" /> لغو تخصیص
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Approval actions */}
           <div className="grid grid-cols-2 gap-2">
-            {pr.status !== "approved" && pr.status !== "posted" && (
-              <Button onClick={approve} disabled={busy}><CheckCircle2 className="w-4 h-4 ml-1" /> تایید مدیریت</Button>
-            )}
-            {pr.status === "approved" && (
-              <Button onClick={reject} variant="outline" disabled={busy}>لغو تایید</Button>
-            )}
-            {pr.status === "approved" && (
-              <Button onClick={postVoucher} disabled={busy}>صدور سند داخلی</Button>
+            {(headerStatus === "draft" || headerStatus === "pending_approval") && (
+              <>
+                <Button onClick={approve} disabled={busy}><CheckCircle2 className="w-4 h-4 ml-1" /> تایید مدیریت</Button>
+                <Button onClick={reject} variant="outline" disabled={busy}>رد درخواست</Button>
+              </>
             )}
           </div>
+        </div>
+      </div>
+
+      {allocItem && (
+        <AllocationDialog
+          item={allocItem}
+          requestId={pr.id}
+          onClose={() => setAllocItem(null)}
+          onDone={async () => { setAllocItem(null); await reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface BankLite { id: string; title: string | null; bank_name: string | null }
+interface TxRow {
+  id: string; bank_id: string; transaction_jalali_date: string | null;
+  withdraw_amount: number; description: string | null; document_number: string | null;
+}
+
+function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFull; requestId: string; onClose: () => void; onDone: () => void }) {
+  const [banks, setBanks] = useState<BankLite[]>([]);
+  const [bankFilter, setBankFilter] = useState<string>("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [amountFilter, setAmountFilter] = useState("");
+  const [descFilter, setDescFilter] = useState("");
+  const [docFilter, setDocFilter] = useState("");
+  const [txs, setTxs] = useState<TxRow[]>([]);
+  const [selected, setSelected] = useState<TxRow | null>(null);
+  const [allocAmount, setAllocAmount] = useState<number>(0);
+  const [busy, setBusy] = useState(false);
+
+  const remaining = Math.max(0, Number(item.amount || 0) - Number(item.paid_amount || 0));
+
+  useEffect(() => {
+    void supabase.from("finance_banks").select("id,title,bank_name").eq("is_deleted", false).then(({ data }) => setBanks((data as BankLite[]) || []));
+  }, []);
+
+  useEffect(() => {
+    let q = supabase
+      .from("finance_bank_transactions")
+      .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number")
+      .eq("is_deleted", false)
+      .eq("transaction_type", "withdraw")
+      .eq("assignment_status", "unassigned")
+      .order("transaction_datetime", { ascending: false })
+      .limit(100);
+    if (bankFilter) q = q.eq("bank_id", bankFilter);
+    if (fromDate) q = q.gte("transaction_jalali_date", fromDate);
+    if (toDate) q = q.lte("transaction_jalali_date", toDate);
+    if (amountFilter) {
+      const a = parseMoney(amountFilter);
+      if (a) q = q.eq("withdraw_amount", a);
+    }
+    if (descFilter) q = q.ilike("description", `%${descFilter}%`);
+    if (docFilter) q = q.ilike("document_number", `%${docFilter}%`);
+    void q.then(({ data }) => setTxs((data as TxRow[]) || []));
+  }, [bankFilter, fromDate, toDate, amountFilter, descFilter, docFilter]);
+
+  function selectTx(tx: TxRow) {
+    setSelected(tx);
+    const w = Number(tx.withdraw_amount || 0);
+    setAllocAmount(Math.min(w, remaining));
+  }
+
+  async function submit() {
+    if (!selected) return;
+    if (!allocAmount || allocAmount <= 0) return toast.error("مبلغ تخصیص نامعتبر است");
+    if (allocAmount > remaining + 1e-6) return toast.error("بیش از مانده ردیف");
+    if (allocAmount > Number(selected.withdraw_amount || 0) + 1e-6) return toast.error("بیش از مبلغ تراکنش");
+    setBusy(true);
+    try {
+      const r = await createPaymentAllocation({
+        payment_request_id: requestId,
+        payment_request_item_id: item.id,
+        bank_transaction_id: selected.id,
+        amount: allocAmount,
+      });
+      if (r.ok) toast.success("تخصیص و سند داخلی ثبت شد");
+      else toast.error(r.error || "تخصیص ثبت شد ولی ثبت سپیدار ناموفق بود");
+      onDone();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "خطا");
+    } finally { setBusy(false); }
+  }
+
+  const bankName = (id: string) => {
+    const b = banks.find((x) => x.id === id);
+    return b ? (b.title || b.bank_name || "—") : "—";
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-card rounded-t-2xl sm:rounded-2xl border shadow-lg w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
+          <h3 className="font-bold">انتخاب تراکنش برداشت</h3>
+          <Button size="icon" variant="ghost" onClick={onClose}><X className="w-4 h-4" /></Button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="rounded-lg bg-muted/40 p-2 text-xs grid grid-cols-3 gap-2">
+            <div><span className="text-muted-foreground">ذینفع: </span><span className="font-bold">{item.party ? partyName(item.party) : "—"}</span></div>
+            <div><span className="text-muted-foreground">مبلغ ردیف: </span>{formatMoney(item.amount)}</div>
+            <div><span className="text-muted-foreground">مانده ردیف: </span>{formatMoney(remaining)}</div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+              <option value="">همه بانک‌ها</option>
+              {banks.map((b) => <option key={b.id} value={b.id}>{b.title || b.bank_name}</option>)}
+            </select>
+            <Input placeholder="تاریخ از (شمسی)" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <Input placeholder="تاریخ تا (شمسی)" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            <Input dir="ltr" placeholder="مبلغ" value={amountFilter} onChange={(e) => setAmountFilter(e.target.value)} />
+            <Input placeholder="شرح" value={descFilter} onChange={(e) => setDescFilter(e.target.value)} />
+            <Input placeholder="شماره سند" value={docFilter} onChange={(e) => setDocFilter(e.target.value)} />
+          </div>
+
+          <div className="rounded-lg border max-h-72 overflow-y-auto">
+            {txs.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">تراکنش برداشت تخصیص‌نشده‌ای یافت نشد</div>}
+            {txs.map((tx) => (
+              <button key={tx.id} onClick={() => selectTx(tx)}
+                className={`w-full text-right p-3 border-b last:border-b-0 hover:bg-muted/60 transition ${selected?.id === tx.id ? "bg-primary/5" : ""}`}>
+                <div className="flex justify-between items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold">{bankName(tx.bank_id)}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{tx.description || "—"}</div>
+                    <div className="text-[10px] text-muted-foreground">سند: {tx.document_number || "—"} · {tx.transaction_jalali_date || ""}</div>
+                  </div>
+                  <MoneyCell value={tx.withdraw_amount} className="text-sm" negative />
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {selected && (
+            <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
+              <div className="text-sm font-bold">تایید تخصیص</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-muted-foreground">بانک: </span>{bankName(selected.bank_id)}</div>
+                <div><span className="text-muted-foreground">تاریخ: </span>{selected.transaction_jalali_date || "—"}</div>
+                <div><span className="text-muted-foreground">مبلغ تراکنش: </span>{formatMoney(selected.withdraw_amount)}</div>
+                <div><span className="text-muted-foreground">مانده ردیف: </span>{formatMoney(remaining)}</div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">مبلغ تخصیص</Label>
+                <Input dir="ltr" inputMode="numeric" value={allocAmount || ""} onChange={(e) => setAllocAmount(parseMoney(e.target.value))} />
+              </div>
+              <Button onClick={submit} disabled={busy} className="w-full">
+                <CheckCircle2 className="w-4 h-4 ml-1" /> ثبت تخصیص و ایجاد سند
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

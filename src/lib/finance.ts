@@ -78,6 +78,36 @@ export const RECEIVE_ID_STATUS_LABEL: Record<string, string> = {
   cancelled: "لغو شده",
 };
 
+// Payment request header statuses
+export const PAYMENT_REQUEST_STATUS_LABEL: Record<string, string> = {
+  draft: "پیش‌نویس",
+  pending_approval: "در انتظار تایید مدیریت",
+  approved: "تایید شده",
+  partially_paid: "پرداخت ناقص",
+  paid: "پرداخت کامل",
+  rejected: "رد شده",
+  cancelled: "لغو شده",
+};
+
+// Payment request item statuses
+export const PAYMENT_ITEM_STATUS_LABEL: Record<string, string> = {
+  pending_approval: "در انتظار تایید",
+  approved: "تایید شده",
+  partially_paid: "پرداخت ناقص",
+  paid: "پرداخت شده",
+  sync_failed: "خطای ثبت سند",
+  cancelled: "لغو شده",
+  rejected: "رد شده",
+};
+
+// Payment allocation statuses
+export const PAYMENT_ALLOCATION_STATUS_LABEL: Record<string, string> = {
+  pending_sync: "در انتظار ثبت سند",
+  synced: "ثبت سند شده",
+  sync_failed: "خطای ثبت سپیدار",
+  cancelled: "لغو شده",
+};
+
 export function receiveIdStatusLabel(s: string | null | undefined): string {
   return (s && RECEIVE_ID_STATUS_LABEL[s]) || s || "—";
 }
@@ -595,4 +625,255 @@ export async function cancelReceiveIdentification(receiveIdId: string): Promise<
       .eq("id", ri.bank_transaction_id);
   }
   if (ri.bank_id) await recalculateBankUnassignedBalances(ri.bank_id);
+}
+
+// ---------- Payment Allocation workflow ----------
+export interface CreatePaymentAllocationInput {
+  payment_request_id: string;
+  payment_request_item_id: string;
+  bank_transaction_id: string;
+  amount: number;
+}
+
+function accountTypeForAmountTypeCode(code: number | null | undefined): string {
+  if (code === 1) return "party_creditor";
+  if (code === 2) return "party_prepayment";
+  if (code === 3) return "party_on_account";
+  return "party";
+}
+
+async function refreshPaymentRequestPaidTotals(payment_request_id: string): Promise<void> {
+  // Sum paid_amount on items, and update item statuses + header status.
+  const { data: items } = await supabase
+    .from("finance_payment_request_items")
+    .select("id, amount, paid_amount, status")
+    .eq("payment_request_id", payment_request_id);
+  const list = (items || []) as { id: string; amount: number | null; paid_amount: number | null; status: string | null }[];
+  let totalPaid = 0;
+  let allPaid = list.length > 0;
+  let anyPaid = false;
+  for (const it of list) {
+    const amt = Number(it.amount || 0);
+    const paid = Number(it.paid_amount || 0);
+    totalPaid += paid;
+    const remaining = Math.max(0, amt - paid);
+    let nextStatus = it.status || "approved";
+    if (paid > 0 && paid + 1e-6 < amt) nextStatus = "partially_paid";
+    else if (paid + 1e-6 >= amt && amt > 0) nextStatus = "paid";
+    if (nextStatus !== it.status || remaining !== Number(it.paid_amount || 0)) {
+      await supabase
+        .from("finance_payment_request_items")
+        .update({ remaining_amount: remaining, status: nextStatus })
+        .eq("id", it.id);
+    }
+    if (nextStatus !== "paid") allPaid = false;
+    if (paid > 0) anyPaid = true;
+  }
+  const { data: header } = await supabase
+    .from("finance_payment_requests")
+    .select("total_amount, status")
+    .eq("id", payment_request_id)
+    .maybeSingle();
+  const total = Number(header?.total_amount || 0);
+  const remaining = Math.max(0, total - totalPaid);
+  let headerStatus = header?.status || "approved";
+  if (allPaid && list.length > 0) headerStatus = "paid";
+  else if (anyPaid) headerStatus = "partially_paid";
+  await supabase
+    .from("finance_payment_requests")
+    .update({ total_paid_amount: totalPaid, remaining_amount: remaining, status: headerStatus })
+    .eq("id", payment_request_id);
+}
+
+export async function createPaymentAllocation(input: CreatePaymentAllocationInput): Promise<{ id: string; ok: boolean; error?: string }> {
+  // Load item + request
+  const { data: item } = await supabase
+    .from("finance_payment_request_items")
+    .select("id, payment_request_id, party_id, amount, paid_amount, amount_type_code, status")
+    .eq("id", input.payment_request_item_id)
+    .maybeSingle();
+  if (!item) throw new Error("ردیف درخواست یافت نشد");
+  if (!["approved", "partially_paid", "sync_failed"].includes(String(item.status))) {
+    throw new Error("ردیف درخواست در وضعیت قابل پرداخت نیست (نیاز به تایید مدیریت)");
+  }
+  const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
+  if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
+  if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
+
+  // Validate party Sepidar-ready
+  if (!item.party_id) throw new Error("ذینفع ردیف نامعتبر است");
+  await assertPartiesReadyForPosting([item.party_id]);
+
+  // Load bank transaction
+  const { data: tx } = await supabase
+    .from("finance_bank_transactions")
+    .select("id, bank_id, transaction_type, withdraw_amount, assignment_status")
+    .eq("id", input.bank_transaction_id)
+    .maybeSingle();
+  if (!tx) throw new Error("تراکنش بانکی یافت نشد");
+  if (tx.transaction_type !== "withdraw") throw new Error("فقط تراکنش برداشت قابل اتصال است");
+  if (tx.assignment_status !== "unassigned") throw new Error("تراکنش قبلاً به عملیات دیگری متصل شده است");
+  if (input.amount - 1e-6 > Number(tx.withdraw_amount || 0)) throw new Error("مبلغ تخصیص از مبلغ تراکنش بیشتر است");
+
+  // Validate bank Sepidar mapping
+  const { data: bank } = await supabase
+    .from("finance_banks")
+    .select("id, sepidar_dl_id, sepidar_account_id, title, bank_name")
+    .eq("id", tx.bank_id)
+    .maybeSingle();
+  if (!bank?.sepidar_dl_id || !bank?.sepidar_account_id) {
+    throw new Error(`بانک «${bank?.title || bank?.bank_name || ""}» در سپیدار نگاشت نشده است`);
+  }
+
+  // Create allocation row
+  const { data: alloc, error: aerr } = await supabase
+    .from("finance_payment_allocations")
+    .insert({
+      payment_request_id: input.payment_request_id,
+      payment_request_item_id: input.payment_request_item_id,
+      bank_transaction_id: input.bank_transaction_id,
+      bank_id: tx.bank_id,
+      party_id: item.party_id,
+      amount: input.amount,
+      status: "pending_sync",
+      sepidar_sync_status: "not_synced",
+    })
+    .select("id")
+    .single();
+  if (aerr || !alloc) throw aerr || new Error("درج تخصیص ناموفق بود");
+
+  // Mark transaction assigning
+  await supabase
+    .from("finance_bank_transactions")
+    .update({
+      assignment_status: "assigning",
+      assigned_operation_type: "payment_allocation",
+      assigned_operation_id: alloc.id,
+    })
+    .eq("id", input.bank_transaction_id);
+
+  // Create internal voucher (debit party-account, credit bank)
+  const accountType = accountTypeForAmountTypeCode(item.amount_type_code as number | null);
+  const v = await createVoucher({
+    voucher_type: "payment_allocation",
+    source_operation_type: "payment_allocation",
+    source_operation_id: alloc.id,
+    title: "پرداخت ذینفع",
+    description: null,
+    items: [
+      { party_id: item.party_id, account_type: accountType, debit: input.amount, credit: 0, description: "بدهکار ذینفع" },
+      { bank_id: tx.bank_id, account_type: "bank", debit: 0, credit: input.amount, description: "بانک" },
+    ],
+  });
+  await supabase.from("finance_payment_allocations").update({ voucher_id: v.id }).eq("id", alloc.id);
+
+  // Sync to Sepidar (placeholder)
+  const sync = await syncVoucherToSepidar(v.id);
+  if (sync.status === "synced") {
+    await supabase
+      .from("finance_payment_allocations")
+      .update({ status: "synced", sepidar_sync_status: "synced", sepidar_error_message: null })
+      .eq("id", alloc.id);
+    await supabase
+      .from("finance_bank_transactions")
+      .update({ assignment_status: "assigned" })
+      .eq("id", input.bank_transaction_id);
+    // Update item paid_amount
+    const newPaid = Number(item.paid_amount || 0) + Number(input.amount);
+    await supabase
+      .from("finance_payment_request_items")
+      .update({ paid_amount: newPaid })
+      .eq("id", input.payment_request_item_id);
+    // Reduce party balance (we paid them — balance moves toward zero / debit)
+    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", item.party_id).maybeSingle();
+    const newBal = Number(party?.balance || 0) + Number(input.amount); // creditor (negative) → adding moves toward 0
+    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", item.party_id);
+    await refreshPaymentRequestPaidTotals(input.payment_request_id);
+    await recalculateBankUnassignedBalances(tx.bank_id);
+    return { id: alloc.id, ok: true };
+  } else {
+    await supabase
+      .from("finance_payment_allocations")
+      .update({ status: "sync_failed", sepidar_sync_status: "failed", sepidar_error_message: sync.error_message })
+      .eq("id", alloc.id);
+    // tx stays 'assigning'
+    await recalculateBankUnassignedBalances(tx.bank_id);
+    return { id: alloc.id, ok: false, error: sync.error_message || "خطا در ثبت سپیدار" };
+  }
+}
+
+export async function retryPaymentAllocationSync(allocationId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data: alloc } = await supabase
+    .from("finance_payment_allocations")
+    .select("*")
+    .eq("id", allocationId)
+    .maybeSingle();
+  if (!alloc) throw new Error("تخصیص یافت نشد");
+  if (alloc.status === "synced") return { ok: true };
+  if (alloc.status === "cancelled") throw new Error("تخصیص لغو شده است");
+  if (!alloc.voucher_id) throw new Error("سند داخلی یافت نشد");
+  const sync = await syncVoucherToSepidar(alloc.voucher_id);
+  if (sync.status === "synced") {
+    await supabase
+      .from("finance_payment_allocations")
+      .update({ status: "synced", sepidar_sync_status: "synced", sepidar_error_message: null })
+      .eq("id", allocationId);
+    await supabase
+      .from("finance_bank_transactions")
+      .update({ assignment_status: "assigned" })
+      .eq("id", alloc.bank_transaction_id);
+    const { data: item } = await supabase
+      .from("finance_payment_request_items")
+      .select("paid_amount")
+      .eq("id", alloc.payment_request_item_id)
+      .maybeSingle();
+    const newPaid = Number(item?.paid_amount || 0) + Number(alloc.amount);
+    await supabase.from("finance_payment_request_items").update({ paid_amount: newPaid }).eq("id", alloc.payment_request_item_id);
+    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", alloc.party_id).maybeSingle();
+    const newBal = Number(party?.balance || 0) + Number(alloc.amount);
+    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", alloc.party_id);
+    await refreshPaymentRequestPaidTotals(alloc.payment_request_id);
+    await recalculateBankUnassignedBalances(alloc.bank_id);
+    return { ok: true };
+  }
+  await supabase
+    .from("finance_payment_allocations")
+    .update({ status: "sync_failed", sepidar_sync_status: "failed", sepidar_error_message: sync.error_message })
+    .eq("id", allocationId);
+  return { ok: false, error: sync.error_message || "خطا در ثبت سپیدار" };
+}
+
+export async function cancelPaymentAllocation(allocationId: string): Promise<void> {
+  const { data: alloc } = await supabase
+    .from("finance_payment_allocations")
+    .select("*")
+    .eq("id", allocationId)
+    .maybeSingle();
+  if (!alloc) throw new Error("تخصیص یافت نشد");
+  if (alloc.status === "synced") throw new Error("تخصیص ثبت‌شده قابل لغو نیست");
+  await supabase
+    .from("finance_payment_allocations")
+    .update({ status: "cancelled" })
+    .eq("id", allocationId);
+  if (alloc.bank_transaction_id) {
+    await supabase
+      .from("finance_bank_transactions")
+      .update({ assignment_status: "unassigned", assigned_operation_type: null, assigned_operation_id: null })
+      .eq("id", alloc.bank_transaction_id);
+  }
+  if (alloc.bank_id) await recalculateBankUnassignedBalances(alloc.bank_id);
+  await refreshPaymentRequestPaidTotals(alloc.payment_request_id);
+}
+
+export async function approvePaymentRequest(payment_request_id: string): Promise<void> {
+  await supabase
+    .from("finance_payment_requests")
+    .update({ status: "approved", approved_at: new Date().toISOString() })
+    .eq("id", payment_request_id);
+  // Promote items pending_approval → approved
+  await supabase
+    .from("finance_payment_request_items")
+    .update({ status: "approved" })
+    .eq("payment_request_id", payment_request_id)
+    .in("status", ["pending_approval", "pending"]);
 }

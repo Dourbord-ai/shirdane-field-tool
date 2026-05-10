@@ -2188,6 +2188,106 @@ export type Database = {
           },
         ]
       }
+      finance_payment_allocations: {
+        Row: {
+          allocation_datetime: string
+          amount: number
+          bank_id: string | null
+          bank_transaction_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_deleted: boolean
+          party_id: string | null
+          payment_request_id: string
+          payment_request_item_id: string
+          sepidar_error_message: string | null
+          sepidar_sync_status: string
+          status: string
+          updated_at: string
+          voucher_id: string | null
+        }
+        Insert: {
+          allocation_datetime?: string
+          amount: number
+          bank_id?: string | null
+          bank_transaction_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          party_id?: string | null
+          payment_request_id: string
+          payment_request_item_id: string
+          sepidar_error_message?: string | null
+          sepidar_sync_status?: string
+          status?: string
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Update: {
+          allocation_datetime?: string
+          amount?: number
+          bank_id?: string | null
+          bank_transaction_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          party_id?: string | null
+          payment_request_id?: string
+          payment_request_item_id?: string
+          sepidar_error_message?: string | null
+          sepidar_sync_status?: string
+          status?: string
+          updated_at?: string
+          voucher_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_payment_allocations_bank_id_fkey"
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_allocations_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_allocations_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_allocations_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payment_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_allocations_payment_request_item_id_fkey"
+            columns: ["payment_request_item_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payment_request_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payment_allocations_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_payment_request_items: {
         Row: {
           amount: number | null
@@ -2200,9 +2300,11 @@ export type Database = {
           is_deleted: boolean | null
           legacy_id: number | null
           legacy_request_type_code: number | null
+          paid_amount: number
           paid_transaction_id: string | null
           party_id: string | null
           payment_request_id: string | null
+          remaining_amount: number | null
           status: string | null
           updated_at: string
           voucher_id: string | null
@@ -2218,9 +2320,11 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          paid_amount?: number
           paid_transaction_id?: string | null
           party_id?: string | null
           payment_request_id?: string | null
+          remaining_amount?: number | null
           status?: string | null
           updated_at?: string
           voucher_id?: string | null
@@ -2236,9 +2340,11 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          paid_amount?: number
           paid_transaction_id?: string | null
           party_id?: string | null
           payment_request_id?: string | null
+          remaining_amount?: number | null
           status?: string | null
           updated_at?: string
           voucher_id?: string | null
@@ -2280,11 +2386,13 @@ export type Database = {
           is_deleted: boolean | null
           legacy_id: number | null
           legacy_request_type_code: number | null
+          remaining_amount: number | null
           request_type: string | null
           requested_by: string | null
           status: string | null
           title: string | null
           total_amount: number | null
+          total_paid_amount: number
           updated_at: string
         }
         Insert: {
@@ -2299,11 +2407,13 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          remaining_amount?: number | null
           request_type?: string | null
           requested_by?: string | null
           status?: string | null
           title?: string | null
           total_amount?: number | null
+          total_paid_amount?: number
           updated_at?: string
         }
         Update: {
@@ -2318,11 +2428,13 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          remaining_amount?: number | null
           request_type?: string | null
           requested_by?: string | null
           status?: string | null
           title?: string | null
           total_amount?: number | null
+          total_paid_amount?: number
           updated_at?: string
         }
         Relationships: []
