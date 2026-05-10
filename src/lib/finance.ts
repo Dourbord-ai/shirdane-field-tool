@@ -334,16 +334,14 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
 // Validation: a beneficiary cannot be used in final voucher posting unless
 // it is fully synced to Sepidar with all required ids present.
 export function isPartyReadyForPosting(p: {
-  approval_status?: string | null;
   sepidar_party_id?: number | null;
-  sepidar_dl_id?: number | null;
   sepidar_account_id?: number | null;
+  sepidar_sync_status?: string | null;
 }): boolean {
   return (
-    p.approval_status === "synced_to_sepidar" &&
     p.sepidar_party_id != null &&
-    p.sepidar_dl_id != null &&
-    p.sepidar_account_id != null
+    p.sepidar_account_id != null &&
+    p.sepidar_sync_status === "synced"
   );
 }
 
@@ -352,7 +350,7 @@ export async function assertPartiesReadyForPosting(partyIds: string[]): Promise<
   if (ids.length === 0) return;
   const { data, error } = await supabase
     .from("finance_parties")
-    .select("id, approval_status, sepidar_party_id, sepidar_dl_id, sepidar_account_id, first_name, last_name, company_name, ownership_type")
+    .select("id, sepidar_party_id, sepidar_account_id, sepidar_sync_status, first_name, last_name, company_name, ownership_type")
     .in("id", ids);
   if (error) throw error;
   const blocked = (data || []).filter((p) => !isPartyReadyForPosting(p as never));
