@@ -28,6 +28,8 @@ interface Tx {
   card_number: string | null;
   source_type: string | null;
   assignment_status: string | null;
+  assigned_operation_type: string | null;
+  assigned_operation_id: string | null;
   raw_data: unknown;
 }
 
