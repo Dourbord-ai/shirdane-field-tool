@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
-import { parseMoney, partyName } from "@/lib/finance";
+import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
 import { legacyBankLabel } from "@/lib/legacyBanks";
-import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle } from "lucide-react";
+import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
+import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Tx {
