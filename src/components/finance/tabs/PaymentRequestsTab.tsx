@@ -175,7 +175,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           amount_type_code: i.amount_type_code,
           amount_type: i.amount_type,
           description: i.description,
-          status: "pending",
+          status: "pending_approval",
           legacy_request_type_code: code,
         })),
       );
