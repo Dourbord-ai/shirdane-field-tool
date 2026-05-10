@@ -296,7 +296,7 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
 
 function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [bankId, setBankId] = useState<string | null>(null);
-  const [bankInfo, setBankInfo] = useState<{ import_template_id: string | null; legacy_bank_name_code: number | null } | null>(null);
+  const [bankInfo, setBankInfo] = useState<{ title: string | null; bank_name: string | null; import_template_id: string | null; legacy_bank_name_code: number | null } | null>(null);
   const [templates, setTemplates] = useState<import("@/lib/bankImport").BankImportTemplate[]>([]);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -311,24 +311,38 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     void supabase
       .from("finance_bank_import_templates")
       .select("*")
-      .eq("is_active", true)
       .order("bank_name_code", { ascending: true })
       .then(({ data }) => setTemplates((data as unknown as import("@/lib/bankImport").BankImportTemplate[]) || []));
   }, []);
 
   useEffect(() => {
+    setTemplateId(null);
+    setParsed([]);
+    setSummary(null);
     if (!bankId) { setBankInfo(null); return; }
     void supabase
       .from("finance_banks")
-      .select("import_template_id,legacy_bank_name_code")
+      .select("title,bank_name,import_template_id,legacy_bank_name_code")
       .eq("id", bankId)
       .maybeSingle()
       .then(({ data }) => {
-        const info = data as { import_template_id: string | null; legacy_bank_name_code: number | null } | null;
+        const info = data as { title: string | null; bank_name: string | null; import_template_id: string | null; legacy_bank_name_code: number | null } | null;
         setBankInfo(info);
-        if (info?.import_template_id) setTemplateId(info.import_template_id);
       });
   }, [bankId]);
+
+  // Auto-select template based on bank: explicit mapping first, then legacy code
+  useEffect(() => {
+    if (!bankInfo || templates.length === 0) return;
+    if (bankInfo.import_template_id) {
+      setTemplateId(bankInfo.import_template_id);
+      return;
+    }
+    if (bankInfo.legacy_bank_name_code != null) {
+      const m = templates.find((t) => t.bank_name_code === bankInfo.legacy_bank_name_code);
+      if (m) setTemplateId(m.id);
+    }
+  }, [bankInfo, templates]);
 
   const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId]);
 
