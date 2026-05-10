@@ -378,6 +378,10 @@ function PartyDetailDrawer({
             <MoneyCell value={party.balance} className="text-xl" positive={(party.balance || 0) > 0} negative={(party.balance || 0) < 0} />
           </div>
 
+          <Button variant="outline" className="w-full" onClick={onCompare}>
+            <GitCompareArrows className="w-4 h-4 ml-1" /> مقایسه صورتحساب با سپیدار
+          </Button>
+
           <div className="space-y-1.5 text-sm">
             {party.national_code && <Row label="کد ملی" value={party.national_code} />}
             {party.national_id && <Row label="شناسه ملی" value={party.national_id} />}
