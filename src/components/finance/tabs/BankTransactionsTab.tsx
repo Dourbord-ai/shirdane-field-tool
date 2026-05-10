@@ -157,9 +157,34 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     <td className="p-2 text-xs">{t.source_type || "—"}</td>
                     <td className="p-2"><FinanceStatusBadge status={t.assignment_status} /></td>
                     <td className="p-2">
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 flex-wrap items-center">
+                        {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setOpenReceiveId(t)}>
+                            <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
+                          </Button>
+                        )}
+                        {t.assignment_status === "unassigned" && t.transaction_type === "withdraw" && (
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های پرداخت")}>
+                            <ArrowUpFromLine className="w-3 h-3 ml-1" /> ثبت پرداخت
+                          </Button>
+                        )}
+                        {t.assignment_status === "unassigned" && (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => toast.info("اتصال به انتقال بین بانکی از تب مربوطه")}>
+                            <ArrowLeftRight className="w-3 h-3 ml-1" /> انتقال بانکی
+                          </Button>
+                        )}
+                        {t.assignment_status === "assigning" && (
+                          <span className="text-[11px] text-amber-700 inline-flex items-center gap-1">
+                            <Link2 className="w-3 h-3" /> در انتظار تایید مدیر
+                          </span>
+                        )}
+                        {t.assignment_status === "assigned" && t.assigned_operation_type === "receive_identification" && (
+                          <span className="text-[11px] text-emerald-700">شناسایی شده</span>
+                        )}
                         <Button size="icon" variant="ghost" title="جزئیات خام" onClick={() => setOpenRaw(t)}><FileText className="w-3.5 h-3.5" /></Button>
-                        <Button size="icon" variant="ghost" title="حذف نرم" onClick={() => softDelete(t)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        {t.assignment_status === "unassigned" && (
+                          <Button size="icon" variant="ghost" title="حذف نرم" onClick={() => softDelete(t)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        )}
                       </div>
                     </td>
                   </tr>
