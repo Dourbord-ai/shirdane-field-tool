@@ -35,6 +35,7 @@ interface Bank {
   sepidar_mapping_status: MappingStatus | null;
   sepidar_mapping_note: string | null;
   sepidar_last_checked_at: string | null;
+  legacy_bank_name_code: number | null;
 }
 
 interface SepidarCacheRow {
