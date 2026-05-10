@@ -37,14 +37,17 @@ export default function PaymentRequestsTab() {
   const [requests, setRequests] = useState<PR[]>([]);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<PR | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string>(""); // "" = همه موارد
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [typeFilter]);
   async function load() {
-    const { data } = await supabase
+    let q = supabase
       .from("finance_payment_requests")
       .select("*")
       .eq("is_deleted", false)
       .order("created_at", { ascending: false });
+    if (typeFilter) q = q.eq("legacy_request_type_code", Number(typeFilter));
+    const { data } = await q;
     setRequests((data as PR[]) || []);
   }
 
@@ -52,7 +55,19 @@ export default function PaymentRequestsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold">درخواست‌های پرداخت</h2>
-        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+        <div className="flex items-center gap-2">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">همه موارد</option>
+            {PAYMENT_REQUEST_TYPES.map((t) => (
+              <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
+            ))}
+          </select>
+          <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
