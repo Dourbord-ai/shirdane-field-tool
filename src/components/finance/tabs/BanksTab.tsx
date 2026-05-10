@@ -8,6 +8,7 @@ import { MoneyCell, JalaliDateCell } from "@/components/finance/atoms";
 import { Plus, Pencil, Power, Eye, RefreshCw, X, Link2, Search, CheckCircle2, AlertTriangle, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { LEGACY_BANK_CODES, legacyBankLabel } from "@/lib/legacyBanks";
 
 type MappingStatus = "not_mapped" | "mapped" | "needs_review";
 
