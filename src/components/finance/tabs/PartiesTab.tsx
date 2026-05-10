@@ -203,12 +203,16 @@ export default function PartiesTab() {
           party={detail}
           onClose={() => setDetail(null)}
           onEdit={() => { setEditing(detail); setOpen(true); setDetail(null); }}
+          onCompare={() => setCompareId(detail.id)}
           onChanged={async () => {
             const { data } = await supabase.from("finance_parties").select("*").eq("id", detail.id).maybeSingle();
             if (data) setDetail(data as Party);
             void load();
           }}
         />
+      )}
+      {compareId && (
+        <BeneficiaryStatementCompareDialog beneficiaryId={compareId} onClose={() => setCompareId(null)} />
       )}
     </div>
   );
