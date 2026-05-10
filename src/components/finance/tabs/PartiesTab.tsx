@@ -282,11 +282,12 @@ function Field({ label, children, full }: { label: string; children: React.React
 }
 
 function PartyDetailDrawer({
-  party, onClose, onEdit, onChanged,
+  party, onClose, onEdit, onCompare, onChanged,
 }: {
   party: Party;
   onClose: () => void;
   onEdit: () => void;
+  onCompare: () => void;
   onChanged: () => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
