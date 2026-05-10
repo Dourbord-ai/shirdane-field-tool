@@ -238,6 +238,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
+      {openReceiveId && (
+        <NewReceiveIdDialog
+          presetTxId={openReceiveId.id}
+          onClose={() => setOpenReceiveId(null)}
+          onDone={() => { setOpenReceiveId(null); void load(); }}
+        />
+      )}
       {openRaw && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setOpenRaw(null)}>
           <div className="bg-card rounded-xl border shadow-lg w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
