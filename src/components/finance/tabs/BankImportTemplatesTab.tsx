@@ -165,6 +165,9 @@ export default function BankImportTemplatesTab() {
                   placeholder="3,4"
                 />
               </Field>
+              <Field label="توضیحات قالب" full>
+                <Input value={edit.description ?? ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="مثلاً: قالب بانک گردشگری هنوز تعریف نشده است" />
+              </Field>
               <ToggleRow label="هدر دارد" v={edit.has_header} on={(b) => setEdit({ ...edit, has_header: b })} />
               <ToggleRow label="پاکسازی RTL" v={edit.needs_rtl_cleanup} on={(b) => setEdit({ ...edit, needs_rtl_cleanup: b })} />
               <ToggleRow label="اصلاح ساعت ۲۴:۰۰" v={edit.time_24_fix} on={(b) => setEdit({ ...edit, time_24_fix: b })} />
