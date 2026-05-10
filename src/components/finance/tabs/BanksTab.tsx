@@ -57,6 +57,7 @@ const EMPTY: Partial<Bank> = {
   sepidar_dl_id: null, sepidar_dl_code: "", sepidar_account_id: null,
   sepidar_bank_account_id: null, sepidar_full_title: "",
   sepidar_mapping_status: "not_mapped", sepidar_mapping_note: "",
+  legacy_bank_name_code: null,
 };
 
 const MAPPING_LABEL: Record<MappingStatus, string> = {
