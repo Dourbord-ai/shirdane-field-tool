@@ -6,6 +6,7 @@ import {
   OP_STATUS_LABEL,
   ASSIGNMENT_STATUS_LABEL,
   SEPIDAR_STATUS_LABEL,
+  RECEIVE_ID_STATUS_LABEL,
 } from "@/lib/finance";
 
 export function MoneyCell({
