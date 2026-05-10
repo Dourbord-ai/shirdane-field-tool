@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/finance/atoms";
 import { PartySelector } from "@/components/finance/selectors";
-import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
+import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName, assertPartiesReadyForPosting } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
