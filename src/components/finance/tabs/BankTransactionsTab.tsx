@@ -553,7 +553,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         </div>
         <div className="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-card">
           <Button variant="outline" onClick={onClose}>انصراف</Button>
-          <Button onClick={importAll} disabled={saving || parsed.filter((r) => r.status === "valid").length === 0}>
+          <Button onClick={importAll} disabled={saving || !templateActive || parsed.filter((r) => r.status === "valid").length === 0}>
             ثبت نهایی
           </Button>
         </div>
