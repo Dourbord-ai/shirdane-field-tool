@@ -75,6 +75,21 @@ export const SEPIDAR_STATUS_LABEL: Record<string, string> = {
   deleted_from_sepidar: "حذف شده از سپیدار",
 };
 
+// Approval workflow for finance_parties (beneficiaries)
+export const PARTY_APPROVAL_STATUS_LABEL: Record<string, string> = {
+  draft: "پیش‌نویس",
+  pending_approval: "در انتظار تایید مدیریت",
+  approved: "تایید اطلاعات شده",
+  synced_to_sepidar: "ثبت‌شده در سپیدار",
+  rejected: "رد شده",
+  sync_failed: "خطا در ثبت سپیدار",
+  inactive: "غیرفعال",
+};
+
+export function partyApprovalLabel(s: string | null | undefined): string {
+  return (s && PARTY_APPROVAL_STATUS_LABEL[s]) || "—";
+}
+
 // ---------- Party display ----------
 export function partyName(p: {
   ownership_type?: string | null;
