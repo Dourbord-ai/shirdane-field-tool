@@ -173,3 +173,146 @@ export async function sepidarSyncPlaceholder(voucher_id: string, op: string) {
     .update({ sepidar_sync_status: "syncing", sepidar_sync_attempts: 1 })
     .eq("id", voucher_id);
 }
+
+// ---------- Beneficiary (party) Sepidar sync — placeholder bridge ----------
+// Represents legacy stored procedure: SpAddSepidarBankParty
+// Returns: sepidar_party_id, sepidar_dl_id, sepidar_dl_code,
+// sepidar_account_id, sepidar_full_name, sepidar_sync_status, error_message
+export interface SepidarPartyResponse {
+  sepidar_party_id: number | null;
+  sepidar_dl_id: number | null;
+  sepidar_dl_code: number | null;
+  sepidar_account_id: number | null;
+  sepidar_full_name: string | null;
+  sepidar_sync_status: "synced" | "failed";
+  error_message: string | null;
+}
+
+// Placeholder bridge — does NOT call SQL Server. Simulates success-shape only.
+// Replace with real Sepidar Bridge call later.
+async function callSepidarBridgeAddParty(
+  party: { id: string; full_name: string },
+): Promise<SepidarPartyResponse> {
+  // Simulate latency for UX
+  await new Promise((r) => setTimeout(r, 600));
+  return {
+    sepidar_party_id: null,
+    sepidar_dl_id: null,
+    sepidar_dl_code: null,
+    sepidar_account_id: null,
+    sepidar_full_name: party.full_name,
+    sepidar_sync_status: "failed",
+    error_message: "پل سپیدار هنوز متصل نشده است (placeholder)",
+  };
+}
+
+export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyResponse> {
+  const { data: party, error } = await supabase
+    .from("finance_parties")
+    .select("*")
+    .eq("id", partyId)
+    .maybeSingle();
+  if (error || !party) throw error || new Error("ذینفع یافت نشد");
+  if (party.approval_status !== "approved" && party.approval_status !== "sync_failed") {
+    throw new Error("ابتدا اطلاعات ذینفع باید تایید شود");
+  }
+
+  // Mark as syncing + bump attempts
+  const attempts = (party.sepidar_sync_attempts ?? 0) + 1;
+  await supabase
+    .from("finance_parties")
+    .update({ sepidar_sync_status: "syncing", sepidar_sync_attempts: attempts })
+    .eq("id", partyId);
+
+  const fullName = partyName(party as never);
+  const requestPayload = {
+    procedure: "SpAddSepidarBankParty",
+    party_id: partyId,
+    full_name: fullName,
+    national_code: party.national_code,
+    national_id: party.national_id,
+    ownership_type: party.ownership_type,
+  };
+
+  let response: SepidarPartyResponse;
+  try {
+    response = await callSepidarBridgeAddParty({ id: partyId, full_name: fullName });
+  } catch (e: unknown) {
+    response = {
+      sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
+      sepidar_account_id: null, sepidar_full_name: null,
+      sepidar_sync_status: "failed",
+      error_message: e instanceof Error ? e.message : "خطای نامشخص",
+    };
+  }
+
+  // Log the call
+  await supabase.from("finance_sepidar_sync_logs").insert({
+    party_id: partyId,
+    entity_type: "party",
+    operation_type: "SpAddSepidarBankParty",
+    request_payload: requestPayload,
+    response_payload: response as unknown as Record<string, unknown>,
+    status: response.sepidar_sync_status === "synced" ? "success" : "failed",
+    error_message: response.error_message,
+  });
+
+  if (response.sepidar_sync_status === "synced") {
+    await supabase
+      .from("finance_parties")
+      .update({
+        sepidar_party_id: response.sepidar_party_id,
+        sepidar_dl_id: response.sepidar_dl_id,
+        sepidar_dl_code: response.sepidar_dl_code,
+        sepidar_account_id: response.sepidar_account_id,
+        sepidar_full_name: response.sepidar_full_name,
+        sepidar_sync_status: "synced",
+        approval_status: "synced_to_sepidar",
+        sepidar_synced_at: new Date().toISOString(),
+        sepidar_error_message: null,
+      })
+      .eq("id", partyId);
+  } else {
+    await supabase
+      .from("finance_parties")
+      .update({
+        sepidar_sync_status: "failed",
+        approval_status: "sync_failed",
+        sepidar_error_message: response.error_message,
+      })
+      .eq("id", partyId);
+  }
+
+  return response;
+}
+
+// Validation: a beneficiary cannot be used in final voucher posting unless
+// it is fully synced to Sepidar with all required ids present.
+export function isPartyReadyForPosting(p: {
+  approval_status?: string | null;
+  sepidar_party_id?: number | null;
+  sepidar_dl_id?: number | null;
+  sepidar_account_id?: number | null;
+}): boolean {
+  return (
+    p.approval_status === "synced_to_sepidar" &&
+    p.sepidar_party_id != null &&
+    p.sepidar_dl_id != null &&
+    p.sepidar_account_id != null
+  );
+}
+
+export async function assertPartiesReadyForPosting(partyIds: string[]): Promise<void> {
+  const ids = Array.from(new Set(partyIds.filter(Boolean)));
+  if (ids.length === 0) return;
+  const { data, error } = await supabase
+    .from("finance_parties")
+    .select("id, approval_status, sepidar_party_id, sepidar_dl_id, sepidar_account_id, first_name, last_name, company_name, ownership_type")
+    .in("id", ids);
+  if (error) throw error;
+  const blocked = (data || []).filter((p) => !isPartyReadyForPosting(p as never));
+  if (blocked.length > 0) {
+    const names = blocked.map((p) => partyName(p as never)).join("، ");
+    throw new Error(`ذینفعان زیر در سپیدار ثبت نشده‌اند و قابل ارسال در سند نیستند: ${names}`);
+  }
+}
