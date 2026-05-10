@@ -156,27 +156,37 @@ export default function PartiesTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((p) => (
-          <button key={p.id} onClick={() => setDetail(p)} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="font-bold truncate">{partyName(p)}</h3>
-                <p className="text-xs text-muted-foreground">{p.ownership_type === "legal" ? "حقوقی" : "حقیقی"} • {p.nationality === "foreign" ? "خارجی" : "ایرانی"}</p>
+          <div key={p.id} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all flex flex-col">
+            <button onClick={() => setDetail(p)} className="text-right flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-bold truncate">{partyName(p)}</h3>
+                  <p className="text-xs text-muted-foreground">{p.ownership_type === "legal" ? "حقوقی" : "حقیقی"} • {p.nationality === "foreign" ? "خارجی" : "ایرانی"}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <ApprovalBadge status={p.approval_status} />
+                  <SepidarStatusBadge status={p.sepidar_sync_status} />
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <ApprovalBadge status={p.approval_status} />
-                <SepidarStatusBadge status={p.sepidar_sync_status} />
+              <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
+                {p.national_code && <p>کد ملی: <span className="font-mono">{p.national_code}</span></p>}
+                {p.sepidar_dl_code != null && <p>کد تفصیل: <span className="font-mono">{p.sepidar_dl_code}</span></p>}
+                {p.sepidar_party_id != null && <p>شناسه طرف حساب سپیدار: <span className="font-mono">{p.sepidar_party_id}</span></p>}
               </div>
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
-              {p.national_code && <p>کد ملی: <span className="font-mono">{p.national_code}</span></p>}
-              {p.sepidar_dl_code != null && <p>کد تفصیل: <span className="font-mono">{p.sepidar_dl_code}</span></p>}
-              {p.sepidar_party_id != null && <p>شناسه طرف حساب سپیدار: <span className="font-mono">{p.sepidar_party_id}</span></p>}
-            </div>
-            <div className="mt-3 pt-3 border-t flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">مانده</span>
-              <MoneyCell value={p.balance} positive={(p.balance || 0) > 0} negative={(p.balance || 0) < 0} />
-            </div>
-          </button>
+              <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">مانده</span>
+                <MoneyCell value={p.balance} positive={(p.balance || 0) > 0} negative={(p.balance || 0) < 0} />
+              </div>
+            </button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3 w-full"
+              onClick={(e) => { e.stopPropagation(); setCompareId(p.id); }}
+            >
+              <GitCompareArrows className="w-4 h-4 ml-1" /> مقایسه صورتحساب با سپیدار
+            </Button>
+          </div>
         ))}
         {filtered.length === 0 && (
           <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
