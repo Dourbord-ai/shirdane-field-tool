@@ -50,6 +50,9 @@ export default function SepidarSettingsTab() {
       default_payment_account_id: s.default_payment_account_id,
       default_party_debit_account_id: s.default_party_debit_account_id,
       default_party_credit_account_id: s.default_party_credit_account_id,
+      default_creditor_payment_account_id: s.default_creditor_payment_account_id,
+      default_prepayment_account_id: s.default_prepayment_account_id,
+      default_on_account_payment_account_id: s.default_on_account_payment_account_id,
     }).eq("id", s.id);
     if (error) return toast.error(error.message);
     toast.success("ذخیره شد");
