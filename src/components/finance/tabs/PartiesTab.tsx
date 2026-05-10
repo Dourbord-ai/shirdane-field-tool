@@ -86,6 +86,7 @@ export default function PartiesTab() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Party> | null>(null);
   const [detail, setDetail] = useState<Party | null>(null);
+  const [compareId, setCompareId] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, []);
   async function load() {
