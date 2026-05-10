@@ -26,6 +26,10 @@ interface KPI {
   unassignedCreditor: number;
   unassignedDebtor: number;
   openRequests: number;
+  approvedNotPaid: number;
+  partiallyPaid: number;
+  withdrawAssigning: number;
+  paymentSyncErrors: number;
   partiesDebit: number;
   partiesCredit: number;
   vouchersNotSynced: number;
