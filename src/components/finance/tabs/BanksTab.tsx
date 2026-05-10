@@ -270,6 +270,18 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
               <Field label="شماره حساب"><Input dir="ltr" value={editing.account_number || ""} onChange={(e) => setEditing({ ...editing, account_number: e.target.value })} /></Field>
               <Field label="شبا"><Input dir="ltr" value={editing.iban_number || ""} onChange={(e) => setEditing({ ...editing, iban_number: e.target.value })} /></Field>
               <Field label="شماره کارت"><Input dir="ltr" value={editing.card_number || ""} onChange={(e) => setEditing({ ...editing, card_number: e.target.value })} /></Field>
+              <Field label="کد بانک در سیستم قدیم">
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={editing.legacy_bank_name_code ?? ""}
+                  onChange={(e) => setEditing({ ...editing, legacy_bank_name_code: e.target.value === "" ? null : Number(e.target.value) })}
+                >
+                  <option value="">— انتخاب نشده —</option>
+                  {LEGACY_BANK_CODES.map((b) => (
+                    <option key={b.code} value={b.code}>{b.code} - {b.name}</option>
+                  ))}
+                </select>
+              </Field>
               <div className="sm:col-span-2 grid grid-cols-3 gap-2">
                 <Toggle label="رسمی" checked={!!editing.is_official} onChange={(v) => setEditing({ ...editing, is_official: v })} />
                 <Toggle label="API فعال" checked={!!editing.is_api_enabled} onChange={(v) => setEditing({ ...editing, is_api_enabled: v })} />
