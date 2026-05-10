@@ -395,13 +395,13 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         amount: r.amount,
         description: r.description || description,
         document_number: r.document_number || null,
-        source_type: (selectedTemplate?.file_type === "csv" ? "csv" : "excel") as const,
+        source_type: selectedTemplate?.file_type === "csv" ? "csv" : "excel",
         assignment_status: "unassigned",
         original_file_name: file.name,
         imported_file_name: title,
         raw_data: r.raw as unknown as Record<string, unknown>,
       };
-      const { error } = await supabase.from("finance_bank_transactions").insert(payload);
+      const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
       if (!error) inserted++;
     }
     setSaving(false);
