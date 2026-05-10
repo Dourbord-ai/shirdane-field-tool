@@ -24,6 +24,7 @@ const TABS = [
   { key: "party-transfer", label: "انتقال بین ذینفع", icon: Repeat },
   { key: "parties", label: "ذینفعان", icon: Users },
   { key: "vouchers", label: "اسناد مالی", icon: FileText },
+  { key: "import-templates", label: "قالب‌های فایل بانکی", icon: FileSpreadsheet },
   { key: "sepidar", label: "تنظیمات سپیدار", icon: Settings },
 ];
 
