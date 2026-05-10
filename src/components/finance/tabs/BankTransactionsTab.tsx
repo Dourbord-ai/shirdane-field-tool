@@ -84,6 +84,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq("id", t.id);
     if (error) return toast.error(error.message);
+    if (t.bank_id) await recalculateBankUnassignedBalances(t.bank_id);
     toast.success("حذف شد");
     void load();
   }
