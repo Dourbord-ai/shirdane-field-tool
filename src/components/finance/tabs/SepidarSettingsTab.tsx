@@ -99,6 +99,18 @@ export default function SepidarSettingsTab() {
             <Label className="text-xs">حساب پیش‌فرض ذینفع بستانکار</Label>
             <Input dir="ltr" inputMode="numeric" value={s.default_party_credit_account_id || ""} onChange={(e) => setS({ ...s, default_party_credit_account_id: Number(e.target.value) || null })} />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">حساب پرداخت بستانکار</Label>
+            <Input dir="ltr" inputMode="numeric" value={s.default_creditor_payment_account_id || ""} onChange={(e) => setS({ ...s, default_creditor_payment_account_id: Number(e.target.value) || null })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">حساب پیش پرداخت</Label>
+            <Input dir="ltr" inputMode="numeric" value={s.default_prepayment_account_id || ""} onChange={(e) => setS({ ...s, default_prepayment_account_id: Number(e.target.value) || null })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">حساب پرداخت علی الحساب</Label>
+            <Input dir="ltr" inputMode="numeric" value={s.default_on_account_payment_account_id || ""} onChange={(e) => setS({ ...s, default_on_account_payment_account_id: Number(e.target.value) || null })} />
+          </div>
         </div>
 
         <div className="flex gap-2">
