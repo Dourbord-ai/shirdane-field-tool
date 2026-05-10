@@ -94,7 +94,8 @@ export default function BankImportTemplatesTab() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-bold">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">کد {t.bank_name_code} · {t.file_type.toUpperCase()}</p>
+                  <p className="text-xs text-muted-foreground">بانک: {legacyBankLabel(t.bank_name_code)} · {t.file_type.toUpperCase()} {!t.is_active && <span className="text-amber-700">· غیرفعال</span>}</p>
+                  {t.description && <p className="text-[11px] text-muted-foreground mt-1">{t.description}</p>}
                 </div>
                 <div className="flex gap-1">
                   <Button size="icon" variant="ghost" onClick={() => setEdit(t)}><Pencil className="w-4 h-4" /></Button>
