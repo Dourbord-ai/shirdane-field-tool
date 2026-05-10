@@ -345,6 +345,8 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
   }, [bankInfo, templates]);
 
   const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId]);
+  const templateActive = !!selectedTemplate?.is_active;
+  const noActiveTemplate = !!bankId && !!bankInfo && !templateActive;
 
   async function preview() {
     setSummary(null);
