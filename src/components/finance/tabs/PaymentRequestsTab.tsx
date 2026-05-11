@@ -177,12 +177,19 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     if (items.some((i) => !i.party_id || !i.amount)) return toast.error("ذینفع و مبلغ هر آیتم الزامی است");
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
-    // Validate creditor balance for amount_type_code = 1
+    // Validate creditor balance for amount_type_code = 1 (local + Sepidar)
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
       if (it.amount_type_code === 1 && it.party_id) {
         const v = validateCreditorBalance(partyBalances[it.party_id], it.amount);
         if (!v.ok) return toast.error(`ردیف ${idx + 1}: ${v.message}`);
+        const sb = sepidarBalances[it.party_id];
+        if (sb && sb.balance != null) {
+          // Sepidar convention: positive credit balance means we owe the party.
+          const sepAvail = Math.abs(sb.balance);
+          if (sepAvail + 1e-6 < it.amount)
+            return toast.error(`ردیف ${idx + 1}: مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.`);
+        }
       }
     }
 
