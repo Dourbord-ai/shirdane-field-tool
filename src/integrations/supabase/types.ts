@@ -2596,6 +2596,39 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_sepidar_logs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          operation: string
+          raw_error: string | null
+          request_payload: Json | null
+          response_payload: Json | null
+          success: boolean
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          operation: string
+          raw_error?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          success?: boolean
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          operation?: string
+          raw_error?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          success?: boolean
+        }
+        Relationships: []
+      }
       finance_sepidar_settings: {
         Row: {
           bridge_base_url: string | null
