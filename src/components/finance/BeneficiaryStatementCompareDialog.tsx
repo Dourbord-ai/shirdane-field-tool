@@ -253,35 +253,39 @@ function StatementTable({
           <thead className="bg-muted/50 text-xs">
             <tr>
               <th className="p-2 text-right">تاریخ</th>
-              {kind === "sepidar" && <th className="p-2 text-right">معین</th>}
+              <th className="p-2 text-right">شماره سند</th>
               <th className="p-2 text-right">شرح</th>
               <th className="p-2 text-right">بدهکار</th>
               <th className="p-2 text-right">بستانکار</th>
               <th className="p-2 text-right">مانده</th>
-              <th className="p-2 text-right">شماره سند</th>
-              <th className="p-2 text-right">منبع</th>
+              {kind === "sepidar" && <th className="p-2 text-right">کد معین</th>}
+              {kind === "sepidar" && <th className="p-2 text-right">عنوان معین</th>}
+              {kind === "sepidar" && <th className="p-2 text-right">کد تفصیل</th>}
+              {kind === "sepidar" && <th className="p-2 text-right">عنوان تفصیل</th>}
+              {kind === "sepidar" && <th className="p-2 text-right">صادرکننده</th>}
+              {kind === "internal" && <th className="p-2 text-right">منبع</th>}
             </tr>
           </thead>
           <tbody>
             {slice.map((r) => (
               <tr key={r.id} className="border-t hover:bg-muted/30">
-                <td className="p-2 whitespace-nowrap">
-                  <JalaliDateCell value={r.date} />
-                </td>
-                {kind === "sepidar" && <td className="p-2">{r.account || "—"}</td>}
-                <td className="p-2 max-w-xs truncate" title={r.description}>
-                  {r.description || "—"}
-                </td>
+                <td className="p-2 whitespace-nowrap"><JalaliDateCell value={r.date} /></td>
+                <td className="p-2 font-mono text-xs">{r.documentNumber || "—"}</td>
+                <td className="p-2 max-w-xs truncate" title={r.description}>{r.description || "—"}</td>
                 <td className="p-2"><MoneyCell value={r.debit} /></td>
                 <td className="p-2"><MoneyCell value={r.credit} /></td>
                 <td className="p-2"><MoneyCell value={r.balance} /></td>
-                <td className="p-2 font-mono text-xs">{r.documentNumber || "—"}</td>
-                <td className="p-2 text-xs text-muted-foreground">{r.source || "—"}</td>
+                {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.dlCode || "—"}</td>}
+                {kind === "sepidar" && <td className="p-2">{r.dlTitle || "—"}</td>}
+                {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.slCode || "—"}</td>}
+                {kind === "sepidar" && <td className="p-2">{r.slTitle || "—"}</td>}
+                {kind === "sepidar" && <td className="p-2 text-xs">{r.issuerEntityName || "—"}</td>}
+                {kind === "internal" && <td className="p-2 text-xs text-muted-foreground">{r.source || "—"}</td>}
               </tr>
             ))}
             {!slice.length && (
               <tr>
-                <td colSpan={kind === "sepidar" ? 8 : 7} className="p-6 text-center text-sm text-muted-foreground">
+                <td colSpan={kind === "sepidar" ? 11 : 7} className="p-6 text-center text-sm text-muted-foreground">
                   ردیفی یافت نشد
                 </td>
               </tr>

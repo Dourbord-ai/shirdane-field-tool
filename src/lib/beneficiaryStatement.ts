@@ -17,8 +17,13 @@ export interface StatementRow {
   sepidarVoucherId?: number | null;
   sepidarVoucherNumber?: number | null;
   externalReferenceId?: string | null;
-  // sepidar-only
+  // sepidar-only details
   account?: string | null;
+  dlCode?: string | null;
+  dlTitle?: string | null;
+  slCode?: string | null;
+  slTitle?: string | null;
+  issuerEntityName?: string | null;
 }
 
 export interface StatementDiff {
@@ -151,51 +156,92 @@ async function fetchSepidar(
   toDate?: string | null,
 ): Promise<{ rows: StatementRow[]; opening: number; available: boolean; error?: string }> {
   if (!sepidarPartyId) {
-    return { rows: [], opening: 0, available: false, error: "ذینفع در سپیدار ثبت نشده است" };
+    return {
+      rows: [],
+      opening: 0,
+      available: false,
+      error: "برای این ذینفع، شناسه سپیدار ثبت نشده است.",
+    };
   }
 
-  // TODO: connect to Sepidar beneficiary statement stored procedure.
-  // Expected RPC name (placeholder): `sepidar_beneficiary_statement`
-  // Args: { p_party_id: number, p_from: string|null, p_to: string|null }
   try {
-    // @ts-expect-error placeholder RPC, may not exist yet in the database
-    const { data, error } = await supabase.rpc("sepidar_beneficiary_statement", {
-      p_party_id: sepidarPartyId,
-      p_from: fromDate ?? null,
-      p_to: toDate ?? null,
-    });
+    const { data, error } = await supabase.functions.invoke(
+      "sepidar-beneficiary-statement",
+      {
+        body: {
+          partyId: sepidarPartyId,
+          fromDate: fromDate ?? null,
+          toDate: toDate ?? null,
+        },
+      },
+    );
     if (error) {
-      return { rows: [], opening: 0, available: false, error: error.message };
+      return { rows: [], opening: 0, available: false, error: error.message || String(error) };
     }
-    type SRow = {
-      sepidar_voucher_id?: number | null;
-      voucher_number?: number | null;
-      voucher_date?: string | null;
-      account?: string | null;
-      description?: string | null;
-      debit?: number | null;
-      credit?: number | null;
-      external_reference_id?: string | null;
+    const payload = data as
+      | { success: boolean; rowCount?: number; data?: Record<string, unknown>[]; message?: string }
+      | null;
+    if (!payload) {
+      return { rows: [], opening: 0, available: false, error: "پاسخی از سپیدار دریافت نشد." };
+    }
+    if (!payload.success) {
+      return { rows: [], opening: 0, available: false, error: payload.message || "خطا در واکشی صورتحساب." };
+    }
+    const list = payload.data || [];
+
+    const num = (v: unknown): number => {
+      if (v == null || v === "") return 0;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) ? n : 0;
     };
-    const list = (data as SRow[] | null) || [];
+    const str = (v: unknown): string | null => {
+      if (v == null) return null;
+      const s = String(v).trim();
+      return s.length ? s : null;
+    };
+    const pick = <T,>(r: Record<string, unknown>, ...keys: string[]): T | undefined => {
+      for (const k of keys) {
+        if (r[k] !== undefined && r[k] !== null) return r[k] as T;
+        const lk = Object.keys(r).find((x) => x.toLowerCase() === k.toLowerCase());
+        if (lk && r[lk] !== undefined && r[lk] !== null) return r[lk] as T;
+      }
+      return undefined;
+    };
+
     let bal = 0;
     const rows: StatementRow[] = list.map((r, i) => {
-      const debit = r.debit || 0;
-      const credit = r.credit || 0;
+      const debit = num(pick(r, "Debit", "debit"));
+      const credit = num(pick(r, "Credit", "credit"));
       bal += debit - credit;
+      const dateRaw = pick<string>(r, "VoucherDate", "voucher_date", "Date");
       return {
         id: `sep-${i}`,
-        date: r.voucher_date || null,
-        description: r.description || "",
+        date: dateRaw ? String(dateRaw) : null,
+        description: str(pick(r, "Description", "description")) || "",
         debit,
         credit,
         balance: bal,
-        documentNumber: r.voucher_number != null ? String(r.voucher_number) : null,
+        documentNumber:
+          str(pick(r, "VoucherNumber", "voucher_number")) ||
+          null,
         source: "sepidar",
-        sepidarVoucherId: r.sepidar_voucher_id ?? null,
-        sepidarVoucherNumber: r.voucher_number ?? null,
-        externalReferenceId: r.external_reference_id ?? null,
-        account: r.account ?? null,
+        sepidarVoucherId:
+          pick<number>(r, "VoucherId", "SepidarVoucherId", "sepidar_voucher_id") != null
+            ? Number(pick(r, "VoucherId", "SepidarVoucherId", "sepidar_voucher_id"))
+            : null,
+        sepidarVoucherNumber:
+          pick<number>(r, "VoucherNumber", "voucher_number") != null
+            ? Number(pick(r, "VoucherNumber", "voucher_number"))
+            : null,
+        externalReferenceId: str(pick(r, "ExternalReferenceId", "external_reference_id")),
+        account:
+          str(pick(r, "DLTitle", "AccountTitle")) ||
+          str(pick(r, "DLCode", "AccountCode")),
+        dlCode: str(pick(r, "DLCode", "dl_code")),
+        dlTitle: str(pick(r, "DLTitle", "dl_title")),
+        slCode: str(pick(r, "SLCode", "sl_code")),
+        slTitle: str(pick(r, "SLTitle", "sl_title")),
+        issuerEntityName: str(pick(r, "IssuerEntityName", "issuer_entity_name", "Issuer")),
       };
     });
     return { rows, opening: 0, available: true };
@@ -373,13 +419,20 @@ export function exportStatementToExcel(
   const rows = which === "internal" ? comparison.internalStatement : comparison.sepidarStatement;
   const data = rows.map((r) => ({
     تاریخ: formatJalaliDate(r.date),
-    ...(which === "sepidar" ? { معین: r.account || "" } : {}),
+    "شماره سند": r.documentNumber || "",
     شرح: r.description,
     بدهکار: r.debit,
     بستانکار: r.credit,
     مانده: r.balance,
-    "شماره سند": r.documentNumber || "",
-    منبع: r.source || "",
+    ...(which === "sepidar"
+      ? {
+          "کد معین": r.dlCode || "",
+          "عنوان معین": r.dlTitle || "",
+          "کد تفصیل": r.slCode || "",
+          "عنوان تفصیل": r.slTitle || "",
+          "صادرکننده": r.issuerEntityName || "",
+        }
+      : { منبع: r.source || "" }),
   }));
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
