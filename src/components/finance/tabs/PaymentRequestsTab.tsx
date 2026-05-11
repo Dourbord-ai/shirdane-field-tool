@@ -316,6 +316,52 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         مانده بستانکاری ذینفع برای این مبلغ کافی نیست
                       </div>
                     )}
+                    {it.party_id && (() => {
+                      const sepId = partySepidarIds[it.party_id];
+                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
+                      if (!isCreditor) {
+                        return (
+                          <div className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                            برای این نوع پرداخت، کنترل مانده سپیدار الزامی نیست.
+                          </div>
+                        );
+                      }
+                      if (!sepId) {
+                        return (
+                          <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+                            این ذینفع به سپیدار متصل نیست (sepidar_party_id ندارد).
+                          </div>
+                        );
+                      }
+                      if (!sb || sb.loading) {
+                        return <div className="text-[11px] text-muted-foreground bg-muted/40 rounded px-2 py-1">در حال دریافت مانده از سپیدار…</div>;
+                      }
+                      if (sb.error) {
+                        return <div className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">خطا در سپیدار: {sb.error}</div>;
+                      }
+                      const sepAvail = Math.abs(Number(sb.balance || 0));
+                      const exceeds = it.amount > 0 && sepAvail + 1e-6 < it.amount;
+                      return (
+                        <div className={`rounded px-2 py-1 text-[11px] flex items-center justify-between ${exceeds ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
+                          <span>مانده قابل پرداخت طبق سپیدار</span>
+                          <MoneyCell value={sepAvail} className="text-[11px]" />
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
+                      if (!isCreditor || !sb || sb.balance == null) return null;
+                      const sepAvail = Math.abs(Number(sb.balance || 0));
+                      if (it.amount > 0 && sepAvail + 1e-6 < it.amount) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
                   </div>
