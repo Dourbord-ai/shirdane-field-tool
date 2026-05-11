@@ -17,8 +17,13 @@ export interface StatementRow {
   sepidarVoucherId?: number | null;
   sepidarVoucherNumber?: number | null;
   externalReferenceId?: string | null;
-  // sepidar-only
+  // sepidar-only details
   account?: string | null;
+  dlCode?: string | null;
+  dlTitle?: string | null;
+  slCode?: string | null;
+  slTitle?: string | null;
+  issuerEntityName?: string | null;
 }
 
 export interface StatementDiff {
