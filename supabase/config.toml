@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.check-fertility-operation]
 verify_jwt = false
+
+[functions.sepidar-beneficiary-statement]
+verify_jwt = false
