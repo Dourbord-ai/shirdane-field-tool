@@ -21,13 +21,13 @@ async function logOp(
   raw_error: string | null,
 ): Promise<void> {
   try {
-    await supabase.from("finance_sepidar_logs").insert({
+    await supabase.from("finance_sepidar_logs").insert([{
       operation,
-      request_payload,
-      response_payload: response_payload ?? null,
+      request_payload: request_payload as never,
+      response_payload: (response_payload ?? null) as never,
       success,
-      raw_error,
-    });
+      raw_error: raw_error ?? undefined,
+    }]);
   } catch (e) {
     // never block the caller for logging failures
     // eslint-disable-next-line no-console
@@ -35,7 +35,7 @@ async function logOp(
   }
 }
 
-async function callEdge<T extends Json = Json>(
+async function callEdge<T = Json>(
   functionName: string,
   body: Json,
 ): Promise<T> {
@@ -45,14 +45,14 @@ async function callEdge<T extends Json = Json>(
     await logOp(functionName, body, (data as Json) ?? null, false, msg);
     throw new Error(msg);
   }
-  const resp = (data ?? {}) as Json & { success?: boolean; message?: string; rawError?: string };
+  const resp = (data ?? {}) as { success?: boolean; message?: string; rawError?: string } & Json;
   if (resp.success === false) {
     const msg = (resp.message as string) || "خطای نامشخص از سپیدار";
     await logOp(functionName, body, resp, false, (resp.rawError as string) || msg);
     throw new Error(msg);
   }
   await logOp(functionName, body, resp, true, null);
-  return resp as T;
+  return resp as unknown as T;
 }
 
 // ----------------- Public API -----------------
