@@ -20,3 +20,15 @@ verify_jwt = false
 
 [functions.sepidar-beneficiary-statement]
 verify_jwt = false
+
+[functions.sepidar-beneficiary-balance]
+verify_jwt = false
+
+[functions.sepidar-create-payment-voucher]
+verify_jwt = false
+
+[functions.sepidar-allocate-payment-transaction]
+verify_jwt = false
+
+[functions.sepidar-voucher-status]
+verify_jwt = false

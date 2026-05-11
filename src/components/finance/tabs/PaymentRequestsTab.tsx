@@ -17,6 +17,7 @@ import {
   getPaymentAmountTypeKey,
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
+import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
 
 interface PR {
   id: string;
@@ -122,24 +123,49 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "" },
   ]);
   const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
+  const [partySepidarIds, setPartySepidarIds] = useState<Record<string, number | null>>({});
+  const [sepidarBalances, setSepidarBalances] = useState<Record<string, { loading: boolean; balance: number | null; error: string | null }>>({});
   const [saving, setSaving] = useState(false);
 
   const total = items.reduce((s, i) => s + (i.amount || 0), 0);
 
-  // Fetch balances for selected parties
+  // Fetch local balance + sepidar_party_id for selected parties
   useEffect(() => {
     const ids = Array.from(new Set(items.map((i) => i.party_id).filter((x): x is string => !!x)));
     const missing = ids.filter((id) => !(id in partyBalances));
     if (!missing.length) return;
-    void supabase.from("finance_parties").select("id,balance").in("id", missing).then(({ data }) => {
+    void supabase.from("finance_parties").select("id,balance,sepidar_party_id").in("id", missing).then(({ data }) => {
       if (!data) return;
       setPartyBalances((prev) => {
         const next = { ...prev };
         for (const r of data as { id: string; balance: number | null }[]) next[r.id] = Number(r.balance || 0);
         return next;
       });
+      setPartySepidarIds((prev) => {
+        const next = { ...prev };
+        for (const r of data as { id: string; sepidar_party_id: number | null }[]) next[r.id] = r.sepidar_party_id ?? null;
+        return next;
+      });
     });
   }, [items, partyBalances]);
+
+  // Fetch Sepidar balance for creditor rows
+  useEffect(() => {
+    items.forEach((it) => {
+      if (!it.party_id || !shouldEnforceSepidarBalance(it.amount_type_code)) return;
+      const sepId = partySepidarIds[it.party_id];
+      if (!sepId) return;
+      const key = `${it.party_id}`;
+      if (sepidarBalances[key]) return;
+      setSepidarBalances((p) => ({ ...p, [key]: { loading: true, balance: null, error: null } }));
+      getSepidarBeneficiaryBalance(sepId)
+        .then((r) => setSepidarBalances((p) => ({ ...p, [key]: { loading: false, balance: Number(r.balance || 0), error: null } })))
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : "خطا در دریافت مانده سپیدار";
+          setSepidarBalances((p) => ({ ...p, [key]: { loading: false, balance: null, error: msg } }));
+        });
+    });
+  }, [items, partySepidarIds, sepidarBalances]);
 
   function updateItem(idx: number, patch: Partial<PRItem>) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
@@ -151,12 +177,19 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     if (items.some((i) => !i.party_id || !i.amount)) return toast.error("ذینفع و مبلغ هر آیتم الزامی است");
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
-    // Validate creditor balance for amount_type_code = 1
+    // Validate creditor balance for amount_type_code = 1 (local + Sepidar)
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
       if (it.amount_type_code === 1 && it.party_id) {
         const v = validateCreditorBalance(partyBalances[it.party_id], it.amount);
         if (!v.ok) return toast.error(`ردیف ${idx + 1}: ${v.message}`);
+        const sb = sepidarBalances[it.party_id];
+        if (sb && sb.balance != null) {
+          // Sepidar convention: positive credit balance means we owe the party.
+          const sepAvail = Math.abs(sb.balance);
+          if (sepAvail + 1e-6 < it.amount)
+            return toast.error(`ردیف ${idx + 1}: مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.`);
+        }
       }
     }
 
@@ -283,6 +316,52 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         مانده بستانکاری ذینفع برای این مبلغ کافی نیست
                       </div>
                     )}
+                    {it.party_id && (() => {
+                      const sepId = partySepidarIds[it.party_id];
+                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
+                      if (!isCreditor) {
+                        return (
+                          <div className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                            برای این نوع پرداخت، کنترل مانده سپیدار الزامی نیست.
+                          </div>
+                        );
+                      }
+                      if (!sepId) {
+                        return (
+                          <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+                            این ذینفع به سپیدار متصل نیست (sepidar_party_id ندارد).
+                          </div>
+                        );
+                      }
+                      if (!sb || sb.loading) {
+                        return <div className="text-[11px] text-muted-foreground bg-muted/40 rounded px-2 py-1">در حال دریافت مانده از سپیدار…</div>;
+                      }
+                      if (sb.error) {
+                        return <div className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">خطا در سپیدار: {sb.error}</div>;
+                      }
+                      const sepAvail = Math.abs(Number(sb.balance || 0));
+                      const exceeds = it.amount > 0 && sepAvail + 1e-6 < it.amount;
+                      return (
+                        <div className={`rounded px-2 py-1 text-[11px] flex items-center justify-between ${exceeds ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
+                          <span>مانده قابل پرداخت طبق سپیدار</span>
+                          <MoneyCell value={sepAvail} className="text-[11px]" />
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
+                      if (!isCreditor || !sb || sb.balance == null) return null;
+                      const sepAvail = Math.abs(Number(sb.balance || 0));
+                      if (it.amount > 0 && sepAvail + 1e-6 < it.amount) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
                   </div>
