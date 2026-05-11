@@ -419,13 +419,20 @@ export function exportStatementToExcel(
   const rows = which === "internal" ? comparison.internalStatement : comparison.sepidarStatement;
   const data = rows.map((r) => ({
     تاریخ: formatJalaliDate(r.date),
-    ...(which === "sepidar" ? { معین: r.account || "" } : {}),
+    "شماره سند": r.documentNumber || "",
     شرح: r.description,
     بدهکار: r.debit,
     بستانکار: r.credit,
     مانده: r.balance,
-    "شماره سند": r.documentNumber || "",
-    منبع: r.source || "",
+    ...(which === "sepidar"
+      ? {
+          "کد معین": r.dlCode || "",
+          "عنوان معین": r.dlTitle || "",
+          "کد تفصیل": r.slCode || "",
+          "عنوان تفصیل": r.slTitle || "",
+          "صادرکننده": r.issuerEntityName || "",
+        }
+      : { منبع: r.source || "" }),
   }));
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
