@@ -123,24 +123,49 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "" },
   ]);
   const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
+  const [partySepidarIds, setPartySepidarIds] = useState<Record<string, number | null>>({});
+  const [sepidarBalances, setSepidarBalances] = useState<Record<string, { loading: boolean; balance: number | null; error: string | null }>>({});
   const [saving, setSaving] = useState(false);
 
   const total = items.reduce((s, i) => s + (i.amount || 0), 0);
 
-  // Fetch balances for selected parties
+  // Fetch local balance + sepidar_party_id for selected parties
   useEffect(() => {
     const ids = Array.from(new Set(items.map((i) => i.party_id).filter((x): x is string => !!x)));
     const missing = ids.filter((id) => !(id in partyBalances));
     if (!missing.length) return;
-    void supabase.from("finance_parties").select("id,balance").in("id", missing).then(({ data }) => {
+    void supabase.from("finance_parties").select("id,balance,sepidar_party_id").in("id", missing).then(({ data }) => {
       if (!data) return;
       setPartyBalances((prev) => {
         const next = { ...prev };
         for (const r of data as { id: string; balance: number | null }[]) next[r.id] = Number(r.balance || 0);
         return next;
       });
+      setPartySepidarIds((prev) => {
+        const next = { ...prev };
+        for (const r of data as { id: string; sepidar_party_id: number | null }[]) next[r.id] = r.sepidar_party_id ?? null;
+        return next;
+      });
     });
   }, [items, partyBalances]);
+
+  // Fetch Sepidar balance for creditor rows
+  useEffect(() => {
+    items.forEach((it) => {
+      if (!it.party_id || !shouldEnforceSepidarBalance(it.amount_type_code)) return;
+      const sepId = partySepidarIds[it.party_id];
+      if (!sepId) return;
+      const key = `${it.party_id}`;
+      if (sepidarBalances[key]) return;
+      setSepidarBalances((p) => ({ ...p, [key]: { loading: true, balance: null, error: null } }));
+      getSepidarBeneficiaryBalance(sepId)
+        .then((r) => setSepidarBalances((p) => ({ ...p, [key]: { loading: false, balance: Number(r.balance || 0), error: null } })))
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : "خطا در دریافت مانده سپیدار";
+          setSepidarBalances((p) => ({ ...p, [key]: { loading: false, balance: null, error: msg } }));
+        });
+    });
+  }, [items, partySepidarIds, sepidarBalances]);
 
   function updateItem(idx: number, patch: Partial<PRItem>) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
