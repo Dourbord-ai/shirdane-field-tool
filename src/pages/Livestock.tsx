@@ -33,7 +33,7 @@ import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 
 type Cow = {
   id: number;
