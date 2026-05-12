@@ -1,5 +1,14 @@
+// Dashboard.tsx — main landing page after login.
+// All KPIs are now wired to real DB counts (public.cows) instead of hardcoded
+// placeholders. Dates are not displayed here directly, but if any are added
+// later they should be routed through src/lib/dateDisplay.formatShamsi to keep
+// the entire app on the Iranian calendar.
+
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { toPersianDigits } from "@/lib/jalali";
 import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
