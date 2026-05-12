@@ -33,6 +33,9 @@ function parseJalaliString(s: string | null): JalaliDate | null {
   return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
 }
 import { toast } from "sonner";
+// Universal Shamsi formatter — used so the date column on each history row
+// renders consistently with the rest of the app.
+import { formatShamsi } from "@/lib/dateDisplay";
 import { Loader2, Pencil, Trash2, Plus, MapPin, Tag, HeartPulse } from "lucide-react";
 
 export type CowChangeKind = "location" | "type" | "status";
@@ -205,7 +208,10 @@ export default function CowChangeSection({ cowId, kind, currentRefId, currentDat
                 <li key={row.id} className="rounded-lg border border-border bg-background p-3 space-y-1.5">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className="text-sm font-medium text-foreground">{row.ref_name ?? "—"}</p>
-                    <span className="text-xs text-muted-foreground">{row.event_date ?? new Date(row.created_at).toLocaleDateString("fa-IR")}</span>
+                    {/* Prefer the human-entered event_date (already Shamsi text in DB).
+                        Fall back to created_at via the universal Shamsi formatter so
+                        we never leak a Gregorian date into the timeline. */}
+                    <span className="text-xs text-muted-foreground">{formatShamsi(row.event_date ?? row.created_at)}</span>
                   </div>
                   {prev?.ref_name && (
                     <p className="text-xs text-muted-foreground">از: {prev.ref_name}</p>

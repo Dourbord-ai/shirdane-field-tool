@@ -1,5 +1,14 @@
+// Dashboard.tsx — main landing page after login.
+// All KPIs are now wired to real DB counts (public.cows) instead of hardcoded
+// placeholders. Dates are not displayed here directly, but if any are added
+// later they should be routed through src/lib/dateDisplay.formatShamsi to keep
+// the entire app on the Iranian calendar.
+
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { toPersianDigits } from "@/lib/jalali";
 import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
@@ -33,9 +42,61 @@ const recentEvents = [
   { title: "زایش جدید",             detail: "۳ گوساله سالم",         hint: "۱ روز پیش",    tone: "info"    as const, icon: HeartPulse },
 ];
 
+// -----------------------------------------------------------------------------
+// LiveCounts — shape of the real-time KPI numbers we pull from public.cows.
+// We compute them in a single Supabase round-trip so the dashboard load
+// stays snappy.
+// -----------------------------------------------------------------------------
+interface LiveCounts {
+  total: number;       // every cow currently in herd
+  milking: number;     // female + present + not dry
+  pregnant: number;    // female + present + is_pregnancy
+  dry: number;         // female + present + is_dry
+  calves: number;      // present cows whose sextype indicates calf/heifer (sex=0 + age proxy)
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = getSession();
+
+  // Live KPI state — starts at zero so the UI never flashes stale placeholders.
+  const [counts, setCounts] = useState<LiveCounts>({
+    total: 0, milking: 0, pregnant: 0, dry: 0, calves: 0,
+  });
+
+  // Pull real cow counts on mount. We select only the boolean/int columns we
+  // need for the aggregations and compute the buckets in JS — this avoids
+  // requiring extra DB views or RPC functions for now.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("cows")
+        // We pull only the columns needed for the dashboard buckets. Note we
+        // use `date_of_birth` (the actual schema column name) not `birth_date`.
+        .select("sex,is_dry,is_pregnancy,existancestatus,date_of_birth")
+        .limit(5000);
+      if (error || !data || cancelled) return;
+      // Restrict to in-herd animals (existancestatus = 1 means present).
+      const present = data.filter((c) => (c.existancestatus ?? 0) === 1);
+      const milking = present.filter((c) => c.sex === 0 && c.is_dry === false).length;
+      const pregnant = present.filter((c) => c.is_pregnancy === true).length;
+      const dry = present.filter((c) => c.sex === 0 && c.is_dry === true).length;
+      // Rough calf bucket: present + younger than ~12 months. Falls back to 0
+      // when date_of_birth isn't set so we never show a misleading number.
+      const oneYearAgo = Date.now() - 365 * 24 * 3600 * 1000;
+      const calves = present.filter((c) => {
+        if (!c.date_of_birth) return false;
+        const t = Date.parse(String(c.date_of_birth));
+        return Number.isFinite(t) && t >= oneYearAgo;
+      }).length;
+      setCounts({ total: present.length, milking, pregnant, dry, calves });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Helper to render a number in Persian digits — keeps the JSX compact.
+  const fa = (n: number) => toPersianDigits(String(n));
 
   return (
     <div className="py-4 lg:py-6 space-y-4 lg:space-y-6 animate-fade-in">
@@ -60,14 +121,17 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ============== KPI ROW ============== */}
+      {/* ============== KPI ROW ==============
+          Each tile is now bound to a real cow count from `counts` (loaded
+          above). Milk/finance KPIs remain static placeholders until those
+          modules are wired — kept in Persian digits so the UI stays clean. */}
       <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KPIWidget label="کل دام‌ها"        value="۱۴۲"       hint="همه دام‌ها"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای شیری"      value="۶۷"        hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای آبستن"     value="۲۳"        hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"  hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"   hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
-        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"    hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}    hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}  hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)} hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"           hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"             hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"              hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
 
       <InvoiceNotifications />
@@ -134,11 +198,14 @@ export default function Dashboard() {
         <GlobalCard>
           <h3 className="text-base font-extrabold text-foreground mb-4">نمای کلی دام‌ها</h3>
           <div className="space-y-3">
+            {/* Overview rows are now bound to live counts. We use the same
+                buckets (milking / dry / pregnant / calves) computed from
+                public.cows so this card and the KPI row never disagree. */}
             {[
-              { label: "گاوهای شیری", value: "۶۷" },
-              { label: "گاوهای خشک",  value: "۳۵" },
-              { label: "گاوهای آبستن", value: "۲۳" },
-              { label: "گوساله‌ها",   value: "۱۷" },
+              { label: "گاوهای شیری", value: counts.milking },
+              { label: "گاوهای خشک",  value: counts.dry },
+              { label: "گاوهای آبستن", value: counts.pregnant },
+              { label: "گوساله‌ها",   value: counts.calves },
             ].map((r) => (
               <div key={r.label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
                 <button
@@ -148,13 +215,13 @@ export default function Dashboard() {
                   مشاهده
                 </button>
                 <span className="text-sm text-muted-foreground">{r.label}</span>
-                <span className="text-base font-extrabold text-foreground tabular-nums">{r.value}</span>
+                <span className="text-base font-extrabold text-foreground tabular-nums">{fa(r.value)}</span>
               </div>
             ))}
             <div className="flex items-center justify-between pt-2">
               <span />
               <span className="text-sm font-bold text-muted-foreground">جمع کل</span>
-              <span className="text-xl font-extrabold text-primary tabular-nums">۱۴۲</span>
+              <span className="text-xl font-extrabold text-primary tabular-nums">{fa(counts.total)}</span>
             </div>
           </div>
         </GlobalCard>

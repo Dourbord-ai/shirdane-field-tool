@@ -14,6 +14,10 @@ import CowChangeSection from "@/components/livestock/CowChangeSection";
 import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
 import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
 import { cowImageFor } from "@/lib/cowImage";
+// Universal Shamsi formatter — every visible date on the cow profile
+// (created_at, purchase_date, pre_entry_*) is routed through this so the
+// page never accidentally shows Gregorian numerals or raw ISO strings.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 type Cow = {
   id: number;
@@ -234,7 +238,9 @@ export default function LivestockProfile() {
         <Row label="وضعیت حضور" value={presenceLabel((cow.existancestatus ?? 0))} />
         <Row
           label="تاریخ ورود"
-          value={cow.created_at ? new Date(cow.created_at).toLocaleDateString("fa-IR") : "—"}
+          // Use the central Shamsi formatter so both ISO timestamps from
+          // `created_at` and pre-stored Shamsi strings render consistently.
+          value={formatShamsi(cow.created_at)}
         />
       </Section>
 
@@ -291,9 +297,11 @@ export default function LivestockProfile() {
 
       {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
         <Section title="اطلاعات اولیه قبل از ورود به دامداری">
-          <Row label="تاریخ زایش قبل از ورود" value={cow.pre_entry_birth_date} />
-          <Row label="تاریخ سقط قبل از ورود" value={cow.pre_entry_abortion_date} />
-          <Row label="تاریخ خشکی قبل از ورود" value={cow.pre_entry_dry_date} />
+          {/* These values may already be Shamsi strings from import, but we still
+              pass them through formatShamsi so digits/separators are normalized. */}
+          <Row label="تاریخ زایش قبل از ورود" value={formatShamsi(cow.pre_entry_birth_date, false, "")} />
+          <Row label="تاریخ سقط قبل از ورود" value={formatShamsi(cow.pre_entry_abortion_date, false, "")} />
+          <Row label="تاریخ خشکی قبل از ورود" value={formatShamsi(cow.pre_entry_dry_date, false, "")} />
           <Row label="دوره/روزهای قبل از ورود" value={cow.pre_entry_period != null ? `${cow.pre_entry_period} روز` : null} />
           <Row label="توضیحات" value={cow.pre_entry_note} />
         </Section>
@@ -301,7 +309,7 @@ export default function LivestockProfile() {
 
       {/* Section 3: Purchase info */}
       <Section title="اطلاعات خرید">
-        <Row label="تاریخ خرید" value={cow.purchase_date} />
+        <Row label="تاریخ خرید" value={formatShamsi(cow.purchase_date, false, "")} />
         <Row
           label="قیمت خرید"
           value={
@@ -343,7 +351,9 @@ export default function LivestockProfile() {
                     <p className="text-xs text-muted-foreground mt-0.5">{e.description}</p>
                   )}
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    {new Date(e.created_at).toLocaleDateString("fa-IR")}
+                    {/* Centralized Shamsi formatter — keeps event timestamps consistent
+                        with every other date in the app (Persian digits + Jalali year). */}
+                    {formatShamsi(e.created_at)}
                   </p>
                 </div>
               </li>

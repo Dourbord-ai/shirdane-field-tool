@@ -10,6 +10,9 @@ import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { toast } from "sonner";
 import { useCows, useFertilityOperations, cowLabel } from "@/hooks/useFertilityRefs";
 import { ALERT_STATUS_LABEL } from "@/lib/fertilityRefs";
+// Centralized Shamsi formatter — used so the alert date column matches the
+// rest of the app instead of relying on the browser's fa-IR locale.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 interface Alert {
   id: string;
@@ -121,7 +124,9 @@ export default function FertilityAlerts() {
                     {op && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{op.name}</span>}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(a.alert_date).toLocaleDateString("fa-IR")}
+                    {/* Centralized Shamsi formatter keeps the alert date column in sync
+                        with the rest of the app (Persian digits + Jalali calendar). */}
+                    {formatShamsi(a.alert_date)}
                   </span>
                 </div>
                 {a.description && <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{a.description}</p>}
