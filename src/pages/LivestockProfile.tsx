@@ -356,9 +356,10 @@ export default function LivestockProfile() {
                     <p className="text-xs text-muted-foreground mt-0.5">{e.description}</p>
                   )}
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    {/* Centralized Shamsi formatter — keeps event timestamps consistent
-                        with every other date in the app (Persian digits + Jalali year). */}
-                    {formatShamsi(e.created_at)}
+                    {/* اولویت با event_date است (که از قبل شمسی ذخیره می‌شود)؛
+                        اگر نبود، به created_at میلادی برمی‌گردیم. formatShamsi
+                        هر دو حالت را به شمسی فارسی یکدست تبدیل می‌کند. */}
+                    {formatShamsi(e.event_date || e.created_at)}
                   </p>
                 </div>
               </li>
