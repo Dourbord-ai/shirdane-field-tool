@@ -40,12 +40,26 @@ const modules = [
   { title: "ثبت رکورد شیر", icon: Plus,         route: "/milk-record/quick",       desc: "ثبت سریع" },
 ];
 
-const recentEvents = [
-  { title: "ثبت رکورد شیر روزانه", detail: "۴۵۶ لیتر — شیفت صبح",  hint: "۳۰ دقیقه پیش", tone: "success" as const, icon: Milk },
-  { title: "هشدار کاهش شیر",       detail: "۵ گاو نیاز به بررسی",   hint: "۲ ساعت پیش",   tone: "danger"  as const, icon: TrendingUp },
-  { title: "رویداد سلامتی",         detail: "۲ دام نیازمند درمان",   hint: "۵ ساعت پیش",   tone: "warn"    as const, icon: AlertTriangle },
-  { title: "زایش جدید",             detail: "۳ گوساله سالم",         hint: "۱ روز پیش",    tone: "info"    as const, icon: HeartPulse },
-];
+// NOTE: The previously hard-coded `recentEvents` array has been removed.
+// Recent events are now loaded live from `public.livestock_fertility_events`
+// in the component below (see `events` state + its useEffect).
+
+// Map fertility_operation_id → human label + icon. Keeps the timeline tidy
+// without pulling the full reference table for a 5-row card.
+const OP_META: Record<number, { label: string; icon: typeof Milk }> = {
+  1:  { label: "ثبت فحلی",      icon: HeartPulse },
+  2:  { label: "تلقیح",          icon: HeartPulse },
+  3:  { label: "تست آبستنی",    icon: Activity },
+  4:  { label: "تست آبستنی",    icon: Activity },
+  5:  { label: "سقط",            icon: AlertTriangle },
+  6:  { label: "زایش",           icon: HeartPulse },
+  7:  { label: "خشکی",           icon: Milk },
+  8:  { label: "شستشو",         icon: Activity },
+  10: { label: "کلین تست",      icon: Activity },
+  11: { label: "تست آبستنی",    icon: Activity },
+  12: { label: "تست آبستنی",    icon: Activity },
+  13: { label: "همزمان‌سازی",   icon: Activity },
+};
 
 // -----------------------------------------------------------------------------
 // LiveCounts — shape of the real-time KPI numbers we pull from public.cows.
