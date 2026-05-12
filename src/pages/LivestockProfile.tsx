@@ -242,9 +242,10 @@ export default function LivestockProfile() {
         <Row label="وضعیت حضور" value={presenceLabel((cow.existancestatus ?? 0))} />
         <Row
           label="تاریخ ورود"
-          // Use the central Shamsi formatter so both ISO timestamps from
-          // `created_at` and pre-stored Shamsi strings render consistently.
-          value={formatShamsi(cow.created_at)}
+          // طبق درخواست محصول: «تاریخ ورود» باید برابر date_of_birth (تاریخ تولد دام)
+          // در جدول cows باشد. formatShamsi هم رشته‌های شمسی ذخیره‌شده و هم
+          // ISO میلادی را به شمسی با ارقام فارسی تبدیل می‌کند.
+          value={formatShamsi(cow.date_of_birth)}
         />
       </Section>
 
