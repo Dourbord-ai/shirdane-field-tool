@@ -252,6 +252,7 @@ function NewReceiveIdDialog({ onClose, onDone, presetTxId }: { onClose: () => vo
   const amount = tx?.deposit_amount || 0;
 
   async function submit() {
+    if (saving) return;
     if (!tx || !txId) return toast.error("رسید را انتخاب کنید");
     if (!tx.bank_id) return toast.error("بانک رسید نامعتبر است");
     if (!partyId) return toast.error("ذینفع را انتخاب کنید");
@@ -327,6 +328,7 @@ function RejectDialog({ ri, onClose, onDone }: { ri: RI; onClose: () => void; on
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   async function submit() {
+    if (saving) return;
     if (!reason.trim()) return toast.error("دلیل رد را بنویسید");
     setSaving(true);
     try {

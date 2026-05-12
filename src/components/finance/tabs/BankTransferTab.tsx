@@ -33,6 +33,7 @@ export default function BankTransferTab() {
   const valid = !!fromTx && !!toTx && Math.abs(diff - computedFee) < 0.01;
 
   async function submit() {
+    if (saving) return;
     if (!fromTx || !toTx || !fromId || !toId) return toast.error("هر دو رسید را انتخاب کنید");
     if (!fromTx.bank_id || !toTx.bank_id) return toast.error("بانک نامعتبر");
     if (fromTx.bank_id === toTx.bank_id) return toast.error("بانک مبدا و مقصد یکسان است");

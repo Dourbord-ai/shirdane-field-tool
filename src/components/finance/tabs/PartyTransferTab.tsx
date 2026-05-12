@@ -20,6 +20,7 @@ export default function PartyTransferTab() {
   const [saving, setSaving] = useState(false);
 
   async function submit() {
+    if (saving) return;
     if (!fromParty) return toast.error("ذینفع بستانکار را انتخاب کنید");
     if (!toParty) return toast.error("ذینفع بدهکار را انتخاب کنید");
     if (fromParty === toParty) return toast.error("ذینفع‌ها نمی‌توانند یکسان باشند");
