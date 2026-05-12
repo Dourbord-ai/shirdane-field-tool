@@ -42,9 +42,59 @@ const recentEvents = [
   { title: "زایش جدید",             detail: "۳ گوساله سالم",         hint: "۱ روز پیش",    tone: "info"    as const, icon: HeartPulse },
 ];
 
+// -----------------------------------------------------------------------------
+// LiveCounts — shape of the real-time KPI numbers we pull from public.cows.
+// We compute them in a single Supabase round-trip so the dashboard load
+// stays snappy.
+// -----------------------------------------------------------------------------
+interface LiveCounts {
+  total: number;       // every cow currently in herd
+  milking: number;     // female + present + not dry
+  pregnant: number;    // female + present + is_pregnancy
+  dry: number;         // female + present + is_dry
+  calves: number;      // present cows whose sextype indicates calf/heifer (sex=0 + age proxy)
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = getSession();
+
+  // Live KPI state — starts at zero so the UI never flashes stale placeholders.
+  const [counts, setCounts] = useState<LiveCounts>({
+    total: 0, milking: 0, pregnant: 0, dry: 0, calves: 0,
+  });
+
+  // Pull real cow counts on mount. We select only the boolean/int columns we
+  // need for the aggregations and compute the buckets in JS — this avoids
+  // requiring extra DB views or RPC functions for now.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("cows")
+        .select("sex,is_dry,is_pregnancy,existancestatus,birth_date")
+        .limit(5000);
+      if (error || !data || cancelled) return;
+      // Restrict to in-herd animals (existancestatus = 1 means present).
+      const present = data.filter((c) => (c.existancestatus ?? 0) === 1);
+      const milking = present.filter((c) => c.sex === 0 && c.is_dry === false).length;
+      const pregnant = present.filter((c) => c.is_pregnancy === true).length;
+      const dry = present.filter((c) => c.sex === 0 && c.is_dry === true).length;
+      // Rough calf bucket: present + younger than ~12 months. Fallback to 0
+      // when birth_date isn't set so we never show a misleading number.
+      const oneYearAgo = Date.now() - 365 * 24 * 3600 * 1000;
+      const calves = present.filter((c) => {
+        if (!c.birth_date) return false;
+        const t = Date.parse(String(c.birth_date));
+        return Number.isFinite(t) && t >= oneYearAgo;
+      }).length;
+      setCounts({ total: present.length, milking, pregnant, dry, calves });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Helper to render a number in Persian digits — keeps the JSX compact.
+  const fa = (n: number) => toPersianDigits(String(n));
 
   return (
     <div className="py-4 lg:py-6 space-y-4 lg:space-y-6 animate-fade-in">
