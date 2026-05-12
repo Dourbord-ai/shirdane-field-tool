@@ -108,6 +108,7 @@ export default function LabResults() {
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
     if (!file) {
       toast({ title: "فایل پیوست نشده", description: "لطفاً تصویر یا PDF نتیجه آزمایش را انتخاب کنید.", variant: "destructive" });
       return;
