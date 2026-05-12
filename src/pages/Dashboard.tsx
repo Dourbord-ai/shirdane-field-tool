@@ -198,11 +198,14 @@ export default function Dashboard() {
         <GlobalCard>
           <h3 className="text-base font-extrabold text-foreground mb-4">نمای کلی دام‌ها</h3>
           <div className="space-y-3">
+            {/* Overview rows are now bound to live counts. We use the same
+                buckets (milking / dry / pregnant / calves) computed from
+                public.cows so this card and the KPI row never disagree. */}
             {[
-              { label: "گاوهای شیری", value: "۶۷" },
-              { label: "گاوهای خشک",  value: "۳۵" },
-              { label: "گاوهای آبستن", value: "۲۳" },
-              { label: "گوساله‌ها",   value: "۱۷" },
+              { label: "گاوهای شیری", value: counts.milking },
+              { label: "گاوهای خشک",  value: counts.dry },
+              { label: "گاوهای آبستن", value: counts.pregnant },
+              { label: "گوساله‌ها",   value: counts.calves },
             ].map((r) => (
               <div key={r.label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
                 <button
@@ -212,13 +215,13 @@ export default function Dashboard() {
                   مشاهده
                 </button>
                 <span className="text-sm text-muted-foreground">{r.label}</span>
-                <span className="text-base font-extrabold text-foreground tabular-nums">{r.value}</span>
+                <span className="text-base font-extrabold text-foreground tabular-nums">{fa(r.value)}</span>
               </div>
             ))}
             <div className="flex items-center justify-between pt-2">
               <span />
               <span className="text-sm font-bold text-muted-foreground">جمع کل</span>
-              <span className="text-xl font-extrabold text-primary tabular-nums">۱۴۲</span>
+              <span className="text-xl font-extrabold text-primary tabular-nums">{fa(counts.total)}</span>
             </div>
           </div>
         </GlobalCard>
