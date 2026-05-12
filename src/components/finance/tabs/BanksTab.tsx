@@ -83,6 +83,7 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
   const [editing, setEditing] = useState<Partial<Bank> | null>(null);
   const [detail, setDetail] = useState<Bank | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => { void load(); }, []);
   async function load() {
