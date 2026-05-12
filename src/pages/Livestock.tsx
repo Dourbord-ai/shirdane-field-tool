@@ -420,7 +420,18 @@ export default function Livestock() {
           </div>
         )}
 
-        <div ref={sentinelRef} className="col-span-full h-6" />
+        <div ref={sentinelRef} className="col-span-full h-2" />
+        {!loading && hasMore && cows.length > 0 && (
+          <div className="col-span-full flex justify-center py-3">
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-full px-6"
+            >
+              نمایش بیشتر
+            </Button>
+          </div>
+        )}
         {!hasMore && cows.length > 0 && (
           <p className="col-span-full text-center text-xs text-muted-foreground py-2">پایان لیست</p>
         )}
