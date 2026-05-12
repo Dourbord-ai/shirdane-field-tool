@@ -149,6 +149,7 @@ export default function HeatRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!heatTypeId) return toast.error("نوع فحلی را انتخاب کنید");
     if (!quality) return toast.error("کیفیت فحلی را انتخاب کنید");
     if (!discharge) return toast.error("میزان ترشحات را انتخاب کنید");

@@ -172,6 +172,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   }
 
   async function save() {
+    if (saving) return;
     if (!typeCode) return toast.error("نوع درخواست را انتخاب کنید");
     if (!title) return toast.error("عنوان لیست را وارد کنید");
     if (items.some((i) => !i.party_id || !i.amount)) return toast.error("ذینفع و مبلغ هر آیتم الزامی است");
@@ -682,6 +683,7 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   }
 
   async function submit() {
+    if (busy) return;
     if (!selected) return;
     if (!allocAmount || allocAmount <= 0) return toast.error("مبلغ تخصیص نامعتبر است");
     if (allocAmount > remaining + 1e-6) return toast.error("بیش از مانده ردیف");

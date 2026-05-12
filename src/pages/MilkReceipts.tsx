@@ -108,6 +108,7 @@ export default function MilkReceipts() {
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
     if (!file) {
       toast({ title: "فایل پیوست نشده", description: "لطفاً تصویر یا PDF قبض را انتخاب کنید.", variant: "destructive" });
       return;

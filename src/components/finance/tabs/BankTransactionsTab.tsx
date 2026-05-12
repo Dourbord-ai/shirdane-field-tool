@@ -271,6 +271,7 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [saving, setSaving] = useState(false);
 
   async function save() {
+    if (saving) return;
     if (!bankId) return toast.error("بانک را انتخاب کنید");
     const amt = parseMoney(amount);
     if (amt <= 0) return toast.error("مبلغ نامعتبر");

@@ -87,6 +87,7 @@ export default function AbortionRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     const finalPeriod = useDefaultPeriod ? defaultPeriod : Number(period);
     if (!finalPeriod || finalPeriod < 1) return toast.error("دوره زایش معتبر نیست");
     if (!date) return toast.error("تاریخ سقط را انتخاب کنید");

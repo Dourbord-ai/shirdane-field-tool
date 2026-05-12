@@ -793,6 +793,7 @@ export default function NewInvoice() {
   const showPreview = showProductDetails && !!data.settlement && hasValidRows;
 
   const handleSubmit = async () => {
+    if (submitting) return;
     // Block submission if any wage/rental row has a verified name mismatch (red)
     const wageMismatch = wageRows.some((r) => r.verifyStatus === "mismatch");
     const rentalMismatch = rentalRows.some((r) => r.verifyStatus === "mismatch");
