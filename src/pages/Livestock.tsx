@@ -27,7 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, SlidersHorizontal, Loader2, ChevronLeft, X, Droplet, Heart, Users } from "lucide-react";
+import { Search, SlidersHorizontal, Loader2, ChevronLeft, X } from "lucide-react";
+import kpiCowHerd from "@/assets/kpi-cow-herd.png";
+import kpiCowMilking from "@/assets/kpi-cow-milking.png";
+import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
+import kpiMilkCan from "@/assets/kpi-milk-can.png";
 
 const PAGE_SIZE = 50;
 
@@ -191,10 +195,10 @@ export default function Livestock() {
   }, [loading, hasMore]);
 
   const kpis = useMemo(() => ([
-    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd, icon: Users, tone: "from-emerald-50 to-teal-50" },
-    { id: "milking:wet", label: "دوشا", value: totals.wet, icon: Droplet, tone: "from-sky-50 to-cyan-50" },
-    { id: "milking:dry", label: "خشک", value: totals.dry, icon: Droplet, tone: "from-amber-50 to-orange-50" },
-    { id: "fertility:8", label: "آبستن", value: totals.pregnant, icon: Heart, tone: "from-rose-50 to-pink-50" },
+    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
+    { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,      image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
+    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,      image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
+    { id: "fertility:8",      label: "گاوهای آبستن", value: totals.pregnant, image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
   ]), [totals]);
 
   const selectedList = useMemo(
@@ -216,22 +220,29 @@ export default function Livestock() {
         </div>
       </div>
 
-      {/* KPI strip */}
+      {/* KPI strip — image-rich enterprise tiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {kpis.map((k) => {
-          const Icon = k.icon;
           const active = selected.has(k.id);
           return (
             <button
               key={k.id}
               onClick={() => toggle(k.id)}
-              className={`kpi-tile bg-gradient-to-br ${k.tone} ${active ? "ring-2 ring-primary/40 border-primary/40" : ""}`}
+              className={`kpi-tile group ${active ? "ring-2 ring-primary/40 border-primary/40" : ""}`}
+              style={active ? { boxShadow: `0 14px 40px -12px ${k.accent}` } : undefined}
             >
-              <div className="flex items-center justify-between">
-                <span className="kpi-label">{k.label}</span>
-                <Icon className="w-4 h-4 text-foreground/60" />
+              <div className="flex items-start justify-between gap-2 relative z-10">
+                <div className="min-w-0 flex-1 text-right">
+                  <span className="kpi-label">{k.label}</span>
+                  <div className="kpi-value mt-1">{(k.value ?? 0).toLocaleString("fa-IR")}</div>
+                </div>
+                <img
+                  src={k.image}
+                  alt=""
+                  loading="lazy"
+                  className="w-14 h-14 sm:w-16 sm:h-16 object-contain shrink-0 -my-1 -mr-1 drop-shadow-[0_6px_18px_rgba(0,0,0,0.4)]"
+                />
               </div>
-              <span className="kpi-value">{(k.value ?? 0).toLocaleString("fa-IR")}</span>
             </button>
           );
         })}
@@ -384,9 +395,13 @@ export default function Livestock() {
                     {female && (
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${
                         c.is_dry
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-sky-50 text-sky-700 border-sky-200"
-                      }`}>
+                          ? "bg-tone-warn/15 text-tone-warn border-tone-warn/30"
+                          : "bg-tone-info/15 text-tone-info border-tone-info/30"
+                      }`}
+                      style={c.is_dry
+                        ? { color: "hsl(38 92% 70%)", borderColor: "hsl(38 92% 55% / 0.35)", background: "hsl(38 92% 55% / 0.12)" }
+                        : { color: "hsl(217 91% 75%)", borderColor: "hsl(217 91% 60% / 0.35)", background: "hsl(217 91% 60% / 0.12)" }}
+                      >
                         {dryLabel(c.is_dry)}
                       </span>
                     )}

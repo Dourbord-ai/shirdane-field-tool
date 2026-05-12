@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Bell, Search, User, CloudSun, Calendar, Menu } from "lucide-react";
+import { ArrowLeft, Bell, Search, User, CloudSun, Calendar, Menu, Plus } from "lucide-react";
 import { getSession } from "@/lib/auth";
 
 function shamsiNow(): { date: string; time: string } {
@@ -74,8 +74,23 @@ export default function AppHeader() {
 
       <div className="flex-1 lg:hidden" />
 
-      {/* Right cluster: weather, date, bell, profile */}
+      {/* Right cluster: quick milk record, weather, date, bell, profile */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={() => navigate("/milk-record/quick")}
+          className="hidden sm:inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary glow-primary px-3 py-2 text-primary-foreground text-xs font-bold active:scale-[0.98]"
+          aria-label="ثبت رکورد شیر"
+        >
+          <Plus className="w-4 h-4" />
+          <span>ثبت رکورد شیر</span>
+        </button>
+        <button
+          onClick={() => navigate("/milk-record/quick")}
+          className="sm:hidden touch-target flex items-center justify-center rounded-xl bg-gradient-primary glow-primary text-primary-foreground"
+          aria-label="ثبت رکورد شیر"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
         <div className="hidden sm:flex items-center gap-2 rounded-xl glass px-3 py-2">
           <CloudSun className="w-5 h-5 text-tone-warn" style={{ color: "hsl(38 92% 65%)" }} />
           <div className="text-right leading-tight">

@@ -7,7 +7,9 @@ import {
 import InvoiceNotifications from "@/components/InvoiceNotifications";
 import { GlobalCard, KPIWidget } from "@/components/global/KPIWidget";
 import heroCows from "@/assets/dashboard-hero-cows.jpg";
-import kpiCow from "@/assets/kpi-cow.png";
+import kpiCowHerd from "@/assets/kpi-cow-herd.png";
+import kpiCowMilking from "@/assets/kpi-cow-milking.png";
+import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
 import kpiCoins from "@/assets/kpi-coins.png";
 import kpiWallet from "@/assets/kpi-wallet.png";
@@ -24,10 +26,11 @@ const modules = [
   { title: "ثبت رکورد شیر", icon: Plus,         route: "/milk-record/quick",       desc: "ثبت سریع" },
 ];
 
-const alerts = [
-  { title: "کاهش شیر", count: "۵ گاو",  hint: "۲ ساعت پیش", tone: "danger" as const, icon: TrendingUp },
-  { title: "مشکل سلامتی", count: "۲ دام", hint: "۵ ساعت پیش", tone: "warn"   as const, icon: AlertTriangle },
-  { title: "توقف زایش",  count: "۳ گاو", hint: "۱ روز پیش",  tone: "info"   as const, icon: HeartPulse },
+const recentEvents = [
+  { title: "ثبت رکورد شیر روزانه", detail: "۴۵۶ لیتر — شیفت صبح",  hint: "۳۰ دقیقه پیش", tone: "success" as const, icon: Milk },
+  { title: "هشدار کاهش شیر",       detail: "۵ گاو نیاز به بررسی",   hint: "۲ ساعت پیش",   tone: "danger"  as const, icon: TrendingUp },
+  { title: "رویداد سلامتی",         detail: "۲ دام نیازمند درمان",   hint: "۵ ساعت پیش",   tone: "warn"    as const, icon: AlertTriangle },
+  { title: "زایش جدید",             detail: "۳ گوساله سالم",         hint: "۱ روز پیش",    tone: "info"    as const, icon: HeartPulse },
 ];
 
 export default function Dashboard() {
@@ -59,12 +62,12 @@ export default function Dashboard() {
 
       {/* ============== KPI ROW ============== */}
       <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KPIWidget label="کل دام‌ها"        value="۱۴۲"       hint="همه دام‌ها"     image={kpiCow}     accent="green" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای شیری"      value="۶۷"        hint="در حال شیردهی" image={kpiCow}     accent="green" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای آبستن"     value="۲۳"        hint="مجموع"         image={kpiCow}     accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"  hint="کل جمع‌آوری"   image={kpiMilkCan} accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"   hint="ریال"          image={kpiCoins}   accent="orange" onClick={() => navigate("/finance")} />
-        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"    hint="ریال"          image={kpiWallet}  accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="کل دام‌ها"        value="۱۴۲"       hint="همه دام‌ها"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای شیری"      value="۶۷"        hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای آبستن"     value="۲۳"        hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"  hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"   hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"    hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
 
       <InvoiceNotifications />
@@ -94,38 +97,36 @@ export default function Dashboard() {
           </div>
         </GlobalCard>
 
-        {/* Alerts */}
+        {/* Recent events — timeline */}
         <GlobalCard>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-extrabold text-foreground">هشدارهای اخیر</h3>
-            <span className="status-chip status-danger">{alerts.length}</span>
+            <h3 className="text-base font-extrabold text-foreground">رویدادهای اخیر</h3>
+            <span className="text-[10px] text-muted-foreground">{recentEvents.length} رویداد</span>
           </div>
-          <div className="space-y-3">
-            {alerts.map((a) => (
-              <div
-                key={a.title}
-                className="flex items-center gap-3 p-3 rounded-xl bg-secondary/40 border border-border/40"
-              >
-                <span
-                  className={
-                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 " +
-                    (a.tone === "danger"
-                      ? "status-danger"
-                      : a.tone === "warn"
-                      ? "status-warn"
-                      : "status-info")
-                  }
-                >
-                  <a.icon className="w-5 h-5" />
-                </span>
-                <div className="flex-1 min-w-0 text-right">
-                  <p className="text-sm font-bold text-foreground">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">{a.count}</p>
-                </div>
-                <span className="text-[10px] text-muted-foreground shrink-0">{a.hint}</span>
-              </div>
-            ))}
-          </div>
+          <ol className="relative space-y-3 pr-4 border-r border-border/40">
+            {recentEvents.map((e) => {
+              const dot =
+                e.tone === "danger" ? "bg-destructive shadow-[0_0_0_4px_hsl(0_84%_60%/0.18)]"
+                : e.tone === "warn" ? "bg-tone-warn shadow-[0_0_0_4px_hsl(38_92%_55%/0.18)]"
+                : e.tone === "success" ? "bg-primary shadow-[0_0_0_4px_hsl(127_58%_58%/0.22)]"
+                : "bg-tone-info shadow-[0_0_0_4px_hsl(217_91%_60%/0.18)]";
+              return (
+                <li key={e.title} className="relative pr-4">
+                  <span className={`absolute -right-[7px] top-3 w-3 h-3 rounded-full ${dot}`} />
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/40 border border-border/40 hover:border-primary/30 transition-colors">
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-card border border-border/50 text-foreground">
+                      <e.icon className="w-4 h-4" />
+                    </span>
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className="text-sm font-bold text-foreground truncate">{e.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{e.detail}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0 mt-1">{e.hint}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </GlobalCard>
       </section>
 
