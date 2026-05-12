@@ -93,6 +93,21 @@ function EventCard({
         <span className="text-xs text-muted-foreground">{formatEventDate(e.event_date)}</span>
       </div>
       {e.result && <p className={`text-sm break-words ${cancelled ? "line-through text-muted-foreground" : "text-foreground"}`}>{e.result}</p>}
+      {/* Show structured pregnancy/result codes when present (esp. pregnancy_test rows). */}
+      {((e as any).result_code != null || (e as any).status_code != null) && (
+        <div className="flex flex-wrap gap-1.5">
+          {(e as any).result_code != null && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-muted text-muted-foreground">
+              کد نتیجه: {String((e as any).result_code)}
+            </span>
+          )}
+          {(e as any).status_code != null && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-muted text-muted-foreground">
+              وضعیت: {fertilityLabel((e as any).status_code)}
+            </span>
+          )}
+        </div>
+      )}
       {e.notes && <p className="text-xs text-muted-foreground break-words">{e.notes}</p>}
       {e.operator_name && (
         <p className="text-[11px] text-muted-foreground">اپراتور: {e.operator_name}</p>
