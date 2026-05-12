@@ -382,7 +382,7 @@ export default function Livestock() {
                 />
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="cow-tag text-base">#{tag}</span>
+                    <span className="cow-tag text-base">{tag}</span>
                     <span className="text-xs text-muted-foreground">
                       {c.sextype || (c.sex === 0 ? "ماده" : c.sex === 1 ? "نر" : "—")}
                     </span>
