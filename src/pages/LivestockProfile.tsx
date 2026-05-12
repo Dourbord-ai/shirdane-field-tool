@@ -178,7 +178,7 @@ export default function LivestockProfile() {
           <div className="space-y-1 flex-1 min-w-0">
             <p className="text-xs text-muted-foreground">شماره پلاک</p>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="cow-hero-tag">#{tag}</h1>
+              <h1 className="cow-hero-tag">{tag}</h1>
               <span className={`text-xs px-2.5 py-1 rounded-full border ${presenceBadgeClass((cow.existancestatus ?? 0))}`}>
                 {presenceLabel((cow.existancestatus ?? 0))}
               </span>
