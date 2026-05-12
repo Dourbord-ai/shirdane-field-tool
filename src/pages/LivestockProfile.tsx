@@ -13,6 +13,7 @@ import FertilitySection from "@/components/livestock/FertilitySection";
 import CowChangeSection from "@/components/livestock/CowChangeSection";
 import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
 import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
+import { cowImageFor } from "@/lib/cowImage";
 
 type Cow = {
   id: number;
@@ -162,8 +163,15 @@ export default function LivestockProfile() {
 
       {/* Hero */}
       <div className="cow-hero">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="space-y-1">
+        <div className="flex items-start gap-4 flex-wrap">
+          <img
+            src={cowImageFor(cow)}
+            alt={`دام شماره ${tag}`}
+            width={112}
+            height={112}
+            className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-border/60 shadow-lg shrink-0"
+          />
+          <div className="space-y-1 flex-1 min-w-0">
             <p className="text-xs text-muted-foreground">شماره پلاک</p>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="cow-hero-tag">#{tag}</h1>

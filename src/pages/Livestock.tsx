@@ -32,6 +32,7 @@ import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
+import { cowImageFor } from "@/lib/cowImage";
 
 const PAGE_SIZE = 10;
 
@@ -370,7 +371,15 @@ export default function Livestock() {
               onClick={() => navigate(`/livestock/${c.id}`)}
               className="cow-card group"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <img
+                  src={cowImageFor(c)}
+                  alt=""
+                  loading="lazy"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 rounded-xl object-cover shrink-0 border border-border/60 shadow-md"
+                />
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="cow-tag text-base">#{tag}</span>
@@ -383,11 +392,7 @@ export default function Livestock() {
                       {presenceLabel(c.existancestatus ?? 0)}
                     </span>
                     {female && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                        c.is_dry
-                          ? "bg-tone-warn/15 text-tone-warn border-tone-warn/30"
-                          : "bg-tone-info/15 text-tone-info border-tone-info/30"
-                      }`}
+                      <span className="text-xs px-2 py-0.5 rounded-full border"
                       style={c.is_dry
                         ? { color: "hsl(38 92% 70%)", borderColor: "hsl(38 92% 55% / 0.35)", background: "hsl(38 92% 55% / 0.12)" }
                         : { color: "hsl(217 91% 75%)", borderColor: "hsl(217 91% 60% / 0.35)", background: "hsl(217 91% 60% / 0.12)" }}
