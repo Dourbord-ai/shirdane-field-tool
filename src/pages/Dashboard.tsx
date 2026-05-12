@@ -299,35 +299,49 @@ export default function Dashboard() {
           </div>
         </GlobalCard>
 
-        {/* Recent events — timeline */}
+        {/* Recent events — timeline (live from livestock_fertility_events) */}
         <GlobalCard>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-extrabold text-foreground">رویدادهای اخیر</h3>
-            <span className="text-[10px] text-muted-foreground">{recentEvents.length} رویداد</span>
+            <span className="text-[10px] text-muted-foreground">{fa(events.length)} رویداد</span>
           </div>
-          {/* Timeline rail — uses the primary (green) accent so the section stays
-              consistent with the global design system instead of mixing red/amber/blue tones. */}
-          <ol className="relative space-y-3 pr-4 border-r border-primary/30">
-            {recentEvents.map((e) => {
-              return (
-                <li key={e.title} className="relative pr-4">
-                  {/* Single accent dot — primary green with a soft glow ring. */}
-                  <span className="absolute -right-[7px] top-3 w-3 h-3 rounded-full bg-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.18)]" />
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-card/60 border border-border/50 hover:border-primary/40 transition-colors">
-                    {/* Icon chip uses primary tint to match KPI/widget styling across the app. */}
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 border border-primary/20 text-primary">
-                      <e.icon className="w-4 h-4" />
-                    </span>
-                    <div className="flex-1 min-w-0 text-right">
-                      <p className="text-sm font-bold text-foreground truncate">{e.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{e.detail}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 mt-1 whitespace-nowrap">{e.hint}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+          {events.length === 0 ? (
+            // Empty-state — shown until the first fertility event is recorded.
+            <p className="text-xs text-muted-foreground text-center py-6">رویدادی ثبت نشده است</p>
+          ) : (
+            <ol className="relative space-y-3 pr-4 border-r border-primary/30">
+              {events.map((e) => {
+                // Look up label/icon for this fertility_operation_id; fall back to a
+                // generic "رویداد" when the operation id is unmapped (e.g. legacy).
+                const meta = OP_META[e.op] ?? { label: "رویداد", icon: Activity };
+                const Icon = meta.icon;
+                return (
+                  <li key={e.id} className="relative pr-4">
+                    <span className="absolute -right-[7px] top-3 w-3 h-3 rounded-full bg-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.18)]" />
+                    <button
+                      onClick={() => navigate(`/livestock/${e.cow_id}`)}
+                      className="w-full text-right flex items-start gap-3 p-3 rounded-xl bg-card/60 border border-border/50 hover:border-primary/40 transition-colors"
+                    >
+                      <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 border border-primary/20 text-primary">
+                        <Icon className="w-4 h-4" />
+                      </span>
+                      <div className="flex-1 min-w-0 text-right">
+                        <p className="text-sm font-bold text-foreground truncate">
+                          {meta.label} — دام #{fa(e.cow_id)}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {e.result || e.notes || "بدون توضیح"}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0 mt-1 whitespace-nowrap">
+                        {formatShamsi(e.date)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </GlobalCard>
       </section>
 
