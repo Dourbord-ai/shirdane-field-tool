@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Bell, Search, User, CloudSun, Calendar, Menu } from "lucide-react";
+import { ArrowLeft, Bell, Search, User, CloudSun, Calendar, Menu, Plus } from "lucide-react";
 import { getSession } from "@/lib/auth";
 
 function shamsiNow(): { date: string; time: string } {
