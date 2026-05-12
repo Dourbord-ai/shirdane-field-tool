@@ -141,9 +141,6 @@ export default function Dashboard() {
         <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"             hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
         <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"              hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
-
-      <InvoiceNotifications />
-
       {/* ============== QUICK ACCESS + ALERTS ============== */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Quick access */}
