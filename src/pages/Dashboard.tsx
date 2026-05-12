@@ -1,228 +1,201 @@
-import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
-import { BarChart3, ClipboardList, Package, Plus, ShoppingCart, Receipt, Milk, FlaskConical, Users, Award, HeartPulse, Settings, List, PlusCircle, Activity, Bell, Layers, Tag, CircleDot, Home, Wallet } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
+  Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
+} from "lucide-react";
 import InvoiceNotifications from "@/components/InvoiceNotifications";
+import { GlobalCard, KPIWidget } from "@/components/global/KPIWidget";
+import heroCows from "@/assets/dashboard-hero-cows.jpg";
+import kpiCow from "@/assets/kpi-cow.png";
+import kpiMilkCan from "@/assets/kpi-milk-can.png";
+import kpiCoins from "@/assets/kpi-coins.png";
+import kpiWallet from "@/assets/kpi-wallet.png";
 
 const modules = [
-  { title: "خرید و فروش", icon: ShoppingCart, description: "ثبت و پیگیری فاکتورها", key: "sales" },
-  { title: "قبوض", icon: Receipt, description: "قبض شیر و نتایج آزمایشگاه", key: "receipts" },
-  { title: "مدیریت دام", icon: ClipboardList, description: "ثبت و پیگیری اطلاعات دام‌ها", key: "livestock" },
-  { title: "انبار و تغذیه", icon: Package, description: "مدیریت خوراک و موجودی انبار", key: "storage" },
-  { title: "گزارشات", icon: BarChart3, description: "آمار و گزارش‌های عملکرد", key: "reports" },
-  { title: "امور مالی", icon: Wallet, description: "بانک‌ها، تراکنش‌ها، اسناد و سپیدار", key: "finance" },
-  { title: "منابع انسانی", icon: Users, description: "حضور و غیاب و درخواست‌ها", key: "hr" },
-  { title: "مدارک و مجوزها", icon: Award, description: "مدیریت گواهینامه‌ها و پروانه‌ها", key: "certificates" },
-  { title: "مدیریت باروری", icon: HeartPulse, description: "ورکفلو، قواعد، عملیات و هشدارهای باروری", key: "fertility", adminOnly: true },
+  { title: "خرید و فروش",   icon: ShoppingCart, route: "/invoices",                desc: "فاکتورها" },
+  { title: "قبض شیر",        icon: Milk,         route: "/receipts/milk",           desc: "صورت‌حساب کارخانه" },
+  { title: "آزمایشگاه",      icon: FlaskConical, route: "/receipts/lab",            desc: "نتایج آزمون" },
+  { title: "مدیریت دام",     icon: ClipboardList,route: "/livestock",               desc: "لیست دام‌ها" },
+  { title: "باروری",         icon: HeartPulse,   route: "/fertility/operations",    desc: "عملیات باروری" },
+  { title: "امور مالی",      icon: Wallet,       route: "/finance",                 desc: "بانک، اسناد، سپیدار" },
+  { title: "منابع انسانی",   icon: Users,        route: "/hr",                      desc: "حضور و درخواست" },
+  { title: "مدارک",          icon: Award,        route: "/certificates",            desc: "مجوزها" },
+  { title: "ثبت رکورد شیر", icon: Plus,         route: "/milk-record/quick",       desc: "ثبت سریع" },
 ];
 
-const fertilityItems = [
-  { title: "ورکفلو باروری", route: "/fertility/workflows", icon: Settings },
-  { title: "تعریف قواعد", route: "/fertility/rules", icon: List },
-  { title: "ثبت عملیات باروری", route: "/fertility/operations", icon: PlusCircle },
-  { title: "تایم‌لاین باروری دام", route: "/fertility/timeline", icon: Activity },
-  { title: "هشدارهای باروری", route: "/fertility/alerts", icon: Bell },
-  { title: "انواع فحلی", route: "/fertility/erotic-types", icon: Settings },
+const alerts = [
+  { title: "کاهش شیر", count: "۵ گاو",  hint: "۲ ساعت پیش", tone: "danger" as const, icon: TrendingUp },
+  { title: "مشکل سلامتی", count: "۲ دام", hint: "۵ ساعت پیش", tone: "warn"   as const, icon: AlertTriangle },
+  { title: "توقف زایش",  count: "۳ گاو", hint: "۱ روز پیش",  tone: "info"   as const, icon: HeartPulse },
 ];
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = getSession();
-  const isAdmin = true; // TEMP: dev bypass — see src/lib/devAccess.ts (DEV_ACCESS_MODE)
-  const visibleModules = modules.filter((m) => !(m as { adminOnly?: boolean }).adminOnly || isAdmin);
-  const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
   return (
-    <div className="py-6 space-y-6 animate-fade-in">
-      {/* Welcome */}
-      <div className="rounded-xl bg-primary/5 border border-primary/10 p-5 transition-shadow duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.2)]">
-        <p className="text-body text-muted-foreground">سلام 👋</p>
-        <h2 className="text-heading text-foreground mt-1">{user?.name || "کاربر"}</h2>
-        <p className="text-body text-muted-foreground mt-1">به شیردانه خوش آمدید</p>
-      </div>
+    <div className="py-4 lg:py-6 space-y-4 lg:space-y-6 animate-fade-in">
+      {/* ============== HERO ============== */}
+      <section className="relative rounded-3xl overflow-hidden border border-border/50 glow-primary">
+        <img
+          src={heroCows}
+          alt="گله گاوهای دامداری"
+          width={1920}
+          height={1080}
+          className="absolute inset-0 w-full h-full object-cover opacity-90"
+        />
+        <div className="absolute inset-0 bg-gradient-to-l from-background/95 via-background/40 to-transparent" />
+        <div className="relative z-10 p-5 sm:p-8 lg:p-10 max-w-2xl text-right">
+          <p className="text-sm sm:text-base text-muted-foreground">صبح بخیر، مدیر دامداری 👋</p>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-foreground mt-2 leading-tight">
+            {user?.name || "خوش آمدید"}
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-2 max-w-md">
+            در اینجا آخرین وضعیت دامداری شما امروز را مشاهده می‌کنید.
+          </p>
+        </div>
+      </section>
 
-      {/* Invoice Notifications */}
+      {/* ============== KPI ROW ============== */}
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KPIWidget label="کل دام‌ها"        value="۱۴۲"       hint="همه دام‌ها"     image={kpiCow}     accent="green" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای شیری"      value="۶۷"        hint="در حال شیردهی" image={kpiCow}     accent="green" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای آبستن"     value="۲۳"        hint="مجموع"         image={kpiCow}     accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"  hint="کل جمع‌آوری"   image={kpiMilkCan} accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"   hint="ریال"          image={kpiCoins}   accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"    hint="ریال"          image={kpiWallet}  accent="orange" onClick={() => navigate("/finance")} />
+      </section>
+
       <InvoiceNotifications />
 
-      {/* Module Cards */}
-      <div className="space-y-3">
-        {visibleModules.map((mod) => (
-          <div key={mod.key}>
-            <button
-              onClick={() => setExpandedModule(expandedModule === mod.key ? null : mod.key)}
-              className="w-full touch-target rounded-xl bg-card border border-border p-5 flex items-center gap-4 active:bg-secondary transition-all duration-200 text-right hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.25)] hover:border-primary/20"
-            >
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <mod.icon className="w-6 h-6 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-body-lg font-bold text-foreground">{mod.title}</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">{mod.description}</p>
-              </div>
-            </button>
-
-            {/* New Invoice button - shown when خرید و فروش is tapped */}
-            {mod.key === "sales" && expandedModule === "sales" && (
-              <div className="space-y-2 mt-2 animate-fade-in">
-                <Button
-                  onClick={() => navigate("/invoices/new")}
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
-                  size="lg"
-                >
-                  <Plus className="w-5 h-5" />
-                  ثبت فاکتور جدید
-                </Button>
-                <Button
-                  onClick={() => navigate("/invoices")}
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
-                  size="lg"
-                >
-                  <ClipboardList className="w-5 h-5" />
-                  فاکتورها
-                </Button>
-              </div>
-            )}
-
-            {/* Receipts sub-cards - shown when قبوض is tapped */}
-            {mod.key === "receipts" && expandedModule === "receipts" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 animate-fade-in">
-                <button
-                  onClick={() => navigate("/receipts/milk")}
-                  className="touch-target rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-200/60 p-4 flex flex-col items-start gap-2 text-right transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(210_80%_50%/0.25)] hover:border-blue-300 active:scale-[0.98]"
-                  aria-label="قبض شیر"
-                >
-                  <div className="w-11 h-11 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <Milk className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-body font-bold text-foreground">قبض شیر</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      صورت حساب فروش شیر کارخانه
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => navigate("/receipts/lab")}
-                  className="touch-target rounded-xl bg-gradient-to-br from-amber-50 to-white border border-amber-200/60 p-4 flex flex-col items-start gap-2 text-right transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(38_90%_50%/0.25)] hover:border-amber-300 active:scale-[0.98]"
-                  aria-label="نتایج آزمایشگاه"
-                >
-                  <div className="w-11 h-11 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <FlaskConical className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-body font-bold text-foreground">نتایج آزمایشگاه</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      مشاهده نتایج آزمون‌های شیر
-                    </p>
-                  </div>
-                </button>
-              </div>
-            )}
-
-            {mod.key === "finance" && expandedModule === "finance" && (
-              <div className="mt-2 animate-fade-in">
-                <Button onClick={() => navigate("/finance")} className="w-full touch-target rounded-xl gap-2 text-body font-bold" size="lg">
-                  <Wallet className="w-5 h-5" />
-                  ورود به امور مالی
-                </Button>
-              </div>
-            )}
-
-            {mod.key === "hr" && expandedModule === "hr" && (
-              <div className="mt-2 animate-fade-in">
-                <Button
-                  onClick={() => navigate("/hr")}
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold"
-                  size="lg"
-                >
-                  <Users className="w-5 h-5" />
-                  ورود به منابع انسانی
-                </Button>
-              </div>
-            )}
-
-            {mod.key === "certificates" && expandedModule === "certificates" && (
-              <div className="mt-2 animate-fade-in">
-                <Button
-                  onClick={() => navigate("/certificates")}
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold"
-                  size="lg"
-                >
-                  <Award className="w-5 h-5" />
-                  مشاهده مدارک و مجوزها
-                </Button>
-              </div>
-            )}
-
-            {/* Fertility management — admin only */}
-            {mod.key === "fertility" && expandedModule === "fertility" && (
-              <div className="space-y-2 mt-2 animate-fade-in">
-                {fertilityItems.map((item) => {
-                  const active = location.pathname === item.route;
-                  return (
-                    <Button
-                      key={item.route}
-                      onClick={() => navigate(item.route)}
-                      variant={active ? "default" : "outline"}
-                      className={`w-full touch-target rounded-xl gap-2 text-body font-bold justify-start transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)] ${active ? "ring-2 ring-primary/40" : ""}`}
-                      size="lg"
-                    >
-                      <item.icon className="w-5 h-5" />
-                      {item.title}
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Livestock management — direct navigation */}
-            {mod.key === "livestock" && expandedModule === "livestock" && (
-              <div className="space-y-2 mt-2 animate-fade-in">
-                <Button
-                  onClick={() => navigate("/livestock")}
-                  className="w-full touch-target rounded-xl gap-2 text-body font-bold transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.3)]"
-                  size="lg"
-                >
-                  <ClipboardList className="w-5 h-5" />
-                  مشاهده لیست دام‌ها
-                </Button>
-                <div className="rounded-2xl border border-border bg-muted/30 p-3 space-y-2">
-                  <p className="text-sm font-bold text-muted-foreground px-1">تنظیمات پایه دام</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { title: "گروه‌های دام", description: "دسته‌بندی کلی", route: "/admin/livestock-groups", icon: Layers },
-                      { title: "انواع دام", description: "گاو، گوساله، تلیسه…", route: "/admin/livestock-types", icon: Tag },
-                      { title: "وضعیت‌های دام", description: "حضور و عملیاتی", route: "/admin/livestock-statuses", icon: CircleDot },
-                      { title: "بهاربند / جایگاه", description: "مکان فیزیکی", route: "/admin/livestock-locations", icon: Home },
-                    ].map((it) => (
-                      <button
-                        key={it.route}
-                        onClick={() => navigate(it.route)}
-                        className="settings-tile flex-col items-start sm:flex-row"
-                        aria-label={it.title}
-                      >
-                        <span className="settings-tile-icon">
-                          <it.icon className="w-5 h-5" />
-                        </span>
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-bold text-foreground">{it.title}</h4>
-                          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{it.description}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+      {/* ============== QUICK ACCESS + ALERTS ============== */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Quick access */}
+        <GlobalCard className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-extrabold text-foreground">دسترسی سریع</h3>
+            <span className="text-xs text-muted-foreground">{modules.length} ماژول</span>
           </div>
-        ))}
-      </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+            {modules.map((m) => (
+              <button
+                key={m.title}
+                onClick={() => navigate(m.route)}
+                className="quick-action"
+              >
+                <span className="quick-action-icon">
+                  <m.icon className="w-5 h-5" />
+                </span>
+                <span className="text-xs font-bold text-foreground mt-1">{m.title}</span>
+                <span className="text-[10px] text-muted-foreground">{m.desc}</span>
+              </button>
+            ))}
+          </div>
+        </GlobalCard>
 
-      {/* Placeholder note */}
-      <p className="text-center text-sm text-muted-foreground pt-4">
+        {/* Alerts */}
+        <GlobalCard>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-extrabold text-foreground">هشدارهای اخیر</h3>
+            <span className="status-chip status-danger">{alerts.length}</span>
+          </div>
+          <div className="space-y-3">
+            {alerts.map((a) => (
+              <div
+                key={a.title}
+                className="flex items-center gap-3 p-3 rounded-xl bg-secondary/40 border border-border/40"
+              >
+                <span
+                  className={
+                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 " +
+                    (a.tone === "danger"
+                      ? "status-danger"
+                      : a.tone === "warn"
+                      ? "status-warn"
+                      : "status-info")
+                  }
+                >
+                  <a.icon className="w-5 h-5" />
+                </span>
+                <div className="flex-1 min-w-0 text-right">
+                  <p className="text-sm font-bold text-foreground">{a.title}</p>
+                  <p className="text-xs text-muted-foreground">{a.count}</p>
+                </div>
+                <span className="text-[10px] text-muted-foreground shrink-0">{a.hint}</span>
+              </div>
+            ))}
+          </div>
+        </GlobalCard>
+      </section>
+
+      {/* ============== MODULE OVERVIEW ============== */}
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <GlobalCard>
+          <h3 className="text-base font-extrabold text-foreground mb-4">نمای کلی دام‌ها</h3>
+          <div className="space-y-3">
+            {[
+              { label: "گاوهای شیری", value: "۶۷" },
+              { label: "گاوهای خشک",  value: "۳۵" },
+              { label: "گاوهای آبستن", value: "۲۳" },
+              { label: "گوساله‌ها",   value: "۱۷" },
+            ].map((r) => (
+              <div key={r.label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
+                <button
+                  onClick={() => navigate("/livestock")}
+                  className="text-xs text-primary font-bold hover:underline"
+                >
+                  مشاهده
+                </button>
+                <span className="text-sm text-muted-foreground">{r.label}</span>
+                <span className="text-base font-extrabold text-foreground tabular-nums">{r.value}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-2">
+              <span />
+              <span className="text-sm font-bold text-muted-foreground">جمع کل</span>
+              <span className="text-xl font-extrabold text-primary tabular-nums">۱۴۲</span>
+            </div>
+          </div>
+        </GlobalCard>
+
+        <GlobalCard>
+          <h3 className="text-base font-extrabold text-foreground mb-1">تولید شیر (این ماه)</h3>
+          <p className="text-3xl font-extrabold text-primary tabular-nums mt-2">۴۵۶ <span className="text-base text-muted-foreground">لیتر</span></p>
+          <p className="text-xs text-tone-success mt-1" style={{ color: "hsl(127 58% 70%)" }}>
+            ↑ ۱۲٪ نسبت به ماه گذشته
+          </p>
+          <div className="mt-4 h-32 rounded-xl bg-secondary/40 border border-border/40 flex items-end justify-around p-3 gap-1">
+            {[40, 55, 35, 65, 50, 80, 70, 90].map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-md bg-gradient-primary"
+                style={{ height: `${h}%`, opacity: 0.4 + (i / 8) * 0.6 }}
+              />
+            ))}
+          </div>
+        </GlobalCard>
+
+        <GlobalCard>
+          <h3 className="text-base font-extrabold text-foreground mb-1">درآمد (این ماه)</h3>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2">۲۴۵٬۰۰۰</p>
+              <p className="text-xs mt-1" style={{ color: "hsl(127 58% 70%)" }}>↑ ۱۵٪ نسبت به ماه گذشته</p>
+            </div>
+            <img src={kpiCoins} alt="" loading="lazy" className="w-20 h-20 object-contain" />
+          </div>
+          <div className="mt-4 pt-4 border-t border-border/40">
+            <p className="text-sm text-muted-foreground">هزینه‌ها (این ماه)</p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-2xl font-extrabold text-foreground tabular-nums">۹۸٬۰۰۰</p>
+              <p className="text-xs" style={{ color: "hsl(0 84% 75%)" }}>↓ ۸٪</p>
+            </div>
+          </div>
+        </GlobalCard>
+      </section>
+
+      <p className="text-center text-xs text-muted-foreground pt-2">
         نسخه آزمایشی — ماژول‌ها به‌زودی فعال می‌شوند
       </p>
     </div>
