@@ -10,6 +10,9 @@ import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { toast } from "sonner";
 import { useCows, useFertilityOperations, cowLabel } from "@/hooks/useFertilityRefs";
 import { ALERT_STATUS_LABEL } from "@/lib/fertilityRefs";
+// Centralized Shamsi formatter — used so the alert date column matches the
+// rest of the app instead of relying on the browser's fa-IR locale.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 interface Alert {
   id: string;
