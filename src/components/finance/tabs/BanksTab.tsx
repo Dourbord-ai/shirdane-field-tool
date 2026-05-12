@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -97,21 +97,27 @@ export default function BanksTab({ onViewTransactions }: { onViewTransactions?: 
   }
 
   async function save() {
+    if (savingRef.current) return;
     if (!editing) return;
-    const payload = { ...editing };
-    delete (payload as { id?: string }).id;
-    if (editing.id) {
-      const { error } = await supabase.from("finance_banks").update(payload as never).eq("id", editing.id);
-      if (error) return toastFinanceError(toast, error);
-      toast.success("بانک ویرایش شد");
-    } else {
-      const { error } = await supabase.from("finance_banks").insert(payload as never);
-      if (error) return toastFinanceError(toast, error);
-      toast.success("بانک ثبت شد");
+    savingRef.current = true;
+    try {
+      const payload = { ...editing };
+      delete (payload as { id?: string }).id;
+      if (editing.id) {
+        const { error } = await supabase.from("finance_banks").update(payload as never).eq("id", editing.id);
+        if (error) return toastFinanceError(toast, error);
+        toast.success("بانک ویرایش شد");
+      } else {
+        const { error } = await supabase.from("finance_banks").insert(payload as never);
+        if (error) return toastFinanceError(toast, error);
+        toast.success("بانک ثبت شد");
+      }
+      setOpen(false);
+      setEditing(null);
+      void load();
+    } finally {
+      savingRef.current = false;
     }
-    setOpen(false);
-    setEditing(null);
-    void load();
   }
 
   async function toggleActive(b: Bank) {

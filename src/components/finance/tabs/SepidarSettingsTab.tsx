@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -41,22 +41,29 @@ export default function SepidarSettingsTab() {
     supabase.from("finance_sepidar_sync_logs").select("*").order("created_at", { ascending: false }).limit(50).then(({ data }) => setLogs((data as Log[]) || []));
   }, []);
 
+  const savingRef = useRef(false);
   async function save() {
+    if (savingRef.current) return;
     if (!s) return;
-    const { error } = await supabase.from("finance_sepidar_settings").update({
-      bridge_base_url: s.bridge_base_url,
-      bridge_enabled: s.bridge_enabled,
-      default_bank_fee_party_id: s.default_bank_fee_party_id,
-      default_receive_account_id: s.default_receive_account_id,
-      default_payment_account_id: s.default_payment_account_id,
-      default_party_debit_account_id: s.default_party_debit_account_id,
-      default_party_credit_account_id: s.default_party_credit_account_id,
-      default_creditor_payment_account_id: s.default_creditor_payment_account_id,
-      default_prepayment_account_id: s.default_prepayment_account_id,
-      default_on_account_payment_account_id: s.default_on_account_payment_account_id,
-    }).eq("id", s.id);
-    if (error) return toastFinanceError(toast, error);
-    toast.success("ذخیره شد");
+    savingRef.current = true;
+    try {
+      const { error } = await supabase.from("finance_sepidar_settings").update({
+        bridge_base_url: s.bridge_base_url,
+        bridge_enabled: s.bridge_enabled,
+        default_bank_fee_party_id: s.default_bank_fee_party_id,
+        default_receive_account_id: s.default_receive_account_id,
+        default_payment_account_id: s.default_payment_account_id,
+        default_party_debit_account_id: s.default_party_debit_account_id,
+        default_party_credit_account_id: s.default_party_credit_account_id,
+        default_creditor_payment_account_id: s.default_creditor_payment_account_id,
+        default_prepayment_account_id: s.default_prepayment_account_id,
+        default_on_account_payment_account_id: s.default_on_account_payment_account_id,
+      }).eq("id", s.id);
+      if (error) return toastFinanceError(toast, error);
+      toast.success("ذخیره شد");
+    } finally {
+      savingRef.current = false;
+    }
   }
 
   if (!s) return <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>;

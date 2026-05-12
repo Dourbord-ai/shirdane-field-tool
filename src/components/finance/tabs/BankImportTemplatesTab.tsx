@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -48,24 +48,31 @@ export default function BankImportTemplatesTab() {
     setLoading(false);
   }
 
+  const savingRef = useRef(false);
   async function save() {
+    if (savingRef.current) return;
     if (!edit) return;
     const payload = { ...edit } as Partial<T>;
     delete (payload as { id?: string }).id;
     if (!payload.title) return toast.error("عنوان الزامی است");
-    if (edit.id) {
-      const { error } = await supabase
-        .from("finance_bank_import_templates")
-        .update(payload as never)
-        .eq("id", edit.id);
-      if (error) return toastFinanceError(toast, error);
-    } else {
-      const { error } = await supabase.from("finance_bank_import_templates").insert(payload as never);
-      if (error) return toastFinanceError(toast, error);
+    savingRef.current = true;
+    try {
+      if (edit.id) {
+        const { error } = await supabase
+          .from("finance_bank_import_templates")
+          .update(payload as never)
+          .eq("id", edit.id);
+        if (error) return toastFinanceError(toast, error);
+      } else {
+        const { error } = await supabase.from("finance_bank_import_templates").insert(payload as never);
+        if (error) return toastFinanceError(toast, error);
+      }
+      toast.success("ذخیره شد");
+      setEdit(null);
+      void load();
+    } finally {
+      savingRef.current = false;
     }
-    toast.success("ذخیره شد");
-    setEdit(null);
-    void load();
   }
 
   async function remove(t: T) {

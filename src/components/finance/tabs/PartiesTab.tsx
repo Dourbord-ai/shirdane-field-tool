@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -109,23 +109,30 @@ export default function PartiesTab() {
     return true;
   });
 
+  const savingRef = useRef(false);
   async function save() {
+    if (savingRef.current) return;
     if (!editing) return;
-    const payload = { ...editing };
-    delete (payload as { id?: string }).id;
-    if (editing.id) {
-      const { error } = await supabase.from("finance_parties").update(payload).eq("id", editing.id);
-      if (error) return toastFinanceError(toast, error);
-      toast.success("ذینفع ویرایش شد");
-    } else {
-      // New beneficiaries always start in pending_approval
-      payload.approval_status = "pending_approval";
-      payload.sepidar_sync_status = "not_synced";
-      const { error } = await supabase.from("finance_parties").insert(payload);
-      if (error) return toastFinanceError(toast, error);
-      toast.success("ذینفع ثبت شد — در انتظار تایید مدیریت");
+    savingRef.current = true;
+    try {
+      const payload = { ...editing };
+      delete (payload as { id?: string }).id;
+      if (editing.id) {
+        const { error } = await supabase.from("finance_parties").update(payload).eq("id", editing.id);
+        if (error) return toastFinanceError(toast, error);
+        toast.success("ذینفع ویرایش شد");
+      } else {
+        // New beneficiaries always start in pending_approval
+        payload.approval_status = "pending_approval";
+        payload.sepidar_sync_status = "not_synced";
+        const { error } = await supabase.from("finance_parties").insert(payload);
+        if (error) return toastFinanceError(toast, error);
+        toast.success("ذینفع ثبت شد — در انتظار تایید مدیریت");
+      }
+      setOpen(false); setEditing(null); void load();
+    } finally {
+      savingRef.current = false;
     }
-    setOpen(false); setEditing(null); void load();
   }
 
   return (
