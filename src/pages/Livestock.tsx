@@ -180,19 +180,9 @@ export default function Livestock() {
     return () => { cancelled = true; };
   }, [page, search, selectedKey, hasMore]);
 
-  // Infinite scroll
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    const el = sentinelRef.current;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !loading && hasMore) setPage((p) => p + 1);
-      },
-      { rootMargin: "300px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [loading, hasMore]);
+  // Manual pagination — no auto infinite scroll (improves LCP).
+  // The sentinel is kept for layout but only triggers when explicitly intersected
+  // after the user clicks "Load more". We removed the IntersectionObserver entirely.
 
   const kpis = useMemo(() => ([
     { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
