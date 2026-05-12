@@ -16,7 +16,7 @@ import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
 } from "lucide-react";
-import InvoiceNotifications from "@/components/InvoiceNotifications";
+
 import { GlobalCard, KPIWidget } from "@/components/global/KPIWidget";
 import heroCows from "@/assets/dashboard-hero-cows.jpg";
 import kpiCowHerd from "@/assets/kpi-cow-herd.png";
