@@ -9,12 +9,14 @@ import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toPersianDigits } from "@/lib/jalali";
+import { formatShamsi } from "@/lib/dateDisplay";
 // Canonical "in herd" rule — must match /livestock so the dashboard counts
 // never disagree with the list page (existancestatus = 0 or NULL → present).
 import { isCowPresentInHerd, isFemaleCow } from "@/lib/cowPresence";
 import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
+  Activity,
 } from "lucide-react";
 
 import { GlobalCard, KPIWidget } from "@/components/global/KPIWidget";
@@ -38,12 +40,26 @@ const modules = [
   { title: "ثبت رکورد شیر", icon: Plus,         route: "/milk-record/quick",       desc: "ثبت سریع" },
 ];
 
-const recentEvents = [
-  { title: "ثبت رکورد شیر روزانه", detail: "۴۵۶ لیتر — شیفت صبح",  hint: "۳۰ دقیقه پیش", tone: "success" as const, icon: Milk },
-  { title: "هشدار کاهش شیر",       detail: "۵ گاو نیاز به بررسی",   hint: "۲ ساعت پیش",   tone: "danger"  as const, icon: TrendingUp },
-  { title: "رویداد سلامتی",         detail: "۲ دام نیازمند درمان",   hint: "۵ ساعت پیش",   tone: "warn"    as const, icon: AlertTriangle },
-  { title: "زایش جدید",             detail: "۳ گوساله سالم",         hint: "۱ روز پیش",    tone: "info"    as const, icon: HeartPulse },
-];
+// NOTE: The previously hard-coded `recentEvents` array has been removed.
+// Recent events are now loaded live from `public.livestock_fertility_events`
+// in the component below (see `events` state + its useEffect).
+
+// Map fertility_operation_id → human label + icon. Keeps the timeline tidy
+// without pulling the full reference table for a 5-row card.
+const OP_META: Record<number, { label: string; icon: typeof Milk }> = {
+  1:  { label: "ثبت فحلی",      icon: HeartPulse },
+  2:  { label: "تلقیح",          icon: HeartPulse },
+  3:  { label: "تست آبستنی",    icon: Activity },
+  4:  { label: "تست آبستنی",    icon: Activity },
+  5:  { label: "سقط",            icon: AlertTriangle },
+  6:  { label: "زایش",           icon: HeartPulse },
+  7:  { label: "خشکی",           icon: Milk },
+  8:  { label: "شستشو",         icon: Activity },
+  10: { label: "کلین تست",      icon: Activity },
+  11: { label: "تست آبستنی",    icon: Activity },
+  12: { label: "تست آبستنی",    icon: Activity },
+  13: { label: "همزمان‌سازی",   icon: Activity },
+};
 
 // -----------------------------------------------------------------------------
 // LiveCounts — shape of the real-time KPI numbers we pull from public.cows.
@@ -103,8 +119,125 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Helper to render a number in Persian digits — keeps the JSX compact.
+  // ---------------------------------------------------------------------------
+  // Live "today / this month" aggregates — pulled from operational tables.
+  // ---------------------------------------------------------------------------
+  const [stats, setStats] = useState({
+    todayMilk: 0,
+    monthMilk: 0,
+    prevMonthMilk: 0,
+    dailyMilk: [] as { date: string; total: number }[],
+    income: 0,
+    expense: 0,
+    prevIncome: 0,
+    prevExpense: 0,
+  });
+
+  // Recent fertility events for the right-hand timeline card.
+  const [events, setEvents] = useState<
+    { id: string; op: number; date: string; cow_id: number; result?: string | null; notes?: string | null }[]
+  >([]);
+
+  // Single useEffect that loads milk + finance + recent events in parallel.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // ---- Date helpers (Gregorian boundaries; display goes through formatShamsi) ----
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const todayISO = now.toISOString().slice(0, 10);
+      const monthAgoISO = startOfPrevMonth.toISOString().slice(0, 10);
+
+      // ---- Milk: pull last ~30 days once and bucket in JS -----------------
+      const milkRes = await supabase
+        .from("livestock_milk_records")
+        .select("milk_amount,record_date")
+        .eq("is_cancelled", false)
+        .gte("record_date", monthAgoISO)
+        .lte("record_date", todayISO)
+        .limit(20000);
+
+      let todayMilk = 0, monthMilk = 0, prevMonthMilk = 0;
+      const dailyMap = new Map<string, number>();
+      // Seed last-8-days buckets with 0 so the chart always renders.
+      for (let i = 7; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 3600 * 1000)
+          .toISOString().slice(0, 10);
+        dailyMap.set(d, 0);
+      }
+      (milkRes.data ?? []).forEach((r: any) => {
+        const amount = Number(r.milk_amount || 0);
+        const d = String(r.record_date);
+        if (d === todayISO) todayMilk += amount;
+        const dt = new Date(d);
+        if (dt >= startOfMonth) monthMilk += amount;
+        else if (dt >= startOfPrevMonth) prevMonthMilk += amount;
+        if (dailyMap.has(d)) dailyMap.set(d, (dailyMap.get(d) || 0) + amount);
+      });
+      const dailyMilk = Array.from(dailyMap.entries()).map(([date, total]) => ({ date, total }));
+
+      // ---- Finance: this month vs previous month --------------------------
+      const [thisMonth, prevMonth] = await Promise.all([
+        supabase.from("factors")
+          .select("invoice_type,payable_amount,total_amount")
+          .gte("created_at", startOfMonth.toISOString())
+          .lt("created_at", startOfNextMonth.toISOString())
+          .limit(5000),
+        supabase.from("factors")
+          .select("invoice_type,payable_amount,total_amount")
+          .gte("created_at", startOfPrevMonth.toISOString())
+          .lt("created_at", startOfMonth.toISOString())
+          .limit(5000),
+      ]);
+      const sumByType = (rows: any[] | null, type: "buy" | "sell") =>
+        (rows ?? [])
+          .filter((r) => r.invoice_type === type)
+          .reduce((s, r) => s + Number(r.payable_amount ?? r.total_amount ?? 0), 0);
+      const income = sumByType(thisMonth.data as any[], "sell");
+      const expense = sumByType(thisMonth.data as any[], "buy");
+      const prevIncome = sumByType(prevMonth.data as any[], "sell");
+      const prevExpense = sumByType(prevMonth.data as any[], "buy");
+
+      // ---- Recent fertility events (top 5, latest first) -----------------
+      const evRes = await supabase
+        .from("livestock_fertility_events")
+        .select("id,fertility_operation_id,event_date,event_time,livestock_id,result,notes,created_at")
+        .eq("is_cancelled", false)
+        .order("event_date", { ascending: false })
+        .order("event_time", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (cancelled) return;
+      setStats({ todayMilk, monthMilk, prevMonthMilk, dailyMilk, income, expense, prevIncome, prevExpense });
+      setEvents(
+        (evRes.data ?? []).map((e: any) => ({
+          id: e.id,
+          op: e.fertility_operation_id,
+          date: e.event_date || e.created_at,
+          cow_id: e.livestock_id,
+          result: e.result,
+          notes: e.notes,
+        })),
+      );
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Helpers — Persian digits, money formatting, percent deltas, chart scale.
   const fa = (n: number) => toPersianDigits(String(n));
+  const faMoney = (n: number) => toPersianDigits(Math.round(n).toLocaleString("en-US"));
+  const pctDelta = (cur: number, prev: number) => {
+    if (!prev) return null;
+    const p = Math.round(((cur - prev) / prev) * 100);
+    return { value: Math.abs(p), up: p >= 0 };
+  };
+  const milkDelta = pctDelta(stats.monthMilk, stats.prevMonthMilk);
+  const incomeDelta = pctDelta(stats.income, stats.prevIncome);
+  const expenseDelta = pctDelta(stats.expense, stats.prevExpense);
+  const maxDaily = Math.max(1, ...stats.dailyMilk.map((d) => d.total));
 
   return (
     <div className="py-4 lg:py-6 space-y-4 lg:space-y-6 animate-fade-in">
@@ -130,16 +263,16 @@ export default function Dashboard() {
       </section>
 
       {/* ============== KPI ROW ==============
-          Each tile is now bound to a real cow count from `counts` (loaded
-          above). Milk/finance KPIs remain static placeholders until those
-          modules are wired — kept in Persian digits so the UI stays clean. */}
+          Cow tiles read from public.cows. Milk tile reads from
+          public.livestock_milk_records. Income/expense tiles read from
+          public.factors (sell vs buy). All zeros render as ۰ until data lands. */}
       <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}    hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}  hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)} hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="شیر امروز"        value="—"                   hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value="—"                   hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
-        <KPIWidget label="هزینه‌های ماه"   value="—"                   hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}       hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}     hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)}    hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="شیر امروز"        value={fa(Math.round(stats.todayMilk))} hint="لیتر"         image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="درآمد این ماه"    value={faMoney(stats.income)}  hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="هزینه‌های ماه"   value={faMoney(stats.expense)} hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -166,35 +299,49 @@ export default function Dashboard() {
           </div>
         </GlobalCard>
 
-        {/* Recent events — timeline */}
+        {/* Recent events — timeline (live from livestock_fertility_events) */}
         <GlobalCard>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-extrabold text-foreground">رویدادهای اخیر</h3>
-            <span className="text-[10px] text-muted-foreground">{recentEvents.length} رویداد</span>
+            <span className="text-[10px] text-muted-foreground">{fa(events.length)} رویداد</span>
           </div>
-          {/* Timeline rail — uses the primary (green) accent so the section stays
-              consistent with the global design system instead of mixing red/amber/blue tones. */}
-          <ol className="relative space-y-3 pr-4 border-r border-primary/30">
-            {recentEvents.map((e) => {
-              return (
-                <li key={e.title} className="relative pr-4">
-                  {/* Single accent dot — primary green with a soft glow ring. */}
-                  <span className="absolute -right-[7px] top-3 w-3 h-3 rounded-full bg-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.18)]" />
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-card/60 border border-border/50 hover:border-primary/40 transition-colors">
-                    {/* Icon chip uses primary tint to match KPI/widget styling across the app. */}
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 border border-primary/20 text-primary">
-                      <e.icon className="w-4 h-4" />
-                    </span>
-                    <div className="flex-1 min-w-0 text-right">
-                      <p className="text-sm font-bold text-foreground truncate">{e.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{e.detail}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 mt-1 whitespace-nowrap">{e.hint}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+          {events.length === 0 ? (
+            // Empty-state — shown until the first fertility event is recorded.
+            <p className="text-xs text-muted-foreground text-center py-6">رویدادی ثبت نشده است</p>
+          ) : (
+            <ol className="relative space-y-3 pr-4 border-r border-primary/30">
+              {events.map((e) => {
+                // Look up label/icon for this fertility_operation_id; fall back to a
+                // generic "رویداد" when the operation id is unmapped (e.g. legacy).
+                const meta = OP_META[e.op] ?? { label: "رویداد", icon: Activity };
+                const Icon = meta.icon;
+                return (
+                  <li key={e.id} className="relative pr-4">
+                    <span className="absolute -right-[7px] top-3 w-3 h-3 rounded-full bg-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.18)]" />
+                    <button
+                      onClick={() => navigate(`/livestock/${e.cow_id}`)}
+                      className="w-full text-right flex items-start gap-3 p-3 rounded-xl bg-card/60 border border-border/50 hover:border-primary/40 transition-colors"
+                    >
+                      <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 border border-primary/20 text-primary">
+                        <Icon className="w-4 h-4" />
+                      </span>
+                      <div className="flex-1 min-w-0 text-right">
+                        <p className="text-sm font-bold text-foreground truncate">
+                          {meta.label} — دام #{fa(e.cow_id)}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {e.result || e.notes || "بدون توضیح"}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0 mt-1 whitespace-nowrap">
+                        {formatShamsi(e.date)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </GlobalCard>
       </section>
 
@@ -233,16 +380,27 @@ export default function Dashboard() {
 
         <GlobalCard>
           <h3 className="text-base font-extrabold text-foreground mb-1">تولید شیر (این ماه)</h3>
-          <p className="text-3xl font-extrabold text-primary tabular-nums mt-2">۴۵۶ <span className="text-base text-muted-foreground">لیتر</span></p>
-          <p className="text-xs text-tone-success mt-1" style={{ color: "hsl(127 58% 70%)" }}>
-            ↑ ۱۲٪ نسبت به ماه گذشته
+          {/* Live monthly total from livestock_milk_records (sum across days). */}
+          <p className="text-3xl font-extrabold text-primary tabular-nums mt-2 whitespace-nowrap">
+            {faMoney(stats.monthMilk)} <span className="text-base text-muted-foreground">لیتر</span>
           </p>
+          {milkDelta && (
+            <p className="text-xs mt-1" style={{ color: milkDelta.up ? "hsl(127 58% 70%)" : "hsl(0 84% 75%)" }}>
+              {milkDelta.up ? "↑" : "↓"} {fa(milkDelta.value)}٪ نسبت به ماه گذشته
+            </p>
+          )}
+          {/* Bar chart — last 8 days. Heights normalized to the tallest bar so
+              even a small day still renders a visible sliver. */}
           <div className="mt-4 h-32 rounded-xl bg-secondary/40 border border-border/40 flex items-end justify-around p-3 gap-1">
-            {[40, 55, 35, 65, 50, 80, 70, 90].map((h, i) => (
+            {stats.dailyMilk.map((d, i) => (
               <div
-                key={i}
+                key={d.date}
+                title={`${d.date}: ${d.total}`}
                 className="flex-1 rounded-md bg-gradient-primary"
-                style={{ height: `${h}%`, opacity: 0.4 + (i / 8) * 0.6 }}
+                style={{
+                  height: `${Math.max(4, (d.total / maxDaily) * 100)}%`,
+                  opacity: 0.4 + (i / Math.max(1, stats.dailyMilk.length)) * 0.6,
+                }}
               />
             ))}
           </div>
@@ -252,16 +410,26 @@ export default function Dashboard() {
           <h3 className="text-base font-extrabold text-foreground mb-1">درآمد (این ماه)</h3>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2">۲۴۵٬۰۰۰</p>
-              <p className="text-xs mt-1" style={{ color: "hsl(127 58% 70%)" }}>↑ ۱۵٪ نسبت به ماه گذشته</p>
+              {/* Live monthly income — sum of factors.payable_amount where invoice_type='sell'. */}
+              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.income)}</p>
+              {incomeDelta && (
+                <p className="text-xs mt-1" style={{ color: incomeDelta.up ? "hsl(127 58% 70%)" : "hsl(0 84% 75%)" }}>
+                  {incomeDelta.up ? "↑" : "↓"} {fa(incomeDelta.value)}٪ نسبت به ماه گذشته
+                </p>
+              )}
             </div>
             <img src={kpiCoins} alt="" loading="lazy" className="w-20 h-20 object-contain" />
           </div>
           <div className="mt-4 pt-4 border-t border-border/40">
             <p className="text-sm text-muted-foreground">هزینه‌ها (این ماه)</p>
             <div className="flex items-center justify-between mt-1">
-              <p className="text-2xl font-extrabold text-foreground tabular-nums">۹۸٬۰۰۰</p>
-              <p className="text-xs" style={{ color: "hsl(0 84% 75%)" }}>↓ ۸٪</p>
+              {/* Live monthly expense — sum of factors.payable_amount where invoice_type='buy'. */}
+              <p className="text-2xl font-extrabold text-foreground tabular-nums whitespace-nowrap">{faMoney(stats.expense)}</p>
+              {expenseDelta && (
+                <p className="text-xs whitespace-nowrap" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
+                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪
+                </p>
+              )}
             </div>
           </div>
         </GlobalCard>
