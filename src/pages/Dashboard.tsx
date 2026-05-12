@@ -103,25 +103,24 @@ export default function Dashboard() {
             <h3 className="text-base font-extrabold text-foreground">رویدادهای اخیر</h3>
             <span className="text-[10px] text-muted-foreground">{recentEvents.length} رویداد</span>
           </div>
-          <ol className="relative space-y-3 pr-4 border-r border-border/40">
+          {/* Timeline rail — uses the primary (green) accent so the section stays
+              consistent with the global design system instead of mixing red/amber/blue tones. */}
+          <ol className="relative space-y-3 pr-4 border-r border-primary/30">
             {recentEvents.map((e) => {
-              const dot =
-                e.tone === "danger" ? "bg-destructive shadow-[0_0_0_4px_hsl(0_84%_60%/0.18)]"
-                : e.tone === "warn" ? "bg-tone-warn shadow-[0_0_0_4px_hsl(38_92%_55%/0.18)]"
-                : e.tone === "success" ? "bg-primary shadow-[0_0_0_4px_hsl(127_58%_58%/0.22)]"
-                : "bg-tone-info shadow-[0_0_0_4px_hsl(217_91%_60%/0.18)]";
               return (
                 <li key={e.title} className="relative pr-4">
-                  <span className={`absolute -right-[7px] top-3 w-3 h-3 rounded-full ${dot}`} />
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/40 border border-border/40 hover:border-primary/30 transition-colors">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-card border border-border/50 text-foreground">
+                  {/* Single accent dot — primary green with a soft glow ring. */}
+                  <span className="absolute -right-[7px] top-3 w-3 h-3 rounded-full bg-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.18)]" />
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-card/60 border border-border/50 hover:border-primary/40 transition-colors">
+                    {/* Icon chip uses primary tint to match KPI/widget styling across the app. */}
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 border border-primary/20 text-primary">
                       <e.icon className="w-4 h-4" />
                     </span>
                     <div className="flex-1 min-w-0 text-right">
                       <p className="text-sm font-bold text-foreground truncate">{e.title}</p>
                       <p className="text-xs text-muted-foreground truncate">{e.detail}</p>
                     </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 mt-1">{e.hint}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0 mt-1 whitespace-nowrap">{e.hint}</span>
                   </div>
                 </li>
               );
