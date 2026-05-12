@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 const items = [
   { title: "داشبورد",       icon: LayoutDashboard, to: "/dashboard" },
   { title: "دام‌ها",         icon: Beef,            to: "/livestock" },
-  { title: "تولید شیر",      icon: Milk,            to: "/receipts/milk" },
+  { title: "قبوض شیر",       icon: Milk,            to: "/receipts/milk" },
+  { title: "قبوض آزمایشگاه", icon: Receipt,         to: "/receipts/lab" },
   { title: "خرید و فروش",    icon: ShoppingCart,    to: "/invoices" },
-  { title: "قبوض",           icon: Receipt,         to: "/receipts/lab" },
   { title: "باروری",         icon: HeartPulse,      to: "/fertility/operations" },
   { title: "گزارش‌ها",       icon: BarChart3,       to: "/dashboard" },
   { title: "امور مالی",      icon: Wallet,          to: "/finance" },
