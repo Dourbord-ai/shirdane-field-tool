@@ -10,7 +10,6 @@
   font-style: normal;
   font-display: swap;
 }
-
 @font-face {
   font-family: 'Vazirmatn';
   src: url('/fonts/Vazirmatn-Medium.woff2') format('woff2');
@@ -18,7 +17,6 @@
   font-style: normal;
   font-display: swap;
 }
-
 @font-face {
   font-family: 'Vazirmatn';
   src: url('/fonts/Vazirmatn-Bold.woff2') format('woff2');
@@ -27,209 +25,285 @@
   font-display: swap;
 }
 
+/* =============================================================
+   DAMBAN GLOBAL DESIGN SYSTEM — Dark navy + agricultural green
+   All colors HSL. Tokens cascade to every page automatically.
+   ============================================================= */
 @layer base {
   :root {
-    --background: 120 20% 98%;
-    --foreground: 150 10% 15%;
+    /* Backgrounds — deep navy gradient base */
+    --background: 210 50% 7%;          /* #07111B */
+    --foreground: 0 0% 100%;           /* #FFFFFF */
 
-    --card: 0 0% 100%;
-    --card-foreground: 150 10% 15%;
+    /* Cards — translucent navy */
+    --card: 211 50% 10%;               /* ~#0D1927 */
+    --card-foreground: 0 0% 100%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 150 10% 15%;
+    --popover: 211 50% 11%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 142 50% 36%;
-    --primary-foreground: 0 0% 100%;
+    /* Primary — vibrant agricultural green #57D364 */
+    --primary: 127 58% 58%;
+    --primary-foreground: 210 50% 7%;
+    --primary-glow: 142 60% 43%;       /* #2BAE66 */
 
-    --secondary: 120 10% 94%;
-    --secondary-foreground: 150 10% 25%;
+    /* Secondary — subtle navy surface */
+    --secondary: 211 40% 14%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 120 10% 94%;
-    --muted-foreground: 150 5% 50%;
+    --muted: 211 35% 16%;
+    --muted-foreground: 0 0% 72%;
 
-    --accent: 38 80% 55%;
+    /* Accent — green */
+    --accent: 142 60% 43%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 84% 60%;          /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 120 10% 88%;
-    --input: 120 10% 88%;
-    --ring: 142 50% 36%;
+    /* Soft white borders */
+    --border: 210 30% 22%;
+    --input: 211 40% 16%;
+    --ring: 127 58% 58%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Sidebar — dark glass */
+    --sidebar-background: 211 55% 8%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 127 58% 58%;
+    --sidebar-primary-foreground: 210 50% 7%;
+    --sidebar-accent: 211 40% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 30% 18%;
+    --sidebar-ring: 127 58% 58%;
 
-    --header-height: 3.5rem;
+    --header-height: 4rem;
 
-    /* Module color zoning — livestock (teal/emerald) */
-    --livestock: 168 55% 32%;
-    --livestock-soft: 168 40% 94%;
-    --livestock-ink: 168 45% 22%;
+    /* Module zoning — kept for legacy components, retuned for dark */
+    --livestock: 142 55% 50%;
+    --livestock-soft: 142 50% 18%;
+    --livestock-ink: 142 60% 75%;
 
-    /* Layered surfaces — reduce eye fatigue */
-    --surface-1: 150 18% 97%;
-    --surface-2: 150 14% 94%;
-    --surface-3: 150 12% 90%;
+    /* Layered surfaces */
+    --surface-1: 211 50% 10%;
+    --surface-2: 211 45% 12%;
+    --surface-3: 211 40% 14%;
 
     /* Status tones */
-    --tone-success: 142 50% 36%;
-    --tone-success-soft: 142 50% 94%;
-    --tone-warn: 38 90% 50%;
-    --tone-warn-soft: 38 90% 94%;
-    --tone-danger: 0 72% 51%;
-    --tone-danger-soft: 0 72% 95%;
-    --tone-info: 210 70% 50%;
-    --tone-info-soft: 210 70% 95%;
+    --tone-success: 127 58% 58%;
+    --tone-success-soft: 127 50% 16%;
+    --tone-warn: 38 92% 55%;           /* #F59E0B */
+    --tone-warn-soft: 38 60% 16%;
+    --tone-danger: 0 84% 60%;
+    --tone-danger-soft: 0 60% 18%;
+    --tone-info: 217 91% 60%;          /* #3B82F6 */
+    --tone-info-soft: 217 60% 18%;
 
-    /* Module color zoning — fertility (purple/amber) */
-    --fertility: 268 55% 52%;
-    --fertility-soft: 268 60% 96%;
-    --fertility-ink: 268 50% 28%;
-    --fertility-accent: 38 95% 55%;
+    --fertility: 258 90% 66%;          /* #8B5CF6 */
+    --fertility-soft: 258 50% 18%;
+    --fertility-ink: 258 80% 80%;
+    --fertility-accent: 38 92% 55%;
 
-    /* Module color zoning — settings (slate/indigo) */
-    --settings: 222 35% 45%;
-    --settings-soft: 222 30% 95%;
+    --settings: 217 91% 60%;
+    --settings-soft: 217 50% 16%;
+
+    /* Glow & gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(127 58% 58%), hsl(142 60% 43%));
+    --gradient-bg: linear-gradient(180deg, #07111B 0%, #081827 45%, #0A1F2D 100%);
+    --gradient-card: linear-gradient(180deg, hsl(211 50% 12% / 0.92), hsl(211 50% 9% / 0.92));
+    --shadow-glow: 0 10px 40px -10px hsl(127 58% 58% / 0.25);
+    --shadow-card: 0 8px 30px -10px hsl(210 80% 4% / 0.6);
   }
+
+  /* dark class is identity — same tokens (project is dark-only) */
+  .dark { color-scheme: dark; }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
 
   html {
     direction: rtl;
     font-size: 16px;
+    color-scheme: dark;
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply text-foreground font-sans antialiased;
+    background: var(--gradient-bg);
+    background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     -webkit-tap-highlight-color: transparent;
+    min-height: 100vh;
   }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(900px 500px at 85% -5%, hsl(142 60% 43% / 0.10), transparent 60%),
+      radial-gradient(700px 400px at -5% 105%, hsl(127 58% 58% / 0.08), transparent 60%);
+    z-index: 0;
+  }
+  #root { position: relative; z-index: 1; }
 }
 
 @layer utilities {
-  .touch-target {
-    @apply min-h-[44px] min-w-[44px];
-  }
-  .bg-gradient-primary {
-    background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(142 50% 46%));
-  }
+  .touch-target { @apply min-h-[44px] min-w-[44px]; }
+  .bg-gradient-primary { background-image: var(--gradient-primary); }
   .bg-gradient-secondary {
-    background-image: linear-gradient(135deg, hsl(var(--accent)), hsl(38 80% 65%));
+    background-image: linear-gradient(135deg, hsl(var(--accent)), hsl(38 92% 55%));
   }
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .glass {
+    background: hsl(211 50% 10% / 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+  }
+  .glow-primary { box-shadow: var(--shadow-glow); }
+  .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 }
 
 @layer components {
+  /* ---------- Global card ---------- */
   .card-dashboard {
-    @apply rounded-2xl border border-border bg-card p-4 shadow-sm transition-all duration-200 hover:shadow-md;
+    @apply rounded-2xl p-4 transition-all duration-200;
+    background: var(--gradient-card);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+    box-shadow: var(--shadow-card);
   }
-  .card-dashboard-purple { @apply hover:border-primary/30; }
-  .card-dashboard-orange { @apply hover:border-accent/30; }
+  .card-dashboard:hover {
+    border-color: hsl(127 58% 58% / 0.3);
+    box-shadow: 0 12px 40px -10px hsl(127 58% 58% / 0.18);
+  }
+  .card-dashboard-purple:hover { border-color: hsl(258 90% 66% / 0.35); }
+  .card-dashboard-orange:hover { border-color: hsl(38 92% 55% / 0.35); }
+
   .btn-primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    @apply text-primary-foreground hover:opacity-90;
+    background: var(--gradient-primary);
   }
 
-  /* Livestock module workspace — calm, layered, operational */
-  .livestock-surface {
-    background:
-      radial-gradient(1200px 400px at 100% -10%, hsl(var(--livestock) / 0.06), transparent 60%),
-      linear-gradient(180deg, hsl(var(--surface-1)), hsl(var(--surface-2)));
+  /* ---------- KPI tile (image-rich enterprise) ---------- */
+  .kpi-tile {
+    @apply relative rounded-2xl p-4 overflow-hidden text-right transition-all cursor-pointer;
+    background: var(--gradient-card);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+    min-height: 110px;
   }
+  .kpi-tile:hover {
+    border-color: hsl(127 58% 58% / 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 40px -12px hsl(127 58% 58% / 0.2);
+  }
+  .kpi-value { @apply text-2xl sm:text-3xl font-extrabold tabular-nums text-foreground; }
+  .kpi-label { @apply text-xs text-muted-foreground; }
+
+  /* ---------- Chips ---------- */
   .chip {
     @apply inline-flex items-center gap-1 rounded-full border px-3.5 py-2 text-xs sm:text-sm font-medium transition-all touch-target min-h-[40px] shrink-0 select-none;
   }
   .chip-default {
-    @apply chip bg-card border-border text-foreground hover:bg-secondary active:scale-[0.97];
+    @apply chip border-border text-foreground hover:bg-secondary active:scale-[0.97];
+    background: hsl(211 40% 14% / 0.6);
   }
   .chip-active {
     @apply chip border-transparent text-primary-foreground shadow-md ring-2 ring-primary/30 active:scale-[0.97];
-    background: linear-gradient(135deg, hsl(var(--livestock)), hsl(var(--primary)));
+    background: var(--gradient-primary);
   }
-  .scrollbar-hide {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
   .chips-scroller {
     @apply flex gap-2 overflow-x-auto py-2 px-1 -mx-1 scrollbar-hide snap-x;
     scroll-padding-inline: 0.25rem;
   }
   .chips-scroller > * { @apply snap-start; }
-  .kpi-tile {
-    @apply rounded-2xl border border-border bg-card p-3 sm:p-4 flex flex-col gap-1 transition-all hover:shadow-md hover:border-primary/30 cursor-pointer text-right;
-  }
-  .kpi-value { @apply text-xl sm:text-2xl font-bold tabular-nums text-foreground; }
-  .kpi-label { @apply text-xs text-muted-foreground; }
 
+  /* ---------- Cow card (legacy livestock tiles) ---------- */
   .cow-card {
-    @apply rounded-2xl border border-border bg-card p-3 sm:p-4 transition-all text-right
-           hover:border-primary/30 hover:shadow-[0_8px_24px_-12px_hsl(var(--livestock)/0.35)]
-           active:scale-[0.99];
+    @apply rounded-2xl p-3 sm:p-4 transition-all text-right active:scale-[0.99];
+    background: var(--gradient-card);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+  }
+  .cow-card:hover {
+    border-color: hsl(127 58% 58% / 0.3);
+    box-shadow: 0 8px 24px -12px hsl(142 60% 43% / 0.45);
   }
   .cow-tag {
     @apply inline-flex items-center justify-center rounded-xl px-2.5 py-1 font-extrabold tabular-nums;
-    background: linear-gradient(135deg, hsl(var(--livestock-soft)), hsl(var(--surface-2)));
-    color: hsl(var(--livestock-ink));
-    border: 1px solid hsl(var(--livestock) / 0.18);
+    background: hsl(142 50% 18% / 0.6);
+    color: hsl(142 60% 75%);
+    border: 1px solid hsl(142 55% 50% / 0.25);
   }
 
-  /* Cow profile hero — operational cockpit header */
   .cow-hero {
     @apply rounded-3xl p-5 sm:p-6 border relative overflow-hidden;
     background:
-      radial-gradient(600px 200px at 100% 0%, hsl(var(--livestock) / 0.12), transparent 60%),
-      linear-gradient(180deg, hsl(var(--card)), hsl(var(--livestock-soft) / 0.5));
-    border-color: hsl(var(--livestock) / 0.18);
+      radial-gradient(600px 200px at 100% 0%, hsl(142 60% 43% / 0.18), transparent 60%),
+      var(--gradient-card);
+    border-color: hsl(0 0% 100% / 0.06);
   }
   .cow-hero-tag {
     @apply text-3xl sm:text-4xl font-extrabold tabular-nums tracking-tight;
-    color: hsl(var(--livestock-ink));
+    color: hsl(142 60% 75%);
   }
   .quick-action {
-    @apply flex flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-card p-3 text-center
-           transition-all hover:border-primary/30 hover:shadow-md active:scale-[0.97] touch-target min-h-[72px];
+    @apply flex flex-col items-center justify-center gap-1 rounded-2xl p-3 text-center
+           transition-all active:scale-[0.97] touch-target min-h-[80px];
+    background: var(--gradient-card);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+  }
+  .quick-action:hover {
+    border-color: hsl(127 58% 58% / 0.35);
+    box-shadow: 0 10px 30px -12px hsl(127 58% 58% / 0.25);
   }
   .quick-action-icon {
-    @apply w-9 h-9 rounded-xl flex items-center justify-center;
-    background: hsl(var(--livestock-soft));
-    color: hsl(var(--livestock-ink));
+    @apply w-11 h-11 rounded-xl flex items-center justify-center;
+    background: hsl(142 50% 18% / 0.6);
+    color: hsl(142 60% 75%);
   }
 
-  /* Settings dashboard tiles */
+  /* ---------- Settings tiles ---------- */
   .settings-tile {
-    @apply rounded-2xl border border-border bg-card p-4 flex items-start gap-3 text-right transition-all
-           hover:shadow-md hover:border-primary/30 active:scale-[0.99] touch-target;
+    @apply rounded-2xl p-4 flex items-start gap-3 text-right transition-all
+           active:scale-[0.99] touch-target;
+    background: var(--gradient-card);
+    border: 1px solid hsl(0 0% 100% / 0.06);
+  }
+  .settings-tile:hover {
+    border-color: hsl(217 91% 60% / 0.35);
+    box-shadow: 0 8px 24px -12px hsl(217 91% 60% / 0.3);
   }
   .settings-tile-icon {
     @apply w-11 h-11 rounded-xl flex items-center justify-center shrink-0;
-    background: hsl(var(--settings-soft));
-    color: hsl(var(--settings));
+    background: hsl(217 50% 16% / 0.8);
+    color: hsl(217 91% 75%);
   }
 
-  /* Fertility module workspace */
-  .fertility-surface {
-    background:
-      radial-gradient(1200px 400px at 0% -10%, hsl(var(--fertility) / 0.07), transparent 60%),
-      linear-gradient(180deg, hsl(var(--surface-1)), hsl(var(--surface-2)));
-  }
+  /* ---------- Module surfaces ---------- */
+  .livestock-surface { background: transparent; }
+  .fertility-surface { background: transparent; }
   .fertility-hero {
     @apply rounded-3xl p-5 sm:p-6 border relative overflow-hidden;
     background:
-      radial-gradient(500px 200px at 100% 0%, hsl(var(--fertility-accent) / 0.18), transparent 60%),
-      linear-gradient(135deg, hsl(var(--fertility-soft)), hsl(var(--card)));
-    border-color: hsl(var(--fertility) / 0.18);
+      radial-gradient(500px 200px at 100% 0%, hsl(38 92% 55% / 0.18), transparent 60%),
+      var(--gradient-card);
+    border-color: hsl(258 90% 66% / 0.18);
   }
+
+  /* ---------- Status chips ---------- */
+  .status-chip { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold; }
+  .status-success { background: hsl(127 50% 16% / 0.8); color: hsl(127 58% 75%); }
+  .status-warn    { background: hsl(38 60% 16% / 0.8);  color: hsl(38 92% 70%); }
+  .status-danger  { background: hsl(0 60% 18% / 0.8);   color: hsl(0 84% 75%); }
+  .status-info    { background: hsl(217 50% 16% / 0.8); color: hsl(217 91% 75%); }
 }
