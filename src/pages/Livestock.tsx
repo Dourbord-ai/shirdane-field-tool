@@ -33,7 +33,7 @@ import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 
 type Cow = {
   id: number;
@@ -180,19 +180,9 @@ export default function Livestock() {
     return () => { cancelled = true; };
   }, [page, search, selectedKey, hasMore]);
 
-  // Infinite scroll
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    const el = sentinelRef.current;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !loading && hasMore) setPage((p) => p + 1);
-      },
-      { rootMargin: "300px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [loading, hasMore]);
+  // Manual pagination — no auto infinite scroll (improves LCP).
+  // The sentinel is kept for layout but only triggers when explicitly intersected
+  // after the user clicks "Load more". We removed the IntersectionObserver entirely.
 
   const kpis = useMemo(() => ([
     { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
@@ -430,7 +420,18 @@ export default function Livestock() {
           </div>
         )}
 
-        <div ref={sentinelRef} className="col-span-full h-6" />
+        <div ref={sentinelRef} className="col-span-full h-2" />
+        {!loading && hasMore && cows.length > 0 && (
+          <div className="col-span-full flex justify-center py-3">
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-full px-6"
+            >
+              نمایش بیشتر
+            </Button>
+          </div>
+        )}
         {!hasMore && cows.length > 0 && (
           <p className="col-span-full text-center text-xs text-muted-foreground py-2">پایان لیست</p>
         )}
