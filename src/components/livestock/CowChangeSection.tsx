@@ -33,6 +33,9 @@ function parseJalaliString(s: string | null): JalaliDate | null {
   return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
 }
 import { toast } from "sonner";
+// Universal Shamsi formatter — used so the date column on each history row
+// renders consistently with the rest of the app.
+import { formatShamsi } from "@/lib/dateDisplay";
 import { Loader2, Pencil, Trash2, Plus, MapPin, Tag, HeartPulse } from "lucide-react";
 
 export type CowChangeKind = "location" | "type" | "status";
