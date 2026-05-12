@@ -36,6 +36,10 @@ type Cow = {
   last_status_id: number | null;
   last_status_date: string | null;
   created_at: string;
+  // date_of_birth comes from the cows table and represents the animal's birthday.
+  // Per business rule: "تاریخ ورود" در پروفایل دام باید برابر date_of_birth باشد
+  // (نه created_at که زمان ثبت رکورد در سیستم است).
+  date_of_birth: string | null;
   purchase_date: string | null;
   purchase_price: number | null;
   supplier: string | null;
@@ -238,9 +242,10 @@ export default function LivestockProfile() {
         <Row label="وضعیت حضور" value={presenceLabel((cow.existancestatus ?? 0))} />
         <Row
           label="تاریخ ورود"
-          // Use the central Shamsi formatter so both ISO timestamps from
-          // `created_at` and pre-stored Shamsi strings render consistently.
-          value={formatShamsi(cow.created_at)}
+          // طبق درخواست محصول: «تاریخ ورود» باید برابر date_of_birth (تاریخ تولد دام)
+          // در جدول cows باشد. formatShamsi هم رشته‌های شمسی ذخیره‌شده و هم
+          // ISO میلادی را به شمسی با ارقام فارسی تبدیل می‌کند.
+          value={formatShamsi(cow.date_of_birth)}
         />
       </Section>
 
@@ -351,9 +356,10 @@ export default function LivestockProfile() {
                     <p className="text-xs text-muted-foreground mt-0.5">{e.description}</p>
                   )}
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    {/* Centralized Shamsi formatter — keeps event timestamps consistent
-                        with every other date in the app (Persian digits + Jalali year). */}
-                    {formatShamsi(e.created_at)}
+                    {/* اولویت با event_date است (که از قبل شمسی ذخیره می‌شود)؛
+                        اگر نبود، به created_at میلادی برمی‌گردیم. formatShamsi
+                        هر دو حالت را به شمسی فارسی یکدست تبدیل می‌کند. */}
+                    {formatShamsi(e.event_date || e.created_at)}
                   </p>
                 </div>
               </li>
