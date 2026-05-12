@@ -253,14 +253,32 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const { data } = await supabase
+      // Pull all reproductive events for this cow from the canonical fertility table
+      // (NOT public.livestock_events — that table holds non-fertility records).
+      const { data, error } = await supabase
         .from("livestock_fertility_events" as any)
         .select("*")
         .eq("livestock_id", livestockId)
         .order("event_date", { ascending: false })
+        .order("event_time", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
+      if (error) {
+        console.error("[FertilitySection] load error", error);
+      }
+      // Normalize legacy/alias event_type names so timeline renders consistently.
+      // DB historically stores both `pregnancy_test` and `pregnancy_check` for the same concept.
+      const normalized = ((data as any[]) ?? []).map((row) => ({
+        ...row,
+        event_type: row.event_type === "pregnancy_check" ? "pregnancy_test" : row.event_type,
+      })) as FertilityEvent[];
+      // Temporary diagnostic logging — verifies pregnancy_check / pregnancy_test rows arrive.
+      console.log("[FertilitySection] livestock_id=", livestockId, "events:", normalized);
+      console.log(
+        "[FertilitySection] pregnancy events:",
+        normalized.filter((e) => e.event_type === "pregnancy_test"),
+      );
       if (!cancelled) {
-        setEvents(((data as any[]) ?? []) as FertilityEvent[]);
+        setEvents(normalized);
         setLoading(false);
       }
     }
