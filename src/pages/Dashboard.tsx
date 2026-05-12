@@ -380,16 +380,27 @@ export default function Dashboard() {
 
         <GlobalCard>
           <h3 className="text-base font-extrabold text-foreground mb-1">تولید شیر (این ماه)</h3>
-          <p className="text-3xl font-extrabold text-primary tabular-nums mt-2">۴۵۶ <span className="text-base text-muted-foreground">لیتر</span></p>
-          <p className="text-xs text-tone-success mt-1" style={{ color: "hsl(127 58% 70%)" }}>
-            ↑ ۱۲٪ نسبت به ماه گذشته
+          {/* Live monthly total from livestock_milk_records (sum across days). */}
+          <p className="text-3xl font-extrabold text-primary tabular-nums mt-2 whitespace-nowrap">
+            {faMoney(stats.monthMilk)} <span className="text-base text-muted-foreground">لیتر</span>
           </p>
+          {milkDelta && (
+            <p className="text-xs mt-1" style={{ color: milkDelta.up ? "hsl(127 58% 70%)" : "hsl(0 84% 75%)" }}>
+              {milkDelta.up ? "↑" : "↓"} {fa(milkDelta.value)}٪ نسبت به ماه گذشته
+            </p>
+          )}
+          {/* Bar chart — last 8 days. Heights normalized to the tallest bar so
+              even a small day still renders a visible sliver. */}
           <div className="mt-4 h-32 rounded-xl bg-secondary/40 border border-border/40 flex items-end justify-around p-3 gap-1">
-            {[40, 55, 35, 65, 50, 80, 70, 90].map((h, i) => (
+            {stats.dailyMilk.map((d, i) => (
               <div
-                key={i}
+                key={d.date}
+                title={`${d.date}: ${d.total}`}
                 className="flex-1 rounded-md bg-gradient-primary"
-                style={{ height: `${h}%`, opacity: 0.4 + (i / 8) * 0.6 }}
+                style={{
+                  height: `${Math.max(4, (d.total / maxDaily) * 100)}%`,
+                  opacity: 0.4 + (i / Math.max(1, stats.dailyMilk.length)) * 0.6,
+                }}
               />
             ))}
           </div>
@@ -399,16 +410,26 @@ export default function Dashboard() {
           <h3 className="text-base font-extrabold text-foreground mb-1">درآمد (این ماه)</h3>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2">۲۴۵٬۰۰۰</p>
-              <p className="text-xs mt-1" style={{ color: "hsl(127 58% 70%)" }}>↑ ۱۵٪ نسبت به ماه گذشته</p>
+              {/* Live monthly income — sum of factors.payable_amount where invoice_type='sell'. */}
+              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.income)}</p>
+              {incomeDelta && (
+                <p className="text-xs mt-1" style={{ color: incomeDelta.up ? "hsl(127 58% 70%)" : "hsl(0 84% 75%)" }}>
+                  {incomeDelta.up ? "↑" : "↓"} {fa(incomeDelta.value)}٪ نسبت به ماه گذشته
+                </p>
+              )}
             </div>
             <img src={kpiCoins} alt="" loading="lazy" className="w-20 h-20 object-contain" />
           </div>
           <div className="mt-4 pt-4 border-t border-border/40">
             <p className="text-sm text-muted-foreground">هزینه‌ها (این ماه)</p>
             <div className="flex items-center justify-between mt-1">
-              <p className="text-2xl font-extrabold text-foreground tabular-nums">۹۸٬۰۰۰</p>
-              <p className="text-xs" style={{ color: "hsl(0 84% 75%)" }}>↓ ۸٪</p>
+              {/* Live monthly expense — sum of factors.payable_amount where invoice_type='buy'. */}
+              <p className="text-2xl font-extrabold text-foreground tabular-nums whitespace-nowrap">{faMoney(stats.expense)}</p>
+              {expenseDelta && (
+                <p className="text-xs whitespace-nowrap" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
+                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪
+                </p>
+              )}
             </div>
           </div>
         </GlobalCard>
