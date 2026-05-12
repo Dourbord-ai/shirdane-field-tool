@@ -36,6 +36,10 @@ type Cow = {
   last_status_id: number | null;
   last_status_date: string | null;
   created_at: string;
+  // date_of_birth comes from the cows table and represents the animal's birthday.
+  // Per business rule: "تاریخ ورود" در پروفایل دام باید برابر date_of_birth باشد
+  // (نه created_at که زمان ثبت رکورد در سیستم است).
+  date_of_birth: string | null;
   purchase_date: string | null;
   purchase_price: number | null;
   supplier: string | null;
