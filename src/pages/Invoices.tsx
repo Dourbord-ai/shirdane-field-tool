@@ -477,7 +477,11 @@ export default function Invoices() {
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-muted-foreground">
-                    {f.invoice_date ? toPersianDigits(f.invoice_date) : "—"}
+                    {/* Always render via the universal Shamsi helper so an ISO date
+                        like "2025-05-12" is converted to "۱۴۰۴/۰۲/۲۲" instead of
+                        being shown as Gregorian numerals. The helper also handles
+                        the case where invoice_date is already a Shamsi string. */}
+                    {formatShamsi(f.invoice_date)}
                   </span>
                   <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", selectedId === f.id && "rotate-180")} />
                 </div>
