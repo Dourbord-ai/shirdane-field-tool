@@ -95,6 +95,7 @@ export default function CleanTestRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!visitorId) return toast.error("بازدید کننده را انتخاب کنید");
     if (!result) return toast.error("نتیجه کلین تست را انتخاب کنید");
     if (!date) return toast.error("تاریخ کلین تست را انتخاب کنید");

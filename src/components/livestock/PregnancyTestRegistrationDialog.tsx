@@ -115,6 +115,7 @@ export default function PregnancyTestRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!testType) return toast.error("نوع تست آبستنی را انتخاب کنید");
     if (!vetId) return toast.error("دامپزشک را انتخاب کنید");
     if (!result) return toast.error("نتیجه تست را انتخاب کنید");

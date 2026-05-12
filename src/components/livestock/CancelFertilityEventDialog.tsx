@@ -33,6 +33,7 @@ export default function CancelFertilityEventDialog({
   const [submitting, setSubmitting] = useState(false);
 
   async function handleConfirm() {
+    if (submitting) return;
     if (!event) return;
     if (!reason.trim()) {
       toast.error("دلیل لغو را وارد کنید");

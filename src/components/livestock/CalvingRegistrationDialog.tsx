@@ -165,6 +165,7 @@ export default function CalvingRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!date) return toast.error("تاریخ زایش را انتخاب کنید");
     if (!time) return toast.error("ساعت زایش را وارد کنید");
     const finalPeriod = useDefaultPeriod ? defaultPeriod : Number(period);

@@ -82,6 +82,7 @@ export default function RinseRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!operatorId) return toast.error("شخص شستشو دهنده را انتخاب کنید");
     if (!reason.trim()) return toast.error("علت شستشو را وارد کنید");
     if (!date) return toast.error("تاریخ شستشو را انتخاب کنید");

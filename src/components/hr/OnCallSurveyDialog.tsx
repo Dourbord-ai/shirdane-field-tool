@@ -44,6 +44,7 @@ const OnCallSurveyDialog = ({ open, onOpenChange, required = false }: Props) => 
   }, [profile]);
 
   const handleSubmit = async () => {
+    if (saving) return;
     const res = await saveAnswers(answers);
     if (res.success) {
       toast({ title: 'ذخیره شد', description: 'پاسخ‌های شما با موفقیت ذخیره شد.' });

@@ -376,6 +376,7 @@ function PhysicalStatusFormDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!date) return toast.error("تاریخ را انتخاب کنید");
     setSubmitting(true);
 

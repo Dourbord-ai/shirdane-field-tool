@@ -212,6 +212,7 @@ export default function InseminationRegistrationDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!inseminationType) return toast.error("نوع تلقیح را انتخاب کنید");
 
     if (inseminationType === "natural") {

@@ -317,6 +317,7 @@ function CowChangeFormDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!refId) return toast.error(`${cfg.label} را انتخاب کنید`);
     if (!date) return toast.error("تاریخ را انتخاب کنید");
     setSubmitting(true);
