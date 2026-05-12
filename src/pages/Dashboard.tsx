@@ -9,12 +9,14 @@ import { useNavigate } from "react-router-dom";
 import { getSession } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toPersianDigits } from "@/lib/jalali";
+import { formatShamsi } from "@/lib/dateDisplay";
 // Canonical "in herd" rule — must match /livestock so the dashboard counts
 // never disagree with the list page (existancestatus = 0 or NULL → present).
 import { isCowPresentInHerd, isFemaleCow } from "@/lib/cowPresence";
 import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
+  Activity,
 } from "lucide-react";
 
 import { GlobalCard, KPIWidget } from "@/components/global/KPIWidget";
