@@ -137,9 +137,9 @@ export default function Dashboard() {
         <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}    hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}  hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)} hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"           hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"             hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
-        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"              hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="شیر امروز"        value="—"                   hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="درآمد این ماه"    value="—"                   hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="هزینه‌های ماه"   value="—"                   hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
