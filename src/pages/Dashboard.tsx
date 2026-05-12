@@ -121,14 +121,17 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ============== KPI ROW ============== */}
+      {/* ============== KPI ROW ==============
+          Each tile is now bound to a real cow count from `counts` (loaded
+          above). Milk/finance KPIs remain static placeholders until those
+          modules are wired — kept in Persian digits so the UI stays clean. */}
       <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KPIWidget label="کل دام‌ها"        value="۱۴۲"       hint="همه دام‌ها"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای شیری"      value="۶۷"        hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای آبستن"     value="۲۳"        hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"  hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"   hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
-        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"    hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}    hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}  hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)} hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="شیر امروز"        value="۴۵۶ لیتر"           hint="کل جمع‌آوری"   image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="درآمد این ماه"    value="۲۴۵٬۰۰۰"             hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
+        <KPIWidget label="هزینه‌های ماه"   value="۹۸٬۰۰۰"              hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
 
       <InvoiceNotifications />
