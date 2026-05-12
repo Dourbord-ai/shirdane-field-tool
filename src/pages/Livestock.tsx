@@ -395,9 +395,13 @@ export default function Livestock() {
                     {female && (
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${
                         c.is_dry
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-sky-50 text-sky-700 border-sky-200"
-                      }`}>
+                          ? "bg-tone-warn/15 text-tone-warn border-tone-warn/30"
+                          : "bg-tone-info/15 text-tone-info border-tone-info/30"
+                      }`}
+                      style={c.is_dry
+                        ? { color: "hsl(38 92% 70%)", borderColor: "hsl(38 92% 55% / 0.35)", background: "hsl(38 92% 55% / 0.12)" }
+                        : { color: "hsl(217 91% 75%)", borderColor: "hsl(217 91% 60% / 0.35)", background: "hsl(217 91% 60% / 0.12)" }}
+                      >
                         {dryLabel(c.is_dry)}
                       </span>
                     )}
