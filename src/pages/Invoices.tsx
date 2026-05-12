@@ -4,6 +4,10 @@ import { ChevronDown, FileText, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toPersianDigits } from "@/lib/jalali";
+// Universal Shamsi formatter — accepts ISO, Date, or pre-formatted Shamsi
+// strings and always returns "YYYY/MM/DD" in Persian digits. Used to keep
+// every date in the app on the Iranian calendar.
+import { formatShamsi } from "@/lib/dateDisplay";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
