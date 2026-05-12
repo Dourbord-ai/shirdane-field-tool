@@ -54,7 +54,9 @@ export function KPIWidget({
       <div className="flex items-start justify-between gap-2 relative z-10">
         <div className="min-w-0 flex-1">
           <p className="kpi-label">{label}</p>
-          <p className="kpi-value mt-1 break-words">{value}</p>
+          {/* Force the KPI number to stay on a single line — truncate with ellipsis if it would overflow.
+              This prevents long values like "۲۴۵٬۰۰۰" or "۴۵۶ لیتر" from breaking onto two rows. */}
+          <p className="kpi-value mt-1 whitespace-nowrap overflow-hidden text-ellipsis leading-tight">{value}</p>
           {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
         </div>
         {image && (
