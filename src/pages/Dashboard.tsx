@@ -72,7 +72,9 @@ export default function Dashboard() {
     (async () => {
       const { data, error } = await supabase
         .from("cows")
-        .select("sex,is_dry,is_pregnancy,existancestatus,birth_date")
+        // We pull only the columns needed for the dashboard buckets. Note we
+        // use `date_of_birth` (the actual schema column name) not `birth_date`.
+        .select("sex,is_dry,is_pregnancy,existancestatus,date_of_birth")
         .limit(5000);
       if (error || !data || cancelled) return;
       // Restrict to in-herd animals (existancestatus = 1 means present).
@@ -80,12 +82,12 @@ export default function Dashboard() {
       const milking = present.filter((c) => c.sex === 0 && c.is_dry === false).length;
       const pregnant = present.filter((c) => c.is_pregnancy === true).length;
       const dry = present.filter((c) => c.sex === 0 && c.is_dry === true).length;
-      // Rough calf bucket: present + younger than ~12 months. Fallback to 0
-      // when birth_date isn't set so we never show a misleading number.
+      // Rough calf bucket: present + younger than ~12 months. Falls back to 0
+      // when date_of_birth isn't set so we never show a misleading number.
       const oneYearAgo = Date.now() - 365 * 24 * 3600 * 1000;
       const calves = present.filter((c) => {
-        if (!c.birth_date) return false;
-        const t = Date.parse(String(c.birth_date));
+        if (!c.date_of_birth) return false;
+        const t = Date.parse(String(c.date_of_birth));
         return Number.isFinite(t) && t >= oneYearAgo;
       }).length;
       setCounts({ total: present.length, milking, pregnant, dry, calves });
