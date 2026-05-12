@@ -80,11 +80,16 @@ export default function Dashboard() {
         .select("sex,is_dry,is_pregnancy,existancestatus,date_of_birth")
         .limit(5000);
       if (error || !data || cancelled) return;
-      // Restrict to in-herd animals (existancestatus = 1 means present).
-      const present = data.filter((c) => (c.existancestatus ?? 0) === 1);
-      const milking = present.filter((c) => c.sex === 0 && c.is_dry === false).length;
-      const pregnant = present.filter((c) => c.is_pregnancy === true).length;
-      const dry = present.filter((c) => c.sex === 0 && c.is_dry === true).length;
+      // Restrict to in-herd animals using the canonical helper:
+      //   existancestatus = 0 or NULL → present in herd.
+      // (Previously this filtered on === 1 which is "sold" and produced
+      //  numbers that disagreed with the /livestock page.)
+      const present = data.filter((c) => isCowPresentInHerd(c));
+      // Milking = female + present + not dry. We use isFemaleCow so
+      // sex coding (0=female) stays consistent with the rest of the app.
+      const milking = present.filter((c) => isFemaleCow(c) && c.is_dry === false).length;
+      const pregnant = present.filter((c) => isFemaleCow(c) && c.is_pregnancy === true).length;
+      const dry = present.filter((c) => isFemaleCow(c) && c.is_dry === true).length;
       // Rough calf bucket: present + younger than ~12 months. Falls back to 0
       // when date_of_birth isn't set so we never show a misleading number.
       const oneYearAgo = Date.now() - 365 * 24 * 3600 * 1000;
