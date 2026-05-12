@@ -14,6 +14,10 @@ import CowChangeSection from "@/components/livestock/CowChangeSection";
 import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
 import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
 import { cowImageFor } from "@/lib/cowImage";
+// Universal Shamsi formatter — every visible date on the cow profile
+// (created_at, purchase_date, pre_entry_*) is routed through this so the
+// page never accidentally shows Gregorian numerals or raw ISO strings.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 type Cow = {
   id: number;
