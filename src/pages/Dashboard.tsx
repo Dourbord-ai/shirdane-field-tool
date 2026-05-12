@@ -119,8 +119,125 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Helper to render a number in Persian digits — keeps the JSX compact.
+  // ---------------------------------------------------------------------------
+  // Live "today / this month" aggregates — pulled from operational tables.
+  // ---------------------------------------------------------------------------
+  const [stats, setStats] = useState({
+    todayMilk: 0,
+    monthMilk: 0,
+    prevMonthMilk: 0,
+    dailyMilk: [] as { date: string; total: number }[],
+    income: 0,
+    expense: 0,
+    prevIncome: 0,
+    prevExpense: 0,
+  });
+
+  // Recent fertility events for the right-hand timeline card.
+  const [events, setEvents] = useState<
+    { id: string; op: number; date: string; cow_id: number; result?: string | null; notes?: string | null }[]
+  >([]);
+
+  // Single useEffect that loads milk + finance + recent events in parallel.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // ---- Date helpers (Gregorian boundaries; display goes through formatShamsi) ----
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const todayISO = now.toISOString().slice(0, 10);
+      const monthAgoISO = startOfPrevMonth.toISOString().slice(0, 10);
+
+      // ---- Milk: pull last ~30 days once and bucket in JS -----------------
+      const milkRes = await supabase
+        .from("livestock_milk_records")
+        .select("milk_amount,record_date")
+        .eq("is_cancelled", false)
+        .gte("record_date", monthAgoISO)
+        .lte("record_date", todayISO)
+        .limit(20000);
+
+      let todayMilk = 0, monthMilk = 0, prevMonthMilk = 0;
+      const dailyMap = new Map<string, number>();
+      // Seed last-8-days buckets with 0 so the chart always renders.
+      for (let i = 7; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 3600 * 1000)
+          .toISOString().slice(0, 10);
+        dailyMap.set(d, 0);
+      }
+      (milkRes.data ?? []).forEach((r: any) => {
+        const amount = Number(r.milk_amount || 0);
+        const d = String(r.record_date);
+        if (d === todayISO) todayMilk += amount;
+        const dt = new Date(d);
+        if (dt >= startOfMonth) monthMilk += amount;
+        else if (dt >= startOfPrevMonth) prevMonthMilk += amount;
+        if (dailyMap.has(d)) dailyMap.set(d, (dailyMap.get(d) || 0) + amount);
+      });
+      const dailyMilk = Array.from(dailyMap.entries()).map(([date, total]) => ({ date, total }));
+
+      // ---- Finance: this month vs previous month --------------------------
+      const [thisMonth, prevMonth] = await Promise.all([
+        supabase.from("factors")
+          .select("invoice_type,payable_amount,total_amount")
+          .gte("created_at", startOfMonth.toISOString())
+          .lt("created_at", startOfNextMonth.toISOString())
+          .limit(5000),
+        supabase.from("factors")
+          .select("invoice_type,payable_amount,total_amount")
+          .gte("created_at", startOfPrevMonth.toISOString())
+          .lt("created_at", startOfMonth.toISOString())
+          .limit(5000),
+      ]);
+      const sumByType = (rows: any[] | null, type: "buy" | "sell") =>
+        (rows ?? [])
+          .filter((r) => r.invoice_type === type)
+          .reduce((s, r) => s + Number(r.payable_amount ?? r.total_amount ?? 0), 0);
+      const income = sumByType(thisMonth.data as any[], "sell");
+      const expense = sumByType(thisMonth.data as any[], "buy");
+      const prevIncome = sumByType(prevMonth.data as any[], "sell");
+      const prevExpense = sumByType(prevMonth.data as any[], "buy");
+
+      // ---- Recent fertility events (top 5, latest first) -----------------
+      const evRes = await supabase
+        .from("livestock_fertility_events")
+        .select("id,fertility_operation_id,event_date,event_time,livestock_id,result,notes,created_at")
+        .eq("is_cancelled", false)
+        .order("event_date", { ascending: false })
+        .order("event_time", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (cancelled) return;
+      setStats({ todayMilk, monthMilk, prevMonthMilk, dailyMilk, income, expense, prevIncome, prevExpense });
+      setEvents(
+        (evRes.data ?? []).map((e: any) => ({
+          id: e.id,
+          op: e.fertility_operation_id,
+          date: e.event_date || e.created_at,
+          cow_id: e.livestock_id,
+          result: e.result,
+          notes: e.notes,
+        })),
+      );
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Helpers — Persian digits, money formatting, percent deltas, chart scale.
   const fa = (n: number) => toPersianDigits(String(n));
+  const faMoney = (n: number) => toPersianDigits(Math.round(n).toLocaleString("en-US"));
+  const pctDelta = (cur: number, prev: number) => {
+    if (!prev) return null;
+    const p = Math.round(((cur - prev) / prev) * 100);
+    return { value: Math.abs(p), up: p >= 0 };
+  };
+  const milkDelta = pctDelta(stats.monthMilk, stats.prevMonthMilk);
+  const incomeDelta = pctDelta(stats.income, stats.prevIncome);
+  const expenseDelta = pctDelta(stats.expense, stats.prevExpense);
+  const maxDaily = Math.max(1, ...stats.dailyMilk.map((d) => d.total));
 
   return (
     <div className="py-4 lg:py-6 space-y-4 lg:space-y-6 animate-fade-in">
