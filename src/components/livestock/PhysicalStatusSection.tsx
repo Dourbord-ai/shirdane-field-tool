@@ -25,6 +25,10 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2, Pencil, Ban, Plus, Camera, Image as ImageIcon, Scale } from "lucide-react";
+// formatShamsi: تبدیل هر رشته تاریخ (شمسی ذخیره‌شده یا ISO میلادی) به نمایش
+// شمسی با ارقام فارسی. این کامپوننت رکوردهای فیزیکی را با record_date نمایش
+// می‌دهد و باید همه‌جا فرمت یکسان داشته باشد.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 const BUCKET = "livestock-physical-status-images";
 
