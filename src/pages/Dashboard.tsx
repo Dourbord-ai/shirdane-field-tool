@@ -399,30 +399,19 @@ export default function Dashboard() {
         </GlobalCard>
 
         <GlobalCard>
-          <h3 className="text-base font-extrabold text-foreground mb-1">درآمد (این ماه)</h3>
+          {/* درآمد card removed by user request — only هزینه‌ها remain. */}
+          <h3 className="text-base font-extrabold text-foreground mb-1">هزینه‌ها (این ماه)</h3>
           <div className="flex items-center justify-between gap-3">
             <div>
-              {/* Live monthly income — sum of factors.payable_amount where invoice_type='sell'. */}
-              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.income)}</p>
-              {incomeDelta && (
-                <p className="text-xs mt-1" style={{ color: incomeDelta.up ? "hsl(127 58% 70%)" : "hsl(0 84% 75%)" }}>
-                  {incomeDelta.up ? "↑" : "↓"} {fa(incomeDelta.value)}٪ نسبت به ماه گذشته
-                </p>
-              )}
-            </div>
-            <img src={kpiCoins} alt="" loading="lazy" className="w-20 h-20 object-contain" />
-          </div>
-          <div className="mt-4 pt-4 border-t border-border/40">
-            <p className="text-sm text-muted-foreground">هزینه‌ها (این ماه)</p>
-            <div className="flex items-center justify-between mt-1">
               {/* Live monthly expense — sum of factors.payable_amount where invoice_type='buy'. */}
-              <p className="text-2xl font-extrabold text-foreground tabular-nums whitespace-nowrap">{faMoney(stats.expense)}</p>
+              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.expense)}</p>
               {expenseDelta && (
-                <p className="text-xs whitespace-nowrap" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
-                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪
+                <p className="text-xs mt-1" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
+                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪ نسبت به ماه گذشته
                 </p>
               )}
             </div>
+            <img src={kpiWallet} alt="" loading="lazy" className="w-20 h-20 object-contain" />
           </div>
         </GlobalCard>
       </section>
