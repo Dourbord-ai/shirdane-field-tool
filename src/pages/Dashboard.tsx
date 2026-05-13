@@ -12,7 +12,7 @@ import { toPersianDigits } from "@/lib/jalali";
 import { formatShamsi } from "@/lib/dateDisplay";
 // Canonical "in herd" rule — must match /livestock so the dashboard counts
 // never disagree with the list page (existancestatus = 0 or NULL → present).
-import { isCowPresentInHerd, isFemaleCow } from "@/lib/cowPresence";
+import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
@@ -86,35 +86,27 @@ export default function Dashboard() {
   // Pull real cow counts on mount. We select only the boolean/int columns we
   // need for the aggregations and compute the buckets in JS — this avoids
   // requiring extra DB views or RPC functions for now.
+  // Use the SAME counting rules as /livestock (server-side count queries with
+  // IN_HERD_OR + sex=0 + is_dry / is_pregnancy) so the two pages can never
+  // disagree, even when the herd grows beyond the previous 5000-row JS limit.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("cows")
-        // We pull only the columns needed for the dashboard buckets. Note we
-        // use `date_of_birth` (the actual schema column name) not `birth_date`.
-        .select("sex,is_dry,is_pregnancy,existancestatus,date_of_birth")
-        .limit(5000);
-      if (error || !data || cancelled) return;
-      // Restrict to in-herd animals using the canonical helper:
-      //   existancestatus = 0 or NULL → present in herd.
-      // (Previously this filtered on === 1 which is "sold" and produced
-      //  numbers that disagreed with the /livestock page.)
-      const present = data.filter((c) => isCowPresentInHerd(c));
-      // Milking = female + present + not dry. We use isFemaleCow so
-      // sex coding (0=female) stays consistent with the rest of the app.
-      const milking = present.filter((c) => isFemaleCow(c) && c.is_dry === false).length;
-      const pregnant = present.filter((c) => isFemaleCow(c) && c.is_pregnancy === true).length;
-      const dry = present.filter((c) => isFemaleCow(c) && c.is_dry === true).length;
-      // Rough calf bucket: present + younger than ~12 months. Falls back to 0
-      // when date_of_birth isn't set so we never show a misleading number.
-      const oneYearAgo = Date.now() - 365 * 24 * 3600 * 1000;
-      const calves = present.filter((c) => {
-        if (!c.date_of_birth) return false;
-        const t = Date.parse(String(c.date_of_birth));
-        return Number.isFinite(t) && t >= oneYearAgo;
-      }).length;
-      setCounts({ total: present.length, milking, pregnant, dry, calves });
+      const head = (q: any) => q.select("id", { count: "exact", head: true });
+      const [t, m, d, p] = await Promise.all([
+        head(supabase.from("cows")).or(IN_HERD_OR),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+      ]);
+      if (cancelled) return;
+      setCounts({
+        total: t.count ?? 0,
+        milking: m.count ?? 0,
+        dry: d.count ?? 0,
+        pregnant: p.count ?? 0,
+        calves: 0,
+      });
     })();
     return () => { cancelled = true; };
   }, []);
