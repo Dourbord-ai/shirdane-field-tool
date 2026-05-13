@@ -99,8 +99,27 @@ function saveQueue(q: LocalEntry[]) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(q.slice(-100)));
 }
 
+// Top-level page: first asks the operator to pick between single and batch modes,
+// then renders the matching screen. Both modes write to the same
+// `livestock_milk_records` table so reports stay consistent.
 export default function MilkRecordQuick() {
   const navigate = useNavigate();
+  // `mode` controls which sub-screen we show. We start on the picker so the user
+  // makes an explicit choice every time they press "ثبت رکورد شیر".
+  const [mode, setMode] = useState<"select" | "single" | "batch">("select");
+
+  if (mode === "select") {
+    return <ModeSelect onPick={(m) => setMode(m)} onBack={() => navigate(-1)} />;
+  }
+  if (mode === "batch") {
+    return <BatchMode onBack={() => setMode("select")} />;
+  }
+  return <SingleMode onBack={() => setMode("select")} />;
+}
+
+// SingleMode — the original one-cow-at-a-time flow, now with a real cow photo
+// behind the translucent period gradient so it feels grounded in the parlor.
+function SingleMode({ onBack }: { onBack: () => void }) {
   const session = getSession();
   const userId = session.user?.id ?? null;
 
