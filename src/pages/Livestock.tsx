@@ -54,8 +54,8 @@ import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 export default function Livestock() {
   const navigate = useNavigate();
   const [cows, setCows] = useState<Cow[]>([]);
-  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; inseminated: number; fresh: number }>(
-    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, inseminated: 0, fresh: 0 }
+  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; pregnant_heifers: number; inseminated: number; fresh: number }>(
+    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, pregnant_heifers: 0, inseminated: 0, fresh: 0 }
   );
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
@@ -122,12 +122,13 @@ export default function Livestock() {
       //   - female      → sex = 0 (canonical, not sextype text)
       //   - pregnant    → is_pregnancy = true (boolean cache, not status id)
       //   - milking/dry → is_dry = false / true
-      const [t, h, w, d, p, ins, fr] = await Promise.all([
+      const [t, h, w, d, p, ph, ins, fr] = await Promise.all([
         head(supabase.from("cows")),
         head(supabase.from("cows")).or(IN_HERD_OR),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 3),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 12),
       ]);
@@ -138,6 +139,7 @@ export default function Livestock() {
         wet: w.count ?? 0,
         dry: d.count ?? 0,
         pregnant: p.count ?? 0,
+        pregnant_heifers: ph.count ?? 0,
         inseminated: ins.count ?? 0,
         fresh: fr.count ?? 0,
       });
@@ -193,10 +195,11 @@ export default function Livestock() {
   // after the user clicks "Load more". We removed the IntersectionObserver entirely.
 
   const kpis = useMemo(() => ([
-    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
-    { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,      image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
-    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,      image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
-    { id: "fertility:8",      label: "گاوهای آبستن", value: totals.pregnant, image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
+    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,       image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
+    { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,           image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
+    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,           image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
+    { id: "fertility:8",      label: "گاوهای آبستن", value: totals.pregnant,      image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
+    { id: "fertility:heifer", label: "تلیسه آبستن",  value: totals.pregnant_heifers, image: kpiCowPregnant, accent: "hsl(320 80% 60%)" },
   ]), [totals]);
 
   const selectedList = useMemo(
@@ -219,7 +222,7 @@ export default function Livestock() {
       </div>
 
       {/* KPI strip — image-rich enterprise tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {kpis.map((k) => {
           const active = selected.has(k.id);
           return (

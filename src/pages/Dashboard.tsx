@@ -66,11 +66,12 @@ const OP_META: Record<number, { label: string; icon: typeof Milk }> = {
 // stays snappy.
 // -----------------------------------------------------------------------------
 interface LiveCounts {
-  total: number;       // every cow currently in herd
-  milking: number;     // female + present + not dry
-  pregnant: number;    // female + present + is_pregnancy
-  dry: number;         // female + present + is_dry
-  calves: number;      // present cows whose sextype indicates calf/heifer (sex=0 + age proxy)
+  total: number;           // every cow currently in herd
+  milking: number;         // female + present + not dry
+  pregnant: number;       // female + present + is_pregnancy
+  dry: number;             // female + present + is_dry
+  pregnantHeifers: number; // female + present + is_pregnancy + never calved
+  calves: number;          // present cows whose sextype indicates calf/heifer (sex=0 + age proxy)
 }
 
 export default function Dashboard() {
@@ -79,7 +80,7 @@ export default function Dashboard() {
 
   // Live KPI state — starts at zero so the UI never flashes stale placeholders.
   const [counts, setCounts] = useState<LiveCounts>({
-    total: 0, milking: 0, pregnant: 0, dry: 0, calves: 0,
+    total: 0, milking: 0, pregnant: 0, dry: 0, pregnantHeifers: 0, calves: 0,
   });
 
   // Pull real cow counts on mount. We select only the boolean/int columns we
@@ -92,11 +93,12 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       const head = (q: any) => q.select("id", { count: "exact", head: true });
-      const [t, m, d, p] = await Promise.all([
+      const [t, m, d, p, ph] = await Promise.all([
         head(supabase.from("cows")).or(IN_HERD_OR),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
       ]);
       if (cancelled) return;
       setCounts({
@@ -104,6 +106,7 @@ export default function Dashboard() {
         milking: m.count ?? 0,
         dry: d.count ?? 0,
         pregnant: p.count ?? 0,
+        pregnantHeifers: ph.count ?? 0,
         calves: 0,
       });
     })();
@@ -257,13 +260,14 @@ export default function Dashboard() {
           Cow tiles read from public.cows (same count rules as /livestock).
           Milk tile reads from public.livestock_milk_records.
           درآمد tile was removed by user request. */}
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}       hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}     hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای خشک"       value={fa(counts.dry)}         hint="در دوره خشکی"  image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)}    hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="شیر امروز"        value={fa(Math.round(stats.todayMilk))} hint="لیتر"         image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="هزینه‌های ماه"   value={faMoney(stats.expense)} hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
+        <KPIWidget label="کل دام‌ها"           value={fa(counts.total)}          hint="موجود گله"         image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای شیری"         value={fa(counts.milking)}        hint="در حال شیردهی"   image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای خشک"          value={fa(counts.dry)}            hint="در دوره خشکی"    image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="گاوهای آبستن"        value={fa(counts.pregnant)}       hint="مجموع آبستن"     image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="تلیسه آبستن"         value={fa(counts.pregnantHeifers)} hint="آبستن بدون زایش" image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="شیر امروز"           value={fa(Math.round(stats.todayMilk))} hint="لیتر"          image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
+        <KPIWidget label="هزینه‌های ماه"      value={faMoney(stats.expense)}    hint="ریال"             image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -348,6 +352,7 @@ export default function Dashboard() {
               { label: "گاوهای شیری", value: counts.milking },
               { label: "گاوهای خشک",  value: counts.dry },
               { label: "گاوهای آبستن", value: counts.pregnant },
+              { label: "تلیسه آبستن", value: counts.pregnantHeifers },
               { label: "گوساله‌ها",   value: counts.calves },
             ].map((r) => (
               <div key={r.label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
