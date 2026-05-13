@@ -351,16 +351,30 @@ function SingleMode({ onBack }: { onBack: () => void }) {
   return (
     <div
       dir="rtl"
-      className={`min-h-screen w-full overflow-y-auto transition-colors duration-700 ${isNight ? "text-slate-100" : "text-slate-900"}`}
-      style={{ background: meta.gradient }}
+      className={`relative min-h-screen w-full overflow-y-auto transition-colors duration-700 ${isNight ? "text-slate-100" : "text-slate-900"}`}
     >
+      {/* Real photo backdrop, fixed and dimmed so foreground stays readable. */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 bg-cover bg-center"
+        style={{ backgroundImage: `url(${milkBgSingle})` }}
+      />
+      {/* Period-color wash on top of the photo so each shift still feels distinct. */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 opacity-80 mix-blend-soft-light"
+        style={{ background: meta.gradient }}
+      />
+      {/* Slight darken to keep glass cards legible over busy backgrounds. */}
+      <div aria-hidden className={`fixed inset-0 -z-10 ${isNight ? "bg-slate-950/40" : "bg-white/10"}`} />
+
       {/* Animated atmosphere overlays */}
       <AtmosphereLayer period={period} />
 
       {/* Top bar */}
       <div className="relative z-10 flex items-center justify-between px-4 pt-4">
         <button
-          onClick={() => navigate(-1)}
+          onClick={onBack}
           className={`backdrop-blur-md ${isNight ? "bg-white/10" : "bg-white/40"} rounded-full p-2.5 active:scale-90 transition`}
           aria-label="بازگشت"
         >
