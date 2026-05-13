@@ -25,6 +25,10 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2, Pencil, Ban, Plus, Camera, Image as ImageIcon, Scale } from "lucide-react";
+// formatShamsi: تبدیل هر رشته تاریخ (شمسی ذخیره‌شده یا ISO میلادی) به نمایش
+// شمسی با ارقام فارسی. این کامپوننت رکوردهای فیزیکی را با record_date نمایش
+// می‌دهد و باید همه‌جا فرمت یکسان داشته باشد.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 const BUCKET = "livestock-physical-status-images";
 
@@ -181,7 +185,7 @@ export default function PhysicalStatusSection({ cowId, onChanged }: Props) {
               <span className="text-muted-foreground">امتیاز بدنی: </span>
               <span className="font-medium">{latest.body_score ?? "—"}</span>
             </div>
-            <div className="col-span-2 text-xs text-muted-foreground">آخرین ارزیابی: {latest.record_date}</div>
+            <div className="col-span-2 text-xs text-muted-foreground">آخرین ارزیابی: {formatShamsi(latest.record_date)}</div>
           </div>
         </div>
       )}
@@ -218,7 +222,7 @@ export default function PhysicalStatusSection({ cowId, onChanged }: Props) {
                   )}
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs text-muted-foreground">{r.record_date}</span>
+                      <span className="text-xs text-muted-foreground">{formatShamsi(r.record_date)}</span>
                       {r.is_cancelled && (
                         <span className="text-[11px] px-2 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20">
                           لغو شده
