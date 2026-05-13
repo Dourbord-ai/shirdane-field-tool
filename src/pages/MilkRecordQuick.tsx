@@ -214,7 +214,9 @@ function SingleMode({ onBack }: { onBack: () => void }) {
     const tag = earTag.trim();
     const amt = parseFloat(amount.replace(",", "."));
     if (!tag) { toast.error("شماره گوش را وارد کنید"); earRef.current?.focus(); return; }
-    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست"); amountRef.current?.focus(); return; }
+    // milk amount must be a positive number not exceeding 40 kg
+    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست — باید مثبت باشد"); amountRef.current?.focus(); return; }
+    if (amt > 40) { toast.error("مقدار شیر نمی‌تواند بیشتر از ۴۰ کیلوگرم باشد"); amountRef.current?.focus(); return; }
 
     setSubmitting(true);
     const cow = await findCow(tag);
@@ -289,7 +291,8 @@ function SingleMode({ onBack }: { onBack: () => void }) {
   async function handleUpdate() {
     if (!editing) return;
     const amt = parseFloat(amount.replace(",", "."));
-    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست"); return; }
+    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست — باید مثبت باشد"); return; }
+    if (amt > 40) { toast.error("مقدار شیر نمی‌تواند بیشتر از ۴۰ کیلوگرم باشد"); return; }
     setSubmitting(true);
     const updatedLocal: LocalEntry = { ...editing, milk_amount: amt, period };
     setEntries((prev) => prev.map((e) => (e.localId === editing.localId ? updatedLocal : e)));
@@ -902,12 +905,16 @@ function BatchMode({ onBack }: { onBack: () => void }) {
         const amt = parseFloat(cell.amount.replace(",", "."));
         if (!tag && !cell.amount) continue; // skip blank cells silently
         if (!tag || !amt || amt <= 0) {
-          errors.push(`خط ${toPersianDigits(li + 1)} ستون ${toPersianDigits(ci + 1)}: ناقص`);
+          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: ناقص یا منفی`);
+          continue;
+        }
+        if (amt > 40) {
+          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: بیش از ۴۰ کیلو`);
           continue;
         }
         const num = Number(tag.replace(/[^\d]/g, ""));
         if (!num) {
-          errors.push(`خط ${toPersianDigits(li + 1)} ستون ${toPersianDigits(ci + 1)}: شماره گوش نامعتبر`);
+          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: شماره گوش نامعتبر`);
           continue;
         }
         // Look up cow by ear tag; reject if not female / not in herd
