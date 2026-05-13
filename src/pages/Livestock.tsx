@@ -178,6 +178,18 @@ export default function Livestock() {
       // Single shared filter pipeline — used by both quick chips and advanced
       q = applyFilters(q, selected);
 
+      // KPI-specific chips that don't map to a single fertility status id.
+      // These must mirror the KPI count queries above so the resulting list
+      // contains exactly the cows that were counted on the tile.
+      if (selected.has("kpi:pregnant") || selected.has("kpi:heifer")) {
+        // pregnant counter = IN_HERD + sex=0 (female) + is_pregnancy=true
+        q = q.or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true);
+        if (selected.has("kpi:heifer")) {
+          // heifer = pregnant cow that has never calved (no last_birth_date)
+          q = q.is("last_birth_date", null);
+        }
+      }
+
       const { data, error } = await q;
       if (cancelled) return;
       if (error) { console.error(error); setLoading(false); return; }
