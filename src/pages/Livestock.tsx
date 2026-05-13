@@ -32,6 +32,7 @@ import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
+import kpiCowDry from "@/assets/kpi-cow.png";
 import { cowImageFor } from "@/lib/cowImage";
 
 const PAGE_SIZE = 10;
@@ -209,7 +210,7 @@ export default function Livestock() {
   const kpis = useMemo(() => ([
     { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,       image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
     { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,           image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
-    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,           image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
+    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,           image: kpiCowDry,     accent: "hsl(38 92% 55%)" },
     { id: "kpi:pregnant",     label: "گاوهای آبستن", value: totals.pregnant,      image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
     { id: "kpi:heifer",       label: "تلیسه آبستن",  value: totals.pregnant_heifers, image: kpiCowPregnant, accent: "hsl(320 80% 60%)" },
   ]), [totals]);
