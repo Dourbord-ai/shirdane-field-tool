@@ -37,14 +37,43 @@ export const PRESENCE_OPTIONS: FilterOption[] = [
   presenceOpt("other_exit", PRESENCE_STATUS_LABELS[4], (q) => q.eq("existancestatus", 4)),
 ];
 
+// Milking / دوشا = female (sex=0) AND is_dry=false AND has calved at least once
+//   (last_birth_date NOT NULL OR number_of_births > 0).
+// Dry / خشک  = female (sex=0) AND is_dry=true.
+// Heifer / تلیسه (non-milking female) = female AND is_dry=false AND never calved.
+// We use sex (canonical) instead of sextype because sextype is null for many rows.
 export const MILKING_OPTIONS: FilterOption[] = [
-  { id: "milking:wet", category: "milking", label: "دوشا", apply: (q) => q.eq("is_dry", false) },
-  { id: "milking:dry", category: "milking", label: "خشک", apply: (q) => q.eq("is_dry", true) },
+  {
+    id: "milking:wet",
+    category: "milking",
+    label: "دوشا",
+    apply: (q) =>
+      q.eq("sex", 0).eq("is_dry", false).or(
+        "last_birth_date.not.is.null,number_of_births.gt.0",
+      ),
+  },
+  {
+    id: "milking:dry",
+    category: "milking",
+    label: "خشک",
+    apply: (q) => q.eq("sex", 0).eq("is_dry", true),
+  },
+  {
+    id: "milking:heifer",
+    category: "milking",
+    label: "تلیسه (نزاییده)",
+    apply: (q) =>
+      q
+        .eq("sex", 0)
+        .eq("is_dry", false)
+        .is("last_birth_date", null)
+        .or("number_of_births.is.null,number_of_births.eq.0"),
+  },
 ];
 
 export const SEX_OPTIONS: FilterOption[] = [
-  { id: "sex:female", category: "sex", label: "ماده", apply: (q) => q.eq("sextype", "ماده") },
-  { id: "sex:male", category: "sex", label: "نر", apply: (q) => q.eq("sextype", "نر") },
+  { id: "sex:female", category: "sex", label: "ماده", apply: (q) => q.eq("sex", 0) },
+  { id: "sex:male", category: "sex", label: "نر", apply: (q) => q.eq("sex", 1) },
 ];
 
 // Curated fertility shortcuts (the most-used statuses); the advanced dropdown
@@ -129,13 +158,17 @@ function optToOrParts(opt: FilterOption): string[] {
     case "presence:other_exit":
       return ["existancestatus.eq.4"];
     case "milking:wet":
+      // Approximation for OR-combination: matches the dominant condition.
+      // For exact semantics, select milking:wet alone (single-category path).
       return ["is_dry.eq.false"];
     case "milking:dry":
       return ["is_dry.eq.true"];
+    case "milking:heifer":
+      return ["is_dry.eq.false"];
     case "sex:female":
-      return ["sextype.eq.ماده"];
+      return ["sex.eq.0"];
     case "sex:male":
-      return ["sextype.eq.نر"];
+      return ["sex.eq.1"];
     default:
       if (opt.id.startsWith("fertility:")) {
         return [`last_fertility_status.eq.${opt.id.split(":")[1]}`];
