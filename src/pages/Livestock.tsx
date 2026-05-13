@@ -244,7 +244,7 @@ export default function Livestock() {
       </div>
 
       {/* KPI strip — image-rich enterprise tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {kpis.map((k) => {
           const active = selected.has(k.id);
           return (
