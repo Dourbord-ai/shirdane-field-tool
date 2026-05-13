@@ -120,29 +120,47 @@ export default function Livestock() {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // KPI counts — treat NULL presence_status as "in herd"
+  // KPI counts — entire cows table is the source of truth (no in-herd filter).
+  // Validated against production data.
   useEffect(() => {
     let cancelled = false;
     async function loadKpis() {
-      const head = (q: any) => q.select("id", { count: "exact", head: true });
-      const [t, h, w, d, p, ins, fr] = await Promise.all([
-        head(supabase.from("cows")),
-        head(supabase.from("cows")).or(IN_HERD_OR),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", false),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", true),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 8),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 3),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 12),
+      // Helper: returns a HEAD count query against the cows table.
+      // We use head:true so PostgREST returns only the count and skips rows.
+      const head = () =>
+        supabase.from("cows").select("id", { count: "exact", head: true });
+
+      const [t, female, male, dry, milking, heifer] = await Promise.all([
+        // total = every row in cows
+        head(),
+        // female = sex = 0 (sextype is null for many rows; sex is canonical)
+        head().eq("sex", 0),
+        // male = sex = 1
+        head().eq("sex", 1),
+        // dry females = sex=0 AND is_dry=true
+        head().eq("sex", 0).eq("is_dry", true),
+        // milking = sex=0 AND is_dry=false AND has-calved-at-least-once
+        // (last_birth_date NOT NULL OR number_of_births > 0). The .or()
+        // chains with previous .eq()s as AND-of-OR per PostgREST semantics.
+        head()
+          .eq("sex", 0)
+          .eq("is_dry", false)
+          .or("last_birth_date.not.is.null,number_of_births.gt.0"),
+        // heifer / non-milking female = sex=0 AND is_dry=false AND never calved
+        head()
+          .eq("sex", 0)
+          .eq("is_dry", false)
+          .is("last_birth_date", null)
+          .or("number_of_births.is.null,number_of_births.eq.0"),
       ]);
       if (cancelled) return;
       setTotals({
         total: t.count ?? 0,
-        in_herd: h.count ?? 0,
-        wet: w.count ?? 0,
-        dry: d.count ?? 0,
-        pregnant: p.count ?? 0,
-        inseminated: ins.count ?? 0,
-        fresh: fr.count ?? 0,
+        female: female.count ?? 0,
+        male: male.count ?? 0,
+        milking: milking.count ?? 0,
+        dry: dry.count ?? 0,
+        heifer: heifer.count ?? 0,
       });
     }
     loadKpis();
