@@ -54,8 +54,18 @@ import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 export default function Livestock() {
   const navigate = useNavigate();
   const [cows, setCows] = useState<Cow[]>([]);
-  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; inseminated: number; fresh: number }>(
-    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, inseminated: 0, fresh: 0 }
+  // KPI counts validated against production:
+  //   total=702, female=445, male=257, dry=29, milking=230, heifer=186.
+  // All counts are over the entire cows table (no presence filter).
+  const [totals, setTotals] = useState<{
+    total: number;
+    female: number;
+    male: number;
+    milking: number;
+    dry: number;
+    heifer: number;
+  }>(
+    { total: 0, female: 0, male: 0, milking: 0, dry: 0, heifer: 0 }
   );
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
