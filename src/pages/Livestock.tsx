@@ -32,6 +32,7 @@ import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
+import kpiCowDry from "@/assets/kpi-cow.png";
 import { cowImageFor } from "@/lib/cowImage";
 
 const PAGE_SIZE = 10;
