@@ -167,28 +167,6 @@ export default function Dashboard() {
       });
       const dailyMilk = Array.from(dailyMap.entries()).map(([date, total]) => ({ date, total }));
 
-      // ---- Finance: this month vs previous month --------------------------
-      const [thisMonth, prevMonth] = await Promise.all([
-        supabase.from("factors")
-          .select("invoice_type,payable_amount,total_amount")
-          .gte("created_at", startOfMonth.toISOString())
-          .lt("created_at", startOfNextMonth.toISOString())
-          .limit(5000),
-        supabase.from("factors")
-          .select("invoice_type,payable_amount,total_amount")
-          .gte("created_at", startOfPrevMonth.toISOString())
-          .lt("created_at", startOfMonth.toISOString())
-          .limit(5000),
-      ]);
-      const sumByType = (rows: any[] | null, type: "buy" | "sell") =>
-        (rows ?? [])
-          .filter((r) => r.invoice_type === type)
-          .reduce((s, r) => s + Number(r.payable_amount ?? r.total_amount ?? 0), 0);
-      const income = sumByType(thisMonth.data as any[], "sell");
-      const expense = sumByType(thisMonth.data as any[], "buy");
-      const prevIncome = sumByType(prevMonth.data as any[], "sell");
-      const prevExpense = sumByType(prevMonth.data as any[], "buy");
-
       // ---- Recent fertility events (top 5, latest first) -----------------
       const evRes = await supabase
         .from("livestock_fertility_events")
