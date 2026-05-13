@@ -54,18 +54,8 @@ import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 export default function Livestock() {
   const navigate = useNavigate();
   const [cows, setCows] = useState<Cow[]>([]);
-  // KPI counts validated against production:
-  //   total=702, female=445, male=257, dry=29, milking=230, heifer=186.
-  // All counts are over the entire cows table (no presence filter).
-  const [totals, setTotals] = useState<{
-    total: number;
-    female: number;
-    male: number;
-    milking: number;
-    dry: number;
-    heifer: number;
-  }>(
-    { total: 0, female: 0, male: 0, milking: 0, dry: 0, heifer: 0 }
+  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; inseminated: number; fresh: number }>(
+    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, inseminated: 0, fresh: 0 }
   );
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
@@ -120,47 +110,29 @@ export default function Livestock() {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // KPI counts — entire cows table is the source of truth (no in-herd filter).
-  // Validated against production data.
+  // KPI counts — treat NULL presence_status as "in herd"
   useEffect(() => {
     let cancelled = false;
     async function loadKpis() {
-      // Helper: returns a HEAD count query against the cows table.
-      // We use head:true so PostgREST returns only the count and skips rows.
-      const head = () =>
-        supabase.from("cows").select("id", { count: "exact", head: true });
-
-      const [t, female, male, dry, milking, heifer] = await Promise.all([
-        // total = every row in cows
-        head(),
-        // female = sex = 0 (sextype is null for many rows; sex is canonical)
-        head().eq("sex", 0),
-        // male = sex = 1
-        head().eq("sex", 1),
-        // dry females = sex=0 AND is_dry=true
-        head().eq("sex", 0).eq("is_dry", true),
-        // milking = sex=0 AND is_dry=false AND has-calved-at-least-once
-        // (last_birth_date NOT NULL OR number_of_births > 0). The .or()
-        // chains with previous .eq()s as AND-of-OR per PostgREST semantics.
-        head()
-          .eq("sex", 0)
-          .eq("is_dry", false)
-          .or("last_birth_date.not.is.null,number_of_births.gt.0"),
-        // heifer / non-milking female = sex=0 AND is_dry=false AND never calved
-        head()
-          .eq("sex", 0)
-          .eq("is_dry", false)
-          .is("last_birth_date", null)
-          .or("number_of_births.is.null,number_of_births.eq.0"),
+      const head = (q: any) => q.select("id", { count: "exact", head: true });
+      const [t, h, w, d, p, ins, fr] = await Promise.all([
+        head(supabase.from("cows")),
+        head(supabase.from("cows")).or(IN_HERD_OR),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", false),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 8),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 3),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 12),
       ]);
       if (cancelled) return;
       setTotals({
         total: t.count ?? 0,
-        female: female.count ?? 0,
-        male: male.count ?? 0,
-        milking: milking.count ?? 0,
-        dry: dry.count ?? 0,
-        heifer: heifer.count ?? 0,
+        in_herd: h.count ?? 0,
+        wet: w.count ?? 0,
+        dry: d.count ?? 0,
+        pregnant: p.count ?? 0,
+        inseminated: ins.count ?? 0,
+        fresh: fr.count ?? 0,
       });
     }
     loadKpis();
@@ -213,15 +185,11 @@ export default function Livestock() {
   // The sentinel is kept for layout but only triggers when explicitly intersected
   // after the user clicks "Load more". We removed the IntersectionObserver entirely.
 
-  // KPI tiles map directly to the validated counts.
-  // Each tile id matches a filter option id where applicable, so clicking the
-  // tile applies the same filter via the unified pipeline (applyFilters).
   const kpis = useMemo(() => ([
-    { id: "sex:female",       label: "گاوهای ماده",     value: totals.female,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
-    { id: "sex:male",         label: "گاوهای نر",       value: totals.male,    image: kpiCowHerd,     accent: "hsl(217 91% 60%)" },
-    { id: "milking:wet",      label: "گاوهای دوشا",     value: totals.milking, image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
-    { id: "milking:dry",      label: "گاوهای خشک",      value: totals.dry,     image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
-    { id: "milking:heifer",   label: "تلیسه (نزاییده)", value: totals.heifer,  image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
+    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
+    { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,      image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
+    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,      image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
+    { id: "fertility:8",      label: "گاوهای آبستن", value: totals.pregnant, image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
   ]), [totals]);
 
   const selectedList = useMemo(
@@ -244,7 +212,7 @@ export default function Livestock() {
       </div>
 
       {/* KPI strip — image-rich enterprise tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {kpis.map((k) => {
           const active = selected.has(k.id);
           return (
