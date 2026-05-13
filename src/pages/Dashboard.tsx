@@ -120,10 +120,6 @@ export default function Dashboard() {
     monthMilk: 0,
     prevMonthMilk: 0,
     dailyMilk: [] as { date: string; total: number }[],
-    income: 0,
-    expense: 0,
-    prevIncome: 0,
-    prevExpense: 0,
   });
 
   // Recent fertility events for the right-hand timeline card.
