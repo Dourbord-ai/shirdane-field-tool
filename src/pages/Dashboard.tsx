@@ -265,7 +265,7 @@ export default function Dashboard() {
         <KPIWidget label="گاوهای شیری"         value={fa(counts.milking)}        hint="در حال شیردهی"   image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای خشک"          value={fa(counts.dry)}            hint="در دوره خشکی"    image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای آبستن"        value={fa(counts.pregnant)}       hint="مجموع آبستن"     image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="تلیسه آبستن"         value={fa(counts.pregnantHeifers)} hint="آبستن بدون زایش" image={kpiCowPregnant} accent="pink"   onClick={() => navigate("/livestock")} />
+        <KPIWidget label="تلیسه آبستن"         value={fa(counts.pregnantHeifers)} hint="آبستن بدون زایش" image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
         <KPIWidget label="شیر امروز"           value={fa(Math.round(stats.todayMilk))} hint="لیتر"          image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
         <KPIWidget label="هزینه‌های ماه"      value={faMoney(stats.expense)}    hint="ریال"             image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
