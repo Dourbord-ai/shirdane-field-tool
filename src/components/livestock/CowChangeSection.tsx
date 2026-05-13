@@ -175,9 +175,8 @@ export default function CowChangeSection({ cowId, kind, currentRefId, currentDat
               {currentName ? <span className="font-medium">{currentName}</span> : <span className="text-muted-foreground">ثبت نشده</span>}
             </p>
             {currentDate && (
-              {/* currentDate ممکن است شمسی متنی یا ISO میلادی باشد. formatShamsi
-                  هر دو حالت را به نمایش شمسی با ارقام فارسی تبدیل می‌کند تا
-                  همه‌جای پروفایل دام تاریخ یک‌دست دیده شود. */}
+              // currentDate ممکن است شمسی متنی یا ISO میلادی باشد؛ formatShamsi
+              // هر دو حالت را به نمایش شمسی با ارقام فارسی تبدیل می‌کند.
               <p className="text-xs text-muted-foreground mt-0.5">آخرین تغییر: {formatShamsi(currentDate)}</p>
             )}
           </div>
