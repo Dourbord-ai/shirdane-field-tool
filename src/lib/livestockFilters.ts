@@ -158,13 +158,17 @@ function optToOrParts(opt: FilterOption): string[] {
     case "presence:other_exit":
       return ["existancestatus.eq.4"];
     case "milking:wet":
+      // Approximation for OR-combination: matches the dominant condition.
+      // For exact semantics, select milking:wet alone (single-category path).
       return ["is_dry.eq.false"];
     case "milking:dry":
       return ["is_dry.eq.true"];
+    case "milking:heifer":
+      return ["is_dry.eq.false"];
     case "sex:female":
-      return ["sextype.eq.ماده"];
+      return ["sex.eq.0"];
     case "sex:male":
-      return ["sextype.eq.نر"];
+      return ["sex.eq.1"];
     default:
       if (opt.id.startsWith("fertility:")) {
         return [`last_fertility_status.eq.${opt.id.split(":")[1]}`];
