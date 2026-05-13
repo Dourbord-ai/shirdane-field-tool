@@ -1,4 +1,5 @@
 // Fertility domain helpers for livestock profile
+import { formatShamsi } from "@/lib/dateDisplay";
 
 export type FertilityEventType =
   | "heat"
@@ -98,12 +99,7 @@ export const eventBadgeClass = (t: string | null | undefined) => {
   }
 };
 
-export const formatEventDate = (d: string | null | undefined) => {
-  if (!d) return "—";
-  // event_date is stored as text (Jalali string from legacy or ISO). Pass through if non-ISO.
-  const tryDate = new Date(d);
-  if (!isNaN(tryDate.getTime()) && /\d{4}-\d{2}-\d{2}/.test(d)) {
-    return tryDate.toLocaleDateString("fa-IR");
-  }
-  return d;
+// Unified Shamsi formatter — handles ISO, Shamsi-like, Date, epoch.
+export const formatEventDate = (d: string | number | Date | null | undefined) => {
+  return formatShamsi(d);
 };
