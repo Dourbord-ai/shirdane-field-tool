@@ -198,8 +198,8 @@ export default function Livestock() {
     { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,       image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
     { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,           image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
     { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,           image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
-    { id: "fertility:8",      label: "گاوهای آبستن", value: totals.pregnant,      image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
-    { id: "fertility:heifer", label: "تلیسه آبستن",  value: totals.pregnant_heifers, image: kpiCowPregnant, accent: "hsl(320 80% 60%)" },
+    { id: "kpi:pregnant",     label: "گاوهای آبستن", value: totals.pregnant,      image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
+    { id: "kpi:heifer",       label: "تلیسه آبستن",  value: totals.pregnant_heifers, image: kpiCowPregnant, accent: "hsl(320 80% 60%)" },
   ]), [totals]);
 
   const selectedList = useMemo(
