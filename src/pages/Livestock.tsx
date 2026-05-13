@@ -54,8 +54,8 @@ import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 export default function Livestock() {
   const navigate = useNavigate();
   const [cows, setCows] = useState<Cow[]>([]);
-  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; inseminated: number; fresh: number }>(
-    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, inseminated: 0, fresh: 0 }
+  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; pregnant_heifers: number; inseminated: number; fresh: number }>(
+    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, pregnant_heifers: 0, inseminated: 0, fresh: 0 }
   );
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
