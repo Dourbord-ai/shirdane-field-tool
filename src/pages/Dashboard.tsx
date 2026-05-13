@@ -93,11 +93,12 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       const head = (q: any) => q.select("id", { count: "exact", head: true });
-      const [t, m, d, p] = await Promise.all([
+      const [t, m, d, p, ph] = await Promise.all([
         head(supabase.from("cows")).or(IN_HERD_OR),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
       ]);
       if (cancelled) return;
       setCounts({
@@ -105,6 +106,7 @@ export default function Dashboard() {
         milking: m.count ?? 0,
         dry: d.count ?? 0,
         pregnant: p.count ?? 0,
+        pregnantHeifers: ph.count ?? 0,
         calves: 0,
       });
     })();
