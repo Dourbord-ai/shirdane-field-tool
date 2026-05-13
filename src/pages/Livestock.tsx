@@ -122,12 +122,13 @@ export default function Livestock() {
       //   - female      → sex = 0 (canonical, not sextype text)
       //   - pregnant    → is_pregnancy = true (boolean cache, not status id)
       //   - milking/dry → is_dry = false / true
-      const [t, h, w, d, p, ins, fr] = await Promise.all([
+      const [t, h, w, d, p, ph, ins, fr] = await Promise.all([
         head(supabase.from("cows")),
         head(supabase.from("cows")).or(IN_HERD_OR),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 3),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 12),
       ]);
@@ -138,6 +139,7 @@ export default function Livestock() {
         wet: w.count ?? 0,
         dry: d.count ?? 0,
         pregnant: p.count ?? 0,
+        pregnant_heifers: ph.count ?? 0,
         inseminated: ins.count ?? 0,
         fresh: fr.count ?? 0,
       });
