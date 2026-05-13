@@ -1059,25 +1059,63 @@ function BatchMode({ onBack }: { onBack: () => void }) {
               )}
             </div>
 
-            {/* Two parallel rows: ear tags above, milk amounts below.
-                On wide screens we use 10 columns; on narrow phones we wrap to 5. */}
+            {/* Vertical static list — one row per stall.
+                Each row reads naturally right-to-left in Persian:
+                [row #] [شماره گوش input] [مقدار شیر input] [kg]
+                Large touch targets so low-literacy operators on phones
+                can tap and type confidently. */}
             <div className="space-y-2">
-              <BatchRow
-                label="شماره گوش"
-                color="from-slate-800/70 to-slate-800/40"
-                values={line.cells.map((c) => c.ear)}
-                onChange={(i, v) => updateCell(lineIdx, i, { ear: v })}
-                placeholder="0000"
-                inputMode="numeric"
-              />
-              <BatchRow
-                label="مقدار شیر (kg)"
-                color={`bg-gradient-to-r ${meta.accent} bg-opacity-20`}
-                values={line.cells.map((c) => c.amount)}
-                onChange={(i, v) => updateCell(lineIdx, i, { amount: v })}
-                placeholder="0.0"
-                inputMode="decimal"
-              />
+              {/* Column header — printed once so each row stays uncluttered */}
+              <div className="grid grid-cols-[2.25rem_1fr_1fr] gap-2 px-1 text-[11px] font-bold opacity-70">
+                <div className="text-center">#</div>
+                <div className="text-center">شماره گوش</div>
+                <div className="text-center">مقدار شیر (kg)</div>
+              </div>
+              {line.cells.map((cell, cellIdx) => {
+                // Highlight the row softly once both fields are filled — gives
+                // the operator a clear visual confirmation per stall.
+                const ready = cell.ear.trim() && parseFloat(cell.amount.replace(",", ".")) > 0;
+                return (
+                  <div
+                    key={cellIdx}
+                    className={`grid grid-cols-[2.25rem_1fr_1fr] gap-2 items-center rounded-xl p-1.5 ring-1 transition ${
+                      ready
+                        ? `bg-gradient-to-r ${meta.accent} bg-opacity-20 ring-white/30`
+                        : "bg-slate-950/40 ring-white/5"
+                    }`}
+                  >
+                    {/* Stall number — large, easy to read */}
+                    <div className="h-12 flex items-center justify-center text-sm font-black opacity-80">
+                      {toPersianDigits(cellIdx + 1)}
+                    </div>
+                    {/* Ear tag input */}
+                    <input
+                      value={cell.ear}
+                      onChange={(e) => updateCell(lineIdx, cellIdx, { ear: e.target.value })}
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder="0000"
+                      aria-label={`شماره گوش ردیف ${cellIdx + 1}`}
+                      className="h-12 w-full rounded-lg text-center text-base font-bold tracking-wider bg-slate-950/60 ring-1 ring-white/10 focus:ring-2 focus:ring-white/50 outline-none placeholder:text-white/25 text-white"
+                    />
+                    {/* Milk amount input with kg suffix for clarity */}
+                    <div className="relative">
+                      <input
+                        value={cell.amount}
+                        onChange={(e) => updateCell(lineIdx, cellIdx, { amount: e.target.value })}
+                        inputMode="decimal"
+                        dir="ltr"
+                        placeholder="0.0"
+                        aria-label={`مقدار شیر ردیف ${cellIdx + 1}`}
+                        className="h-12 w-full rounded-lg text-center text-base font-bold tracking-wider bg-slate-950/60 ring-1 ring-white/10 focus:ring-2 focus:ring-white/50 outline-none placeholder:text-white/25 text-white pl-8"
+                      />
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold opacity-60 pointer-events-none">
+                        kg
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
