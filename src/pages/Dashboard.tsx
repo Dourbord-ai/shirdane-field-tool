@@ -352,6 +352,7 @@ export default function Dashboard() {
               { label: "گاوهای شیری", value: counts.milking },
               { label: "گاوهای خشک",  value: counts.dry },
               { label: "گاوهای آبستن", value: counts.pregnant },
+              { label: "تلیسه آبستن", value: counts.pregnantHeifers },
               { label: "گوساله‌ها",   value: counts.calves },
             ].map((r) => (
               <div key={r.label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
