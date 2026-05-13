@@ -100,9 +100,6 @@ export const eventBadgeClass = (t: string | null | undefined) => {
 };
 
 // Unified Shamsi formatter — handles ISO, Shamsi-like, Date, epoch.
-// Uses the project's universal formatter to guarantee Persian-digit Jalali
-// output everywhere fertility events are rendered (زایش، سقط، تلقیح، ...).
-import { formatShamsi } from "@/lib/dateDisplay";
 export const formatEventDate = (d: string | number | Date | null | undefined) => {
   return formatShamsi(d);
 };
