@@ -66,11 +66,12 @@ const OP_META: Record<number, { label: string; icon: typeof Milk }> = {
 // stays snappy.
 // -----------------------------------------------------------------------------
 interface LiveCounts {
-  total: number;       // every cow currently in herd
-  milking: number;     // female + present + not dry
-  pregnant: number;    // female + present + is_pregnancy
-  dry: number;         // female + present + is_dry
-  calves: number;      // present cows whose sextype indicates calf/heifer (sex=0 + age proxy)
+  total: number;           // every cow currently in herd
+  milking: number;         // female + present + not dry
+  pregnant: number;       // female + present + is_pregnancy
+  dry: number;             // female + present + is_dry
+  pregnantHeifers: number; // female + present + is_pregnancy + never calved
+  calves: number;          // present cows whose sextype indicates calf/heifer (sex=0 + age proxy)
 }
 
 export default function Dashboard() {
