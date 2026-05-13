@@ -214,7 +214,9 @@ function SingleMode({ onBack }: { onBack: () => void }) {
     const tag = earTag.trim();
     const amt = parseFloat(amount.replace(",", "."));
     if (!tag) { toast.error("شماره گوش را وارد کنید"); earRef.current?.focus(); return; }
-    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست"); amountRef.current?.focus(); return; }
+    // milk amount must be a positive number not exceeding 40 kg
+    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست — باید مثبت باشد"); amountRef.current?.focus(); return; }
+    if (amt > 40) { toast.error("مقدار شیر نمی‌تواند بیشتر از ۴۰ کیلوگرم باشد"); amountRef.current?.focus(); return; }
 
     setSubmitting(true);
     const cow = await findCow(tag);
