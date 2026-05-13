@@ -12,7 +12,7 @@ import { toPersianDigits } from "@/lib/jalali";
 import { formatShamsi } from "@/lib/dateDisplay";
 // Canonical "in herd" rule — must match /livestock so the dashboard counts
 // never disagree with the list page (existancestatus = 0 or NULL → present).
-import { isCowPresentInHerd, isFemaleCow } from "@/lib/cowPresence";
+import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 import {
   ShoppingCart, Receipt, ClipboardList, Package, BarChart3, Wallet, Users,
   Award, HeartPulse, Plus, Milk, FlaskConical, TrendingUp, AlertTriangle,
@@ -25,7 +25,6 @@ import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
-import kpiCoins from "@/assets/kpi-coins.png";
 import kpiWallet from "@/assets/kpi-wallet.png";
 
 const modules = [
@@ -86,35 +85,27 @@ export default function Dashboard() {
   // Pull real cow counts on mount. We select only the boolean/int columns we
   // need for the aggregations and compute the buckets in JS — this avoids
   // requiring extra DB views or RPC functions for now.
+  // Use the SAME counting rules as /livestock (server-side count queries with
+  // IN_HERD_OR + sex=0 + is_dry / is_pregnancy) so the two pages can never
+  // disagree, even when the herd grows beyond the previous 5000-row JS limit.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("cows")
-        // We pull only the columns needed for the dashboard buckets. Note we
-        // use `date_of_birth` (the actual schema column name) not `birth_date`.
-        .select("sex,is_dry,is_pregnancy,existancestatus,date_of_birth")
-        .limit(5000);
-      if (error || !data || cancelled) return;
-      // Restrict to in-herd animals using the canonical helper:
-      //   existancestatus = 0 or NULL → present in herd.
-      // (Previously this filtered on === 1 which is "sold" and produced
-      //  numbers that disagreed with the /livestock page.)
-      const present = data.filter((c) => isCowPresentInHerd(c));
-      // Milking = female + present + not dry. We use isFemaleCow so
-      // sex coding (0=female) stays consistent with the rest of the app.
-      const milking = present.filter((c) => isFemaleCow(c) && c.is_dry === false).length;
-      const pregnant = present.filter((c) => isFemaleCow(c) && c.is_pregnancy === true).length;
-      const dry = present.filter((c) => isFemaleCow(c) && c.is_dry === true).length;
-      // Rough calf bucket: present + younger than ~12 months. Falls back to 0
-      // when date_of_birth isn't set so we never show a misleading number.
-      const oneYearAgo = Date.now() - 365 * 24 * 3600 * 1000;
-      const calves = present.filter((c) => {
-        if (!c.date_of_birth) return false;
-        const t = Date.parse(String(c.date_of_birth));
-        return Number.isFinite(t) && t >= oneYearAgo;
-      }).length;
-      setCounts({ total: present.length, milking, pregnant, dry, calves });
+      const head = (q: any) => q.select("id", { count: "exact", head: true });
+      const [t, m, d, p] = await Promise.all([
+        head(supabase.from("cows")).or(IN_HERD_OR),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+      ]);
+      if (cancelled) return;
+      setCounts({
+        total: t.count ?? 0,
+        milking: m.count ?? 0,
+        dry: d.count ?? 0,
+        pregnant: p.count ?? 0,
+        calves: 0,
+      });
     })();
     return () => { cancelled = true; };
   }, []);
@@ -235,7 +226,7 @@ export default function Dashboard() {
     return { value: Math.abs(p), up: p >= 0 };
   };
   const milkDelta = pctDelta(stats.monthMilk, stats.prevMonthMilk);
-  const incomeDelta = pctDelta(stats.income, stats.prevIncome);
+  // درآمد delta removed by user request — only milk + expense deltas remain.
   const expenseDelta = pctDelta(stats.expense, stats.prevExpense);
   const maxDaily = Math.max(1, ...stats.dailyMilk.map((d) => d.total));
 
@@ -263,17 +254,15 @@ export default function Dashboard() {
       </section>
 
       {/* ============== KPI ROW ==============
-          Cow tiles read from public.cows. Milk tile reads from
-          public.livestock_milk_records. Income/expense tiles read from
-          public.factors (sell vs buy). All zeros render as ۰ until data lands. */}
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
+          Cow tiles read from public.cows (same count rules as /livestock).
+          Milk tile reads from public.livestock_milk_records.
+          درآمد tile was removed by user request. */}
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}       hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}     hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        {/* گاوهای خشک — same rule as /livestock: female (sex=0) + present + is_dry=true */}
         <KPIWidget label="گاوهای خشک"       value={fa(counts.dry)}         hint="در دوره خشکی"  image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)}    hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
         <KPIWidget label="شیر امروز"        value={fa(Math.round(stats.todayMilk))} hint="لیتر"         image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value={faMoney(stats.income)}  hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
         <KPIWidget label="هزینه‌های ماه"   value={faMoney(stats.expense)} hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
@@ -409,30 +398,19 @@ export default function Dashboard() {
         </GlobalCard>
 
         <GlobalCard>
-          <h3 className="text-base font-extrabold text-foreground mb-1">درآمد (این ماه)</h3>
+          {/* درآمد card removed by user request — only هزینه‌ها remain. */}
+          <h3 className="text-base font-extrabold text-foreground mb-1">هزینه‌ها (این ماه)</h3>
           <div className="flex items-center justify-between gap-3">
             <div>
-              {/* Live monthly income — sum of factors.payable_amount where invoice_type='sell'. */}
-              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.income)}</p>
-              {incomeDelta && (
-                <p className="text-xs mt-1" style={{ color: incomeDelta.up ? "hsl(127 58% 70%)" : "hsl(0 84% 75%)" }}>
-                  {incomeDelta.up ? "↑" : "↓"} {fa(incomeDelta.value)}٪ نسبت به ماه گذشته
-                </p>
-              )}
-            </div>
-            <img src={kpiCoins} alt="" loading="lazy" className="w-20 h-20 object-contain" />
-          </div>
-          <div className="mt-4 pt-4 border-t border-border/40">
-            <p className="text-sm text-muted-foreground">هزینه‌ها (این ماه)</p>
-            <div className="flex items-center justify-between mt-1">
               {/* Live monthly expense — sum of factors.payable_amount where invoice_type='buy'. */}
-              <p className="text-2xl font-extrabold text-foreground tabular-nums whitespace-nowrap">{faMoney(stats.expense)}</p>
+              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.expense)}</p>
               {expenseDelta && (
-                <p className="text-xs whitespace-nowrap" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
-                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪
+                <p className="text-xs mt-1" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
+                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪ نسبت به ماه گذشته
                 </p>
               )}
             </div>
+            <img src={kpiWallet} alt="" loading="lazy" className="w-20 h-20 object-contain" />
           </div>
         </GlobalCard>
       </section>
