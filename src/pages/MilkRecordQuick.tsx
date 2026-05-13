@@ -20,6 +20,11 @@ import {
 } from "lucide-react";
 import { todayJalali, formatJalali, gregorianToJalali, toPersianDigits } from "@/lib/jalali";
 import { getShamsiToday } from "@/lib/shamsiNow";
+// Real photographic backgrounds for the two registration modes — the single mode
+// uses a close-up of one cow being milked, the batch mode uses a full milking parlor.
+import milkBgSingle from "@/assets/milk-bg-single.jpg";
+import milkBgBatch from "@/assets/milk-bg-batch.jpg";
+import { Users, User } from "lucide-react";
 
 type Period = 1 | 2 | 3;
 
@@ -94,8 +99,27 @@ function saveQueue(q: LocalEntry[]) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(q.slice(-100)));
 }
 
+// Top-level page: first asks the operator to pick between single and batch modes,
+// then renders the matching screen. Both modes write to the same
+// `livestock_milk_records` table so reports stay consistent.
 export default function MilkRecordQuick() {
   const navigate = useNavigate();
+  // `mode` controls which sub-screen we show. We start on the picker so the user
+  // makes an explicit choice every time they press "ثبت رکورد شیر".
+  const [mode, setMode] = useState<"select" | "single" | "batch">("select");
+
+  if (mode === "select") {
+    return <ModeSelect onPick={(m) => setMode(m)} onBack={() => navigate(-1)} />;
+  }
+  if (mode === "batch") {
+    return <BatchMode onBack={() => setMode("select")} />;
+  }
+  return <SingleMode onBack={() => setMode("select")} />;
+}
+
+// SingleMode — the original one-cow-at-a-time flow, now with a real cow photo
+// behind the translucent period gradient so it feels grounded in the parlor.
+function SingleMode({ onBack }: { onBack: () => void }) {
   const session = getSession();
   const userId = session.user?.id ?? null;
 
@@ -327,16 +351,30 @@ export default function MilkRecordQuick() {
   return (
     <div
       dir="rtl"
-      className={`min-h-screen w-full overflow-y-auto transition-colors duration-700 ${isNight ? "text-slate-100" : "text-slate-900"}`}
-      style={{ background: meta.gradient }}
+      className={`relative min-h-screen w-full overflow-y-auto transition-colors duration-700 ${isNight ? "text-slate-100" : "text-slate-900"}`}
     >
+      {/* Real photo backdrop, fixed and dimmed so foreground stays readable. */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 bg-cover bg-center"
+        style={{ backgroundImage: `url(${milkBgSingle})` }}
+      />
+      {/* Period-color wash on top of the photo so each shift still feels distinct. */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 opacity-80 mix-blend-soft-light"
+        style={{ background: meta.gradient }}
+      />
+      {/* Slight darken to keep glass cards legible over busy backgrounds. */}
+      <div aria-hidden className={`fixed inset-0 -z-10 ${isNight ? "bg-slate-950/40" : "bg-white/10"}`} />
+
       {/* Animated atmosphere overlays */}
       <AtmosphereLayer period={period} />
 
       {/* Top bar */}
       <div className="relative z-10 flex items-center justify-between px-4 pt-4">
         <button
-          onClick={() => navigate(-1)}
+          onClick={onBack}
           className={`backdrop-blur-md ${isNight ? "bg-white/10" : "bg-white/40"} rounded-full p-2.5 active:scale-90 transition`}
           aria-label="بازگشت"
         >
@@ -641,5 +679,501 @@ function AtmosphereLayer({ period }: { period: Period }) {
         }}
       />
     </>
+  );
+}
+
+// ============================================================================
+// ModeSelect — landing screen shown the moment the user opens the milk-record
+// page. Two large photo cards make the choice obvious on a phone in the parlor.
+// ============================================================================
+function ModeSelect({
+  onPick,
+  onBack,
+}: {
+  onPick: (m: "single" | "batch") => void;
+  onBack: () => void;
+}) {
+  const todayInfo = useMemo(() => getShamsiToday(new Date()), []);
+  const todayLabel = useMemo(() => toPersianDigits(formatJalali(todayJalali())), []);
+  return (
+    <div dir="rtl" className="relative min-h-screen w-full bg-slate-950 text-slate-100 overflow-hidden">
+      {/* Soft ambient backdrop — uses the batch photo lightly blurred so the
+          choice cards still pop visually without competing with their own photos. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-cover bg-center opacity-30 blur-xl scale-110"
+        style={{ backgroundImage: `url(${milkBgBatch})` }}
+      />
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/60 to-slate-950/90" />
+
+      {/* Header */}
+      <div className="relative z-10 flex items-center justify-between px-4 pt-4">
+        <button
+          onClick={onBack}
+          className="backdrop-blur-md bg-white/10 rounded-full p-2.5 active:scale-90 transition"
+          aria-label="بازگشت"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="text-center leading-tight">
+          <div className="text-xl font-black tracking-wide">{todayInfo.weekdayName}</div>
+          <div className="text-base font-bold opacity-90">{todayLabel}</div>
+          <div className="text-[11px] opacity-70 mt-0.5">ثبت رکورد شیر</div>
+        </div>
+        <div className="w-10" />
+      </div>
+
+      {/* Title */}
+      <div className="relative z-10 px-5 mt-8 text-center">
+        <h1 className="text-2xl font-black">روش ثبت را انتخاب کنید</h1>
+        <p className="text-sm opacity-70 mt-1">
+          هر دو روش رکوردها را در یک منبع اطلاعاتی ذخیره می‌کنند.
+        </p>
+      </div>
+
+      {/* Two big photo choice cards */}
+      <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-4 px-4 mt-6 pb-10">
+        <ModeCard
+          image={milkBgSingle}
+          title="ثبت تکی"
+          subtitle="یک دام در هر مرحله — مناسب کنترل دقیق"
+          icon={<User className="w-5 h-5" />}
+          onClick={() => onPick("single")}
+        />
+        <ModeCard
+          image={milkBgBatch}
+          title="ثبت گروهی"
+          subtitle="ده‌تایی — مناسب پایان شیفت در سالن"
+          icon={<Users className="w-5 h-5" />}
+          onClick={() => onPick("batch")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ModeCard({
+  image,
+  title,
+  subtitle,
+  icon,
+  onClick,
+}: {
+  image: string;
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      onClick={onClick}
+      className="group relative h-56 md:h-72 w-full rounded-3xl overflow-hidden ring-1 ring-white/10 shadow-2xl text-right"
+    >
+      <img
+        src={image}
+        alt={title}
+        loading="lazy"
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10" />
+      <div className="absolute inset-x-0 bottom-0 p-5 flex items-end justify-between">
+        <div>
+          <div className="text-2xl font-black text-white drop-shadow">{title}</div>
+          <div className="text-xs text-white/85 mt-1 max-w-[80%]">{subtitle}</div>
+        </div>
+        <div className="bg-white/15 backdrop-blur-md p-2.5 rounded-full ring-1 ring-white/20 text-white">
+          {icon}
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+// ============================================================================
+// BatchMode — sheet-style entry that mirrors the operator's mental model:
+// a "line" (لاین) is a row of stalls. Each line has 10 paired ear-tag / amount
+// cells. Pressing "ثبت" sends every filled, lookup-resolved cell to
+// `livestock_milk_records` (same table as single mode). "پایان ثبت این شیفت"
+// flushes everything, shows totals, and clears for the next shift.
+// ============================================================================
+const BATCH_COLS = 10; // ten paired cells per line — matches the user's spec
+const BATCH_QUEUE_KEY = "milk_record_batch_queue_v1";
+
+type BatchCell = {
+  ear: string;
+  amount: string;
+};
+type BatchLine = {
+  id: string;
+  cells: BatchCell[];
+};
+
+function emptyLine(): BatchLine {
+  // Each new line starts with BATCH_COLS empty paired cells
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    cells: Array.from({ length: BATCH_COLS }, () => ({ ear: "", amount: "" })),
+  };
+}
+
+function BatchMode({ onBack }: { onBack: () => void }) {
+  const session = getSession();
+  const userId = session.user?.id ?? null;
+
+  // Period defaults to the current time-of-day shift, like SingleMode
+  const [period, setPeriod] = useState<Period>(detectPeriod());
+  const meta = PERIOD_META[period];
+
+  // Persist lines locally so an accidental refresh in the parlor doesn't lose work
+  const [lines, setLines] = useState<BatchLine[]>(() => {
+    try {
+      const raw = localStorage.getItem(BATCH_QUEUE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as BatchLine[];
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch {
+      /* fall through */
+    }
+    return [emptyLine(), emptyLine()];
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [shiftSummary, setShiftSummary] = useState<{ count: number; total: number } | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(BATCH_QUEUE_KEY, JSON.stringify(lines));
+  }, [lines]);
+
+  const todayInfo = useMemo(() => getShamsiToday(new Date()), []);
+  const todayLabel = useMemo(() => toPersianDigits(formatJalali(todayJalali())), []);
+
+  // Update a single cell immutably
+  function updateCell(lineIdx: number, cellIdx: number, patch: Partial<BatchCell>) {
+    setLines((prev) =>
+      prev.map((l, i) =>
+        i !== lineIdx ? l : { ...l, cells: l.cells.map((c, j) => (j !== cellIdx ? c : { ...c, ...patch })) },
+      ),
+    );
+  }
+
+  function addLine() {
+    setLines((prev) => [...prev, emptyLine()]);
+  }
+  function removeLine(idx: number) {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  }
+
+  // Counts of filled vs valid cells, shown as live stats in the header
+  const filled = useMemo(() => {
+    let c = 0;
+    let total = 0;
+    for (const l of lines) {
+      for (const cell of l.cells) {
+        const amt = parseFloat(cell.amount.replace(",", "."));
+        if (cell.ear.trim() && amt > 0) {
+          c++;
+          total += amt;
+        }
+      }
+    }
+    return { count: c, total };
+  }, [lines]);
+
+  // Submit every filled cell. Rows that fail validation/lookup are kept in place
+  // and visually flagged so the operator can fix and retry.
+  async function submitAll(endShift: boolean) {
+    if (submitting) return;
+    setSubmitting(true);
+    const date = todayIso();
+    const seenInBatch = new Set<number>(); // dedup within this submission
+    let successCount = 0;
+    let totalKg = 0;
+    const errors: string[] = [];
+
+    // Snapshot lines so we can mutate fresh state at the end
+    const snap = lines.map((l) => ({ ...l, cells: l.cells.map((c) => ({ ...c })) }));
+
+    for (let li = 0; li < snap.length; li++) {
+      for (let ci = 0; ci < snap[li].cells.length; ci++) {
+        const cell = snap[li].cells[ci];
+        const tag = cell.ear.trim();
+        const amt = parseFloat(cell.amount.replace(",", "."));
+        if (!tag && !cell.amount) continue; // skip blank cells silently
+        if (!tag || !amt || amt <= 0) {
+          errors.push(`خط ${toPersianDigits(li + 1)} ستون ${toPersianDigits(ci + 1)}: ناقص`);
+          continue;
+        }
+        const num = Number(tag.replace(/[^\d]/g, ""));
+        if (!num) {
+          errors.push(`خط ${toPersianDigits(li + 1)} ستون ${toPersianDigits(ci + 1)}: شماره گوش نامعتبر`);
+          continue;
+        }
+        // Look up cow by ear tag; reject if not female / not in herd
+        const { data: cow, error: lookupErr } = await (supabase as any)
+          .from("cows")
+          .select("id, sex, existancestatus")
+          .eq("earnumber", num)
+          .limit(1)
+          .maybeSingle();
+        if (lookupErr || !cow) {
+          errors.push(`گوش ${toPersianDigits(tag)}: یافت نشد`);
+          continue;
+        }
+        if (cow.sex !== 0 || (cow.existancestatus != null && cow.existancestatus !== 0)) {
+          errors.push(`گوش ${toPersianDigits(tag)}: غیرقابل ثبت`);
+          continue;
+        }
+        if (seenInBatch.has(Number(cow.id))) {
+          errors.push(`گوش ${toPersianDigits(tag)}: تکراری در همین ثبت`);
+          continue;
+        }
+        seenInBatch.add(Number(cow.id));
+        // Same insert payload as SingleMode → same table, same columns
+        const { error: insErr } = await (supabase as any).from("livestock_milk_records").insert({
+          livestock_id: Number(cow.id),
+          milk_amount: amt,
+          record_date: date,
+          period,
+          registered_user_id: userId ?? null,
+        });
+        if (insErr) {
+          // Unique-violation = already recorded for this cow/period/date
+          errors.push(
+            insErr.code === "23505"
+              ? `گوش ${toPersianDigits(tag)}: قبلاً ثبت شده`
+              : `گوش ${toPersianDigits(tag)}: خطای ذخیره`,
+          );
+          continue;
+        }
+        successCount++;
+        totalKg += amt;
+        // Clear the cell on success so the operator sees what's left to fix
+        snap[li].cells[ci] = { ear: "", amount: "" };
+      }
+    }
+
+    setLines(snap);
+    setSubmitting(false);
+
+    if (successCount > 0) toast.success(`${toPersianDigits(successCount)} رکورد ثبت شد`);
+    if (errors.length) {
+      // Show only the first few to avoid swamping the screen
+      toast.error(errors.slice(0, 3).join(" • ") + (errors.length > 3 ? " …" : ""));
+    }
+
+    if (endShift) {
+      // Shift end: show summary screen and reset to two empty lines for next time
+      setShiftSummary({ count: successCount, total: totalKg });
+      setLines([emptyLine(), emptyLine()]);
+      localStorage.removeItem(BATCH_QUEUE_KEY);
+    }
+  }
+
+  return (
+    <div dir="rtl" className="relative min-h-screen w-full text-slate-100 overflow-y-auto">
+      {/* Real parlor photo — fixed so it doesn't scroll with the form */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 bg-cover bg-center"
+        style={{ backgroundImage: `url(${milkBgBatch})` }}
+      />
+      <div aria-hidden className="fixed inset-0 -z-10 bg-gradient-to-b from-slate-950/70 via-slate-950/60 to-slate-950/85" />
+
+      {/* Sticky top bar with back / title / end-shift */}
+      <div className="sticky top-0 z-20 backdrop-blur-xl bg-slate-950/40 border-b border-white/10">
+        <div className="flex items-center justify-between px-4 py-3">
+          <button
+            onClick={onBack}
+            className="backdrop-blur-md bg-white/10 rounded-full p-2.5 active:scale-90 transition"
+            aria-label="بازگشت"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="text-center leading-tight">
+            <div className="text-base font-black">{todayInfo.weekdayName} • {todayLabel}</div>
+            <div className="text-[11px] opacity-80">ثبت گروهی شیر</div>
+          </div>
+          <button
+            onClick={() => submitAll(true)}
+            disabled={submitting || filled.count === 0}
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-500/90 hover:bg-rose-500 disabled:opacity-40 active:scale-95 transition"
+          >
+            پایان ثبت این شیفت
+          </button>
+        </div>
+
+        {/* Period selector + live counters */}
+        <div className="flex items-center justify-between gap-2 px-4 pb-3">
+          <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-white/10 ring-1 ring-white/10">
+            {([1, 2, 3] as Period[]).map((p) => {
+              const m = PERIOD_META[p];
+              const active = p === period;
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`relative h-9 px-3 rounded-lg flex items-center gap-1.5 text-xs font-bold transition ${
+                    active ? `bg-gradient-to-br ${m.accent} text-white shadow` : "text-white/80"
+                  }`}
+                >
+                  {m.icon}
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-[11px] opacity-90 text-left">
+            <div>
+              <span className="font-black">{toPersianDigits(filled.count)}</span> آماده ثبت
+            </div>
+            <div>
+              مجموع: <span className="font-black">{toPersianDigits(filled.total.toFixed(1))}</span> کیلو
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Lines */}
+      <div className="relative z-10 px-3 py-4 space-y-4">
+        {lines.map((line, lineIdx) => (
+          <div
+            key={line.id}
+            className="rounded-2xl backdrop-blur-xl bg-slate-900/55 ring-1 ring-white/10 p-3 shadow-xl"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-black flex items-center gap-2">
+                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br ${meta.accent} text-white text-xs`}>
+                  {toPersianDigits(lineIdx + 1)}
+                </span>
+                لاین {toPersianDigits(lineIdx + 1)}
+              </div>
+              {lines.length > 1 && (
+                <button
+                  onClick={() => removeLine(lineIdx)}
+                  className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/70"
+                >
+                  حذف لاین
+                </button>
+              )}
+            </div>
+
+            {/* Two parallel rows: ear tags above, milk amounts below.
+                On wide screens we use 10 columns; on narrow phones we wrap to 5. */}
+            <div className="space-y-2">
+              <BatchRow
+                label="شماره گوش"
+                color="from-slate-800/70 to-slate-800/40"
+                values={line.cells.map((c) => c.ear)}
+                onChange={(i, v) => updateCell(lineIdx, i, { ear: v })}
+                placeholder="0000"
+                inputMode="numeric"
+              />
+              <BatchRow
+                label="مقدار شیر (kg)"
+                color={`bg-gradient-to-r ${meta.accent} bg-opacity-20`}
+                values={line.cells.map((c) => c.amount)}
+                onChange={(i, v) => updateCell(lineIdx, i, { amount: v })}
+                placeholder="0.0"
+                inputMode="decimal"
+              />
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={addLine}
+          className="w-full py-3 rounded-2xl border-2 border-dashed border-white/20 text-white/80 hover:bg-white/5 active:scale-[0.99] transition flex items-center justify-center gap-2 text-sm font-bold"
+        >
+          <Plus className="w-4 h-4" />
+          افزودن لاین جدید
+        </button>
+
+        {/* Submit (does NOT end the shift) */}
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => submitAll(false)}
+          disabled={submitting || filled.count === 0}
+          className={`w-full h-16 rounded-2xl font-black text-lg text-white shadow-2xl bg-gradient-to-br ${meta.accent} disabled:opacity-50 flex items-center justify-center gap-2`}
+        >
+          {submitting ? <Loader2 className="w-6 h-6 animate-spin" /> : <Check className="w-6 h-6" />}
+          ثبت {filled.count > 0 ? `(${toPersianDigits(filled.count)})` : ""}
+        </motion.button>
+      </div>
+
+      {/* End-of-shift summary modal */}
+      <AnimatePresence>
+        {shiftSummary && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.85, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.85, y: 20 }}
+              className="w-full max-w-sm rounded-3xl bg-slate-900 ring-1 ring-white/10 p-6 text-center"
+            >
+              <div className="mx-auto w-14 h-14 rounded-full bg-emerald-500/20 flex items-center justify-center mb-3">
+                <Check className="w-7 h-7 text-emerald-400" />
+              </div>
+              <div className="text-xl font-black mb-1">شیفت بسته شد</div>
+              <div className="text-sm opacity-80">
+                {toPersianDigits(shiftSummary.count)} رکورد ثبت شد
+              </div>
+              <div className="text-sm opacity-80 mb-5">
+                مجموع: {toPersianDigits(shiftSummary.total.toFixed(1))} کیلوگرم
+              </div>
+              <button
+                onClick={() => setShiftSummary(null)}
+                className="w-full py-3 rounded-xl bg-white text-slate-900 font-black"
+              >
+                باشه
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// One labelled row of N inputs. Wraps to multiple visual rows on small screens
+// via responsive grid columns.
+function BatchRow({
+  label,
+  color,
+  values,
+  onChange,
+  placeholder,
+  inputMode,
+}: {
+  label: string;
+  color: string;
+  values: string[];
+  onChange: (idx: number, v: string) => void;
+  placeholder: string;
+  inputMode: "numeric" | "decimal";
+}) {
+  return (
+    <div>
+      <div className="text-[11px] opacity-70 mb-1 px-1">{label}</div>
+      <div className="grid grid-cols-5 md:grid-cols-10 gap-1.5">
+        {values.map((v, i) => (
+          <input
+            key={i}
+            value={v}
+            onChange={(e) => onChange(i, e.target.value)}
+            inputMode={inputMode}
+            dir="ltr"
+            placeholder={placeholder}
+            className={`h-11 rounded-lg text-center text-sm font-bold tracking-wider bg-slate-950/50 ring-1 ring-white/10 focus:ring-2 focus:ring-white/40 outline-none placeholder:text-white/25 text-white transition ${color}`}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
