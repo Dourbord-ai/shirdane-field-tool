@@ -1,4 +1,5 @@
 // Fertility domain helpers for livestock profile
+import { formatShamsi } from "@/lib/dateDisplay";
 
 export type FertilityEventType =
   | "heat"
