@@ -241,10 +241,10 @@ export default function LivestockProfile() {
         <Row label="جنسیت" value={cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")} />
         <Row label="وضعیت حضور" value={presenceLabel((cow.existancestatus ?? 0))} />
         <Row
-          label="تاریخ ورود"
-          // طبق درخواست محصول: «تاریخ ورود» باید برابر date_of_birth (تاریخ تولد دام)
-          // در جدول cows باشد. formatShamsi هم رشته‌های شمسی ذخیره‌شده و هم
-          // ISO میلادی را به شمسی با ارقام فارسی تبدیل می‌کند.
+          label="تاریخ تولد"
+          // مقدار از ستون `date_of_birth` در جدول `public.cows` خوانده می‌شود.
+          // formatShamsi هم رشته‌های شمسی ذخیره‌شده و هم ISO میلادی را به
+          // شمسی با ارقام فارسی تبدیل می‌کند.
           value={formatShamsi(cow.date_of_birth)}
         />
       </Section>
