@@ -115,14 +115,21 @@ export default function Livestock() {
     let cancelled = false;
     async function loadKpis() {
       const head = (q: any) => q.select("id", { count: "exact", head: true });
+      // IMPORTANT: these queries must match the rules used by the main
+      // Dashboard (src/pages/Dashboard.tsx) so the KPI numbers shown on both
+      // pages are identical:
+      //   - "موجود گله" → existancestatus IS NULL OR = 0 (IN_HERD_OR)
+      //   - female      → sex = 0 (canonical, not sextype text)
+      //   - pregnant    → is_pregnancy = true (boolean cache, not status id)
+      //   - milking/dry → is_dry = false / true
       const [t, h, w, d, p, ins, fr] = await Promise.all([
         head(supabase.from("cows")),
         head(supabase.from("cows")).or(IN_HERD_OR),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", false),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("is_dry", true),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 8),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 3),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sextype", "ماده").eq("last_fertility_status", 12),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 3),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 12),
       ]);
       if (cancelled) return;
       setTotals({
