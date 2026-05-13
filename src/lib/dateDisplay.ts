@@ -29,7 +29,13 @@ import {
 // always > 1000 and < 1500 in practice). We use a loose regex that also
 // accepts Persian digits and either "/" or "-" separators.
 // ---------------------------------------------------------------------------
-const SHAMSI_LIKE = /^[۰-۹0-9]{4}[\\/\\-][۰-۹0-9]{1,2}[\\/\\-][۰-۹0-9]{1,2}/;
+// NOTE: inside a regex literal, "/" must be escaped (\/) but "-" inside a
+// character class is literal. The previous version used "\\/\\-" which became
+// the LITERAL chars `\` `/` `\` `-` in the character class — meaning Shamsi
+// strings like "1404/02/15" never matched, and fell through to `new Date()`
+// (which returns Invalid Date for slash-separated Jalali years), so the
+// formatter returned the "—" fallback for every pre-stored Shamsi value.
+const SHAMSI_LIKE = /^[۰-۹0-9]{4}[/\-][۰-۹0-9]{1,2}[/\-][۰-۹0-9]{1,2}/;
 
 // Convert any Persian/Arabic digit characters back to ASCII so Number()/parseInt
 // understand them. Used when normalizing pre-stored Shamsi strings.
