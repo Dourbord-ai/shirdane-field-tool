@@ -20,6 +20,11 @@ import {
 } from "lucide-react";
 import { todayJalali, formatJalali, gregorianToJalali, toPersianDigits } from "@/lib/jalali";
 import { getShamsiToday } from "@/lib/shamsiNow";
+// Real photographic backgrounds for the two registration modes — the single mode
+// uses a close-up of one cow being milked, the batch mode uses a full milking parlor.
+import milkBgSingle from "@/assets/milk-bg-single.jpg";
+import milkBgBatch from "@/assets/milk-bg-batch.jpg";
+import { Users, User } from "lucide-react";
 
 type Period = 1 | 2 | 3;
 
