@@ -291,7 +291,8 @@ function SingleMode({ onBack }: { onBack: () => void }) {
   async function handleUpdate() {
     if (!editing) return;
     const amt = parseFloat(amount.replace(",", "."));
-    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست"); return; }
+    if (!amt || amt <= 0) { toast.error("مقدار شیر معتبر نیست — باید مثبت باشد"); return; }
+    if (amt > 40) { toast.error("مقدار شیر نمی‌تواند بیشتر از ۴۰ کیلوگرم باشد"); return; }
     setSubmitting(true);
     const updatedLocal: LocalEntry = { ...editing, milk_amount: amt, period };
     setEntries((prev) => prev.map((e) => (e.localId === editing.localId ? updatedLocal : e)));
