@@ -25,7 +25,6 @@ import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
-import kpiWallet from "@/assets/kpi-wallet.png";
 
 const modules = [
   { title: "خرید و فروش",   icon: ShoppingCart, route: "/invoices",                desc: "فاکتورها" },
