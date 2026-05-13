@@ -80,7 +80,7 @@ export default function Dashboard() {
 
   // Live KPI state — starts at zero so the UI never flashes stale placeholders.
   const [counts, setCounts] = useState<LiveCounts>({
-    total: 0, milking: 0, pregnant: 0, dry: 0, calves: 0,
+    total: 0, milking: 0, pregnant: 0, dry: 0, pregnantHeifers: 0, calves: 0,
   });
 
   // Pull real cow counts on mount. We select only the boolean/int columns we
