@@ -213,11 +213,15 @@ export default function Livestock() {
   // The sentinel is kept for layout but only triggers when explicitly intersected
   // after the user clicks "Load more". We removed the IntersectionObserver entirely.
 
+  // KPI tiles map directly to the validated counts.
+  // Each tile id matches a filter option id where applicable, so clicking the
+  // tile applies the same filter via the unified pipeline (applyFilters).
   const kpis = useMemo(() => ([
-    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
-    { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,      image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
-    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,      image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
-    { id: "fertility:8",      label: "گاوهای آبستن", value: totals.pregnant, image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
+    { id: "sex:female",       label: "گاوهای ماده",     value: totals.female,  image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
+    { id: "sex:male",         label: "گاوهای نر",       value: totals.male,    image: kpiCowHerd,     accent: "hsl(217 91% 60%)" },
+    { id: "milking:wet",      label: "گاوهای دوشا",     value: totals.milking, image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
+    { id: "milking:dry",      label: "گاوهای خشک",      value: totals.dry,     image: kpiMilkCan,     accent: "hsl(38 92% 55%)" },
+    { id: "milking:heifer",   label: "تلیسه (نزاییده)", value: totals.heifer,  image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
   ]), [totals]);
 
   const selectedList = useMemo(
