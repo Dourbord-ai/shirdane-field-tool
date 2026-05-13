@@ -400,23 +400,6 @@ export default function Dashboard() {
             ))}
           </div>
         </GlobalCard>
-
-        <GlobalCard>
-          {/* درآمد card removed by user request — only هزینه‌ها remain. */}
-          <h3 className="text-base font-extrabold text-foreground mb-1">هزینه‌ها (این ماه)</h3>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              {/* Live monthly expense — sum of factors.payable_amount where invoice_type='buy'. */}
-              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.expense)}</p>
-              {expenseDelta && (
-                <p className="text-xs mt-1" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
-                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪ نسبت به ماه گذشته
-                </p>
-              )}
-            </div>
-            <img src={kpiWallet} alt="" loading="lazy" className="w-20 h-20 object-contain" />
-          </div>
-        </GlobalCard>
       </section>
 
       <p className="text-center text-xs text-muted-foreground pt-2">
