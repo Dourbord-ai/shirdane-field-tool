@@ -25,7 +25,6 @@ import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
-import kpiWallet from "@/assets/kpi-wallet.png";
 
 const modules = [
   { title: "خرید و فروش",   icon: ShoppingCart, route: "/invoices",                desc: "فاکتورها" },
@@ -121,10 +120,6 @@ export default function Dashboard() {
     monthMilk: 0,
     prevMonthMilk: 0,
     dailyMilk: [] as { date: string; total: number }[],
-    income: 0,
-    expense: 0,
-    prevIncome: 0,
-    prevExpense: 0,
   });
 
   // Recent fertility events for the right-hand timeline card.
@@ -172,28 +167,6 @@ export default function Dashboard() {
       });
       const dailyMilk = Array.from(dailyMap.entries()).map(([date, total]) => ({ date, total }));
 
-      // ---- Finance: this month vs previous month --------------------------
-      const [thisMonth, prevMonth] = await Promise.all([
-        supabase.from("factors")
-          .select("invoice_type,payable_amount,total_amount")
-          .gte("created_at", startOfMonth.toISOString())
-          .lt("created_at", startOfNextMonth.toISOString())
-          .limit(5000),
-        supabase.from("factors")
-          .select("invoice_type,payable_amount,total_amount")
-          .gte("created_at", startOfPrevMonth.toISOString())
-          .lt("created_at", startOfMonth.toISOString())
-          .limit(5000),
-      ]);
-      const sumByType = (rows: any[] | null, type: "buy" | "sell") =>
-        (rows ?? [])
-          .filter((r) => r.invoice_type === type)
-          .reduce((s, r) => s + Number(r.payable_amount ?? r.total_amount ?? 0), 0);
-      const income = sumByType(thisMonth.data as any[], "sell");
-      const expense = sumByType(thisMonth.data as any[], "buy");
-      const prevIncome = sumByType(prevMonth.data as any[], "sell");
-      const prevExpense = sumByType(prevMonth.data as any[], "buy");
-
       // ---- Recent fertility events (top 5, latest first) -----------------
       const evRes = await supabase
         .from("livestock_fertility_events")
@@ -205,7 +178,7 @@ export default function Dashboard() {
         .limit(5);
 
       if (cancelled) return;
-      setStats({ todayMilk, monthMilk, prevMonthMilk, dailyMilk, income, expense, prevIncome, prevExpense });
+      setStats({ todayMilk, monthMilk, prevMonthMilk, dailyMilk });
       setEvents(
         (evRes.data ?? []).map((e: any) => ({
           id: e.id,
@@ -229,8 +202,6 @@ export default function Dashboard() {
     return { value: Math.abs(p), up: p >= 0 };
   };
   const milkDelta = pctDelta(stats.monthMilk, stats.prevMonthMilk);
-  // درآمد delta removed by user request — only milk + expense deltas remain.
-  const expenseDelta = pctDelta(stats.expense, stats.prevExpense);
   const maxDaily = Math.max(1, ...stats.dailyMilk.map((d) => d.total));
 
   return (
@@ -260,14 +231,13 @@ export default function Dashboard() {
           Cow tiles read from public.cows (same count rules as /livestock).
           Milk tile reads from public.livestock_milk_records.
           درآمد tile was removed by user request. */}
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <KPIWidget label="کل دام‌ها"           value={fa(counts.total)}          hint="موجود گله"         image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای شیری"         value={fa(counts.milking)}        hint="در حال شیردهی"   image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای خشک"          value={fa(counts.dry)}            hint="در دوره خشکی"    image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای آبستن"        value={fa(counts.pregnant)}       hint="مجموع آبستن"     image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
         <KPIWidget label="تلیسه آبستن"         value={fa(counts.pregnantHeifers)} hint="آبستن بدون زایش" image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
         <KPIWidget label="شیر امروز"           value={fa(Math.round(stats.todayMilk))} hint="لیتر"          image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="هزینه‌های ماه"      value={faMoney(stats.expense)}    hint="ریال"             image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -399,23 +369,6 @@ export default function Dashboard() {
                 }}
               />
             ))}
-          </div>
-        </GlobalCard>
-
-        <GlobalCard>
-          {/* درآمد card removed by user request — only هزینه‌ها remain. */}
-          <h3 className="text-base font-extrabold text-foreground mb-1">هزینه‌ها (این ماه)</h3>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              {/* Live monthly expense — sum of factors.payable_amount where invoice_type='buy'. */}
-              <p className="text-3xl font-extrabold text-foreground tabular-nums mt-2 whitespace-nowrap">{faMoney(stats.expense)}</p>
-              {expenseDelta && (
-                <p className="text-xs mt-1" style={{ color: expenseDelta.up ? "hsl(0 84% 75%)" : "hsl(127 58% 70%)" }}>
-                  {expenseDelta.up ? "↑" : "↓"} {fa(expenseDelta.value)}٪ نسبت به ماه گذشته
-                </p>
-              )}
-            </div>
-            <img src={kpiWallet} alt="" loading="lazy" className="w-20 h-20 object-contain" />
           </div>
         </GlobalCard>
       </section>
