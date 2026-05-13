@@ -202,8 +202,6 @@ export default function Dashboard() {
     return { value: Math.abs(p), up: p >= 0 };
   };
   const milkDelta = pctDelta(stats.monthMilk, stats.prevMonthMilk);
-  // درآمد delta removed by user request — only milk + expense deltas remain.
-  const expenseDelta = pctDelta(stats.expense, stats.prevExpense);
   const maxDaily = Math.max(1, ...stats.dailyMilk.map((d) => d.total));
 
   return (
