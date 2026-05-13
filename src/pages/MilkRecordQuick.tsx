@@ -905,12 +905,16 @@ function BatchMode({ onBack }: { onBack: () => void }) {
         const amt = parseFloat(cell.amount.replace(",", "."));
         if (!tag && !cell.amount) continue; // skip blank cells silently
         if (!tag || !amt || amt <= 0) {
-          errors.push(`خط ${toPersianDigits(li + 1)} ستون ${toPersianDigits(ci + 1)}: ناقص`);
+          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: ناقص یا منفی`);
+          continue;
+        }
+        if (amt > 40) {
+          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: بیش از ۴۰ کیلو`);
           continue;
         }
         const num = Number(tag.replace(/[^\d]/g, ""));
         if (!num) {
-          errors.push(`خط ${toPersianDigits(li + 1)} ستون ${toPersianDigits(ci + 1)}: شماره گوش نامعتبر`);
+          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: شماره گوش نامعتبر`);
           continue;
         }
         // Look up cow by ear tag; reject if not female / not in herd
