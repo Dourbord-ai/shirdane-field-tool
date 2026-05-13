@@ -862,7 +862,7 @@ function BatchMode({ onBack }: { onBack: () => void }) {
     setLines((prev) => [...prev, emptyLine()]);
   }
   function removeLine(idx: number) {
-    setLines((prev) (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
   }
 
   // Counts of filled vs valid cells, shown as live stats in the header
