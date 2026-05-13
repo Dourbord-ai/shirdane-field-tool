@@ -255,17 +255,15 @@ export default function Dashboard() {
       </section>
 
       {/* ============== KPI ROW ==============
-          Cow tiles read from public.cows. Milk tile reads from
-          public.livestock_milk_records. Income/expense tiles read from
-          public.factors (sell vs buy). All zeros render as ۰ until data lands. */}
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
+          Cow tiles read from public.cows (same count rules as /livestock).
+          Milk tile reads from public.livestock_milk_records.
+          درآمد tile was removed by user request. */}
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <KPIWidget label="کل دام‌ها"        value={fa(counts.total)}       hint="موجود گله"     image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای شیری"      value={fa(counts.milking)}     hint="در حال شیردهی" image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        {/* گاوهای خشک — same rule as /livestock: female (sex=0) + present + is_dry=true */}
         <KPIWidget label="گاوهای خشک"       value={fa(counts.dry)}         hint="در دوره خشکی"  image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
         <KPIWidget label="گاوهای آبستن"     value={fa(counts.pregnant)}    hint="مجموع آبستن"   image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
         <KPIWidget label="شیر امروز"        value={fa(Math.round(stats.todayMilk))} hint="لیتر"         image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
-        <KPIWidget label="درآمد این ماه"    value={faMoney(stats.income)}  hint="ریال"          image={kpiCoins}       accent="orange" onClick={() => navigate("/finance")} />
         <KPIWidget label="هزینه‌های ماه"   value={faMoney(stats.expense)} hint="ریال"          image={kpiWallet}      accent="orange" onClick={() => navigate("/finance")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
