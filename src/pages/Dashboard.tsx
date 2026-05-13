@@ -178,7 +178,7 @@ export default function Dashboard() {
         .limit(5);
 
       if (cancelled) return;
-      setStats({ todayMilk, monthMilk, prevMonthMilk, dailyMilk, income, expense, prevIncome, prevExpense });
+      setStats({ todayMilk, monthMilk, prevMonthMilk, dailyMilk });
       setEvents(
         (evRes.data ?? []).map((e: any) => ({
           id: e.id,
