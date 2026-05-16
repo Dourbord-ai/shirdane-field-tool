@@ -1,8 +1,58 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+// Extract plain text from a React node (used to filter SelectItems by their label).
+// We walk children recursively so wrappers like <span> inside SelectItem still match.
+function nodeToText(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeToText).join(" ");
+  if (React.isValidElement(node)) return nodeToText((node.props as any)?.children);
+  return "";
+}
+
+// Count how many SelectItem descendants a node tree contains.
+// We use this to decide whether to auto-show the search input (threshold: > 5 items).
+function countSelectItems(node: React.ReactNode): number {
+  let count = 0;
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return;
+    if (child.type === SelectItem) {
+      count += 1;
+    } else {
+      // Recurse into SelectGroup / fragments / wrappers so grouped items are counted too.
+      count += countSelectItems((child.props as any)?.children);
+    }
+  });
+  return count;
+}
+
+// Recursively filter a children tree, keeping only SelectItems whose label text matches `query`.
+// Empty groups (no matching items left) are removed to avoid stray headings.
+function filterSelectItems(node: React.ReactNode, query: string): React.ReactNode {
+  const q = query.trim().toLowerCase();
+  if (!q) return node;
+  const walk = (n: React.ReactNode): React.ReactNode => {
+    if (Array.isArray(n)) {
+      return n.map((c, i) => <React.Fragment key={i}>{walk(c)}</React.Fragment>);
+    }
+    if (!React.isValidElement(n)) return n;
+    if (n.type === SelectItem) {
+      // Keep the item only when its visible text contains the search query.
+      return nodeToText((n.props as any)?.children).toLowerCase().includes(q) ? n : null;
+    }
+    // For wrappers (SelectGroup, fragments, etc.) filter their children; drop wrapper if empty.
+    const childrenFiltered = walk((n.props as any)?.children);
+    const hasAny =
+      React.Children.toArray(childrenFiltered).some((c) => c !== null && c !== false);
+    if (!hasAny) return null;
+    return React.cloneElement(n, n.props as any, childrenFiltered);
+  };
+  return walk(node);
+}
 
 const Select = SelectPrimitive.Root;
 
