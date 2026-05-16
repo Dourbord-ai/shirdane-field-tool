@@ -946,12 +946,16 @@ function BatchMode({ onBack }: { onBack: () => void }) {
           registered_user_id: null, // ستون bigint است؛ userId از نوع UUID رشته‌ای است و باعث خطای 22P02 می‌شود
         });
         if (insErr) {
-          // Unique-violation = already recorded for this cow/period/date
+          // برای دیباگ، به جای پیام کلی، کد و متن خطای واقعی PostgREST را نمایش می‌دهیم
+          // تا تفاوت بین unique-violation، RLS، NOT NULL، تایپ نامعتبر (22P02) و… مشخص باشد.
+          const detail = `${insErr.code ?? "?"} ${insErr.message ?? ""}`.trim();
           errors.push(
             insErr.code === "23505"
               ? `گوش ${toPersianDigits(tag)}: قبلاً ثبت شده`
-              : `گوش ${toPersianDigits(tag)}: خطای ذخیره`,
+              : `گوش ${toPersianDigits(tag)}: ${detail}`,
           );
+          // برای ردیابی دقیق در Console (شامل details/hint)
+          console.error("[bulk milk insert] failed", { tag, num, payload: { livestock_id: Number(cow.id), milk_amount: amt, record_date: date, period }, insErr });
           continue;
         }
         successCount++;
