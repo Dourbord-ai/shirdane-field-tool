@@ -96,7 +96,10 @@ export default function Dashboard() {
         head(supabase.from("cows")).or(IN_HERD_OR),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        // «گاو آبستن» = ماده‌ی موجود در گله + آبستن + حداقل یک بار زایش کرده (last_birth_date NOT NULL)
+        // این تعریف، تلیسه‌های آبستن را از این KPI کنار می‌گذارد تا با کاشی «تلیسه آبستن» همپوشانی نداشته باشد.
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).not("last_birth_date", "is", null),
+        // «تلیسه آبستن» = ماده‌ی موجود + آبستن + هیچ‌گاه نزاییده (last_birth_date IS NULL)
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
       ]);
       if (cancelled) return;
