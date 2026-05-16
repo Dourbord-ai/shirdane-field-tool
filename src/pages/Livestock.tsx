@@ -154,7 +154,10 @@ export default function Livestock() {
         head(supabase.from("cows")).or(IN_HERD_OR),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
-        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true),
+        // «گاو آبستن» (kpi:pregnant) عمداً تلیسه‌ها را حذف می‌کند تا با KPI «تلیسه آبستن» جمع‌پذیر باشد:
+        //   pregnant_cows + pregnant_heifers = total_pregnant
+        // پس شرط اضافه‌ی last_birth_date IS NOT NULL یعنی فقط ماده‌هایی که قبلاً زاییده‌اند.
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).not("last_birth_date", "is", null),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 3),
         head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 12),
