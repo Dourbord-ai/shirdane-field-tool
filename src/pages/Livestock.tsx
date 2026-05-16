@@ -215,11 +215,14 @@ export default function Livestock() {
       // These must mirror the KPI count queries above so the resulting list
       // contains exactly the cows that were counted on the tile.
       if (selected.has("kpi:pregnant") || selected.has("kpi:heifer")) {
-        // pregnant counter = IN_HERD + sex=0 (female) + is_pregnancy=true
+        // پایه‌ی مشترک هر دو KPI: ماده‌ی موجود در گله و آبستن
         q = q.or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true);
         if (selected.has("kpi:heifer")) {
-          // heifer = pregnant cow that has never calved (no last_birth_date)
+          // تلیسه آبستن = هنوز هیچ زایشی ندارد
           q = q.is("last_birth_date", null);
+        } else {
+          // گاو آبستن = حداقل یک زایش قبلی دارد (تلیسه‌ها را کنار می‌گذاریم)
+          q = q.not("last_birth_date", "is", null);
         }
       }
 
