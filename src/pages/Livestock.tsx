@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
   PRESENCE_STATUS_LABELS,
@@ -46,6 +46,7 @@ type Cow = {
   sex: number | null;
   existancestatus: number | null;
   is_dry: boolean | null;
+  is_pregnancy: boolean | null;
   last_fertility_status: number | null;
   created_at: string;
 };
@@ -54,6 +55,12 @@ import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 
 export default function Livestock() {
   const navigate = useNavigate();
+  // Read ?kpi=... so a KPI click on Dashboard lands here with the matching
+  // filter pre-applied. We use this to keep the count and the click-through
+  // list driven by the SAME WHERE conditions on public.cows.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kpiParam = searchParams.get("kpi");
+
   const [cows, setCows] = useState<Cow[]>([]);
   const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; pregnant_heifers: number; inseminated: number; fresh: number }>(
     { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, pregnant_heifers: 0, inseminated: 0, fresh: 0 }
@@ -73,9 +80,28 @@ export default function Livestock() {
   // -------- Unified filter state --------
   // Single source of truth: a Set of filter ids (e.g. "presence:in_herd").
   // Both quick chips and advanced dropdowns write into this set.
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(["presence:in_herd"]),
-  );
+  // Initial selection: derived from the ?kpi= query param when present, so a
+  // Dashboard KPI click lands here with the exact same filter as the count.
+  const initialSelected = useMemo(() => {
+    switch (kpiParam) {
+      case "pregnant":
+        // Count query: IN_HERD + sex=0 + is_pregnancy=true
+        // We add presence:in_herd so the chip UI reflects it, and kpi:pregnant
+        // applies the sex=0 + is_pregnancy=true predicates below.
+        return new Set(["presence:in_herd", "kpi:pregnant"]);
+      case "heifer":
+        return new Set(["presence:in_herd", "kpi:heifer"]);
+      case "milking":
+        return new Set(["presence:in_herd", "milking:wet"]);
+      case "dry":
+        return new Set(["presence:in_herd", "milking:dry"]);
+      case "in_herd":
+      default:
+        return new Set(["presence:in_herd"]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [selected, setSelected] = useState<Set<string>>(initialSelected);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const selectedKey = useMemo(() => Array.from(selected).sort().join("|"), [selected]);
@@ -164,7 +190,10 @@ export default function Livestock() {
       let q = supabase
         .from("cows")
         .select(
-          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,last_fertility_status,created_at",
+          // Include is_pregnancy + existancestatus + sex so we can render
+          // a debug badge row and verify no male / non-existing animals
+          // appear in the pregnant KPI click-through.
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,created_at",
         )
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
@@ -427,6 +456,23 @@ export default function Livestock() {
                       <span className="text-xs px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">
                         {fertilityLabel(c.last_fertility_status)}
                       </span>
+                    )}
+                    {/* Debug badges for the pregnant KPI click-through so the
+                        user can visually verify that every row in the list
+                        satisfies sex=0, existancestatus=0, is_pregnancy=true
+                        (i.e. the SAME WHERE used by the KPI count). */}
+                    {(selected.has("kpi:pregnant") || selected.has("kpi:heifer")) && (
+                      <>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          sex={c.sex ?? "—"}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          presence_status={c.existancestatus ?? "null"}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          is_pregnancy={String(c.is_pregnancy)}
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
