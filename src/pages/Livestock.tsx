@@ -190,7 +190,10 @@ export default function Livestock() {
       let q = supabase
         .from("cows")
         .select(
-          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,last_fertility_status,created_at",
+          // Include is_pregnancy + existancestatus + sex so we can render
+          // a debug badge row and verify no male / non-existing animals
+          // appear in the pregnant KPI click-through.
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,created_at",
         )
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
