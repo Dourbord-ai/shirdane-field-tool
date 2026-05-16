@@ -55,6 +55,12 @@ import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
 
 export default function Livestock() {
   const navigate = useNavigate();
+  // Read ?kpi=... so a KPI click on Dashboard lands here with the matching
+  // filter pre-applied. We use this to keep the count and the click-through
+  // list driven by the SAME WHERE conditions on public.cows.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kpiParam = searchParams.get("kpi");
+
   const [cows, setCows] = useState<Cow[]>([]);
   const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; pregnant_heifers: number; inseminated: number; fresh: number }>(
     { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, pregnant_heifers: 0, inseminated: 0, fresh: 0 }
@@ -74,9 +80,28 @@ export default function Livestock() {
   // -------- Unified filter state --------
   // Single source of truth: a Set of filter ids (e.g. "presence:in_herd").
   // Both quick chips and advanced dropdowns write into this set.
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(["presence:in_herd"]),
-  );
+  // Initial selection: derived from the ?kpi= query param when present, so a
+  // Dashboard KPI click lands here with the exact same filter as the count.
+  const initialSelected = useMemo(() => {
+    switch (kpiParam) {
+      case "pregnant":
+        // Count query: IN_HERD + sex=0 + is_pregnancy=true
+        // We add presence:in_herd so the chip UI reflects it, and kpi:pregnant
+        // applies the sex=0 + is_pregnancy=true predicates below.
+        return new Set(["presence:in_herd", "kpi:pregnant"]);
+      case "heifer":
+        return new Set(["presence:in_herd", "kpi:heifer"]);
+      case "milking":
+        return new Set(["presence:in_herd", "milking:wet"]);
+      case "dry":
+        return new Set(["presence:in_herd", "milking:dry"]);
+      case "in_herd":
+      default:
+        return new Set(["presence:in_herd"]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [selected, setSelected] = useState<Set<string>>(initialSelected);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const selectedKey = useMemo(() => Array.from(selected).sort().join("|"), [selected]);
