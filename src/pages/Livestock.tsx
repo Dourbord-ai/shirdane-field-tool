@@ -46,6 +46,7 @@ type Cow = {
   sex: number | null;
   existancestatus: number | null;
   is_dry: boolean | null;
+  is_pregnancy: boolean | null;
   last_fertility_status: number | null;
   created_at: string;
 };
