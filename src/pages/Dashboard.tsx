@@ -232,11 +232,13 @@ export default function Dashboard() {
           Milk tile reads from public.livestock_milk_records.
           درآمد tile was removed by user request. */}
       <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KPIWidget label="کل دام‌ها"           value={fa(counts.total)}          hint="موجود گله"         image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای شیری"         value={fa(counts.milking)}        hint="در حال شیردهی"   image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای خشک"          value={fa(counts.dry)}            hint="در دوره خشکی"    image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="گاوهای آبستن"        value={fa(counts.pregnant)}       hint="مجموع آبستن"     image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
-        <KPIWidget label="تلیسه آبستن"         value={fa(counts.pregnantHeifers)} hint="آبستن بدون زایش" image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock")} />
+        <KPIWidget label="کل دام‌ها"           value={fa(counts.total)}          hint="موجود گله"         image={kpiCowHerd}     accent="green"  onClick={() => navigate("/livestock?kpi=in_herd")} />
+        <KPIWidget label="گاوهای شیری"         value={fa(counts.milking)}        hint="در حال شیردهی"   image={kpiCowMilking}  accent="blue"   onClick={() => navigate("/livestock?kpi=milking")} />
+        <KPIWidget label="گاوهای خشک"          value={fa(counts.dry)}            hint="در دوره خشکی"    image={kpiMilkCan}     accent="orange" onClick={() => navigate("/livestock?kpi=dry")} />
+        {/* Pregnant click-through: pass ?kpi=pregnant so Livestock applies the
+            EXACT same WHERE as the count (IN_HERD + sex=0 + is_pregnancy=true). */}
+        <KPIWidget label="گاوهای آبستن"        value={fa(counts.pregnant)}       hint="مجموع آبستن"     image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock?kpi=pregnant")} />
+        <KPIWidget label="تلیسه آبستن"         value={fa(counts.pregnantHeifers)} hint="آبستن بدون زایش" image={kpiCowPregnant} accent="purple" onClick={() => navigate("/livestock?kpi=heifer")} />
         <KPIWidget label="شیر امروز"           value={fa(Math.round(stats.todayMilk))} hint="لیتر"          image={kpiMilkCan}     accent="blue"   onClick={() => navigate("/receipts/milk")} />
       </section>
       {/* ============== QUICK ACCESS + ALERTS ============== */}
