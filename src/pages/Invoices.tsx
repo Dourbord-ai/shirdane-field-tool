@@ -436,8 +436,18 @@ export default function Invoices() {
 
   return (
     <div className="py-6 space-y-4 animate-fade-in">
-      <div className="flex items-center">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-heading text-foreground">فاکتورها</h1>
+        {/* Always-visible CTA — primary entry point for ثبت فاکتور خرید و فروش.
+            Previously only rendered in the empty state, which hid it once any
+            factor existed. Surfacing it in the header keeps it discoverable. */}
+        <Button
+          onClick={() => navigate("/invoices/new")}
+          className="rounded-xl gap-2 bg-gradient-primary text-primary-foreground glow-primary"
+        >
+          <Plus className="w-4 h-4" />
+          ثبت فاکتور خرید و فروش
+        </Button>
       </div>
 
       {selectedFactor && (
