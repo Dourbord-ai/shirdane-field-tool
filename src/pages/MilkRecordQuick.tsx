@@ -195,7 +195,7 @@ function SingleMode({ onBack }: { onBack: () => void }) {
             milk_amount: e.milk_amount,
             record_date: e.record_date,
             period: e.period,
-            registered_user_id: userId ?? null,
+            registered_user_id: null, // ستون bigint است؛ userId از نوع UUID رشته‌ای است و باعث خطای 22P02 می‌شود
           })
           .select("id")
           .single();
@@ -267,7 +267,7 @@ function SingleMode({ onBack }: { onBack: () => void }) {
             milk_amount: amt,
             record_date: todayIso(),
             period,
-            registered_user_id: userId ?? null,
+            registered_user_id: null, // ستون bigint است؛ userId از نوع UUID رشته‌ای است و باعث خطای 22P02 می‌شود
           })
           .select("id")
           .single();
@@ -943,7 +943,7 @@ function BatchMode({ onBack }: { onBack: () => void }) {
           milk_amount: amt,
           record_date: date,
           period,
-          registered_user_id: userId ?? null,
+          registered_user_id: null, // ستون bigint است؛ userId از نوع UUID رشته‌ای است و باعث خطای 22P02 می‌شود
         });
         if (insErr) {
           // Unique-violation = already recorded for this cow/period/date
