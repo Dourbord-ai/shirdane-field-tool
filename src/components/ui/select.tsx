@@ -46,8 +46,9 @@ function filterSelectItems(node: React.ReactNode, query: string): React.ReactNod
     }
     // For wrappers (SelectGroup, fragments, etc.) filter their children; drop wrapper if empty.
     const childrenFiltered = walk((n.props as any)?.children);
-    const hasAny =
-      React.Children.toArray(childrenFiltered).some((c) => c !== null && c !== false);
+    const hasAny = React.Children.toArray(childrenFiltered).some(
+      (c) => c !== null && c !== undefined && (c as any) !== false,
+    );
     if (!hasAny) return null;
     return React.cloneElement(n, n.props as any, childrenFiltered);
   };
