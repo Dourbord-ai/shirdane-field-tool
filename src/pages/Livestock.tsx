@@ -457,6 +457,23 @@ export default function Livestock() {
                         {fertilityLabel(c.last_fertility_status)}
                       </span>
                     )}
+                    {/* Debug badges for the pregnant KPI click-through so the
+                        user can visually verify that every row in the list
+                        satisfies sex=0, existancestatus=0, is_pregnancy=true
+                        (i.e. the SAME WHERE used by the KPI count). */}
+                    {(selected.has("kpi:pregnant") || selected.has("kpi:heifer")) && (
+                      <>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          sex={c.sex ?? "—"}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          presence_status={c.existancestatus ?? "null"}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          is_pregnancy={String(c.is_pregnancy)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <ChevronLeft className="w-5 h-5 text-muted-foreground shrink-0 mt-1 group-hover:text-primary transition-colors" />
