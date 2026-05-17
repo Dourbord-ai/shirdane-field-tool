@@ -112,6 +112,9 @@ type FilterState = {
   hasRecentAbortionDays: string;
   missingFertility: boolean;                   // last_fertility_status IS NULL
   incompleteData: boolean;                      // no DoB or no tag/ear
+  // Multi-select over the calculated "وضعیت چرخه دام". Filtering happens
+  // client-side after fetch because the state is derived, not stored.
+  lifecycleStates: LifecycleState[];
   // operational presets that map onto multiple raw filters at query time
   preset: "" | "ready_insem" | "needs_preg_test" | "pregnant" | "dry_cows" | "milking_cows" | "recent_heat" | "no_fertility";
 };
@@ -122,7 +125,9 @@ const EMPTY_FILTERS: FilterState = {
   pregnancy: "", dry: "", fertilityStatusId: "",
   bornFrom: null, bornTo: null, minAgeMonths: "", maxAgeMonths: "",
   hasRecentHeatDays: "", hasRecentInseminationDays: "", hasRecentAbortionDays: "",
-  missingFertility: false, incompleteData: false, preset: "",
+  missingFertility: false, incompleteData: false,
+  lifecycleStates: [],
+  preset: "",
 };
 
 // -----------------------------------------------------------------------------
