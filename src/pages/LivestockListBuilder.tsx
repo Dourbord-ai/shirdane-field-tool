@@ -2071,3 +2071,453 @@ function ArchivesListDialog({
     </Dialog>
   );
 }
+
+// =============================================================================
+// ColumnPickerDialog — opens after the user clicks "تایید و تولید لیست".
+// Lets them choose which columns to show/export and the sort key/direction
+// before the actual query runs. Replaces the old always-on filter section.
+// =============================================================================
+function ColumnPickerDialog({
+  columnKeys, setColumnKeys, sortBy, setSortBy, sortDir, setSortDir,
+  onCancel, onConfirm,
+}: {
+  columnKeys: string[];
+  setColumnKeys: (k: string[]) => void;
+  sortBy: (typeof SORT_OPTIONS)[number]["key"];
+  setSortBy: (k: any) => void;
+  sortDir: "asc" | "desc";
+  setSortDir: (d: "asc" | "desc") => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-right">انتخاب ستون‌ها و مرتب‌سازی</DialogTitle>
+          <DialogDescription className="text-right">
+            ستون‌هایی که می‌خواهید در لیست/خروجی نمایش داده شوند را انتخاب و سپس «تایید و تولید لیست» را بزنید.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Quick selection helpers — saves clicks for common scenarios */}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setColumnKeys(ALL_COLUMNS.map((c) => c.key))}>
+              همه ستون‌ها
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setColumnKeys(DEFAULT_COLUMN_KEYS)}>
+              پیش‌فرض
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setColumnKeys(["tag"])}>
+              فقط پلاک
+            </Button>
+          </div>
+
+          <div>
+            <div className="text-xs text-muted-foreground mb-1.5">ستون‌های نمایش/خروجی</div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_COLUMNS.map((c) => {
+                const on = columnKeys.includes(c.key);
+                return (
+                  <Badge
+                    key={c.key}
+                    variant={on ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setColumnKeys(
+                      on ? columnKeys.filter((k) => k !== c.key) : [...columnKeys, c.key],
+                    )}
+                  >
+                    {c.label}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">مرتب‌سازی بر اساس</Label>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v)} dir="rtl">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">ترتیب</Label>
+              <Select value={sortDir} onValueChange={(v) => setSortDir(v as any)} dir="rtl">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">صعودی</SelectItem>
+                  <SelectItem value="desc">نزولی</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>انصراف</Button>
+          <Button
+            onClick={onConfirm}
+            disabled={columnKeys.length === 0}
+            className="bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
+          >
+            <Filter className="w-4 h-4 ml-2" /> تایید و تولید لیست
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// InlineCommonDialog — collects the SHARED fields (date/time/notes plus, for
+// pregnancy test, the doctor name) for the 3 per-row group actions. On
+// confirm the page enters inline mode and renders per-row editors.
+// =============================================================================
+function InlineCommonDialog({
+  kind, onCancel, onConfirm,
+}: {
+  kind: "insemination" | "rinse" | "preg_test";
+  onCancel: () => void;
+  onConfirm: (common: { dateStr: string; time: string; description: string; doctorName?: string }) => void;
+}) {
+  const [date, setDate] = useState<JalaliDate | null>(todayJalali());
+  const [time, setTime] = useState("");
+  const [description, setDescription] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+
+  const TITLE = {
+    insemination: "تلقیح گروهی — اطلاعات مشترک",
+    rinse: "شستشوی گروهی — اطلاعات مشترک",
+    preg_test: "تست آبستنی گروهی — اطلاعات مشترک",
+  }[kind];
+
+  function handleConfirm() {
+    if (!date) return toast.error("تاریخ را انتخاب کنید");
+    if (!time) return toast.error("ساعت را وارد کنید");
+    if (kind === "preg_test" && !doctorName.trim()) return toast.error("نام پزشک را وارد کنید");
+    onConfirm({
+      dateStr: formatJalali(date),
+      time,
+      description: description.trim(),
+      doctorName: kind === "preg_test" ? doctorName.trim() : undefined,
+    });
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-right">{TITLE}</DialogTitle>
+          <DialogDescription className="text-right">
+            پس از تایید، می‌توانید برای هر ردیف اپراتور و سایر اطلاعات را جداگانه تنظیم کنید.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">تاریخ</Label>
+              <JalaliDatePicker value={date} onChange={setDate} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">ساعت</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} dir="ltr" />
+            </div>
+          </div>
+          {kind === "preg_test" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">نام پزشک</Label>
+              <Input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} placeholder="نام و نام خانوادگی پزشک" />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">توضیحات</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>انصراف</Button>
+          <Button onClick={handleConfirm} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            تایید و ورود به حالت ردیفی
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// InlineRowEditors — per-row editors injected as <td>s into the desktop table
+// when the page is in inline group-action mode. Renders the right widgets
+// based on action kind (operator+sperm / operator+medicines / type+result).
+// =============================================================================
+function InlineRowEditors({
+  row, mode, value, onChange, users, sperms, medicines,
+}: {
+  row: CowRow;
+  mode: "insemination" | "rinse" | "preg_test";
+  value: any;
+  onChange: (patch: any) => void;
+  users: AppUser[];
+  sperms: SpermRow[];
+  medicines: Lookup[];
+}) {
+  // Eligibility — out-of-herd or male animals can't receive fertility ops.
+  // We still render placeholder cells so the table stays aligned.
+  const presence = row.presence_status ?? row.existancestatus;
+  const ineligible = presence !== 0 || row.sex !== 0;
+  if (ineligible) {
+    return (
+      <>
+        <td className="p-2 text-xs text-muted-foreground" colSpan={2}>غیرقابل اعمال</td>
+      </>
+    );
+  }
+
+  if (mode === "insemination") {
+    return (
+      <>
+        <td className="p-2 min-w-[140px]">
+          <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اپراتور" /></SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="p-2 min-w-[160px]">
+          <Select value={value.spermId || ""} onValueChange={(v) => onChange({ spermId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اسپرم" /></SelectTrigger>
+            <SelectContent>
+              {sperms.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+      </>
+    );
+  }
+
+  if (mode === "rinse") {
+    return (
+      <>
+        <td className="p-2 min-w-[140px]">
+          <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اپراتور" /></SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="p-2 min-w-[200px]">
+          <MultiMedicinePicker
+            medicines={medicines}
+            selected={value.medicineIds || []}
+            onChange={(ids) => onChange({ medicineIds: ids })}
+          />
+        </td>
+      </>
+    );
+  }
+
+  // preg_test
+  return (
+    <>
+      <td className="p-2 min-w-[130px]">
+        <Select value={value.testType || ""} onValueChange={(v) => onChange({ testType: v })} dir="rtl">
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نوع تست" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="initial">تست اولیه</SelectItem>
+            <SelectItem value="final">تست نهایی</SelectItem>
+            <SelectItem value="extra">تست تکمیلی</SelectItem>
+            <SelectItem value="dry">تست خشکی</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+      <td className="p-2 min-w-[120px]">
+        <Select value={value.testResult || ""} onValueChange={(v) => onChange({ testResult: v })} dir="rtl">
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نتیجه" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="positive">مثبت</SelectItem>
+            <SelectItem value="negative">منفی</SelectItem>
+            <SelectItem value="suspicious">مشکوک</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+    </>
+  );
+}
+
+// Same as InlineRowEditors but rendered as labeled blocks for the mobile card.
+function MobileInlineEditors(props: React.ComponentProps<typeof InlineRowEditors>) {
+  const { row, mode, value, onChange, users, sperms, medicines } = props;
+  const presence = row.presence_status ?? row.existancestatus;
+  if (presence !== 0 || row.sex !== 0) {
+    return <div className="text-xs text-muted-foreground">غیرقابل اعمال</div>;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2 text-xs">
+      {mode === "insemination" && (
+        <>
+          <LabeledField label="اپراتور">
+            <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <LabeledField label="اسپرم">
+            <Select value={value.spermId || ""} onValueChange={(v) => onChange({ spermId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {sperms.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+        </>
+      )}
+      {mode === "rinse" && (
+        <>
+          <LabeledField label="اپراتور">
+            <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <div className="col-span-2">
+            <LabeledField label="داروها">
+              <MultiMedicinePicker
+                medicines={medicines}
+                selected={value.medicineIds || []}
+                onChange={(ids) => onChange({ medicineIds: ids })}
+              />
+            </LabeledField>
+          </div>
+        </>
+      )}
+      {mode === "preg_test" && (
+        <>
+          <LabeledField label="نوع تست">
+            <Select value={value.testType || ""} onValueChange={(v) => onChange({ testType: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="initial">اولیه</SelectItem>
+                <SelectItem value="final">نهایی</SelectItem>
+                <SelectItem value="extra">تکمیلی</SelectItem>
+                <SelectItem value="dry">خشکی</SelectItem>
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <LabeledField label="نتیجه">
+            <Select value={value.testResult || ""} onValueChange={(v) => onChange({ testResult: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="positive">مثبت</SelectItem>
+                <SelectItem value="negative">منفی</SelectItem>
+                <SelectItem value="suspicious">مشکوک</SelectItem>
+              </SelectContent>
+            </Select>
+          </LabeledField>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// =============================================================================
+// MultiMedicinePicker — compact multi-select used for the شستشو دارو column.
+// Lightweight checkbox dropdown rendered via the popover primitive so it
+// works the same on desktop and mobile.
+// =============================================================================
+function MultiMedicinePicker({
+  medicines, selected, onChange,
+}: {
+  medicines: Lookup[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = q
+    ? medicines.filter((m) => (m.name || "").toLowerCase().includes(q.toLowerCase()))
+    : medicines;
+  const labels = selected.map((id) => medicines.find((m) => String(m.id) === id)?.name || id).join("، ");
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full h-8 px-2 text-xs text-right rounded-md border border-input bg-background text-foreground truncate"
+      >
+        {selected.length === 0 ? "انتخاب دارو(ها)" : `${selected.length} مورد: ${labels}`}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 mt-1 w-72 max-h-72 overflow-y-auto rounded-md border border-border bg-popover p-2 shadow-md">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="جستجوی دارو..."
+              className="h-7 text-xs mb-2"
+            />
+            {filtered.length === 0 && (
+              <div className="text-xs text-muted-foreground p-2 text-center">یافت نشد</div>
+            )}
+            {filtered.map((m) => {
+              const id = String(m.id);
+              const on = selected.includes(id);
+              return (
+                <label
+                  key={id}
+                  className="flex items-center gap-2 p-1.5 text-xs hover:bg-muted rounded cursor-pointer"
+                >
+                  <Checkbox
+                    checked={on}
+                    onCheckedChange={() =>
+                      onChange(on ? selected.filter((x) => x !== id) : [...selected, id])
+                    }
+                  />
+                  <span className="flex-1 text-right">{m.name || `#${m.id}`}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
