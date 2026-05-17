@@ -485,8 +485,14 @@ export default function Livestock() {
       )}
 
       {/* Cow grid */}
+      <TooltipProvider delayDuration={250}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-        {cows.map((c) => {
+        {cows
+          // Compute lifecycle once per row, then filter client-side.
+          // We keep this lightweight (pure function over already-loaded data).
+          .map((c) => ({ c, life: calculateLifecycleState(c) }))
+          .filter(({ life }) => lifecycleFilter.size === 0 || lifecycleFilter.has(life.state))
+          .map(({ c, life }) => {
           const female = isFemale(c.sextype, c.sex);
           const tag = c.tag_number || c.earnumber || c.bodynumber || "—";
           return (
@@ -511,6 +517,28 @@ export default function Livestock() {
                       {c.sextype || (c.sex === 0 ? "ماده" : c.sex === 1 ? "نر" : "—")}
                     </span>
                   </div>
+                  {/* Lifecycle badge — primary at-a-glance classification.
+                      Tooltip explains *why* this state was chosen so the
+                      operator can audit the calculation. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border ${life.badgeClass}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {life.label}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[260px] text-right" dir="rtl">
+                      <div className="font-semibold mb-1">{life.label}</div>
+                      <div className="text-xs opacity-80 mb-1">دلیل: {life.reason}</div>
+                      {import.meta.env.DEV && (
+                        <pre className="text-[10px] leading-tight opacity-70 whitespace-pre-wrap font-mono">
+{JSON.stringify(life.debug, null, 1)}
+                        </pre>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
                   <div className="flex flex-wrap gap-1.5">
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.existancestatus ?? 0)}`}>
                       {presenceLabel(c.existancestatus ?? 0)}
