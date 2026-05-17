@@ -1,8 +1,9 @@
 // Edge Function: sepidar-beneficiary-statement
+// Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Calls SQL Server stored procedure `bridge.GetBeneficiaryStatement` via the
 // Sepidar bridge database and returns the recordset to the caller.
 
-import sql from "npm:mssql@10.0.2";
+import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
