@@ -1042,7 +1042,7 @@ export default function LivestockListBuilder() {
                 .in("id", archive.cow_ids);
               if (error) throw error;
               // Hydrate UI state to match what was archived.
-              setRows((data as CowRow[]) ?? []);
+              setRows(((data as unknown) as CowRow[]) ?? []);
               setFilters({ ...(archive.filters || EMPTY_FILTERS) });
               if (archive.column_keys?.length) setColumnKeys(archive.column_keys);
               setSelectedIds(new Set());
