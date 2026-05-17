@@ -411,6 +411,14 @@ export default function LivestockListBuilder() {
       filterRecent("last_inoculation_date",  f.hasRecentInseminationDays);
       filterRecent("last_abortion_date",     f.hasRecentAbortionDays);
 
+      // ----- Lifecycle filter (client-side) ------------------------------
+      // وضعیت چرخه دام is derived, not stored, so we compute it per row and
+      // keep only rows whose calculated state is in the user's selection.
+      if (f.lifecycleStates.length > 0) {
+        const wanted = new Set(f.lifecycleStates);
+        result = result.filter((r) => wanted.has(calculateLifecycleState(r as any).state));
+      }
+
       // ----- Sort --------------------------------------------------------
       const dir = sortDir === "asc" ? 1 : -1;
       const sortKey = sortBy;
