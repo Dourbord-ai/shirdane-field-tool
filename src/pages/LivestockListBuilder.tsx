@@ -272,6 +272,37 @@ export default function LivestockListBuilder() {
   const [actionKey, setActionKey] = useState<"" | "insemination" | "rinse" | "preg_test" | "vaccination">("");
   const [actionOpen, setActionOpen] = useState(false);
 
+  // After the common-form is confirmed for insemination/rinse/preg_test the
+  // page switches into an INLINE per-row mode: extra columns are rendered
+  // into the results table and the user fills اپراتور/اسپرم/دارو/تست per row.
+  // Submitting then bulk-inserts all rows in one go.
+  type InlineMode = {
+    kind: "insemination" | "rinse" | "preg_test";
+    common: { dateStr: string; time: string; description: string; doctorName?: string };
+    perRow: Record<number, {
+      operatorId?: string;
+      spermId?: string;
+      medicineIds?: string[];
+      testType?: "initial" | "final" | "extra" | "dry" | "";
+      testResult?: "positive" | "negative" | "suspicious" | "";
+    }>;
+  };
+  const [inlineAction, setInlineAction] = useState<InlineMode | null>(null);
+  // Reference data needed by inline per-row selectors. Loaded lazily once
+  // the user enters inline mode so the page boot stays cheap.
+  const [inlineUsers, setInlineUsers] = useState<AppUser[]>([]);
+  const [inlineSperms, setInlineSperms] = useState<SpermRow[]>([]);
+  const [inlineMedicines, setInlineMedicines] = useState<Lookup[]>([]);
+  const [inlineSubmitting, setInlineSubmitting] = useState(false);
+
+  // Column-picker dialog (opens when the user clicks تایید و تولید لیست).
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+
+  // Manual-add row state — small inline input above the results table so the
+  // user can paste a tag/body number and pull a single cow into the list.
+  const [manualSearch, setManualSearch] = useState("");
+  const [manualAdding, setManualAdding] = useState(false);
+
   // ---- Archive dialogs -----------------------------------------------------
   // `saveArchiveOpen` opens the "name this archive" form after a list is built.
   // `archivesListOpen` opens the browser of previously-saved archives so a
