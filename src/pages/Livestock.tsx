@@ -34,6 +34,17 @@ import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
 import kpiCowDry from "@/assets/kpi-cow.png";
 import { cowImageFor } from "@/lib/cowImage";
+// Lifecycle helper — derives a single classification (e.g. "گاو دوشا",
+// "تلیسه آبستن") from existing cow fields. Used for the badge + filter below.
+import {
+  calculateLifecycleState,
+  LIFECYCLE_LABELS,
+  ALL_LIFECYCLE_STATES,
+  type LifecycleState,
+} from "@/lib/lifecycleState";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PAGE_SIZE = 10;
 
