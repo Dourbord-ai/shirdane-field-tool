@@ -256,6 +256,19 @@ export default function LivestockListBuilder() {
   const [actionKey, setActionKey] = useState<"" | "insemination" | "rinse" | "preg_test" | "vaccination">("");
   const [actionOpen, setActionOpen] = useState(false);
 
+  // ---- Archive dialogs -----------------------------------------------------
+  // `saveArchiveOpen` opens the "name this archive" form after a list is built.
+  // `archivesListOpen` opens the browser of previously-saved archives so a
+  // user can reopen a list someone else generated and run group actions on it.
+  // `loadedArchive` remembers the currently-opened archive so we can show its
+  // name/creator/date as a banner above the results.
+  const [saveArchiveOpen, setSaveArchiveOpen] = useState(false);
+  const [archivesListOpen, setArchivesListOpen] = useState(false);
+  const [loadedArchive, setLoadedArchive] = useState<ArchiveRow | null>(null);
+
+  // Current user from auth context — used to stamp who created an archive.
+  const { user } = useAuth();
+
   // ---- Load lookups on mount ----------------------------------------------
   useEffect(() => {
     let cancelled = false;
