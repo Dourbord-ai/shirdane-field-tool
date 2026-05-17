@@ -587,7 +587,8 @@ export default function LivestockListBuilder() {
     if (needsSperms && inlineSperms.length === 0) {
       tasks.push(
         (async () => {
-          const r = await supabase.from("sperms").select("id, code, name").order("name");
+          // Only active sperms appear in selection dropdowns (see /settings).
+          const r = await supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name");
           setInlineSperms((r.data as SpermRow[]) ?? []);
         })(),
       );
