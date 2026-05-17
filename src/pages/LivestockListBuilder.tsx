@@ -304,6 +304,12 @@ export default function LivestockListBuilder() {
     if (f.hasRecentAbortionDays) push("ra", `سقط اخیر ≤ ${f.hasRecentAbortionDays} روز`, () => setFilters({ ...f, hasRecentAbortionDays: "" }));
     if (f.missingFertility) push("mf", "بدون وضعیت باروری", () => setFilters({ ...f, missingFertility: false }));
     if (f.incompleteData) push("ic", "داده ناقص", () => setFilters({ ...f, incompleteData: false }));
+    // One chip per selected lifecycle state — clicking removes just that one.
+    f.lifecycleStates.forEach((s) =>
+      push(`life:${s}`, `چرخه: ${LIFECYCLE_LABELS[s]}`, () =>
+        setFilters({ ...f, lifecycleStates: f.lifecycleStates.filter((x) => x !== s) }),
+      ),
+    );
     return chips;
   }, [filters, ctx]);
 
