@@ -750,7 +750,7 @@ export default function LivestockListBuilder() {
             client-side after the main DB query because the state is
             derived from existing cow fields by calculateLifecycleState().
             --------------------------------------------------------------- */}
-        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup}>
+        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup} tone="accent">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
