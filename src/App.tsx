@@ -35,6 +35,7 @@ import LivestockLocationsAdmin from "./pages/admin/LivestockLocationsAdmin";
 import SpermsAdmin from "./pages/admin/SpermsAdmin";
 import SyncTypesAdmin from "./pages/admin/SyncTypesAdmin";
 import SyncTypeDetailsAdmin from "./pages/admin/SyncTypeDetailsAdmin";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
