@@ -287,7 +287,35 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </Button>
                       )}
                     </div>
-                    <PartySelector value={it.party_id} onChange={(id) => updateItem(idx, { party_id: id })} />
+                    {/* Sepidar-backed beneficiary picker. Selecting a row
+                        snapshots beneficiary_id / dl_ref / dl_code / name /
+                        type / balance onto this item so the payment request
+                        is independent of any later changes in Sepidar. */}
+                    <SepidarBeneficiarySelector
+                      value={it.beneficiary_id ?? null}
+                      fallbackLabel={it.beneficiary_name}
+                      onChange={(id, b?: SepidarBeneficiary) => {
+                        if (!id || !b) {
+                          updateItem(idx, {
+                            beneficiary_id: null,
+                            dl_ref: null,
+                            dl_code: null,
+                            beneficiary_name: null,
+                            beneficiary_type: null,
+                            beneficiary_balance_snapshot: null,
+                          });
+                          return;
+                        }
+                        updateItem(idx, {
+                          beneficiary_id: id,
+                          dl_ref: b.dl_ref != null ? String(b.dl_ref) : null,
+                          dl_code: b.dl_code != null ? String(b.dl_code) : null,
+                          beneficiary_name: b.beneficiary_name,
+                          beneficiary_type: b.beneficiary_type,
+                          beneficiary_balance_snapshot: b.balance,
+                        });
+                      }}
+                    />
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">نوع مبلغ</Label>
