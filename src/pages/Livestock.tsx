@@ -88,12 +88,20 @@ export default function Livestock() {
   const [hasMore, setHasMore] = useState(true);
 
   // search (debounced)
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  // Initialize from ?q=... so the global header search can deep-link here
+  // with the same query semantics as the on-page search box.
+  const initialQ = searchParams.get("q") ?? "";
+  const [searchInput, setSearchInput] = useState(initialQ);
+  const [search, setSearch] = useState(initialQ);
   useEffect(() => {
     const t = setTimeout(() => setSearch(toEnDigits(searchInput).trim()), 250);
     return () => clearTimeout(t);
   }, [searchInput]);
+  // Keep local state in sync when the ?q= param changes via header navigation.
+  useEffect(() => {
+    const q = searchParams.get("q") ?? "";
+    setSearchInput((prev) => (prev === q ? prev : q));
+  }, [searchParams]);
 
   // -------- Unified filter state --------
   // Single source of truth: a Set of filter ids (e.g. "presence:in_herd").
