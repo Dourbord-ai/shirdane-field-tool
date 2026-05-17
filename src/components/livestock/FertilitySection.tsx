@@ -17,6 +17,7 @@ import {
 import {
   FERTILITY_EVENT_LABELS,
   FertilityEvent,
+  deriveEventPeople,
   eventBadgeClass,
   fertilityEventLabel,
   formatEventDate,
