@@ -57,7 +57,7 @@ export default function GlobalSidebar() {
       </nav>
 
       <NavLink
-        to="/dashboard"
+        to="/settings"
         className="mt-3 flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/60"
       >
         <Settings className="w-5 h-5" />

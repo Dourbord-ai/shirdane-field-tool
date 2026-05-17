@@ -35,6 +35,7 @@ import LivestockLocationsAdmin from "./pages/admin/LivestockLocationsAdmin";
 import SpermsAdmin from "./pages/admin/SpermsAdmin";
 import SyncTypesAdmin from "./pages/admin/SyncTypesAdmin";
 import SyncTypeDetailsAdmin from "./pages/admin/SyncTypeDetailsAdmin";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ const App = () => (
               <Route path="/admin/sperms" element={<SpermsAdmin />} />
               <Route path="/admin/sync-types" element={<SyncTypesAdmin />} />
               <Route path="/admin/sync-type-details" element={<SyncTypeDetailsAdmin />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

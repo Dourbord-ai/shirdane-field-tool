@@ -587,7 +587,8 @@ export default function LivestockListBuilder() {
     if (needsSperms && inlineSperms.length === 0) {
       tasks.push(
         (async () => {
-          const r = await supabase.from("sperms").select("id, code, name").order("name");
+          // Only active sperms appear in selection dropdowns (see /settings).
+          const r = await supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name");
           setInlineSperms((r.data as SpermRow[]) ?? []);
         })(),
       );
@@ -1526,7 +1527,7 @@ function GroupActionDialog({
       const [u, s] = await Promise.all([
         supabase.from("app_users").select("id, full_name, username").eq("is_active", true).order("full_name"),
         actionKey === "insemination"
-          ? supabase.from("sperms").select("id, code, name").order("name")
+          ? supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name")
           : Promise.resolve({ data: [] } as any),
       ]);
       setUsers((u.data as AppUser[]) ?? []);
