@@ -999,6 +999,62 @@ export default function LivestockListBuilder() {
           }}
         />
       )}
+
+      {/* Save-archive dialog: asks for a name + optional note, then writes
+          a new row into `livestock_list_archives` stamped with the current
+          user, time, filters, columns, and the exact cow_ids of the list. */}
+      {saveArchiveOpen && rows && (
+        <SaveArchiveDialog
+          rows={rows}
+          filters={filters}
+          columnKeys={columnKeys}
+          user={user}
+          onClose={() => setSaveArchiveOpen(false)}
+          onSaved={(archive) => {
+            // Show a confirmation banner that this list is now archived.
+            setLoadedArchive(archive);
+            setSaveArchiveOpen(false);
+            toast.success("لیست در آرشیو ذخیره شد");
+          }}
+        />
+      )}
+
+      {/* Archives browser dialog: lists all saved archives, lets the user
+          open one (which reloads the exact cow_ids + columns + filters into
+          the page), or delete an archive they no longer need. */}
+      {archivesListOpen && (
+        <ArchivesListDialog
+          onClose={() => setArchivesListOpen(false)}
+          onOpen={async (archive) => {
+            // Re-fetch the actual cows from `public.cows` using the archived
+            // ids. This guarantees we render the latest state (post-trigger
+            // cache rebuilds) even though the archive was saved earlier.
+            try {
+              const { data, error } = await supabase
+                .from("cows")
+                .select(
+                  "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+                  "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+                  "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+                  "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+                  "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+                )
+                .in("id", archive.cow_ids);
+              if (error) throw error;
+              // Hydrate UI state to match what was archived.
+              setRows((data as CowRow[]) ?? []);
+              setFilters({ ...(archive.filters || EMPTY_FILTERS) });
+              if (archive.column_keys?.length) setColumnKeys(archive.column_keys);
+              setSelectedIds(new Set());
+              setLoadedArchive(archive);
+              setArchivesListOpen(false);
+              toast.success(`آرشیو «${archive.name}» باز شد`);
+            } catch (e: any) {
+              toast.error("خطا در باز کردن آرشیو: " + (e.message || e));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
