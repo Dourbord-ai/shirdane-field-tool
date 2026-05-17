@@ -55,7 +55,7 @@ export default function FertilityTimeline() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("livestock_fertility_events")
-        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at, erotic_type_id")
+        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at, erotic_type_id, operator_name, metadata")
         .eq("livestock_id", Number(cowId))
         .order("event_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
