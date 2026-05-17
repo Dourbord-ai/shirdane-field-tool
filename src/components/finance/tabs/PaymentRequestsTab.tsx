@@ -349,69 +349,37 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                           onChange={(e) => updateItem(idx, { amount: parseMoney(e.target.value) })} />
                       </div>
                     </div>
-                    {it.party_id && bal !== undefined && (
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                          <span className="text-muted-foreground">مانده فعلی ذینفع</span>
-                          <MoneyCell value={bal} className="text-[11px]" />
-                        </div>
-                        <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                          <span className="text-muted-foreground">مبلغ مجاز قابل پرداخت</span>
-                          <MoneyCell value={isCreditor ? available : it.amount || 0} className="text-[11px]" />
-                        </div>
-                      </div>
-                    )}
-                    {shortage && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        مانده بستانکاری ذینفع برای این مبلغ کافی نیست
-                      </div>
-                    )}
-                    {it.party_id && (() => {
-                      const sepId = partySepidarIds[it.party_id];
-                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
-                      if (!isCreditor) {
-                        return (
-                          <div className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
-                            برای این نوع پرداخت، کنترل مانده سپیدار الزامی نیست.
-                          </div>
-                        );
-                      }
-                      if (!sepId) {
-                        return (
-                          <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
-                            این ذینفع به سپیدار متصل نیست (sepidar_party_id ندارد).
-                          </div>
-                        );
-                      }
-                      if (!sb || sb.loading) {
-                        return <div className="text-[11px] text-muted-foreground bg-muted/40 rounded px-2 py-1">در حال دریافت مانده از سپیدار…</div>;
-                      }
-                      if (sb.error) {
-                        return <div className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">خطا در سپیدار: {sb.error}</div>;
-                      }
-                      const sepAvail = Math.abs(Number(sb.balance || 0));
-                      const exceeds = it.amount > 0 && sepAvail + 1e-6 < it.amount;
+                    {/* Sepidar snapshot balance summary — uses the value captured
+                        when the user picked the beneficiary, not a live query. */}
+                    {it.beneficiary_id && it.beneficiary_balance_snapshot != null && (() => {
+                      const snap = Number(it.beneficiary_balance_snapshot);
+                      const sepAvail = Math.abs(snap);
+                      const exceeds = isCreditor && it.amount > 0 && sepAvail + 1e-6 < it.amount;
                       return (
-                        <div className={`rounded px-2 py-1 text-[11px] flex items-center justify-between ${exceeds ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
-                          <span>مانده قابل پرداخت طبق سپیدار</span>
-                          <MoneyCell value={sepAvail} className="text-[11px]" />
-                        </div>
-                      );
-                    })()}
-                    {(() => {
-                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
-                      if (!isCreditor || !sb || sb.balance == null) return null;
-                      const sepAvail = Math.abs(Number(sb.balance || 0));
-                      if (it.amount > 0 && sepAvail + 1e-6 < it.amount) {
-                        return (
-                          <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.
+                        <>
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                              <span className="text-muted-foreground">مانده سپیدار (لحظه انتخاب)</span>
+                              <MoneyCell value={snap} className="text-[11px]" />
+                            </div>
+                            <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                              <span className="text-muted-foreground">مبلغ مجاز قابل پرداخت</span>
+                              <MoneyCell value={isCreditor ? sepAvail : it.amount || 0} className="text-[11px]" />
+                            </div>
                           </div>
-                        );
-                      }
-                      return null;
+                          {!isCreditor && (
+                            <div className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                              برای این نوع پرداخت، کنترل مانده سپیدار الزامی نیست.
+                            </div>
+                          )}
+                          {exceeds && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.
+                            </div>
+                          )}
+                        </>
+                      );
                     })()}
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
