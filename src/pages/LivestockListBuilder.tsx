@@ -162,6 +162,9 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: "milking",    label: "وضعیت دوشش",        accessor: (r) => yesNo(r.is_dry, "خشک", "دوشا") },
   { key: "pregnancy",  label: "وضعیت آبستنی",      accessor: (r) => yesNo(r.is_pregnancy, "آبستن", "غیر آبستن") },
   { key: "fertility",  label: "آخرین وضعیت باروری", accessor: (r) => FERTILITY_STATUS_LABELS[r.last_fertility_status ?? -1] ?? "—" },
+  // Calculated lifecycle classification (e.g. "گاو دوشا", "تلیسه آبستن").
+  // Pulled from the shared helper so the label matches every other surface.
+  { key: "lifecycle",  label: "وضعیت چرخه دام",    accessor: (r) => calculateLifecycleState(r as any).label },
   { key: "erotic",     label: "آخرین فحلی",        accessor: (r) => r.last_erotic_date || "—" },
   { key: "inoc",       label: "آخرین تلقیح",       accessor: (r) => r.last_inoculation_date || "—" },
   { key: "pregTest",   label: "آخرین تست آبستنی",  accessor: (r) => r.last_pregnancy_date || "—" },
