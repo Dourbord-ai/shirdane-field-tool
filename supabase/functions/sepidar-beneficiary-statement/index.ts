@@ -1,8 +1,9 @@
 // Edge Function: sepidar-beneficiary-statement
+// Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Calls SQL Server stored procedure `bridge.GetBeneficiaryStatement` via the
 // Sepidar bridge database and returns the recordset to the caller.
 
-import sql from "npm:mssql@10.0.2";
+import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,43 +41,14 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "شناسه ذینفع سپیدار معتبر نیست." }, 400);
   }
 
-  // Accept both SEPIDAR_SQL_SERVER (preferred) and legacy SEPIDAR_SQL_HOST
-  const server = Deno.env.get("SEPIDAR_SQL_SERVER") || Deno.env.get("SEPIDAR_SQL_HOST");
-  const portStr = Deno.env.get("SEPIDAR_SQL_PORT");
-  const database = Deno.env.get("SEPIDAR_SQL_DATABASE");
-  const user = Deno.env.get("SEPIDAR_SQL_USER");
-  const password = Deno.env.get("SEPIDAR_SQL_PASSWORD");
-  const encryptEnv = Deno.env.get("SEPIDAR_SQL_ENCRYPT");
-  const trustEnv = Deno.env.get("SEPIDAR_SQL_TRUST_CERT");
-
-  if (!server || !portStr || !database || !user || !password) {
-    return json({
-      success: false,
-      message: "تنظیمات اتصال به سپیدار کامل نیست. لطفاً متغیرهای محیطی SEPIDAR_SQL_* را تنظیم کنید.",
-    }, 500);
-  }
-
-  const config: sql.config = {
-    server,
-    port: Number(portStr),
-    database,
-    user,
-    password,
-    options: {
-      // default to false/true (matching local working setup) when env not set
-      encrypt: encryptEnv === "true",
-      trustServerCertificate: trustEnv ? trustEnv === "true" : true,
-      enableArithAbort: true,
-    },
-    connectionTimeout: 15000,
-    requestTimeout: 60000,
-    pool: { max: 2, min: 0, idleTimeoutMillis: 10000 },
-  };
+  // Centralized env validation + config — see _shared/sepidarSqlClient.ts.
+  const cfg = getSepidarSqlConfig();
+  if (!cfg.ok) return json({ success: false, message: cfg.message }, 500);
 
   let pool: sql.ConnectionPool | null = null;
   try {
-    console.log("[sepidar-statement] connecting", { server, port: portStr, database, partyId });
-    pool = await new sql.ConnectionPool(config).connect();
+    console.log("[sepidar-statement] connecting", { ...cfg.meta, partyId });
+    pool = await new sql.ConnectionPool(cfg.config).connect();
 
     const request = pool.request();
     request.input("PartyId", sql.Int, partyId);
