@@ -550,7 +550,39 @@ export default function LivestockListBuilder() {
             <p className="text-sm text-muted-foreground">فیلترها را انتخاب کنید، لیست را بسازید، چاپ یا خروجی اکسل بگیرید و عملیات گروهی اعمال کنید.</p>
           </div>
         </div>
+        {/* Open the archives browser. Visible always so users can jump to any
+            previously saved list and continue group actions on it. */}
+        <Button variant="outline" onClick={() => setArchivesListOpen(true)}>
+          <FolderOpen className="w-4 h-4 ml-2" /> آرشیوها
+        </Button>
       </div>
+
+      {/* Banner shown when the current view came from an archive — gives
+          context (name, creator, date) so users know they're looking at
+          someone else's saved list and not a fresh one. */}
+      {loadedArchive && (
+        <Card className="p-3 bg-primary/5 border-primary/30 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="font-bold flex items-center gap-1">
+              <Archive className="w-4 h-4 text-primary" /> {loadedArchive.name}
+            </span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <UserIcon className="w-3.5 h-3.5" />
+              {loadedArchive.created_by_name || loadedArchive.created_by_username || "—"}
+            </span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {new Date(loadedArchive.created_at).toLocaleString("fa-IR")}
+            </span>
+            {loadedArchive.note && (
+              <span className="text-muted-foreground">— {loadedArchive.note}</span>
+            )}
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setLoadedArchive(null)}>
+            <X className="w-4 h-4 ml-1" /> بستن آرشیو
+          </Button>
+        </Card>
+      )}
 
       {/* ============== Filter section ================= */}
       <Card className="p-4 bg-card border-border space-y-4">
