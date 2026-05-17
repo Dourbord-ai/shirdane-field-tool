@@ -34,6 +34,17 @@ import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
 import kpiMilkCan from "@/assets/kpi-milk-can.png";
 import kpiCowDry from "@/assets/kpi-cow.png";
 import { cowImageFor } from "@/lib/cowImage";
+// Lifecycle helper — derives a single classification (e.g. "گاو دوشا",
+// "تلیسه آبستن") from existing cow fields. Used for the badge + filter below.
+import {
+  calculateLifecycleState,
+  LIFECYCLE_LABELS,
+  ALL_LIFECYCLE_STATES,
+  type LifecycleState,
+} from "@/lib/lifecycleState";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PAGE_SIZE = 10;
 
@@ -48,6 +59,13 @@ type Cow = {
   is_dry: boolean | null;
   is_pregnancy: boolean | null;
   last_fertility_status: number | null;
+  // Fields required to compute the lifecycle state on the client.
+  date_of_birth: string | null;
+  last_birth_date: string | null;
+  last_inoculation_date: string | null;
+  number_of_births: number | null;
+  last_type_id: number | null;
+  last_status_id: number | null;
   created_at: string;
 };
 
@@ -103,6 +121,16 @@ export default function Livestock() {
   }, []);
   const [selected, setSelected] = useState<Set<string>>(initialSelected);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Lifecycle filter is computed client-side from each cow's derived state,
+  // so it lives outside `selected` (which builds the DB query).
+  const [lifecycleFilter, setLifecycleFilter] = useState<Set<LifecycleState>>(new Set());
+  const toggleLifecycle = (s: LifecycleState) =>
+    setLifecycleFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
 
   const selectedKey = useMemo(() => Array.from(selected).sort().join("|"), [selected]);
 
@@ -196,7 +224,8 @@ export default function Livestock() {
           // Include is_pregnancy + existancestatus + sex so we can render
           // a debug badge row and verify no male / non-existing animals
           // appear in the pregnant KPI click-through.
-          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,created_at",
+          // Additional date/parity fields power the lifecycle state badge.
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,date_of_birth,last_birth_date,last_inoculation_date,number_of_births,last_type_id,last_status_id,created_at",
         )
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
@@ -415,12 +444,55 @@ export default function Livestock() {
               </SelectContent>
             </Select>
           </div>
+          {/* Lifecycle multi-select — client-side filter on calculated state */}
+          <div className="sm:col-span-2">
+            <label className="text-xs text-muted-foreground mb-1 block">وضعیت چرخه دام</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-between font-normal">
+                  <span className="truncate text-sm">
+                    {lifecycleFilter.size === 0
+                      ? "همه"
+                      : `${lifecycleFilter.size.toLocaleString("fa-IR")} مورد انتخاب شده`}
+                  </span>
+                  <SlidersHorizontal className="w-4 h-4 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 max-h-[60vh] overflow-y-auto p-2" dir="rtl">
+                <div className="flex items-center justify-between px-2 py-1 mb-1">
+                  <span className="text-xs text-muted-foreground">انتخاب چندتایی</span>
+                  {lifecycleFilter.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setLifecycleFilter(new Set())}
+                      className="text-xs text-destructive hover:underline"
+                    >پاک‌سازی</button>
+                  )}
+                </div>
+                {ALL_LIFECYCLE_STATES.map((s) => (
+                  <label key={s} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                    <Checkbox
+                      checked={lifecycleFilter.has(s)}
+                      onCheckedChange={() => toggleLifecycle(s)}
+                    />
+                    <span>{LIFECYCLE_LABELS[s]}</span>
+                  </label>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       )}
 
       {/* Cow grid */}
+      <TooltipProvider delayDuration={250}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-        {cows.map((c) => {
+        {cows
+          // Compute lifecycle once per row, then filter client-side.
+          // We keep this lightweight (pure function over already-loaded data).
+          .map((c) => ({ c, life: calculateLifecycleState(c) }))
+          .filter(({ life }) => lifecycleFilter.size === 0 || lifecycleFilter.has(life.state))
+          .map(({ c, life }) => {
           const female = isFemale(c.sextype, c.sex);
           const tag = c.tag_number || c.earnumber || c.bodynumber || "—";
           return (
@@ -445,6 +517,28 @@ export default function Livestock() {
                       {c.sextype || (c.sex === 0 ? "ماده" : c.sex === 1 ? "نر" : "—")}
                     </span>
                   </div>
+                  {/* Lifecycle badge — primary at-a-glance classification.
+                      Tooltip explains *why* this state was chosen so the
+                      operator can audit the calculation. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border ${life.badgeClass}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {life.label}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[260px] text-right" dir="rtl">
+                      <div className="font-semibold mb-1">{life.label}</div>
+                      <div className="text-xs opacity-80 mb-1">دلیل: {life.reason}</div>
+                      {import.meta.env.DEV && (
+                        <pre className="text-[10px] leading-tight opacity-70 whitespace-pre-wrap font-mono">
+{JSON.stringify(life.debug, null, 1)}
+                        </pre>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
                   <div className="flex flex-wrap gap-1.5">
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.existancestatus ?? 0)}`}>
                       {presenceLabel(c.existancestatus ?? 0)}
@@ -516,6 +610,7 @@ export default function Livestock() {
           <p className="col-span-full text-center text-xs text-muted-foreground py-2">پایان لیست</p>
         )}
       </div>
+      </TooltipProvider>
     </div>
   );
 }
