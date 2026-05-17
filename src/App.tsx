@@ -82,6 +82,7 @@ const App = () => (
               <Route path="/admin/sperms" element={<SpermsAdmin />} />
               <Route path="/admin/sync-types" element={<SyncTypesAdmin />} />
               <Route path="/admin/sync-type-details" element={<SyncTypeDetailsAdmin />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
