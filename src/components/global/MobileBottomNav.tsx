@@ -30,7 +30,7 @@ const allItems = [
   { title: "امور مالی",       icon: Wallet,          to: "/finance" },
   { title: "منابع انسانی",    icon: Users,           to: "/hr" },
   { title: "مدارک",           icon: Award,           to: "/certificates" },
-  { title: "تنظیمات",         icon: Settings,        to: "/dashboard" },
+  { title: "تنظیمات",         icon: Settings,        to: "/settings" },
 ];
 
 export default function MobileBottomNav() {
