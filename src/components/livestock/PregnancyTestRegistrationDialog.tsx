@@ -140,7 +140,12 @@ export default function PregnancyTestRegistrationDialog({
       result,
       result_label: RESULT_LABELS[result],
       time,
+      // Persist the vet under operator_name (legacy compatibility) AND under
+      // an explicit doctor_name field so the timeline can render the
+      // «دامپزشک» line without falling back to operator_name heuristics.
       operator_name: operatorName,
+      doctor_name: operatorName,
+      vet_name: operatorName,
     };
 
     const opId = TEST_TYPE_OP_ID[testType];

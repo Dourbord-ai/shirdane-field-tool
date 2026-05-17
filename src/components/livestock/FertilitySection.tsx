@@ -17,6 +17,7 @@ import {
 import {
   FERTILITY_EVENT_LABELS,
   FertilityEvent,
+  deriveEventPeople,
   eventBadgeClass,
   fertilityEventLabel,
   formatEventDate,
@@ -109,9 +110,22 @@ function EventCard({
         </div>
       )}
       {e.notes && <p className="text-xs text-muted-foreground break-words">{e.notes}</p>}
-      {e.operator_name && (
-        <p className="text-[11px] text-muted-foreground">اپراتور: {e.operator_name}</p>
-      )}
+      {(() => {
+        // Derive { operator, doctor } from the event using the shared helper so
+        // pregnancy_test rows (which historically stored the vet in operator_name)
+        // get split into a dedicated «دامپزشک» line without breaking other types.
+        const { operator_name, doctor_name } = deriveEventPeople(e);
+        return (
+          <>
+            {operator_name && (
+              <p className="text-[11px] text-muted-foreground">اپراتور: {operator_name}</p>
+            )}
+            {doctor_name && (
+              <p className="text-[11px] text-muted-foreground">دامپزشک: {doctor_name}</p>
+            )}
+          </>
+        );
+      })()}
       {e.legacy_table_name && (
         <p className="text-[10px] text-muted-foreground/70">
           منبع: {e.legacy_table_name}
