@@ -44,6 +44,15 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { cn } from "@/lib/utils";
 import { FERTILITY_STATUS_LABELS, PRESENCE_STATUS_LABELS } from "@/lib/livestock";
+// Lifecycle classification helper — provides "وضعیت چرخه دام" derived from
+// existing cow fields. We use it here both to render a column and to power
+// the new lifecycle multi-select filter.
+import {
+  calculateLifecycleState,
+  LIFECYCLE_LABELS,
+  ALL_LIFECYCLE_STATES,
+  type LifecycleState,
+} from "@/lib/lifecycleState";
 
 // -----------------------------------------------------------------------------
 // Types and lookup row shapes — kept loose to mirror the actual cows columns.
@@ -103,6 +112,9 @@ type FilterState = {
   hasRecentAbortionDays: string;
   missingFertility: boolean;                   // last_fertility_status IS NULL
   incompleteData: boolean;                      // no DoB or no tag/ear
+  // Multi-select over the calculated "وضعیت چرخه دام". Filtering happens
+  // client-side after fetch because the state is derived, not stored.
+  lifecycleStates: LifecycleState[];
   // operational presets that map onto multiple raw filters at query time
   preset: "" | "ready_insem" | "needs_preg_test" | "pregnant" | "dry_cows" | "milking_cows" | "recent_heat" | "no_fertility";
 };
@@ -113,7 +125,9 @@ const EMPTY_FILTERS: FilterState = {
   pregnancy: "", dry: "", fertilityStatusId: "",
   bornFrom: null, bornTo: null, minAgeMonths: "", maxAgeMonths: "",
   hasRecentHeatDays: "", hasRecentInseminationDays: "", hasRecentAbortionDays: "",
-  missingFertility: false, incompleteData: false, preset: "",
+  missingFertility: false, incompleteData: false,
+  lifecycleStates: [],
+  preset: "",
 };
 
 // -----------------------------------------------------------------------------
@@ -148,6 +162,9 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: "milking",    label: "وضعیت دوشش",        accessor: (r) => yesNo(r.is_dry, "خشک", "دوشا") },
   { key: "pregnancy",  label: "وضعیت آبستنی",      accessor: (r) => yesNo(r.is_pregnancy, "آبستن", "غیر آبستن") },
   { key: "fertility",  label: "آخرین وضعیت باروری", accessor: (r) => FERTILITY_STATUS_LABELS[r.last_fertility_status ?? -1] ?? "—" },
+  // Calculated lifecycle classification (e.g. "گاو دوشا", "تلیسه آبستن").
+  // Pulled from the shared helper so the label matches every other surface.
+  { key: "lifecycle",  label: "وضعیت چرخه دام",    accessor: (r) => calculateLifecycleState(r as any).label },
   { key: "erotic",     label: "آخرین فحلی",        accessor: (r) => r.last_erotic_date || "—" },
   { key: "inoc",       label: "آخرین تلقیح",       accessor: (r) => r.last_inoculation_date || "—" },
   { key: "pregTest",   label: "آخرین تست آبستنی",  accessor: (r) => r.last_pregnancy_date || "—" },
@@ -287,6 +304,12 @@ export default function LivestockListBuilder() {
     if (f.hasRecentAbortionDays) push("ra", `سقط اخیر ≤ ${f.hasRecentAbortionDays} روز`, () => setFilters({ ...f, hasRecentAbortionDays: "" }));
     if (f.missingFertility) push("mf", "بدون وضعیت باروری", () => setFilters({ ...f, missingFertility: false }));
     if (f.incompleteData) push("ic", "داده ناقص", () => setFilters({ ...f, incompleteData: false }));
+    // One chip per selected lifecycle state — clicking removes just that one.
+    f.lifecycleStates.forEach((s) =>
+      push(`life:${s}`, `چرخه: ${LIFECYCLE_LABELS[s]}`, () =>
+        setFilters({ ...f, lifecycleStates: f.lifecycleStates.filter((x) => x !== s) }),
+      ),
+    );
     return chips;
   }, [filters, ctx]);
 
@@ -387,6 +410,14 @@ export default function LivestockListBuilder() {
       filterRecent("last_erotic_date",       f.hasRecentHeatDays);
       filterRecent("last_inoculation_date",  f.hasRecentInseminationDays);
       filterRecent("last_abortion_date",     f.hasRecentAbortionDays);
+
+      // ----- Lifecycle filter (client-side) ------------------------------
+      // وضعیت چرخه دام is derived, not stored, so we compute it per row and
+      // keep only rows whose calculated state is in the user's selection.
+      if (f.lifecycleStates.length > 0) {
+        const wanted = new Set(f.lifecycleStates);
+        result = result.filter((r) => wanted.has(calculateLifecycleState(r as any).state));
+      }
 
       // ----- Sort --------------------------------------------------------
       const dir = sortDir === "asc" ? 1 : -1;
@@ -643,6 +674,54 @@ export default function LivestockListBuilder() {
               <Checkbox id="ic" checked={filters.incompleteData}
                 onCheckedChange={(v) => setFilters({ ...filters, incompleteData: !!v })} />
               <Label htmlFor="ic" className="cursor-pointer">داده ناقص</Label>
+            </div>
+          </div>
+        </FilterGroup>
+
+        {/* ---------------------------------------------------------------
+            وضعیت چرخه دام (lifecycle) — multi-select chip group.
+            Click a chip to toggle inclusion; the filter is applied
+            client-side after the main DB query because the state is
+            derived from existing cow fields by calculateLifecycleState().
+            --------------------------------------------------------------- */}
+        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup}>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {filters.lifecycleStates.length === 0
+                  ? "همه وضعیت‌ها (هیچ فیلتری اعمال نشده)"
+                  : `${filters.lifecycleStates.length.toLocaleString("fa-IR")} وضعیت انتخاب شده`}
+              </div>
+              {filters.lifecycleStates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, lifecycleStates: [] })}
+                  className="text-xs text-destructive hover:underline"
+                >پاک‌سازی</button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_LIFECYCLE_STATES.map((s) => {
+                // A chip per lifecycle state — tracked in filters.lifecycleStates.
+                const on = filters.lifecycleStates.includes(s);
+                return (
+                  <Badge
+                    key={s}
+                    variant={on ? "default" : "outline"}
+                    className="cursor-pointer select-none"
+                    onClick={() =>
+                      setFilters({
+                        ...filters,
+                        lifecycleStates: on
+                          ? filters.lifecycleStates.filter((x) => x !== s)
+                          : [...filters.lifecycleStates, s],
+                      })
+                    }
+                  >
+                    {LIFECYCLE_LABELS[s]}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
         </FilterGroup>
