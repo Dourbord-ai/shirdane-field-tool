@@ -126,6 +126,19 @@ export default function FertilityTimeline() {
                   </span>
                 </div>
                 {e.result_code && <p className="text-xs text-muted-foreground mt-1">کد نتیجه: {e.result_code}</p>}
+                {(() => {
+                  // Compact «اپراتور / دامپزشک» row under date metadata, reusing
+                  // the shared helper so pregnancy_test rows correctly surface
+                  // the vet under «دامپزشک» instead of «اپراتور».
+                  const people = deriveEventPeople(e as unknown as import("@/lib/fertility").FertilityEvent);
+                  if (!people.operator_name && !people.doctor_name) return null;
+                  return (
+                    <p className="text-[11px] text-muted-foreground mt-1 flex flex-wrap gap-x-3">
+                      {people.operator_name && <span>اپراتور: {people.operator_name}</span>}
+                      {people.doctor_name && <span>دامپزشک: {people.doctor_name}</span>}
+                    </p>
+                  );
+                })()}
                 {e.notes && <p className="text-sm text-foreground mt-2 leading-relaxed">{e.notes}</p>}
               </div>
             );
