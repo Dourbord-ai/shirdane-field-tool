@@ -3583,6 +3583,51 @@ export type Database = {
           },
         ]
       }
+      livestock_list_archives: {
+        Row: {
+          column_keys: string[]
+          cow_count: number
+          cow_ids: number[]
+          created_at: string
+          created_by_name: string | null
+          created_by_user_id: string | null
+          created_by_username: string | null
+          filters: Json
+          id: string
+          name: string
+          note: string | null
+          updated_at: string
+        }
+        Insert: {
+          column_keys?: string[]
+          cow_count?: number
+          cow_ids?: number[]
+          created_at?: string
+          created_by_name?: string | null
+          created_by_user_id?: string | null
+          created_by_username?: string | null
+          filters?: Json
+          id?: string
+          name: string
+          note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          column_keys?: string[]
+          cow_count?: number
+          cow_ids?: number[]
+          created_at?: string
+          created_by_name?: string | null
+          created_by_user_id?: string | null
+          created_by_username?: string | null
+          filters?: Json
+          id?: string
+          name?: string
+          note?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       livestock_locations: {
         Row: {
           code: number | null

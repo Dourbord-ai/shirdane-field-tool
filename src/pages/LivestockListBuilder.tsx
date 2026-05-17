@@ -26,7 +26,12 @@ import { toast } from "sonner";
 import {
   Beef, Filter, Printer, FileSpreadsheet, ChevronDown, ChevronUp, X,
   Loader2, CheckSquare, Square, Sparkles, Search, ArrowUpDown,
+  Archive, FolderOpen, Trash2, Clock, User as UserIcon,
 } from "lucide-react";
+// Auth context — we need who the user is so we can stamp archives with the
+// creator's id / username / full name. Without this we couldn't tell who
+// built a given archive later.
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,6 +94,22 @@ type CowRow = {
 type Lookup = { id: number; name: string | null };
 type AppUser = { id: string; full_name: string | null; username: string };
 type SpermRow = { id: number; code: string | null; name: string | null };
+
+// Row shape for the `livestock_list_archives` table created in the migration.
+// Stored alongside the cow ids and filters so an archive is fully reproducible.
+type ArchiveRow = {
+  id: string;
+  name: string;
+  note: string | null;
+  filters: any;
+  column_keys: string[];
+  cow_ids: number[];
+  cow_count: number;
+  created_by_user_id: string | null;
+  created_by_username: string | null;
+  created_by_name: string | null;
+  created_at: string;
+};
 
 // -----------------------------------------------------------------------------
 // Filter state shape. Each field is independent so users can mix freely.
@@ -250,6 +271,19 @@ export default function LivestockListBuilder() {
   // ---- Group-action dialog state ------------------------------------------
   const [actionKey, setActionKey] = useState<"" | "insemination" | "rinse" | "preg_test" | "vaccination">("");
   const [actionOpen, setActionOpen] = useState(false);
+
+  // ---- Archive dialogs -----------------------------------------------------
+  // `saveArchiveOpen` opens the "name this archive" form after a list is built.
+  // `archivesListOpen` opens the browser of previously-saved archives so a
+  // user can reopen a list someone else generated and run group actions on it.
+  // `loadedArchive` remembers the currently-opened archive so we can show its
+  // name/creator/date as a banner above the results.
+  const [saveArchiveOpen, setSaveArchiveOpen] = useState(false);
+  const [archivesListOpen, setArchivesListOpen] = useState(false);
+  const [loadedArchive, setLoadedArchive] = useState<ArchiveRow | null>(null);
+
+  // Current user from auth context — used to stamp who created an archive.
+  const { user } = useAuth();
 
   // ---- Load lookups on mount ----------------------------------------------
   useEffect(() => {
@@ -516,7 +550,39 @@ export default function LivestockListBuilder() {
             <p className="text-sm text-muted-foreground">فیلترها را انتخاب کنید، لیست را بسازید، چاپ یا خروجی اکسل بگیرید و عملیات گروهی اعمال کنید.</p>
           </div>
         </div>
+        {/* Open the archives browser. Visible always so users can jump to any
+            previously saved list and continue group actions on it. */}
+        <Button variant="outline" onClick={() => setArchivesListOpen(true)}>
+          <FolderOpen className="w-4 h-4 ml-2" /> آرشیوها
+        </Button>
       </div>
+
+      {/* Banner shown when the current view came from an archive — gives
+          context (name, creator, date) so users know they're looking at
+          someone else's saved list and not a fresh one. */}
+      {loadedArchive && (
+        <Card className="p-3 bg-primary/5 border-primary/30 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="font-bold flex items-center gap-1">
+              <Archive className="w-4 h-4 text-primary" /> {loadedArchive.name}
+            </span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <UserIcon className="w-3.5 h-3.5" />
+              {loadedArchive.created_by_name || loadedArchive.created_by_username || "—"}
+            </span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {new Date(loadedArchive.created_at).toLocaleString("fa-IR")}
+            </span>
+            {loadedArchive.note && (
+              <span className="text-muted-foreground">— {loadedArchive.note}</span>
+            )}
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setLoadedArchive(null)}>
+            <X className="w-4 h-4 ml-1" /> بستن آرشیو
+          </Button>
+        </Card>
+      )}
 
       {/* ============== Filter section ================= */}
       <Card className="p-4 bg-card border-border space-y-4">
@@ -801,6 +867,19 @@ export default function LivestockListBuilder() {
               <Button size="sm" variant="outline" onClick={exportXlsx}>
                 <FileSpreadsheet className="w-4 h-4 ml-2" /> خروجی اکسل
               </Button>
+              {/* Archive button — opens the save-archive dialog. We only show
+                  it when there are rows so the user can't archive nothing.
+                  The archive stores the exact cow ids displayed, the active
+                  filters, and the chosen columns so it can be reopened later
+                  with the same shape. */}
+              <Button
+                size="sm"
+                onClick={() => setSaveArchiveOpen(true)}
+                disabled={rows.length === 0}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                <Archive className="w-4 h-4 ml-2" /> آرشیو
+              </Button>
             </div>
           </div>
 
@@ -917,6 +996,62 @@ export default function LivestockListBuilder() {
             for (const id of affected) await syncCowFertilityCache(id);
             setActionOpen(false); setActionKey("");
             generate(); // refresh the visible list with new cached fields
+          }}
+        />
+      )}
+
+      {/* Save-archive dialog: asks for a name + optional note, then writes
+          a new row into `livestock_list_archives` stamped with the current
+          user, time, filters, columns, and the exact cow_ids of the list. */}
+      {saveArchiveOpen && rows && (
+        <SaveArchiveDialog
+          rows={rows}
+          filters={filters}
+          columnKeys={columnKeys}
+          user={user}
+          onClose={() => setSaveArchiveOpen(false)}
+          onSaved={(archive) => {
+            // Show a confirmation banner that this list is now archived.
+            setLoadedArchive(archive);
+            setSaveArchiveOpen(false);
+            toast.success("لیست در آرشیو ذخیره شد");
+          }}
+        />
+      )}
+
+      {/* Archives browser dialog: lists all saved archives, lets the user
+          open one (which reloads the exact cow_ids + columns + filters into
+          the page), or delete an archive they no longer need. */}
+      {archivesListOpen && (
+        <ArchivesListDialog
+          onClose={() => setArchivesListOpen(false)}
+          onOpen={async (archive) => {
+            // Re-fetch the actual cows from `public.cows` using the archived
+            // ids. This guarantees we render the latest state (post-trigger
+            // cache rebuilds) even though the archive was saved earlier.
+            try {
+              const { data, error } = await supabase
+                .from("cows")
+                .select(
+                  "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+                  "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+                  "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+                  "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+                  "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+                )
+                .in("id", archive.cow_ids);
+              if (error) throw error;
+              // Hydrate UI state to match what was archived.
+              setRows(((data as unknown) as CowRow[]) ?? []);
+              setFilters({ ...(archive.filters || EMPTY_FILTERS) });
+              if (archive.column_keys?.length) setColumnKeys(archive.column_keys);
+              setSelectedIds(new Set());
+              setLoadedArchive(archive);
+              setArchivesListOpen(false);
+              toast.success(`آرشیو «${archive.name}» باز شد`);
+            } catch (e: any) {
+              toast.error("خطا در باز کردن آرشیو: " + (e.message || e));
+            }
           }}
         />
       )}
@@ -1306,6 +1441,255 @@ function GroupActionDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// SaveArchiveDialog — pops up after the user clicks "آرشیو" on a generated list.
+// Collects a human-friendly name (required) and an optional note/description,
+// then writes a row into `livestock_list_archives` with the exact cow_ids,
+// the active filters, and the chosen columns, plus a creator stamp.
+//
+// Why we store cow_ids (not just filters): the herd changes daily. Re-running
+// the same filters next week would return a different population, which would
+// defeat the whole point of "open this archive and run group actions on it".
+// =============================================================================
+function SaveArchiveDialog({
+  rows, filters, columnKeys, user, onClose, onSaved,
+}: {
+  rows: CowRow[];
+  filters: FilterState;
+  columnKeys: string[];
+  user: { id: string; username: string; fullName: string } | null;
+  onClose: () => void;
+  onSaved: (a: ArchiveRow) => void;
+}) {
+  // Suggest a default name including today's Jalali date so users always have
+  // a sensible starting point — they can rename freely before saving.
+  const [name, setName] = useState(`لیست ${formatJalali(todayJalali())}`);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    // Trim + guard: a blank name is meaningless when browsing archives later.
+    const trimmed = name.trim();
+    if (!trimmed) { toast.error("نام آرشیو الزامی است"); return; }
+    setSaving(true);
+    try {
+      // Insert the archive row. Note we serialize JalaliDate objects in the
+      // filters by going through JSON — this keeps the data shape consistent.
+      const { data, error } = await supabase
+        .from("livestock_list_archives")
+        .insert({
+          name: trimmed,
+          note: note.trim() || null,
+          // Serialize then parse to drop any non-JSON-safe artifacts (Maps etc.)
+          filters: JSON.parse(JSON.stringify(filters)),
+          column_keys: columnKeys,
+          cow_ids: rows.map((r) => r.id),
+          cow_count: rows.length,
+          // Stamp the creator. The app auth layer produces uuid-like ids;
+          // we still send the username + display name as a fallback for
+          // listing UIs that don't want to join back to app_users.
+          created_by_user_id: user?.id ?? null,
+          created_by_username: user?.username ?? null,
+          created_by_name: user?.fullName ?? null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      onSaved(data as ArchiveRow);
+    } catch (e: any) {
+      toast.error("خطا در ذخیره آرشیو: " + (e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Archive className="w-5 h-5 text-primary" /> ذخیره در آرشیو
+          </DialogTitle>
+          <DialogDescription>
+            {`این آرشیو شامل ${rows.length.toLocaleString("fa-IR")} دام خواهد بود و بعداً قابل بازیابی و عملیات گروهی است.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {/* Required name */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">نام آرشیو *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="مثلاً: تلقیح هفته جاری" />
+          </div>
+          {/* Optional note — useful when other users open the archive later */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">توضیحات (اختیاری)</Label>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="هدف از این آرشیو، یادداشت‌ها ..." rows={3} />
+          </div>
+          {/* Auto-stamped meta: shown so the user sees exactly what we record */}
+          <div className="rounded-lg border border-border p-3 text-xs space-y-1 bg-background/40">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <UserIcon className="w-3.5 h-3.5" />
+              <span>ایجاد توسط:</span>
+              <span className="text-foreground">
+                {user?.fullName || user?.username || "—"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" />
+              <span>تاریخ ایجاد:</span>
+              <span className="text-foreground">
+                {new Date().toLocaleString("fa-IR")}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>انصراف</Button>
+          <Button onClick={save} disabled={saving}
+            className="bg-gradient-primary text-primary-foreground">
+            {saving && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+            ذخیره آرشیو
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// ArchivesListDialog — browses every saved archive in the project. Lets the
+// user open one (which the parent re-hydrates into the page) or delete one.
+// Sorted by created_at desc so the freshest archives appear first.
+// =============================================================================
+function ArchivesListDialog({
+  onClose, onOpen,
+}: {
+  onClose: () => void;
+  onOpen: (a: ArchiveRow) => void;
+}) {
+  // Local list + loading + simple search field over name/creator/note.
+  const [items, setItems] = useState<ArchiveRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  // Reload archives — extracted so we can call it again after a delete.
+  async function load() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("livestock_list_archives")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) toast.error("خطا در بارگذاری آرشیو: " + error.message);
+    setItems((data as ArchiveRow[]) ?? []);
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  // Client-side search (small dataset, no server filter needed).
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((a) =>
+      (a.name || "").toLowerCase().includes(q) ||
+      (a.note || "").toLowerCase().includes(q) ||
+      (a.created_by_name || "").toLowerCase().includes(q) ||
+      (a.created_by_username || "").toLowerCase().includes(q)
+    );
+  }, [items, search]);
+
+  async function remove(a: ArchiveRow) {
+    if (!confirm(`حذف آرشیو «${a.name}»؟ این عمل قابل بازگشت نیست.`)) return;
+    const { error } = await supabase
+      .from("livestock_list_archives").delete().eq("id", a.id);
+    if (error) return toast.error("خطا در حذف: " + error.message);
+    toast.success("آرشیو حذف شد");
+    load();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl" className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-primary" /> آرشیو لیست‌های شخصی دام‌ها
+          </DialogTitle>
+          <DialogDescription>
+            هر آرشیو شامل دام‌های دقیق همان لحظه است؛ با باز کردن آن می‌توانید عملیات گروهی اعمال کنید.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Search box across name/note/creator */}
+        <div className="relative">
+          <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pr-9" placeholder="جستجو در نام / یادداشت / سازنده ..."
+            value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+          {loading && (
+            <div className="py-8 text-center text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin inline ml-2" /> در حال بارگذاری...
+            </div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div className="py-8 text-center text-muted-foreground">
+              آرشیوی یافت نشد
+            </div>
+          )}
+          {!loading && filtered.map((a) => (
+            <div key={a.id}
+              className="rounded-lg border border-border p-3 bg-background/40 hover:border-primary/40 transition-colors">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold text-foreground truncate">{a.name}</span>
+                    <Badge variant="secondary">
+                      {a.cow_count.toLocaleString("fa-IR")} دام
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1">
+                      <UserIcon className="w-3 h-3" />
+                      {a.created_by_name || a.created_by_username || "—"}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {new Date(a.created_at).toLocaleString("fa-IR")}
+                    </span>
+                  </div>
+                  {a.note && (
+                    <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.note}</div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <Button size="sm" onClick={() => onOpen(a)}
+                    className="bg-gradient-primary text-primary-foreground">
+                    <FolderOpen className="w-3.5 h-3.5 ml-1" /> باز کردن
+                  </Button>
+                  <Button size="sm" variant="ghost"
+                    onClick={() => remove(a)}
+                    className="text-destructive hover:text-destructive">
+                    <Trash2 className="w-3.5 h-3.5 ml-1" /> حذف
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>بستن</Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }
