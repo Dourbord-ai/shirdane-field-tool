@@ -1117,6 +1117,57 @@ export default function LivestockListBuilder() {
             </div>
           </div>
 
+          {/* Manual-add row: a small inline input lets the user paste a
+              tag/body/ear number and add a single cow to the current list
+              without re-running filters. Empty cells are styled to look like
+              a placeholder row at the top of the table. */}
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2">
+            <Input
+              value={manualSearch}
+              onChange={(e) => setManualSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") manualAddCow(); }}
+              placeholder="شماره دام، شماره بدن یا شماره گوش..."
+              className="h-9"
+            />
+            <Button
+              size="sm"
+              onClick={manualAddCow}
+              disabled={manualAdding}
+              className="bg-primary text-primary-foreground shrink-0"
+            >
+              {manualAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "+ افزودن"}
+            </Button>
+          </div>
+
+          {/* Inline group-action submit banner — only shown when the user has
+              entered per-row mode for insemination/rinse/preg_test. */}
+          {inlineAction && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-3">
+              <div className="text-sm text-emerald-200">
+                حالت ثبت ردیفی فعال: <b>
+                  {inlineAction.kind === "insemination" ? "تلقیح" :
+                   inlineAction.kind === "rinse" ? "شستشو" : "تست آبستنی"}
+                </b>{" "}
+                — تاریخ: {inlineAction.common.dateStr}{inlineAction.common.time ? ` ${inlineAction.common.time}` : ""}
+                {inlineAction.common.doctorName && ` — پزشک: ${inlineAction.common.doctorName}`}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setInlineAction(null)} disabled={inlineSubmitting}>
+                  لغو
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={submitInlineAction}
+                  disabled={inlineSubmitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {inlineSubmitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+                  ثبت همه
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
@@ -1134,6 +1185,25 @@ export default function LivestockListBuilder() {
                       {c.label}
                     </th>
                   ))}
+                  {/* Extra inline-action headers */}
+                  {inlineAction?.kind === "insemination" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اپراتور</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اسپرم</th>
+                    </>
+                  )}
+                  {inlineAction?.kind === "rinse" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اپراتور</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">داروها</th>
+                    </>
+                  )}
+                  {inlineAction?.kind === "preg_test" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">نوع تست</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">نتیجه</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1157,6 +1227,26 @@ export default function LivestockListBuilder() {
                         {c.accessor(r, ctx) ?? "—"}
                       </td>
                     ))}
+                    {/* Per-row inline editors */}
+                    {inlineAction && (
+                      <InlineRowEditors
+                        row={r}
+                        mode={inlineAction.kind}
+                        value={inlineAction.perRow[r.id] || {}}
+                        onChange={(patch) =>
+                          setInlineAction({
+                            ...inlineAction,
+                            perRow: {
+                              ...inlineAction.perRow,
+                              [r.id]: { ...(inlineAction.perRow[r.id] || {}), ...patch },
+                            },
+                          })
+                        }
+                        users={inlineUsers}
+                        sperms={inlineSperms}
+                        medicines={inlineMedicines}
+                      />
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1187,6 +1277,28 @@ export default function LivestockListBuilder() {
                     </div>
                   ))}
                 </div>
+                {/* Inline editors on mobile too */}
+                {inlineAction && (
+                  <div className="mt-2 pt-2 border-t border-emerald-400/30 space-y-2">
+                    <MobileInlineEditors
+                      row={r}
+                      mode={inlineAction.kind}
+                      value={inlineAction.perRow[r.id] || {}}
+                      onChange={(patch) =>
+                        setInlineAction({
+                          ...inlineAction,
+                          perRow: {
+                            ...inlineAction.perRow,
+                            [r.id]: { ...(inlineAction.perRow[r.id] || {}), ...patch },
+                          },
+                        })
+                      }
+                      users={inlineUsers}
+                      sperms={inlineSperms}
+                      medicines={inlineMedicines}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1194,7 +1306,7 @@ export default function LivestockListBuilder() {
       )}
 
       {/* ============== Group actions ================= */}
-      {rows && rows.length > 0 && (
+      {rows && rows.length > 0 && !inlineAction && (
         <Card className="p-4 bg-card border-primary/30 space-y-3">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
             <CheckSquare className="w-4 h-4 text-primary" /> عملیات گروهی روی لیست
