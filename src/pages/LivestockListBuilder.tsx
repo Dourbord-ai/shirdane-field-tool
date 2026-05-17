@@ -272,6 +272,37 @@ export default function LivestockListBuilder() {
   const [actionKey, setActionKey] = useState<"" | "insemination" | "rinse" | "preg_test" | "vaccination">("");
   const [actionOpen, setActionOpen] = useState(false);
 
+  // After the common-form is confirmed for insemination/rinse/preg_test the
+  // page switches into an INLINE per-row mode: extra columns are rendered
+  // into the results table and the user fills اپراتور/اسپرم/دارو/تست per row.
+  // Submitting then bulk-inserts all rows in one go.
+  type InlineMode = {
+    kind: "insemination" | "rinse" | "preg_test";
+    common: { dateStr: string; time: string; description: string; doctorName?: string };
+    perRow: Record<number, {
+      operatorId?: string;
+      spermId?: string;
+      medicineIds?: string[];
+      testType?: "initial" | "final" | "extra" | "dry" | "";
+      testResult?: "positive" | "negative" | "suspicious" | "";
+    }>;
+  };
+  const [inlineAction, setInlineAction] = useState<InlineMode | null>(null);
+  // Reference data needed by inline per-row selectors. Loaded lazily once
+  // the user enters inline mode so the page boot stays cheap.
+  const [inlineUsers, setInlineUsers] = useState<AppUser[]>([]);
+  const [inlineSperms, setInlineSperms] = useState<SpermRow[]>([]);
+  const [inlineMedicines, setInlineMedicines] = useState<Lookup[]>([]);
+  const [inlineSubmitting, setInlineSubmitting] = useState(false);
+
+  // Column-picker dialog (opens when the user clicks تایید و تولید لیست).
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+
+  // Manual-add row state — small inline input above the results table so the
+  // user can paste a tag/body number and pull a single cow into the list.
+  const [manualSearch, setManualSearch] = useState("");
+  const [manualAdding, setManualAdding] = useState(false);
+
   // ---- Archive dialogs -----------------------------------------------------
   // `saveArchiveOpen` opens the "name this archive" form after a list is built.
   // `archivesListOpen` opens the browser of previously-saved archives so a
@@ -489,7 +520,226 @@ export default function LivestockListBuilder() {
     [visibleRows, selectedIds],
   );
 
-  // ---- Export to XLSX ------------------------------------------------------
+  // ---- Manual add cow by tag/body number -----------------------------------
+  // Lets the user type a tag_number or bodynumber and append that single cow
+  // into the current generated list. Useful for one-off additions after the
+  // filter pass — e.g. an animal that just came in from another pen.
+  async function manualAddCow() {
+    const q = manualSearch.trim();
+    if (!q) return toast.error("شماره دام یا شماره بدن را وارد کنید");
+    if (!rows) return toast.error("ابتدا لیست را تولید کنید");
+    setManualAdding(true);
+    try {
+      const isNum = /^\d+$/.test(q);
+      // Search both bodynumber (integer) and tag_number (text). We OR them
+      // so the user doesn't have to pick which kind of identifier they have.
+      let query = supabase.from("cows").select(
+        "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+        "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+        "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+        "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+        "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+      );
+      if (isNum) {
+        query = query.or(`tag_number.eq.${q},bodynumber.eq.${+q},earnumber.eq.${+q}`);
+      } else {
+        query = query.eq("tag_number", q);
+      }
+      const { data, error } = await query.limit(5);
+      if (error) throw error;
+      const found = ((data ?? []) as unknown) as CowRow[];
+      if (found.length === 0) return toast.error("دامی با این شماره پیدا نشد");
+      // De-dupe against current rows.
+      const existingIds = new Set(rows.map((r) => r.id));
+      const fresh = found.filter((c) => !existingIds.has(c.id));
+      if (fresh.length === 0) return toast.error("این دام از قبل در لیست هست");
+      setRows([...fresh, ...rows]);
+      setManualSearch("");
+      toast.success(`${fresh.length} دام به لیست افزوده شد`);
+    } catch (e: any) {
+      toast.error("خطا در افزودن: " + (e.message || e));
+    } finally {
+      setManualAdding(false);
+    }
+  }
+
+  // ---- Start INLINE per-row group-action mode ------------------------------
+  // For insemination / rinse / preg_test we collect only the shared form
+  // (date/time/notes + doctor) up-front, then render per-row editors.
+  async function startInlineAction(
+    kind: "insemination" | "rinse" | "preg_test",
+    common: InlineMode["common"],
+  ) {
+    // Lazy-load reference tables only when we actually need them.
+    const needsUsers = true;
+    const needsSperms = kind === "insemination";
+    const needsMeds = kind === "rinse";
+    const tasks: Promise<any>[] = [];
+    if (needsUsers && inlineUsers.length === 0) {
+      tasks.push(
+        (async () => {
+          const r = await supabase.from("app_users")
+            .select("id, full_name, username").eq("is_active", true).order("full_name");
+          setInlineUsers((r.data as AppUser[]) ?? []);
+        })(),
+      );
+    }
+    if (needsSperms && inlineSperms.length === 0) {
+      tasks.push(
+        (async () => {
+          const r = await supabase.from("sperms").select("id, code, name").order("name");
+          setInlineSperms((r.data as SpermRow[]) ?? []);
+        })(),
+      );
+    }
+    if (needsMeds && inlineMedicines.length === 0) {
+      tasks.push(
+        (async () => {
+          const r = await supabase.from("medicines").select("id, name").order("name");
+          setInlineMedicines((r.data as Lookup[]) ?? []);
+        })(),
+      );
+    }
+    await Promise.all(tasks);
+    setInlineAction({ kind, common, perRow: {} });
+    toast.success("اطلاعات هر ردیف را تکمیل و سپس «ثبت همه» را بزنید");
+  }
+
+  // ---- Submit-all for the inline per-row mode ------------------------------
+  async function submitInlineAction() {
+    if (!inlineAction) return;
+    const { kind, common, perRow } = inlineAction;
+    const targets = targetRows;
+
+    // Validate that every (eligible) row has the needed fields.
+    const missing: number[] = [];
+    for (const r of targets) {
+      const presence = r.presence_status ?? r.existancestatus;
+      if (presence !== 0) continue; // out-of-herd cows are skipped silently
+      if (r.sex !== 0) continue;    // fertility ops are female-only
+      const cfg = perRow[r.id] || {};
+      if (kind === "insemination" && (!cfg.operatorId || !cfg.spermId)) missing.push(r.id);
+      if (kind === "rinse" && (!cfg.operatorId || !cfg.medicineIds?.length)) missing.push(r.id);
+      if (kind === "preg_test" && (!cfg.testType || !cfg.testResult)) missing.push(r.id);
+    }
+    if (missing.length > 0) {
+      return toast.error(`${missing.length} ردیف ناقص است — اپراتور/داده هر ردیف را تکمیل کنید`);
+    }
+
+    setInlineSubmitting(true);
+    try {
+      const dateStr = common.dateStr;
+      const eventDate = common.time ? `${dateStr} ${common.time}` : dateStr;
+      const payload: any[] = [];
+
+      for (const r of targets) {
+        const presence = r.presence_status ?? r.existancestatus;
+        if (presence !== 0 || r.sex !== 0) continue;
+        const cfg = perRow[r.id] || {};
+
+        if (kind === "insemination") {
+          const op = inlineUsers.find((u) => String(u.id) === cfg.operatorId);
+          const s = inlineSperms.find((x) => String(x.id) === cfg.spermId);
+          payload.push({
+            livestock_id: r.id,
+            event_type: "insemination",
+            fertility_operation_id: 2,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: op?.full_name ?? op?.username ?? null,
+            notes: common.description || null,
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              insemination_type: "sperm",
+              sperm_id: s?.id,
+              sperm_label: s ? (s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name) : null,
+              time: common.time,
+              operator_name: op?.full_name ?? op?.username ?? null,
+              source: "list_builder_inline",
+            },
+          });
+        } else if (kind === "rinse") {
+          const op = inlineUsers.find((u) => String(u.id) === cfg.operatorId);
+          const medNames = (cfg.medicineIds || []).map(
+            (mid) => inlineMedicines.find((m) => String(m.id) === mid)?.name ?? mid,
+          );
+          payload.push({
+            livestock_id: r.id,
+            event_type: "rinse",
+            fertility_operation_id: 8,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: op?.full_name ?? op?.username ?? null,
+            notes: common.description || null,
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              rinse_reason: common.description || "—",
+              medicine_ids: cfg.medicineIds,
+              medicine_names: medNames,
+              time: common.time,
+              operator_name: op?.full_name ?? op?.username ?? null,
+              source: "list_builder_inline",
+            },
+          });
+        } else if (kind === "preg_test") {
+          // Per-row test type + result determine the fertility_operation_id
+          // and status_code, same mapping as the legacy dialog.
+          const opMap = { initial: 3, final: 4, extra: 11, dry: 12 } as const;
+          const codeMap: Record<string, Partial<Record<string, number>>> = {
+            initial: { positive: 4, suspicious: 5, negative: 6 },
+            final:   { positive: 8, negative: 7 },
+            extra:   { positive: 18, negative: 17 },
+            dry:     { positive: 20, negative: 19 },
+          };
+          const operationId = opMap[cfg.testType as keyof typeof opMap];
+          const statusCode = codeMap[cfg.testType!]?.[cfg.testResult!] ?? null;
+          if (statusCode == null) continue;
+          payload.push({
+            livestock_id: r.id,
+            event_type: "pregnancy_test",
+            fertility_operation_id: operationId,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: common.doctorName || null,
+            notes: common.description || null,
+            status_code: statusCode,
+            fertility_status_id: statusCode,
+            result: cfg.testResult === "positive" ? "مثبت" : cfg.testResult === "negative" ? "منفی" : "مشکوک",
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              test_type: cfg.testType,
+              result: cfg.testResult,
+              doctor_name: common.doctorName,
+              time: common.time,
+              source: "list_builder_inline",
+            },
+          });
+        }
+      }
+
+      if (payload.length === 0) {
+        setInlineSubmitting(false);
+        return toast.error("هیچ ردیف معتبری برای ثبت وجود ندارد");
+      }
+      const { error } = await supabase.from("livestock_fertility_events" as any).insert(payload);
+      if (error) throw error;
+      // Rebuild fertility cache for each affected cow (DB triggers also do
+      // this, but we re-sync defensively so the UI shows fresh values).
+      for (const p of payload) await syncCowFertilityCache(p.livestock_id);
+      toast.success(`${payload.length} رویداد ثبت شد`);
+      setInlineAction(null);
+      generate(); // refresh visible rows
+    } catch (e: any) {
+      toast.error("خطا در ثبت: " + (e.message || e));
+    } finally {
+      setInlineSubmitting(false);
+    }
+  }
+
+
   function exportXlsx() {
     if (!rows || rows.length === 0) return toast.error("لیستی برای خروجی وجود ندارد");
     const data = rows.map((r) => {
@@ -631,7 +881,7 @@ export default function LivestockListBuilder() {
         )}
 
         {/* Filter groups (collapsible) */}
-        <FilterGroup title="اطلاعات پایه" id="basic" open={openGroup} onToggle={setOpenGroup}>
+        <FilterGroup title="اطلاعات پایه" id="basic" open={openGroup} onToggle={setOpenGroup} tone="info">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Field label="جستجو (پلاک/گوش/بدن)">
               <div className="relative">
@@ -688,7 +938,7 @@ export default function LivestockListBuilder() {
           </div>
         </FilterGroup>
 
-        <FilterGroup title="باروری و وضعیت فیزیولوژیک" id="fert" open={openGroup} onToggle={setOpenGroup}>
+        <FilterGroup title="باروری و وضعیت فیزیولوژیک" id="fert" open={openGroup} onToggle={setOpenGroup} tone="warning">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Field label="آبستنی">
               <Select value={filters.pregnancy} onValueChange={(v) => setFilters({ ...filters, pregnancy: v as any })} dir="rtl">
@@ -750,7 +1000,7 @@ export default function LivestockListBuilder() {
             client-side after the main DB query because the state is
             derived from existing cow fields by calculateLifecycleState().
             --------------------------------------------------------------- */}
-        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup}>
+        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup} tone="accent">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
@@ -792,60 +1042,44 @@ export default function LivestockListBuilder() {
           </div>
         </FilterGroup>
 
-        <FilterGroup title="ستون‌ها و مرتب‌سازی" id="cols" open={openGroup} onToggle={setOpenGroup}>
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1.5">ستون‌های نمایش/خروجی</div>
-              <div className="flex flex-wrap gap-2">
-                {ALL_COLUMNS.map((c) => {
-                  const on = columnKeys.includes(c.key);
-                  return (
-                    <Badge key={c.key} variant={on ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => setColumnKeys((prev) =>
-                        on ? prev.filter((k) => k !== c.key) : [...prev, c.key])}>
-                      {c.label}
-                    </Badge>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="مرتب‌سازی بر اساس">
-                <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)} dir="rtl">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {SORT_OPTIONS.map((s) => (
-                      <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="ترتیب">
-                <Select value={sortDir} onValueChange={(v) => setSortDir(v as any)} dir="rtl">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="asc">صعودی</SelectItem>
-                    <SelectItem value="desc">نزولی</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-          </div>
-        </FilterGroup>
+        {/* NOTE: column/sort selection was removed from the always-visible
+            filter form. Per request, the user now picks columns + sort
+            inside a dialog that opens AFTER pressing "تایید و تولید لیست".
+            See <ColumnPickerDialog/> below. */}
 
-        {/* Generate */}
+        {/* Generate — opens the column picker first, then generates */}
         <div className="flex justify-end gap-2 pt-2 border-t border-border">
           <Button variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>
             بازنشانی
           </Button>
-          <Button onClick={generate} disabled={generating || lookupsLoading}
-            className="bg-gradient-primary text-primary-foreground glow-primary">
+          <Button
+            onClick={() => setColumnPickerOpen(true)}
+            disabled={generating || lookupsLoading}
+            // Distinct color (amber gradient) so it stands out from the
+            // primary-green archive/save buttons.
+            className="bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/30 border-0"
+          >
             {generating && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
             <Filter className="w-4 h-4 ml-2" /> تایید و تولید لیست
           </Button>
         </div>
       </Card>
+
+      {/* Column-picker dialog — opened by the generate button. Lets users
+          choose visible/exported columns and sort settings, then runs the
+          actual query. Replaces the old always-on "ستون‌ها و مرتب‌سازی". */}
+      {columnPickerOpen && (
+        <ColumnPickerDialog
+          columnKeys={columnKeys}
+          setColumnKeys={setColumnKeys}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          sortDir={sortDir}
+          setSortDir={setSortDir}
+          onCancel={() => setColumnPickerOpen(false)}
+          onConfirm={() => { setColumnPickerOpen(false); generate(); }}
+        />
+      )}
 
       {/* ============== Results ================= */}
       {rows && (
@@ -883,6 +1117,57 @@ export default function LivestockListBuilder() {
             </div>
           </div>
 
+          {/* Manual-add row: a small inline input lets the user paste a
+              tag/body/ear number and add a single cow to the current list
+              without re-running filters. Empty cells are styled to look like
+              a placeholder row at the top of the table. */}
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2">
+            <Input
+              value={manualSearch}
+              onChange={(e) => setManualSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") manualAddCow(); }}
+              placeholder="شماره دام، شماره بدن یا شماره گوش..."
+              className="h-9"
+            />
+            <Button
+              size="sm"
+              onClick={manualAddCow}
+              disabled={manualAdding}
+              className="bg-primary text-primary-foreground shrink-0"
+            >
+              {manualAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "+ افزودن"}
+            </Button>
+          </div>
+
+          {/* Inline group-action submit banner — only shown when the user has
+              entered per-row mode for insemination/rinse/preg_test. */}
+          {inlineAction && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-3">
+              <div className="text-sm text-emerald-200">
+                حالت ثبت ردیفی فعال: <b>
+                  {inlineAction.kind === "insemination" ? "تلقیح" :
+                   inlineAction.kind === "rinse" ? "شستشو" : "تست آبستنی"}
+                </b>{" "}
+                — تاریخ: {inlineAction.common.dateStr}{inlineAction.common.time ? ` ${inlineAction.common.time}` : ""}
+                {inlineAction.common.doctorName && ` — پزشک: ${inlineAction.common.doctorName}`}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setInlineAction(null)} disabled={inlineSubmitting}>
+                  لغو
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={submitInlineAction}
+                  disabled={inlineSubmitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {inlineSubmitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+                  ثبت همه
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
@@ -900,6 +1185,25 @@ export default function LivestockListBuilder() {
                       {c.label}
                     </th>
                   ))}
+                  {/* Extra inline-action headers */}
+                  {inlineAction?.kind === "insemination" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اپراتور</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اسپرم</th>
+                    </>
+                  )}
+                  {inlineAction?.kind === "rinse" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اپراتور</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">داروها</th>
+                    </>
+                  )}
+                  {inlineAction?.kind === "preg_test" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">نوع تست</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">نتیجه</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -923,6 +1227,26 @@ export default function LivestockListBuilder() {
                         {c.accessor(r, ctx) ?? "—"}
                       </td>
                     ))}
+                    {/* Per-row inline editors */}
+                    {inlineAction && (
+                      <InlineRowEditors
+                        row={r}
+                        mode={inlineAction.kind}
+                        value={inlineAction.perRow[r.id] || {}}
+                        onChange={(patch) =>
+                          setInlineAction({
+                            ...inlineAction,
+                            perRow: {
+                              ...inlineAction.perRow,
+                              [r.id]: { ...(inlineAction.perRow[r.id] || {}), ...patch },
+                            },
+                          })
+                        }
+                        users={inlineUsers}
+                        sperms={inlineSperms}
+                        medicines={inlineMedicines}
+                      />
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -953,6 +1277,28 @@ export default function LivestockListBuilder() {
                     </div>
                   ))}
                 </div>
+                {/* Inline editors on mobile too */}
+                {inlineAction && (
+                  <div className="mt-2 pt-2 border-t border-emerald-400/30 space-y-2">
+                    <MobileInlineEditors
+                      row={r}
+                      mode={inlineAction.kind}
+                      value={inlineAction.perRow[r.id] || {}}
+                      onChange={(patch) =>
+                        setInlineAction({
+                          ...inlineAction,
+                          perRow: {
+                            ...inlineAction.perRow,
+                            [r.id]: { ...(inlineAction.perRow[r.id] || {}), ...patch },
+                          },
+                        })
+                      }
+                      users={inlineUsers}
+                      sperms={inlineSperms}
+                      medicines={inlineMedicines}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -960,7 +1306,7 @@ export default function LivestockListBuilder() {
       )}
 
       {/* ============== Group actions ================= */}
-      {rows && rows.length > 0 && (
+      {rows && rows.length > 0 && !inlineAction && (
         <Card className="p-4 bg-card border-primary/30 space-y-3">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
             <CheckSquare className="w-4 h-4 text-primary" /> عملیات گروهی روی لیست
@@ -984,18 +1330,31 @@ export default function LivestockListBuilder() {
         </Card>
       )}
 
-      {/* Group action dialog */}
-      {actionOpen && actionKey && (
+      {/* Group action dialog — for VACCINATION we keep the legacy bulk
+          dialog (all-rows-same-values). For insemination/rinse/preg_test we
+          show a small common-fields dialog that then switches the page into
+          inline per-row mode. */}
+      {actionOpen && actionKey === "vaccination" && (
         <GroupActionDialog
           actionKey={actionKey}
           rows={targetRows}
           onClose={() => { setActionOpen(false); setActionKey(""); }}
           onDone={async (affected) => {
-            // After group fertility-event inserts, re-sync cache for each affected cow.
-            // DB triggers do the heavy lift but we re-read to keep the UI cache fresh.
             for (const id of affected) await syncCowFertilityCache(id);
             setActionOpen(false); setActionKey("");
-            generate(); // refresh the visible list with new cached fields
+            generate();
+          }}
+        />
+      )}
+      {actionOpen && (actionKey === "insemination" || actionKey === "rinse" || actionKey === "preg_test") && (
+        <InlineCommonDialog
+          kind={actionKey}
+          onCancel={() => { setActionOpen(false); setActionKey(""); }}
+          onConfirm={async (common) => {
+            setActionOpen(false);
+            const key = actionKey;
+            setActionKey("");
+            await startInlineAction(key as any, common);
           }}
         />
       )}
@@ -1062,22 +1421,41 @@ export default function LivestockListBuilder() {
 // =============================================================================
 // Tiny helper components
 // =============================================================================
+// Each filter group accepts a `tone` so the 3 main filter sections render
+// with visually distinct colored headers — easier to scan a long form.
+// Tones use semantic tokens with /10 opacity so they remain theme-friendly.
+type GroupTone = "primary" | "accent" | "info" | "warning";
+const GROUP_TONE_CLASSES: Record<GroupTone, { wrap: string; header: string; dot: string }> = {
+  primary: { wrap: "border-primary/40",      header: "bg-primary/10 hover:bg-primary/15 text-primary",        dot: "bg-primary" },
+  accent:  { wrap: "border-emerald-400/40",  header: "bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-300", dot: "bg-emerald-400" },
+  info:    { wrap: "border-sky-400/40",      header: "bg-sky-500/10 hover:bg-sky-500/15 text-sky-300",        dot: "bg-sky-400" },
+  warning: { wrap: "border-amber-400/40",    header: "bg-amber-500/10 hover:bg-amber-500/15 text-amber-300",  dot: "bg-amber-400" },
+};
+
 function FilterGroup({
-  title, id, open, onToggle, children,
+  title, id, open, onToggle, children, tone = "primary",
 }: {
   title: string; id: string; open: string | null;
   onToggle: (v: string | null) => void; children: React.ReactNode;
+  tone?: GroupTone;
 }) {
   const isOpen = open === id;
+  const t = GROUP_TONE_CLASSES[tone];
   return (
-    <div className="rounded-lg border border-border">
+    <div className={cn("rounded-lg border", t.wrap)}>
       <button type="button"
-        className="w-full flex items-center justify-between p-3 text-sm font-bold text-foreground hover:bg-secondary/40"
+        className={cn(
+          "w-full flex items-center justify-between p-3 text-sm font-bold transition-colors",
+          t.header,
+        )}
         onClick={() => onToggle(isOpen ? null : id)}>
-        <span>{title}</span>
+        <span className="flex items-center gap-2">
+          <span className={cn("w-2 h-2 rounded-full", t.dot)} />
+          {title}
+        </span>
         {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
-      {isOpen && <div className="p-3 border-t border-border">{children}</div>}
+      {isOpen && <div className="p-3 border-t border-border bg-background/30">{children}</div>}
     </div>
   );
 }
@@ -1691,5 +2069,455 @@ function ArchivesListDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// =============================================================================
+// ColumnPickerDialog — opens after the user clicks "تایید و تولید لیست".
+// Lets them choose which columns to show/export and the sort key/direction
+// before the actual query runs. Replaces the old always-on filter section.
+// =============================================================================
+function ColumnPickerDialog({
+  columnKeys, setColumnKeys, sortBy, setSortBy, sortDir, setSortDir,
+  onCancel, onConfirm,
+}: {
+  columnKeys: string[];
+  setColumnKeys: (k: string[]) => void;
+  sortBy: (typeof SORT_OPTIONS)[number]["key"];
+  setSortBy: (k: any) => void;
+  sortDir: "asc" | "desc";
+  setSortDir: (d: "asc" | "desc") => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-right">انتخاب ستون‌ها و مرتب‌سازی</DialogTitle>
+          <DialogDescription className="text-right">
+            ستون‌هایی که می‌خواهید در لیست/خروجی نمایش داده شوند را انتخاب و سپس «تایید و تولید لیست» را بزنید.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Quick selection helpers — saves clicks for common scenarios */}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setColumnKeys(ALL_COLUMNS.map((c) => c.key))}>
+              همه ستون‌ها
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setColumnKeys(DEFAULT_COLUMN_KEYS)}>
+              پیش‌فرض
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setColumnKeys(["tag"])}>
+              فقط پلاک
+            </Button>
+          </div>
+
+          <div>
+            <div className="text-xs text-muted-foreground mb-1.5">ستون‌های نمایش/خروجی</div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_COLUMNS.map((c) => {
+                const on = columnKeys.includes(c.key);
+                return (
+                  <Badge
+                    key={c.key}
+                    variant={on ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setColumnKeys(
+                      on ? columnKeys.filter((k) => k !== c.key) : [...columnKeys, c.key],
+                    )}
+                  >
+                    {c.label}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">مرتب‌سازی بر اساس</Label>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v)} dir="rtl">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">ترتیب</Label>
+              <Select value={sortDir} onValueChange={(v) => setSortDir(v as any)} dir="rtl">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">صعودی</SelectItem>
+                  <SelectItem value="desc">نزولی</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>انصراف</Button>
+          <Button
+            onClick={onConfirm}
+            disabled={columnKeys.length === 0}
+            className="bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
+          >
+            <Filter className="w-4 h-4 ml-2" /> تایید و تولید لیست
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// InlineCommonDialog — collects the SHARED fields (date/time/notes plus, for
+// pregnancy test, the doctor name) for the 3 per-row group actions. On
+// confirm the page enters inline mode and renders per-row editors.
+// =============================================================================
+function InlineCommonDialog({
+  kind, onCancel, onConfirm,
+}: {
+  kind: "insemination" | "rinse" | "preg_test";
+  onCancel: () => void;
+  onConfirm: (common: { dateStr: string; time: string; description: string; doctorName?: string }) => void;
+}) {
+  const [date, setDate] = useState<JalaliDate | null>(todayJalali());
+  const [time, setTime] = useState("");
+  const [description, setDescription] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+
+  const TITLE = {
+    insemination: "تلقیح گروهی — اطلاعات مشترک",
+    rinse: "شستشوی گروهی — اطلاعات مشترک",
+    preg_test: "تست آبستنی گروهی — اطلاعات مشترک",
+  }[kind];
+
+  function handleConfirm() {
+    if (!date) return toast.error("تاریخ را انتخاب کنید");
+    if (!time) return toast.error("ساعت را وارد کنید");
+    if (kind === "preg_test" && !doctorName.trim()) return toast.error("نام پزشک را وارد کنید");
+    onConfirm({
+      dateStr: formatJalali(date),
+      time,
+      description: description.trim(),
+      doctorName: kind === "preg_test" ? doctorName.trim() : undefined,
+    });
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-right">{TITLE}</DialogTitle>
+          <DialogDescription className="text-right">
+            پس از تایید، می‌توانید برای هر ردیف اپراتور و سایر اطلاعات را جداگانه تنظیم کنید.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">تاریخ</Label>
+              <JalaliDatePicker value={date} onChange={setDate} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">ساعت</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} dir="ltr" />
+            </div>
+          </div>
+          {kind === "preg_test" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">نام پزشک</Label>
+              <Input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} placeholder="نام و نام خانوادگی پزشک" />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">توضیحات</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>انصراف</Button>
+          <Button onClick={handleConfirm} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            تایید و ورود به حالت ردیفی
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// InlineRowEditors — per-row editors injected as <td>s into the desktop table
+// when the page is in inline group-action mode. Renders the right widgets
+// based on action kind (operator+sperm / operator+medicines / type+result).
+// =============================================================================
+function InlineRowEditors({
+  row, mode, value, onChange, users, sperms, medicines,
+}: {
+  row: CowRow;
+  mode: "insemination" | "rinse" | "preg_test";
+  value: any;
+  onChange: (patch: any) => void;
+  users: AppUser[];
+  sperms: SpermRow[];
+  medicines: Lookup[];
+}) {
+  // Eligibility — out-of-herd or male animals can't receive fertility ops.
+  // We still render placeholder cells so the table stays aligned.
+  const presence = row.presence_status ?? row.existancestatus;
+  const ineligible = presence !== 0 || row.sex !== 0;
+  if (ineligible) {
+    return (
+      <>
+        <td className="p-2 text-xs text-muted-foreground" colSpan={2}>غیرقابل اعمال</td>
+      </>
+    );
+  }
+
+  if (mode === "insemination") {
+    return (
+      <>
+        <td className="p-2 min-w-[140px]">
+          <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اپراتور" /></SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="p-2 min-w-[160px]">
+          <Select value={value.spermId || ""} onValueChange={(v) => onChange({ spermId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اسپرم" /></SelectTrigger>
+            <SelectContent>
+              {sperms.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+      </>
+    );
+  }
+
+  if (mode === "rinse") {
+    return (
+      <>
+        <td className="p-2 min-w-[140px]">
+          <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اپراتور" /></SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="p-2 min-w-[200px]">
+          <MultiMedicinePicker
+            medicines={medicines}
+            selected={value.medicineIds || []}
+            onChange={(ids) => onChange({ medicineIds: ids })}
+          />
+        </td>
+      </>
+    );
+  }
+
+  // preg_test
+  return (
+    <>
+      <td className="p-2 min-w-[130px]">
+        <Select value={value.testType || ""} onValueChange={(v) => onChange({ testType: v })} dir="rtl">
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نوع تست" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="initial">تست اولیه</SelectItem>
+            <SelectItem value="final">تست نهایی</SelectItem>
+            <SelectItem value="extra">تست تکمیلی</SelectItem>
+            <SelectItem value="dry">تست خشکی</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+      <td className="p-2 min-w-[120px]">
+        <Select value={value.testResult || ""} onValueChange={(v) => onChange({ testResult: v })} dir="rtl">
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نتیجه" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="positive">مثبت</SelectItem>
+            <SelectItem value="negative">منفی</SelectItem>
+            <SelectItem value="suspicious">مشکوک</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+    </>
+  );
+}
+
+// Same as InlineRowEditors but rendered as labeled blocks for the mobile card.
+function MobileInlineEditors(props: React.ComponentProps<typeof InlineRowEditors>) {
+  const { row, mode, value, onChange, users, sperms, medicines } = props;
+  const presence = row.presence_status ?? row.existancestatus;
+  if (presence !== 0 || row.sex !== 0) {
+    return <div className="text-xs text-muted-foreground">غیرقابل اعمال</div>;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2 text-xs">
+      {mode === "insemination" && (
+        <>
+          <LabeledField label="اپراتور">
+            <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <LabeledField label="اسپرم">
+            <Select value={value.spermId || ""} onValueChange={(v) => onChange({ spermId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {sperms.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+        </>
+      )}
+      {mode === "rinse" && (
+        <>
+          <LabeledField label="اپراتور">
+            <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <div className="col-span-2">
+            <LabeledField label="داروها">
+              <MultiMedicinePicker
+                medicines={medicines}
+                selected={value.medicineIds || []}
+                onChange={(ids) => onChange({ medicineIds: ids })}
+              />
+            </LabeledField>
+          </div>
+        </>
+      )}
+      {mode === "preg_test" && (
+        <>
+          <LabeledField label="نوع تست">
+            <Select value={value.testType || ""} onValueChange={(v) => onChange({ testType: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="initial">اولیه</SelectItem>
+                <SelectItem value="final">نهایی</SelectItem>
+                <SelectItem value="extra">تکمیلی</SelectItem>
+                <SelectItem value="dry">خشکی</SelectItem>
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <LabeledField label="نتیجه">
+            <Select value={value.testResult || ""} onValueChange={(v) => onChange({ testResult: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="positive">مثبت</SelectItem>
+                <SelectItem value="negative">منفی</SelectItem>
+                <SelectItem value="suspicious">مشکوک</SelectItem>
+              </SelectContent>
+            </Select>
+          </LabeledField>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// =============================================================================
+// MultiMedicinePicker — compact multi-select used for the شستشو دارو column.
+// Lightweight checkbox dropdown rendered via the popover primitive so it
+// works the same on desktop and mobile.
+// =============================================================================
+function MultiMedicinePicker({
+  medicines, selected, onChange,
+}: {
+  medicines: Lookup[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = q
+    ? medicines.filter((m) => (m.name || "").toLowerCase().includes(q.toLowerCase()))
+    : medicines;
+  const labels = selected.map((id) => medicines.find((m) => String(m.id) === id)?.name || id).join("، ");
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full h-8 px-2 text-xs text-right rounded-md border border-input bg-background text-foreground truncate"
+      >
+        {selected.length === 0 ? "انتخاب دارو(ها)" : `${selected.length} مورد: ${labels}`}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 mt-1 w-72 max-h-72 overflow-y-auto rounded-md border border-border bg-popover p-2 shadow-md">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="جستجوی دارو..."
+              className="h-7 text-xs mb-2"
+            />
+            {filtered.length === 0 && (
+              <div className="text-xs text-muted-foreground p-2 text-center">یافت نشد</div>
+            )}
+            {filtered.map((m) => {
+              const id = String(m.id);
+              const on = selected.includes(id);
+              return (
+                <label
+                  key={id}
+                  className="flex items-center gap-2 p-1.5 text-xs hover:bg-muted rounded cursor-pointer"
+                >
+                  <Checkbox
+                    checked={on}
+                    onCheckedChange={() =>
+                      onChange(on ? selected.filter((x) => x !== id) : [...selected, id])
+                    }
+                  />
+                  <span className="flex-1 text-right">{m.name || `#${m.id}`}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
