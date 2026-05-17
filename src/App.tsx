@@ -12,6 +12,7 @@ import Invoices from "./pages/Invoices";
 import MilkReceipts from "./pages/MilkReceipts";
 import LabResults from "./pages/LabResults";
 import Livestock from "./pages/Livestock";
+import LivestockListBuilder from "./pages/LivestockListBuilder";
 import LivestockProfile from "./pages/LivestockProfile";
 import MilkRecordQuick from "./pages/MilkRecordQuick";
 import Finance from "./pages/Finance";
