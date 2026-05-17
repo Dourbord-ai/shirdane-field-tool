@@ -121,6 +121,16 @@ export default function Livestock() {
   }, []);
   const [selected, setSelected] = useState<Set<string>>(initialSelected);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Lifecycle filter is computed client-side from each cow's derived state,
+  // so it lives outside `selected` (which builds the DB query).
+  const [lifecycleFilter, setLifecycleFilter] = useState<Set<LifecycleState>>(new Set());
+  const toggleLifecycle = (s: LifecycleState) =>
+    setLifecycleFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
 
   const selectedKey = useMemo(() => Array.from(selected).sort().join("|"), [selected]);
 
