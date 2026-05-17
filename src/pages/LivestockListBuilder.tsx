@@ -1330,19 +1330,34 @@ export default function LivestockListBuilder() {
         </Card>
       )}
 
-      {/* Group action dialog */}
-      {actionOpen && actionKey && (
+      {/* Group action dialog — for VACCINATION we keep the legacy bulk
+          dialog (all-rows-same-values). For insemination/rinse/preg_test we
+          show a small common-fields dialog that then switches the page into
+          inline per-row mode. */}
+      {actionOpen && actionKey === "vaccination" && (
         <GroupActionDialog
           actionKey={actionKey}
           rows={targetRows}
           onClose={() => { setActionOpen(false); setActionKey(""); }}
           onDone={async (affected) => {
-            // After group fertility-event inserts, re-sync cache for each affected cow.
-            // DB triggers do the heavy lift but we re-read to keep the UI cache fresh.
             for (const id of affected) await syncCowFertilityCache(id);
             setActionOpen(false); setActionKey("");
-            generate(); // refresh the visible list with new cached fields
+            generate();
           }}
+        />
+      )}
+      {actionOpen && (actionKey === "insemination" || actionKey === "rinse" || actionKey === "preg_test") && (
+        <InlineCommonDialog
+          kind={actionKey}
+          onCancel={() => { setActionOpen(false); setActionKey(""); }}
+          onConfirm={async (common) => {
+            setActionOpen(false);
+            const key = actionKey;
+            setActionKey("");
+            await startInlineAction(key as any, common);
+          }}
+        />
+      )}
         />
       )}
 
