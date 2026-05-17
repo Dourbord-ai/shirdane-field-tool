@@ -147,7 +147,9 @@ export default function InseminationRegistrationDialog({
       setLoadingLookups(true);
       const [usersRes, spermsRes, cowsRes] = await Promise.all([
         supabase.from("app_users").select("id, full_name, username").eq("is_active", true).order("full_name"),
-        supabase.from("sperms").select("id, code, name").order("name"),
+        // Only active sperms are eligible for new inseminations.
+        // Inactive sperms (managed in /settings) are hidden from this dropdown.
+        supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name"),
         supabase
           .from("cows")
           .select("id, tag_number, earnumber, bodynumber, existancestatus, sex, sextype")
