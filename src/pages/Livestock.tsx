@@ -203,7 +203,8 @@ export default function Livestock() {
           // Include is_pregnancy + existancestatus + sex so we can render
           // a debug badge row and verify no male / non-existing animals
           // appear in the pregnant KPI click-through.
-          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,created_at",
+          // Additional date/parity fields power the lifecycle state badge.
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,date_of_birth,last_birth_date,last_inoculation_date,number_of_births,last_type_id,last_status_id,created_at",
         )
         .order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
