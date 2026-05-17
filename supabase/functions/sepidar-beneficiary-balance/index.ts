@@ -1,8 +1,9 @@
 // Edge Function: sepidar-beneficiary-balance
+// Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Calls ONLY bridge.GetBeneficiaryBalance(@PartyId).
 // Direct Sepidar table access is NOT permitted here.
 // TODO (after DEV_ACCESS_MODE off): require permission `finance.sepidar.view_balance`.
-import sql from "npm:mssql@10.0.2";
+import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
