@@ -57,6 +57,40 @@ async function callEdge<T = Json>(
 
 // ----------------- Public API -----------------
 
+/**
+ * Single beneficiary row returned by `bridge.GetBeneficiaries`, normalized
+ * to snake_case in the edge function. All fields may be null.
+ */
+export interface SepidarBeneficiary {
+  beneficiary_id: number | string | null;
+  dl_ref: string | number | null;
+  dl_code: string | number | null;
+  beneficiary_name: string | null;
+  national_code: string | null;
+  phone: string | null;
+  balance: number | null;
+  is_vendor: boolean | null;
+  is_customer: boolean | null;
+  is_employee: boolean | null;
+  full_address: string | null;
+  beneficiary_type: string | null;
+}
+
+export interface SepidarBeneficiariesResponse {
+  success: true;
+  message: string;
+  data: SepidarBeneficiary[];
+}
+
+/**
+ * Fetch all beneficiaries from Sepidar via the bridge edge function.
+ * The SP returns the full list; the selector UI does the actual search
+ * client-side so typing feels instant after the initial load.
+ */
+export async function getSepidarBeneficiaries(): Promise<SepidarBeneficiariesResponse> {
+  return callEdge<SepidarBeneficiariesResponse>("sepidar-beneficiaries", {});
+}
+
 export interface SepidarBalanceResponse {
   success: true;
   balance: number;

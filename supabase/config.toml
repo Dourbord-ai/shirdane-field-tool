@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.sepidar-voucher-status]
 verify_jwt = false
+
+[functions.sepidar-beneficiaries]
+verify_jwt = false
