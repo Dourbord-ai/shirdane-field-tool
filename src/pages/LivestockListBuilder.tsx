@@ -1527,7 +1527,7 @@ function GroupActionDialog({
       const [u, s] = await Promise.all([
         supabase.from("app_users").select("id, full_name, username").eq("is_active", true).order("full_name"),
         actionKey === "insemination"
-          ? supabase.from("sperms").select("id, code, name").order("name")
+          ? supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name")
           : Promise.resolve({ data: [] } as any),
       ]);
       setUsers((u.data as AppUser[]) ?? []);
