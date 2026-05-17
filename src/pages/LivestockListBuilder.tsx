@@ -520,7 +520,220 @@ export default function LivestockListBuilder() {
     [visibleRows, selectedIds],
   );
 
-  // ---- Export to XLSX ------------------------------------------------------
+  // ---- Manual add cow by tag/body number -----------------------------------
+  // Lets the user type a tag_number or bodynumber and append that single cow
+  // into the current generated list. Useful for one-off additions after the
+  // filter pass — e.g. an animal that just came in from another pen.
+  async function manualAddCow() {
+    const q = manualSearch.trim();
+    if (!q) return toast.error("شماره دام یا شماره بدن را وارد کنید");
+    if (!rows) return toast.error("ابتدا لیست را تولید کنید");
+    setManualAdding(true);
+    try {
+      const isNum = /^\d+$/.test(q);
+      // Search both bodynumber (integer) and tag_number (text). We OR them
+      // so the user doesn't have to pick which kind of identifier they have.
+      let query = supabase.from("cows").select(
+        "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+        "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+        "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+        "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+        "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+      );
+      if (isNum) {
+        query = query.or(`tag_number.eq.${q},bodynumber.eq.${+q},earnumber.eq.${+q}`);
+      } else {
+        query = query.eq("tag_number", q);
+      }
+      const { data, error } = await query.limit(5);
+      if (error) throw error;
+      const found = ((data ?? []) as unknown) as CowRow[];
+      if (found.length === 0) return toast.error("دامی با این شماره پیدا نشد");
+      // De-dupe against current rows.
+      const existingIds = new Set(rows.map((r) => r.id));
+      const fresh = found.filter((c) => !existingIds.has(c.id));
+      if (fresh.length === 0) return toast.error("این دام از قبل در لیست هست");
+      setRows([...fresh, ...rows]);
+      setManualSearch("");
+      toast.success(`${fresh.length} دام به لیست افزوده شد`);
+    } catch (e: any) {
+      toast.error("خطا در افزودن: " + (e.message || e));
+    } finally {
+      setManualAdding(false);
+    }
+  }
+
+  // ---- Start INLINE per-row group-action mode ------------------------------
+  // For insemination / rinse / preg_test we collect only the shared form
+  // (date/time/notes + doctor) up-front, then render per-row editors.
+  async function startInlineAction(
+    kind: "insemination" | "rinse" | "preg_test",
+    common: InlineMode["common"],
+  ) {
+    // Lazy-load reference tables only when we actually need them.
+    const needsUsers = true;
+    const needsSperms = kind === "insemination";
+    const needsMeds = kind === "rinse";
+    const tasks: Promise<any>[] = [];
+    if (needsUsers && inlineUsers.length === 0) {
+      tasks.push(
+        supabase.from("app_users").select("id, full_name, username")
+          .eq("is_active", true).order("full_name")
+          .then((r) => setInlineUsers((r.data as AppUser[]) ?? [])),
+      );
+    }
+    if (needsSperms && inlineSperms.length === 0) {
+      tasks.push(
+        supabase.from("sperms").select("id, code, name").order("name")
+          .then((r) => setInlineSperms((r.data as SpermRow[]) ?? [])),
+      );
+    }
+    if (needsMeds && inlineMedicines.length === 0) {
+      tasks.push(
+        supabase.from("medicines").select("id, name").order("name")
+          .then((r) => setInlineMedicines((r.data as Lookup[]) ?? [])),
+      );
+    }
+    await Promise.all(tasks);
+    setInlineAction({ kind, common, perRow: {} });
+    toast.success("اطلاعات هر ردیف را تکمیل و سپس «ثبت همه» را بزنید");
+  }
+
+  // ---- Submit-all for the inline per-row mode ------------------------------
+  async function submitInlineAction() {
+    if (!inlineAction) return;
+    const { kind, common, perRow } = inlineAction;
+    const targets = targetRows;
+
+    // Validate that every (eligible) row has the needed fields.
+    const missing: number[] = [];
+    for (const r of targets) {
+      const presence = r.presence_status ?? r.existancestatus;
+      if (presence !== 0) continue; // out-of-herd cows are skipped silently
+      if (r.sex !== 0) continue;    // fertility ops are female-only
+      const cfg = perRow[r.id] || {};
+      if (kind === "insemination" && (!cfg.operatorId || !cfg.spermId)) missing.push(r.id);
+      if (kind === "rinse" && (!cfg.operatorId || !cfg.medicineIds?.length)) missing.push(r.id);
+      if (kind === "preg_test" && (!cfg.testType || !cfg.testResult)) missing.push(r.id);
+    }
+    if (missing.length > 0) {
+      return toast.error(`${missing.length} ردیف ناقص است — اپراتور/داده هر ردیف را تکمیل کنید`);
+    }
+
+    setInlineSubmitting(true);
+    try {
+      const dateStr = common.dateStr;
+      const eventDate = common.time ? `${dateStr} ${common.time}` : dateStr;
+      const payload: any[] = [];
+
+      for (const r of targets) {
+        const presence = r.presence_status ?? r.existancestatus;
+        if (presence !== 0 || r.sex !== 0) continue;
+        const cfg = perRow[r.id] || {};
+
+        if (kind === "insemination") {
+          const op = inlineUsers.find((u) => String(u.id) === cfg.operatorId);
+          const s = inlineSperms.find((x) => String(x.id) === cfg.spermId);
+          payload.push({
+            livestock_id: r.id,
+            event_type: "insemination",
+            fertility_operation_id: 2,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: op?.full_name ?? op?.username ?? null,
+            notes: common.description || null,
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              insemination_type: "sperm",
+              sperm_id: s?.id,
+              sperm_label: s ? (s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name) : null,
+              time: common.time,
+              operator_name: op?.full_name ?? op?.username ?? null,
+              source: "list_builder_inline",
+            },
+          });
+        } else if (kind === "rinse") {
+          const op = inlineUsers.find((u) => String(u.id) === cfg.operatorId);
+          const medNames = (cfg.medicineIds || []).map(
+            (mid) => inlineMedicines.find((m) => String(m.id) === mid)?.name ?? mid,
+          );
+          payload.push({
+            livestock_id: r.id,
+            event_type: "rinse",
+            fertility_operation_id: 8,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: op?.full_name ?? op?.username ?? null,
+            notes: common.description || null,
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              rinse_reason: common.description || "—",
+              medicine_ids: cfg.medicineIds,
+              medicine_names: medNames,
+              time: common.time,
+              operator_name: op?.full_name ?? op?.username ?? null,
+              source: "list_builder_inline",
+            },
+          });
+        } else if (kind === "preg_test") {
+          // Per-row test type + result determine the fertility_operation_id
+          // and status_code, same mapping as the legacy dialog.
+          const opMap = { initial: 3, final: 4, extra: 11, dry: 12 } as const;
+          const codeMap: Record<string, Partial<Record<string, number>>> = {
+            initial: { positive: 4, suspicious: 5, negative: 6 },
+            final:   { positive: 8, negative: 7 },
+            extra:   { positive: 18, negative: 17 },
+            dry:     { positive: 20, negative: 19 },
+          };
+          const operationId = opMap[cfg.testType as keyof typeof opMap];
+          const statusCode = codeMap[cfg.testType!]?.[cfg.testResult!] ?? null;
+          if (statusCode == null) continue;
+          payload.push({
+            livestock_id: r.id,
+            event_type: "pregnancy_test",
+            fertility_operation_id: operationId,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: common.doctorName || null,
+            notes: common.description || null,
+            status_code: statusCode,
+            fertility_status_id: statusCode,
+            result: cfg.testResult === "positive" ? "مثبت" : cfg.testResult === "negative" ? "منفی" : "مشکوک",
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              test_type: cfg.testType,
+              result: cfg.testResult,
+              doctor_name: common.doctorName,
+              time: common.time,
+              source: "list_builder_inline",
+            },
+          });
+        }
+      }
+
+      if (payload.length === 0) {
+        setInlineSubmitting(false);
+        return toast.error("هیچ ردیف معتبری برای ثبت وجود ندارد");
+      }
+      const { error } = await supabase.from("livestock_fertility_events" as any).insert(payload);
+      if (error) throw error;
+      // Rebuild fertility cache for each affected cow (DB triggers also do
+      // this, but we re-sync defensively so the UI shows fresh values).
+      for (const p of payload) await syncCowFertilityCache(p.livestock_id);
+      toast.success(`${payload.length} رویداد ثبت شد`);
+      setInlineAction(null);
+      generate(); // refresh visible rows
+    } catch (e: any) {
+      toast.error("خطا در ثبت: " + (e.message || e));
+    } finally {
+      setInlineSubmitting(false);
+    }
+  }
+
+
   function exportXlsx() {
     if (!rows || rows.length === 0) return toast.error("لیستی برای خروجی وجود ندارد");
     const data = rows.map((r) => {
