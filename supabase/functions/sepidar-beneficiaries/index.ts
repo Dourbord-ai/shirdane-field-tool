@@ -1,4 +1,5 @@
 // Edge Function: sepidar-beneficiaries
+// Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Reads beneficiary/party data from the SQL Server bridge database by
 // invoking ONLY the stored procedure `bridge.GetBeneficiaries`.
 // Direct queries against Sepidar01 tables are NOT permitted here.
@@ -6,7 +7,7 @@
 // TODO (after DEV_ACCESS_MODE is disabled): require permission
 // `finance.sepidar.view_beneficiaries` for the calling user.
 
-import sql from "npm:mssql@10.0.2";
+import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
 // --- CORS: allow the SPA + supabase-js fetch to call this function freely ---
 const corsHeaders = {
