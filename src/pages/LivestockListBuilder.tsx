@@ -341,7 +341,7 @@ export default function LivestockListBuilder() {
       const { data, error } = await q.limit(5000);
       if (error) throw error;
 
-      let result = (data ?? []) as CowRow[];
+      let result = ((data ?? []) as unknown) as CowRow[];
 
       // ----- Client-side post-filters ------------------------------------
       const todayMs = Date.now();
