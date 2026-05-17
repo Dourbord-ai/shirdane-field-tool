@@ -17,7 +17,8 @@ import {
   getPaymentAmountTypeKey,
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
-import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance, type SepidarBeneficiary } from "@/lib/sepidar";
+import { SepidarBeneficiarySelector } from "@/components/finance/SepidarBeneficiarySelector";
 
 interface PR {
   id: string;
@@ -48,6 +49,16 @@ interface PRItem {
   description: string;
   status?: string;
   party?: PartyLite;
+  // --- Sepidar beneficiary snapshot ---
+  // These are filled when the user picks a beneficiary from the
+  // SepidarBeneficiarySelector and are persisted on the row so the request
+  // remains meaningful even if the upstream Sepidar record changes later.
+  beneficiary_id?: string | null;
+  dl_ref?: string | null;
+  dl_code?: string | null;
+  beneficiary_name?: string | null;
+  beneficiary_type?: string | null;
+  beneficiary_balance_snapshot?: number | null;
 }
 
 export default function PaymentRequestsTab() {
@@ -172,22 +183,24 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   }
 
   async function save() {
+    // Guard against double-submit (rapid taps on mobile).
     if (saving) return;
     if (!typeCode) return toast.error("نوع درخواست را انتخاب کنید");
     if (!title) return toast.error("عنوان لیست را وارد کنید");
-    if (items.some((i) => !i.party_id || !i.amount)) return toast.error("ذینفع و مبلغ هر آیتم الزامی است");
+    // The new flow REQUIRES a Sepidar beneficiary on every row.
+    if (items.some((i) => !i.beneficiary_id || !i.amount))
+      return toast.error("ذینفع سپیدار و مبلغ هر آیتم الزامی است");
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
-    // Validate creditor balance for amount_type_code = 1 (local + Sepidar)
+    // Validate creditor balance for amount_type_code = 1 using the snapshot
+    // captured at selection time (Sepidar convention: positive credit balance
+    // means we owe the party — `available = abs(balance)` when balance >= 0).
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
-      if (it.amount_type_code === 1 && it.party_id) {
-        const v = validateCreditorBalance(partyBalances[it.party_id], it.amount);
-        if (!v.ok) return toast.error(`ردیف ${idx + 1}: ${v.message}`);
-        const sb = sepidarBalances[it.party_id];
-        if (sb && sb.balance != null) {
-          // Sepidar convention: positive credit balance means we owe the party.
-          const sepAvail = Math.abs(sb.balance);
+      if (it.amount_type_code === 1) {
+        const snap = it.beneficiary_balance_snapshot;
+        if (snap != null) {
+          const sepAvail = Math.abs(Number(snap));
           if (sepAvail + 1e-6 < it.amount)
             return toast.error(`ردیف ${idx + 1}: مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.`);
         }
@@ -205,6 +218,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       await supabase.from("finance_payment_request_items").insert(
         items.map((i) => ({
           payment_request_id: pr.id,
+          // Legacy local party (kept null in the new Sepidar-first flow).
           party_id: i.party_id,
           amount: i.amount,
           amount_type_code: i.amount_type_code,
@@ -212,6 +226,14 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           description: i.description,
           status: "pending_approval",
           legacy_request_type_code: code,
+          // --- Sepidar snapshot fields persisted with the row ---
+          beneficiary_id: i.beneficiary_id ?? null,
+          dl_ref: i.dl_ref ?? null,
+          dl_code: i.dl_code ?? null,
+          beneficiary_name: i.beneficiary_name ?? null,
+          beneficiary_type: i.beneficiary_type ?? null,
+          beneficiary_balance_snapshot: i.beneficiary_balance_snapshot ?? null,
+          beneficiary_snapshot_at: i.beneficiary_id ? new Date().toISOString() : null,
         })),
       );
       toast.success("درخواست ثبت شد");
@@ -276,7 +298,35 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </Button>
                       )}
                     </div>
-                    <PartySelector value={it.party_id} onChange={(id) => updateItem(idx, { party_id: id })} />
+                    {/* Sepidar-backed beneficiary picker. Selecting a row
+                        snapshots beneficiary_id / dl_ref / dl_code / name /
+                        type / balance onto this item so the payment request
+                        is independent of any later changes in Sepidar. */}
+                    <SepidarBeneficiarySelector
+                      value={it.beneficiary_id ?? null}
+                      fallbackLabel={it.beneficiary_name}
+                      onChange={(id, b?: SepidarBeneficiary) => {
+                        if (!id || !b) {
+                          updateItem(idx, {
+                            beneficiary_id: null,
+                            dl_ref: null,
+                            dl_code: null,
+                            beneficiary_name: null,
+                            beneficiary_type: null,
+                            beneficiary_balance_snapshot: null,
+                          });
+                          return;
+                        }
+                        updateItem(idx, {
+                          beneficiary_id: id,
+                          dl_ref: b.dl_ref != null ? String(b.dl_ref) : null,
+                          dl_code: b.dl_code != null ? String(b.dl_code) : null,
+                          beneficiary_name: b.beneficiary_name,
+                          beneficiary_type: b.beneficiary_type,
+                          beneficiary_balance_snapshot: b.balance,
+                        });
+                      }}
+                    />
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">نوع مبلغ</Label>
@@ -299,69 +349,37 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                           onChange={(e) => updateItem(idx, { amount: parseMoney(e.target.value) })} />
                       </div>
                     </div>
-                    {it.party_id && bal !== undefined && (
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                          <span className="text-muted-foreground">مانده فعلی ذینفع</span>
-                          <MoneyCell value={bal} className="text-[11px]" />
-                        </div>
-                        <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                          <span className="text-muted-foreground">مبلغ مجاز قابل پرداخت</span>
-                          <MoneyCell value={isCreditor ? available : it.amount || 0} className="text-[11px]" />
-                        </div>
-                      </div>
-                    )}
-                    {shortage && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        مانده بستانکاری ذینفع برای این مبلغ کافی نیست
-                      </div>
-                    )}
-                    {it.party_id && (() => {
-                      const sepId = partySepidarIds[it.party_id];
-                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
-                      if (!isCreditor) {
-                        return (
-                          <div className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
-                            برای این نوع پرداخت، کنترل مانده سپیدار الزامی نیست.
-                          </div>
-                        );
-                      }
-                      if (!sepId) {
-                        return (
-                          <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
-                            این ذینفع به سپیدار متصل نیست (sepidar_party_id ندارد).
-                          </div>
-                        );
-                      }
-                      if (!sb || sb.loading) {
-                        return <div className="text-[11px] text-muted-foreground bg-muted/40 rounded px-2 py-1">در حال دریافت مانده از سپیدار…</div>;
-                      }
-                      if (sb.error) {
-                        return <div className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">خطا در سپیدار: {sb.error}</div>;
-                      }
-                      const sepAvail = Math.abs(Number(sb.balance || 0));
-                      const exceeds = it.amount > 0 && sepAvail + 1e-6 < it.amount;
+                    {/* Sepidar snapshot balance summary — uses the value captured
+                        when the user picked the beneficiary, not a live query. */}
+                    {it.beneficiary_id && it.beneficiary_balance_snapshot != null && (() => {
+                      const snap = Number(it.beneficiary_balance_snapshot);
+                      const sepAvail = Math.abs(snap);
+                      const exceeds = isCreditor && it.amount > 0 && sepAvail + 1e-6 < it.amount;
                       return (
-                        <div className={`rounded px-2 py-1 text-[11px] flex items-center justify-between ${exceeds ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
-                          <span>مانده قابل پرداخت طبق سپیدار</span>
-                          <MoneyCell value={sepAvail} className="text-[11px]" />
-                        </div>
-                      );
-                    })()}
-                    {(() => {
-                      const sb = it.party_id ? sepidarBalances[it.party_id] : undefined;
-                      if (!isCreditor || !sb || sb.balance == null) return null;
-                      const sepAvail = Math.abs(Number(sb.balance || 0));
-                      if (it.amount > 0 && sepAvail + 1e-6 < it.amount) {
-                        return (
-                          <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.
+                        <>
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                              <span className="text-muted-foreground">مانده سپیدار (لحظه انتخاب)</span>
+                              <MoneyCell value={snap} className="text-[11px]" />
+                            </div>
+                            <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                              <span className="text-muted-foreground">مبلغ مجاز قابل پرداخت</span>
+                              <MoneyCell value={isCreditor ? sepAvail : it.amount || 0} className="text-[11px]" />
+                            </div>
                           </div>
-                        );
-                      }
-                      return null;
+                          {!isCreditor && (
+                            <div className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                              برای این نوع پرداخت، کنترل مانده سپیدار الزامی نیست.
+                            </div>
+                          )}
+                          {exceeds && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-red-700 bg-red-50 rounded px-2 py-1">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.
+                            </div>
+                          )}
+                        </>
+                      );
                     })()}
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
