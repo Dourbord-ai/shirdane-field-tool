@@ -17,7 +17,8 @@ import {
   getPaymentAmountTypeKey,
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
-import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance, type SepidarBeneficiary } from "@/lib/sepidar";
+import { SepidarBeneficiarySelector } from "@/components/finance/SepidarBeneficiarySelector";
 
 interface PR {
   id: string;
@@ -48,6 +49,16 @@ interface PRItem {
   description: string;
   status?: string;
   party?: PartyLite;
+  // --- Sepidar beneficiary snapshot ---
+  // These are filled when the user picks a beneficiary from the
+  // SepidarBeneficiarySelector and are persisted on the row so the request
+  // remains meaningful even if the upstream Sepidar record changes later.
+  beneficiary_id?: string | null;
+  dl_ref?: string | null;
+  dl_code?: string | null;
+  beneficiary_name?: string | null;
+  beneficiary_type?: string | null;
+  beneficiary_balance_snapshot?: number | null;
 }
 
 export default function PaymentRequestsTab() {
