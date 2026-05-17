@@ -1,7 +1,78 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Bell, Search, User, CloudSun, Calendar, Menu, Plus } from "lucide-react";
+import { ArrowLeft, Bell, Search, User, CloudSun, Calendar, Menu, Plus, X } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { toEnDigits } from "@/lib/digits";
+
+/**
+ * Header-level search box.
+ * Behavior mirrors the on-page Livestock search:
+ *   - User types a tag/ear/body number (we normalize Persian → English digits).
+ *   - On submit (Enter) or on the clear button, we navigate to
+ *     /livestock?q=<query>. The Livestock page reads ?q= and runs the exact
+ *     same Supabase query it would for a locally-typed search.
+ * We deliberately do NOT debounce-navigate while typing — that would push
+ * a new history entry on every keystroke. The user explicitly submits.
+ */
+function HeaderSearchBox() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Local controlled input so typing feels instant; we don't read from the URL
+  // here because the user may be on any page when they start typing.
+  const [value, setValue] = useState("");
+
+  // Submit handler — normalize digits, then navigate to /livestock with ?q=.
+  // If the query is empty, just go to /livestock (no filter applied).
+  const submit = (e?: FormEvent) => {
+    e?.preventDefault();
+    const q = toEnDigits(value).trim();
+    const target = q ? `/livestock?q=${encodeURIComponent(q)}` : "/livestock";
+    navigate(target);
+  };
+
+  // When the user navigates away from /livestock (or clears the URL),
+  // keep the header input in sync with whatever Livestock currently shows
+  // so the two search surfaces never disagree visually.
+  useEffect(() => {
+    if (location.pathname.startsWith("/livestock")) {
+      const params = new URLSearchParams(location.search);
+      setValue(params.get("q") ?? "");
+    }
+  }, [location.pathname, location.search]);
+
+  return (
+    <form
+      onSubmit={submit}
+      className="hidden lg:flex flex-1 max-w-md items-center gap-2 rounded-xl bg-secondary/60 border border-border/60 px-3 py-2"
+    >
+      <Search className="w-4 h-4 text-muted-foreground" />
+      <input
+        dir="rtl"
+        inputMode="search"
+        placeholder="جستجوی دام با شماره پلاک..."
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => {
+            // Clear the input AND clear the filter on the Livestock page
+            // so the result list resets to the unfiltered view.
+            setValue("");
+            navigate("/livestock");
+          }}
+          className="p-0.5 rounded-full hover:bg-muted/50"
+          aria-label="پاک کردن"
+        >
+          <X className="w-3.5 h-3.5 text-muted-foreground" />
+        </button>
+      )}
+    </form>
+  );
+}
+
 
 function shamsiNow(): { date: string; time: string } {
   try {
@@ -62,15 +133,11 @@ export default function AppHeader() {
         </div>
       </div>
 
-      {/* Desktop search */}
-      <div className="hidden lg:flex flex-1 max-w-md items-center gap-2 rounded-xl bg-secondary/60 border border-border/60 px-3 py-2">
-        <Search className="w-4 h-4 text-muted-foreground" />
-        <input
-          dir="rtl"
-          placeholder="جستجو..."
-          className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
-        />
-      </div>
+      {/* Desktop search — mirrors the on-page Livestock search.
+          Submitting (Enter) or typing+debounce navigates to /livestock?q=<query>
+          so the result list is the same one the user gets from the Livestock page. */}
+      <HeaderSearchBox />
+
 
       <div className="flex-1 lg:hidden" />
 
