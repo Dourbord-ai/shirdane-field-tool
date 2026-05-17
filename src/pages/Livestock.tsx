@@ -48,6 +48,13 @@ type Cow = {
   is_dry: boolean | null;
   is_pregnancy: boolean | null;
   last_fertility_status: number | null;
+  // Fields required to compute the lifecycle state on the client.
+  date_of_birth: string | null;
+  last_birth_date: string | null;
+  last_inoculation_date: string | null;
+  number_of_births: number | null;
+  last_type_id: number | null;
+  last_status_id: number | null;
   created_at: string;
 };
 
