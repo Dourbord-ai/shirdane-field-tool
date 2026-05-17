@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import SearchableSelect from "@/components/SearchableSelect";
 import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
 import { PREGNANCY_STATE_BADGE, MILKING_STATE_BADGE } from "@/lib/fertilityRefs";
+import { deriveEventPeople } from "@/lib/fertility";
 
 interface FertilityEvent {
   id: string;
