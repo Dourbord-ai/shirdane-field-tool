@@ -2,7 +2,6 @@
 // Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Calls ONLY bridge.GetBeneficiaryBalance(@PartyId).
 // Direct Sepidar table access is NOT permitted here.
-// TODO (after DEV_ACCESS_MODE off): require permission `finance.sepidar.view_balance`.
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
 const corsHeaders = {
@@ -11,17 +10,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
-function persianizeError(raw: string): string {
-  const m = (raw || "").toLowerCase();
-  if (m.includes("login failed") || m.includes("18456"))
-    return "نام کاربری یا رمز عبور اتصال سپیدار اشتباه است.";
-  if (m.includes("etimedout") || m.includes("timeout") || m.includes("econnrefused") || m.includes("enotfound") || m.includes("socket") || m.includes("network"))
-    return "ارتباط با سرور سپیدار برقرار نشد.";
-  if (m.includes("could not find stored procedure") || m.includes("cannot find") || m.includes("2812"))
-    return "پروسیژر مانده ذینفع در سپیدار پیدا نشد.";
-  return "خطا در واکشی مانده ذینفع از سپیدار.";
-}
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -50,17 +38,20 @@ Deno.serve(async (req) => {
     const result = await r.execute("bridge.GetBeneficiaryBalance");
     const rows = (result.recordset as Record<string, unknown>[]) || [];
     const first = rows[0] || {};
-    // Try common column names
-    const balanceVal =
-      first.Balance ?? first.balance ?? first.RemainBalance ??
-      first.RemainCredit ?? first.Credit ?? first.Amount ?? null;
-    const balance = Number(balanceVal ?? 0);
-    console.log("[sepidar-balance] ok", { partyId, rows: rows.length, balance });
-    return json({ success: true, balance, data: first, raw: rows });
+    console.log("[sepidar-balance] ok", { partyId, rows: rows.length });
+    return json({
+      success: true,
+      message: "مانده ذینفع با موفقیت دریافت شد.",
+      data: first,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[sepidar-balance] error", msg, e);
-    return json({ success: false, message: persianizeError(msg), rawError: msg });
+    return json({
+      success: false,
+      message: "مانده ذینفع سپیدار قابل واکشی نیست.",
+      rawError: msg,
+    });
   } finally {
     try { if (pool) await pool.close(); } catch (closeErr) { console.warn("[sepidar-balance] pool close error", closeErr); }
   }
