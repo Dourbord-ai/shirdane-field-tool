@@ -24,6 +24,11 @@ export type FertilityEvent = {
   result: string | null;
   operator_user_id: number | null;
   operator_name: string | null;
+  // Optional vet/doctor name. For pregnancy_test events this is sourced from
+  // metadata.Vet / metadata.vet_name / metadata.doctor_name, or — for legacy
+  // rows imported from CowPregnancies — falls back to operator_name (which the
+  // old pregnancy dialog historically used for the vet field).
+  doctor_name?: string | null;
   notes: string | null;
   metadata: Record<string, unknown> | null;
   legacy_table_name: string | null;
