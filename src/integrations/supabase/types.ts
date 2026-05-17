@@ -2293,9 +2293,16 @@ export type Database = {
           amount: number | null
           amount_type: string | null
           amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
           confirmed_amount: number | null
           created_at: string
           description: string | null
+          dl_code: string | null
+          dl_ref: string | null
           id: string
           is_deleted: boolean | null
           legacy_id: number | null
@@ -2313,9 +2320,16 @@ export type Database = {
           amount?: number | null
           amount_type?: string | null
           amount_type_code?: number | null
+          beneficiary_balance_snapshot?: number | null
+          beneficiary_id?: string | null
+          beneficiary_name?: string | null
+          beneficiary_snapshot_at?: string | null
+          beneficiary_type?: string | null
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
+          dl_code?: string | null
+          dl_ref?: string | null
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
@@ -2333,9 +2347,16 @@ export type Database = {
           amount?: number | null
           amount_type?: string | null
           amount_type_code?: number | null
+          beneficiary_balance_snapshot?: number | null
+          beneficiary_id?: string | null
+          beneficiary_name?: string | null
+          beneficiary_snapshot_at?: string | null
+          beneficiary_type?: string | null
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
+          dl_code?: string | null
+          dl_ref?: string | null
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
