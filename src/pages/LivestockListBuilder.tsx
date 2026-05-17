@@ -631,7 +631,7 @@ export default function LivestockListBuilder() {
         )}
 
         {/* Filter groups (collapsible) */}
-        <FilterGroup title="اطلاعات پایه" id="basic" open={openGroup} onToggle={setOpenGroup}>
+        <FilterGroup title="اطلاعات پایه" id="basic" open={openGroup} onToggle={setOpenGroup} tone="info">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Field label="جستجو (پلاک/گوش/بدن)">
               <div className="relative">
