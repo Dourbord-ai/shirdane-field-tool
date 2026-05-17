@@ -93,14 +93,21 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ success: false, message: "Method not allowed", data: [] }, 405);
 
   // Pull the SQL Server connection settings from project-level secrets.
-  // We intentionally fail fast (and clearly) if anything is missing.
-  const host = Deno.env.get("SEPIDAR_SQL_HOST");
-  const portStr = Deno.env.get("SEPIDAR_SQL_PORT");
+  // The canonical name is SEPIDAR_SQL_SERVER (matches supabase/functions/.env);
+  // SEPIDAR_SQL_HOST is kept as a fallback for older deployments.
+  const host =
+    Deno.env.get("SEPIDAR_SQL_SERVER") ||
+    Deno.env.get("SEPIDAR_SQL_HOST");
+  // Default to the standard SQL Server port if none is configured.
+  const port = Number(Deno.env.get("SEPIDAR_SQL_PORT") || "1433");
   const database = Deno.env.get("SEPIDAR_SQL_DATABASE");
   const user = Deno.env.get("SEPIDAR_SQL_USER");
   const password = Deno.env.get("SEPIDAR_SQL_PASSWORD");
+  // Optional toggles — fall back to safe defaults compatible with SQL Server 2008.
+  const encrypt = Deno.env.get("SEPIDAR_SQL_ENCRYPT") === "true";
+  const trustServerCertificate = (Deno.env.get("SEPIDAR_SQL_TRUST_CERT") ?? "true") === "true";
 
-  if (!host || !portStr || !database || !user || !password) {
+  if (!host || !database || !user || !password) {
     return json(
       {
         success: false,
@@ -114,7 +121,15 @@ Deno.serve(async (req) => {
   // mssql connection config — mirror the working sepidar-beneficiary-statement.
   const config: sql.config = {
     server: host,
-    port: Number(portStr),
+    port,
+    database,
+    user,
+    password,
+    options: {
+      encrypt,
+      trustServerCertificate,
+      enableArithAbort: true,
+    },
     database,
     user,
     password,
