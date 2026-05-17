@@ -1,7 +1,8 @@
 // Edge Function: sepidar-allocate-payment-transaction
+// Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Calls ONLY bridge.AllocatePaymentTransaction.
 // TODO (after DEV_ACCESS_MODE off): require permission `finance.sepidar.allocate_transaction`.
-import sql from "npm:mssql@10.0.2";
+import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
