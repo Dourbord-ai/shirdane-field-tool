@@ -20,6 +20,8 @@ interface FertilityEvent {
   result_code: string | null;
   created_at: string;
   erotic_type_id: number | null;
+  operator_name: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface EroticType { id: number; title: string }
