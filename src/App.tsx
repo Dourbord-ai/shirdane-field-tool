@@ -55,6 +55,7 @@ const App = () => (
               <Route path="/receipts/milk" element={<MilkReceipts />} />
               <Route path="/receipts/lab" element={<LabResults />} />
               <Route path="/livestock" element={<Livestock />} />
+              <Route path="/livestock/list-builder" element={<LivestockListBuilder />} />
               <Route path="/livestock/:id" element={<LivestockProfile />} />
               <Route path="/milk-record/quick" element={<MilkRecordQuick />} />
               <Route path="/finance" element={<Finance />} />
