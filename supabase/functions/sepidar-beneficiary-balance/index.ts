@@ -37,25 +37,14 @@ Deno.serve(async (req) => {
   if (!Number.isFinite(partyId) || partyId <= 0)
     return json({ success: false, message: "شناسه ذینفع سپیدار معتبر نیست." }, 400);
 
-  const host = Deno.env.get("SEPIDAR_SQL_HOST");
-  const portStr = Deno.env.get("SEPIDAR_SQL_PORT");
-  const database = Deno.env.get("SEPIDAR_SQL_DATABASE");
-  const user = Deno.env.get("SEPIDAR_SQL_USER");
-  const password = Deno.env.get("SEPIDAR_SQL_PASSWORD");
-  if (!host || !portStr || !database || !user || !password)
-    return json({ success: false, message: "تنظیمات اتصال به سپیدار کامل نیست." }, 500);
-
-  const config: sql.config = {
-    server: host, port: Number(portStr), database, user, password,
-    options: { encrypt: false, trustServerCertificate: true, enableArithAbort: true },
-    connectionTimeout: 15000, requestTimeout: 60000,
-    pool: { max: 2, min: 0, idleTimeoutMillis: 10000 },
-  };
+  // Centralized env validation + config — see _shared/sepidarSqlClient.ts.
+  const cfg = getSepidarSqlConfig();
+  if (!cfg.ok) return json({ success: false, message: cfg.message }, 500);
 
   let pool: sql.ConnectionPool | null = null;
   try {
-    console.log("[sepidar-balance] connecting", { host, port: portStr, database, partyId });
-    pool = await new sql.ConnectionPool(config).connect();
+    console.log("[sepidar-balance] connecting", { ...cfg.meta, partyId });
+    pool = await new sql.ConnectionPool(cfg.config).connect();
     const r = pool.request();
     r.input("PartyId", sql.Int, partyId);
     const result = await r.execute("bridge.GetBeneficiaryBalance");
