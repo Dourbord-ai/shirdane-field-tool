@@ -577,21 +577,27 @@ export default function LivestockListBuilder() {
     const tasks: Promise<any>[] = [];
     if (needsUsers && inlineUsers.length === 0) {
       tasks.push(
-        supabase.from("app_users").select("id, full_name, username")
-          .eq("is_active", true).order("full_name")
-          .then((r) => setInlineUsers((r.data as AppUser[]) ?? [])),
+        (async () => {
+          const r = await supabase.from("app_users")
+            .select("id, full_name, username").eq("is_active", true).order("full_name");
+          setInlineUsers((r.data as AppUser[]) ?? []);
+        })(),
       );
     }
     if (needsSperms && inlineSperms.length === 0) {
       tasks.push(
-        supabase.from("sperms").select("id, code, name").order("name")
-          .then((r) => setInlineSperms((r.data as SpermRow[]) ?? [])),
+        (async () => {
+          const r = await supabase.from("sperms").select("id, code, name").order("name");
+          setInlineSperms((r.data as SpermRow[]) ?? []);
+        })(),
       );
     }
     if (needsMeds && inlineMedicines.length === 0) {
       tasks.push(
-        supabase.from("medicines").select("id, name").order("name")
-          .then((r) => setInlineMedicines((r.data as Lookup[]) ?? [])),
+        (async () => {
+          const r = await supabase.from("medicines").select("id, name").order("name");
+          setInlineMedicines((r.data as Lookup[]) ?? []);
+        })(),
       );
     }
     await Promise.all(tasks);
