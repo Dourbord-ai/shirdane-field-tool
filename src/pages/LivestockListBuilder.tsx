@@ -1358,8 +1358,6 @@ export default function LivestockListBuilder() {
           }}
         />
       )}
-        />
-      )}
 
       {/* Save-archive dialog: asks for a name + optional note, then writes
           a new row into `livestock_list_archives` stamped with the current
