@@ -44,6 +44,15 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { cn } from "@/lib/utils";
 import { FERTILITY_STATUS_LABELS, PRESENCE_STATUS_LABELS } from "@/lib/livestock";
+// Lifecycle classification helper — provides "وضعیت چرخه دام" derived from
+// existing cow fields. We use it here both to render a column and to power
+// the new lifecycle multi-select filter.
+import {
+  calculateLifecycleState,
+  LIFECYCLE_LABELS,
+  ALL_LIFECYCLE_STATES,
+  type LifecycleState,
+} from "@/lib/lifecycleState";
 
 // -----------------------------------------------------------------------------
 // Types and lookup row shapes — kept loose to mirror the actual cows columns.
