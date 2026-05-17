@@ -444,6 +444,43 @@ export default function Livestock() {
               </SelectContent>
             </Select>
           </div>
+          {/* Lifecycle multi-select — client-side filter on calculated state */}
+          <div className="sm:col-span-2">
+            <label className="text-xs text-muted-foreground mb-1 block">وضعیت چرخه دام</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-between font-normal">
+                  <span className="truncate text-sm">
+                    {lifecycleFilter.size === 0
+                      ? "همه"
+                      : `${lifecycleFilter.size.toLocaleString("fa-IR")} مورد انتخاب شده`}
+                  </span>
+                  <SlidersHorizontal className="w-4 h-4 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 max-h-[60vh] overflow-y-auto p-2" dir="rtl">
+                <div className="flex items-center justify-between px-2 py-1 mb-1">
+                  <span className="text-xs text-muted-foreground">انتخاب چندتایی</span>
+                  {lifecycleFilter.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setLifecycleFilter(new Set())}
+                      className="text-xs text-destructive hover:underline"
+                    >پاک‌سازی</button>
+                  )}
+                </div>
+                {ALL_LIFECYCLE_STATES.map((s) => (
+                  <label key={s} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                    <Checkbox
+                      checked={lifecycleFilter.has(s)}
+                      onCheckedChange={() => toggleLifecycle(s)}
+                    />
+                    <span>{LIFECYCLE_LABELS[s]}</span>
+                  </label>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       )}
 
