@@ -610,6 +610,7 @@ export default function Livestock() {
           <p className="col-span-full text-center text-xs text-muted-foreground py-2">پایان لیست</p>
         )}
       </div>
+      </TooltipProvider>
     </div>
   );
 }
