@@ -792,60 +792,44 @@ export default function LivestockListBuilder() {
           </div>
         </FilterGroup>
 
-        <FilterGroup title="ستون‌ها و مرتب‌سازی" id="cols" open={openGroup} onToggle={setOpenGroup}>
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1.5">ستون‌های نمایش/خروجی</div>
-              <div className="flex flex-wrap gap-2">
-                {ALL_COLUMNS.map((c) => {
-                  const on = columnKeys.includes(c.key);
-                  return (
-                    <Badge key={c.key} variant={on ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => setColumnKeys((prev) =>
-                        on ? prev.filter((k) => k !== c.key) : [...prev, c.key])}>
-                      {c.label}
-                    </Badge>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="مرتب‌سازی بر اساس">
-                <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)} dir="rtl">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {SORT_OPTIONS.map((s) => (
-                      <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="ترتیب">
-                <Select value={sortDir} onValueChange={(v) => setSortDir(v as any)} dir="rtl">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="asc">صعودی</SelectItem>
-                    <SelectItem value="desc">نزولی</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-          </div>
-        </FilterGroup>
+        {/* NOTE: column/sort selection was removed from the always-visible
+            filter form. Per request, the user now picks columns + sort
+            inside a dialog that opens AFTER pressing "تایید و تولید لیست".
+            See <ColumnPickerDialog/> below. */}
 
-        {/* Generate */}
+        {/* Generate — opens the column picker first, then generates */}
         <div className="flex justify-end gap-2 pt-2 border-t border-border">
           <Button variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>
             بازنشانی
           </Button>
-          <Button onClick={generate} disabled={generating || lookupsLoading}
-            className="bg-gradient-primary text-primary-foreground glow-primary">
+          <Button
+            onClick={() => setColumnPickerOpen(true)}
+            disabled={generating || lookupsLoading}
+            // Distinct color (amber gradient) so it stands out from the
+            // primary-green archive/save buttons.
+            className="bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/30 border-0"
+          >
             {generating && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
             <Filter className="w-4 h-4 ml-2" /> تایید و تولید لیست
           </Button>
         </div>
       </Card>
+
+      {/* Column-picker dialog — opened by the generate button. Lets users
+          choose visible/exported columns and sort settings, then runs the
+          actual query. Replaces the old always-on "ستون‌ها و مرتب‌سازی". */}
+      {columnPickerOpen && (
+        <ColumnPickerDialog
+          columnKeys={columnKeys}
+          setColumnKeys={setColumnKeys}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          sortDir={sortDir}
+          setSortDir={setSortDir}
+          onCancel={() => setColumnPickerOpen(false)}
+          onConfirm={() => { setColumnPickerOpen(false); generate(); }}
+        />
+      )}
 
       {/* ============== Results ================= */}
       {rows && (
