@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
   const t0 = Date.now();
   let pool: sql.ConnectionPool | null = null;
   try {
-    console.log("[sepidar-beneficiaries] connecting", { host, port: portStr, database });
+    console.log("[sepidar-beneficiaries] connecting", { host, port, database });
     pool = await new sql.ConnectionPool(config).connect();
     console.log("[sepidar-beneficiaries] connected in", Date.now() - t0, "ms");
 
