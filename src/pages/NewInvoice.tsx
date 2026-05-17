@@ -387,7 +387,8 @@ export default function NewInvoice() {
 
   useEffect(() => {
     const fetchSperms = async () => {
-      const { data: sperms } = await supabase.from("sperms").select("*").order("id");
+      // Only active sperms are offered in invoice forms; toggle in /settings.
+      const { data: sperms } = await supabase.from("sperms").select("*").eq("is_active", true).order("id");
       if (sperms) {
         setSpermOptions(
           sperms.map((s) => ({
