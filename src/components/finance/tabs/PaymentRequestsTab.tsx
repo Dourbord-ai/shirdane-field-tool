@@ -183,22 +183,24 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   }
 
   async function save() {
+    // Guard against double-submit (rapid taps on mobile).
     if (saving) return;
     if (!typeCode) return toast.error("نوع درخواست را انتخاب کنید");
     if (!title) return toast.error("عنوان لیست را وارد کنید");
-    if (items.some((i) => !i.party_id || !i.amount)) return toast.error("ذینفع و مبلغ هر آیتم الزامی است");
+    // The new flow REQUIRES a Sepidar beneficiary on every row.
+    if (items.some((i) => !i.beneficiary_id || !i.amount))
+      return toast.error("ذینفع سپیدار و مبلغ هر آیتم الزامی است");
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
-    // Validate creditor balance for amount_type_code = 1 (local + Sepidar)
+    // Validate creditor balance for amount_type_code = 1 using the snapshot
+    // captured at selection time (Sepidar convention: positive credit balance
+    // means we owe the party — `available = abs(balance)` when balance >= 0).
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
-      if (it.amount_type_code === 1 && it.party_id) {
-        const v = validateCreditorBalance(partyBalances[it.party_id], it.amount);
-        if (!v.ok) return toast.error(`ردیف ${idx + 1}: ${v.message}`);
-        const sb = sepidarBalances[it.party_id];
-        if (sb && sb.balance != null) {
-          // Sepidar convention: positive credit balance means we owe the party.
-          const sepAvail = Math.abs(sb.balance);
+      if (it.amount_type_code === 1) {
+        const snap = it.beneficiary_balance_snapshot;
+        if (snap != null) {
+          const sepAvail = Math.abs(Number(snap));
           if (sepAvail + 1e-6 < it.amount)
             return toast.error(`ردیف ${idx + 1}: مبلغ درخواست از مانده بستانکاری ذینفع در سپیدار بیشتر است.`);
         }
@@ -216,6 +218,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       await supabase.from("finance_payment_request_items").insert(
         items.map((i) => ({
           payment_request_id: pr.id,
+          // Legacy local party (kept null in the new Sepidar-first flow).
           party_id: i.party_id,
           amount: i.amount,
           amount_type_code: i.amount_type_code,
@@ -223,6 +226,14 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           description: i.description,
           status: "pending_approval",
           legacy_request_type_code: code,
+          // --- Sepidar snapshot fields persisted with the row ---
+          beneficiary_id: i.beneficiary_id ?? null,
+          dl_ref: i.dl_ref ?? null,
+          dl_code: i.dl_code ?? null,
+          beneficiary_name: i.beneficiary_name ?? null,
+          beneficiary_type: i.beneficiary_type ?? null,
+          beneficiary_balance_snapshot: i.beneficiary_balance_snapshot ?? null,
+          beneficiary_snapshot_at: i.beneficiary_id ? new Date().toISOString() : null,
         })),
       );
       toast.success("درخواست ثبت شد");
