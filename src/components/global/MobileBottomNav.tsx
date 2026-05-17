@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Beef, Plus, BarChart3, Grid3x3,
-  Milk, Receipt, ShoppingCart, HeartPulse, Wallet, Users, Award, Settings,
+  Milk, Receipt, ShoppingCart, HeartPulse, Wallet, Users, Award, Settings, ListFilter,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
