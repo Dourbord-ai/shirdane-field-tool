@@ -108,3 +108,39 @@ export const eventBadgeClass = (t: string | null | undefined) => {
 export const formatEventDate = (d: string | number | Date | null | undefined) => {
   return formatShamsi(d);
 };
+
+/**
+ * Derive { operator_name, doctor_name } display values for a fertility event.
+ *
+ * - doctor_name: only for pregnancy_test events.
+ *   Pulled from metadata keys (Vet, vet_name, doctor_name) when present
+ *   (this is how legacy CowPregnancies.Vet survives the import), and as a
+ *   fallback uses operator_name — because the current pregnancy dialog
+ *   historically writes the selected vet into the operator_name column.
+ * - operator_name: shown for all event types except pregnancy_test rows
+ *   where the operator_name field is actually the vet (avoids double-print).
+ */
+export function deriveEventPeople(e: FertilityEvent): {
+  operator_name: string | null;
+  doctor_name: string | null;
+} {
+  // metadata may be null or any object — coerce safely so this never throws.
+  const meta = (e.metadata ?? {}) as Record<string, unknown>;
+  const metaVet =
+    (meta.Vet as string) ||
+    (meta.vet_name as string) ||
+    (meta.doctor_name as string) ||
+    null;
+
+  const isPregnancy = e.event_type === "pregnancy_test";
+  // Prefer the explicit metadata vet field; otherwise reuse legacy operator_name.
+  const doctor = isPregnancy ? metaVet || e.operator_name || null : null;
+  // If the operator slot was actually used for the vet, don't repeat it.
+  const operator =
+    isPregnancy && !metaVet && e.operator_name === doctor
+      ? null
+      : e.operator_name ?? null;
+
+  return { operator_name: operator, doctor_name: doctor };
+}
+
