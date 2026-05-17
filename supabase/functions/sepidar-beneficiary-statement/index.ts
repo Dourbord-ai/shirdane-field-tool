@@ -1,10 +1,6 @@
 // Edge Function: sepidar-beneficiary-statement
-// Reads a beneficiary statement from the SQL Server bridge database by
-// invoking ONLY the stored procedure `bridge.GetBeneficiaryStatement`.
-// Direct queries against Sepidar01 tables are NOT permitted here.
-//
-// TODO (after DEV_ACCESS_MODE is disabled): require permission
-// `finance.sepidar.view_statement` for the calling user.
+// Calls SQL Server stored procedure `bridge.GetBeneficiaryStatement` via the
+// Sepidar bridge database and returns the recordset to the caller.
 
 import sql from "npm:mssql@10.0.2";
 
@@ -20,27 +16,6 @@ type Body = {
   fromDate?: string | null;
   toDate?: string | null;
 };
-
-function persianizeError(raw: string): string {
-  const m = (raw || "").toLowerCase();
-  if (m.includes("login failed") || m.includes("18456")) {
-    return "نام کاربری یا رمز عبور اتصال سپیدار اشتباه است.";
-  }
-  if (
-    m.includes("etimedout") ||
-    m.includes("timeout") ||
-    m.includes("econnrefused") ||
-    m.includes("enotfound") ||
-    m.includes("socket") ||
-    m.includes("network")
-  ) {
-    return "ارتباط با سرور سپیدار برقرار نشد.";
-  }
-  if (m.includes("could not find stored procedure") || m.includes("cannot find") || m.includes("2812")) {
-    return "پروسیژر صورتحساب سپیدار پیدا نشد.";
-  }
-  return "خطا در واکشی صورتحساب از سپیدار.";
-}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -65,31 +40,32 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "شناسه ذینفع سپیدار معتبر نیست." }, 400);
   }
 
-  const host = Deno.env.get("SEPIDAR_SQL_HOST");
+  // Accept both SEPIDAR_SQL_SERVER (preferred) and legacy SEPIDAR_SQL_HOST
+  const server = Deno.env.get("SEPIDAR_SQL_SERVER") || Deno.env.get("SEPIDAR_SQL_HOST");
   const portStr = Deno.env.get("SEPIDAR_SQL_PORT");
   const database = Deno.env.get("SEPIDAR_SQL_DATABASE");
   const user = Deno.env.get("SEPIDAR_SQL_USER");
   const password = Deno.env.get("SEPIDAR_SQL_PASSWORD");
+  const encryptEnv = Deno.env.get("SEPIDAR_SQL_ENCRYPT");
+  const trustEnv = Deno.env.get("SEPIDAR_SQL_TRUST_CERT");
 
-  if (!host || !portStr || !database || !user || !password) {
-    return json(
-      {
-        success: false,
-        message: "تنظیمات اتصال به سپیدار کامل نیست. لطفاً متغیرهای محیطی SEPIDAR_SQL_* را تنظیم کنید.",
-      },
-      500,
-    );
+  if (!server || !portStr || !database || !user || !password) {
+    return json({
+      success: false,
+      message: "تنظیمات اتصال به سپیدار کامل نیست. لطفاً متغیرهای محیطی SEPIDAR_SQL_* را تنظیم کنید.",
+    }, 500);
   }
 
   const config: sql.config = {
-    server: host,
+    server,
     port: Number(portStr),
     database,
     user,
     password,
     options: {
-      encrypt: false,
-      trustServerCertificate: true,
+      // default to false/true (matching local working setup) when env not set
+      encrypt: encryptEnv === "true",
+      trustServerCertificate: trustEnv ? trustEnv === "true" : true,
       enableArithAbort: true,
     },
     connectionTimeout: 15000,
@@ -97,38 +73,34 @@ Deno.serve(async (req) => {
     pool: { max: 2, min: 0, idleTimeoutMillis: 10000 },
   };
 
-  const t0 = Date.now();
   let pool: sql.ConnectionPool | null = null;
   try {
-    console.log("[sepidar-statement] connecting", { host, port: portStr, database, partyId });
+    console.log("[sepidar-statement] connecting", { server, port: portStr, database, partyId });
     pool = await new sql.ConnectionPool(config).connect();
-    console.log("[sepidar-statement] connected in", Date.now() - t0, "ms");
 
     const request = pool.request();
     request.input("PartyId", sql.Int, partyId);
-    if (body.fromDate) request.input("FromDate", sql.NVarChar, body.fromDate);
-    else request.input("FromDate", sql.NVarChar, null);
-    if (body.toDate) request.input("ToDate", sql.NVarChar, body.toDate);
-    else request.input("ToDate", sql.NVarChar, null);
+    request.input("FromDate", sql.DateTime, body.fromDate ? new Date(body.fromDate) : null);
+    request.input("ToDate", sql.DateTime, body.toDate ? new Date(body.toDate) : null);
 
-    console.log("[sepidar-statement] executing bridge.GetBeneficiaryStatement");
-    const tExec = Date.now();
     const result = await request.execute("bridge.GetBeneficiaryStatement");
     const rows = (result.recordset as Record<string, unknown>[]) || [];
-    console.log(
-      "[sepidar-statement] executed",
-      { rows: rows.length, execMs: Date.now() - tExec, totalMs: Date.now() - t0 },
-    );
+    console.log("[sepidar-statement] ok rows=", rows.length);
 
-    return json({ success: true, rowCount: rows.length, data: rows });
+    return json({
+      success: true,
+      message: "صورت‌حساب ذینفع با موفقیت دریافت شد.",
+      rowCount: rows.length,
+      data: rows,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("[sepidar-statement] error", msg, e);
+    console.error("[sepidar-statement] error", msg);
     return json({
       success: false,
-      message: persianizeError(msg),
+      message: "صورت‌حساب سپیدار قابل واکشی نیست.",
       rawError: msg,
-    }, 200);
+    });
   } finally {
     try {
       if (pool) await pool.close();
