@@ -688,7 +688,7 @@ export default function LivestockListBuilder() {
           </div>
         </FilterGroup>
 
-        <FilterGroup title="باروری و وضعیت فیزیولوژیک" id="fert" open={openGroup} onToggle={setOpenGroup}>
+        <FilterGroup title="باروری و وضعیت فیزیولوژیک" id="fert" open={openGroup} onToggle={setOpenGroup} tone="warning">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Field label="آبستنی">
               <Select value={filters.pregnancy} onValueChange={(v) => setFilters({ ...filters, pregnancy: v as any })} dir="rtl">
