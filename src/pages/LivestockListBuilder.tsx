@@ -95,6 +95,22 @@ type Lookup = { id: number; name: string | null };
 type AppUser = { id: string; full_name: string | null; username: string };
 type SpermRow = { id: number; code: string | null; name: string | null };
 
+// Row shape for the `livestock_list_archives` table created in the migration.
+// Stored alongside the cow ids and filters so an archive is fully reproducible.
+type ArchiveRow = {
+  id: string;
+  name: string;
+  note: string | null;
+  filters: any;
+  column_keys: string[];
+  cow_ids: number[];
+  cow_count: number;
+  created_by_user_id: string | null;
+  created_by_username: string | null;
+  created_by_name: string | null;
+  created_at: string;
+};
+
 // -----------------------------------------------------------------------------
 // Filter state shape. Each field is independent so users can mix freely.
 // -----------------------------------------------------------------------------
