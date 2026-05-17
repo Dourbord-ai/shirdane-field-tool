@@ -678,6 +678,54 @@ export default function LivestockListBuilder() {
           </div>
         </FilterGroup>
 
+        {/* ---------------------------------------------------------------
+            وضعیت چرخه دام (lifecycle) — multi-select chip group.
+            Click a chip to toggle inclusion; the filter is applied
+            client-side after the main DB query because the state is
+            derived from existing cow fields by calculateLifecycleState().
+            --------------------------------------------------------------- */}
+        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup}>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {filters.lifecycleStates.length === 0
+                  ? "همه وضعیت‌ها (هیچ فیلتری اعمال نشده)"
+                  : `${filters.lifecycleStates.length.toLocaleString("fa-IR")} وضعیت انتخاب شده`}
+              </div>
+              {filters.lifecycleStates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, lifecycleStates: [] })}
+                  className="text-xs text-destructive hover:underline"
+                >پاک‌سازی</button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_LIFECYCLE_STATES.map((s) => {
+                // A chip per lifecycle state — tracked in filters.lifecycleStates.
+                const on = filters.lifecycleStates.includes(s);
+                return (
+                  <Badge
+                    key={s}
+                    variant={on ? "default" : "outline"}
+                    className="cursor-pointer select-none"
+                    onClick={() =>
+                      setFilters({
+                        ...filters,
+                        lifecycleStates: on
+                          ? filters.lifecycleStates.filter((x) => x !== s)
+                          : [...filters.lifecycleStates, s],
+                      })
+                    }
+                  >
+                    {LIFECYCLE_LABELS[s]}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        </FilterGroup>
+
         <FilterGroup title="ستون‌ها و مرتب‌سازی" id="cols" open={openGroup} onToggle={setOpenGroup}>
           <div className="space-y-3">
             <div>
