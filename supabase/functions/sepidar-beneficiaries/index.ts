@@ -93,62 +93,22 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ success: false, message: "Method not allowed", data: [] }, 405);
 
-  // Pull the SQL Server connection settings from project-level secrets.
-  // The canonical name is SEPIDAR_SQL_SERVER (matches supabase/functions/.env);
-  // SEPIDAR_SQL_HOST is kept as a fallback for older deployments.
-  const host =
-    Deno.env.get("SEPIDAR_SQL_SERVER") ||
-    Deno.env.get("SEPIDAR_SQL_HOST");
-  // Default to the standard SQL Server port if none is configured.
-  const port = Number(Deno.env.get("SEPIDAR_SQL_PORT") || "1433");
-  const database = Deno.env.get("SEPIDAR_SQL_DATABASE");
-  const user = Deno.env.get("SEPIDAR_SQL_USER");
-  const password = Deno.env.get("SEPIDAR_SQL_PASSWORD");
-  // Optional toggles — fall back to safe defaults compatible with SQL Server 2008.
-  const encrypt = Deno.env.get("SEPIDAR_SQL_ENCRYPT") === "true";
-  const trustServerCertificate = (Deno.env.get("SEPIDAR_SQL_TRUST_CERT") ?? "true") === "true";
-
-  if (!host || !database || !user || !password) {
+  // Centralized env validation + config — see _shared/sepidarSqlClient.ts.
+  // The canonical name is SEPIDAR_SQL_SERVER; SEPIDAR_SQL_HOST is kept as a
+  // fallback only for older deployments.
+  const cfg = getSepidarSqlConfig();
+  if (!cfg.ok) {
     return json(
-      {
-        success: false,
-        message: "تنظیمات اتصال به سپیدار کامل نیست. لطفاً متغیرهای محیطی SEPIDAR_SQL_* را تنظیم کنید.",
-        data: [],
-      },
+      { success: false, message: cfg.message, data: [] },
       500,
     );
   }
 
-  // mssql connection config — mirror the working sepidar-beneficiary-statement.
-  const config: sql.config = {
-    server: host,
-    port,
-    database,
-    user,
-    password,
-    options: {
-      encrypt,
-      trustServerCertificate,
-      enableArithAbort: true,
-    },
-    database,
-    user,
-    password,
-    options: {
-      encrypt: false,
-      trustServerCertificate: true,
-      enableArithAbort: true,
-    },
-    connectionTimeout: 15000,
-    requestTimeout: 60000,
-    pool: { max: 2, min: 0, idleTimeoutMillis: 10000 },
-  };
-
   const t0 = Date.now();
   let pool: sql.ConnectionPool | null = null;
   try {
-    console.log("[sepidar-beneficiaries] connecting", { host, port, database });
-    pool = await new sql.ConnectionPool(config).connect();
+    console.log("[sepidar-beneficiaries] connecting", cfg.meta);
+    pool = await new sql.ConnectionPool(cfg.config).connect();
     console.log("[sepidar-beneficiaries] connected in", Date.now() - t0, "ms");
 
     // The bridge SP takes no parameters — it returns the full beneficiary view.
