@@ -26,7 +26,12 @@ import { toast } from "sonner";
 import {
   Beef, Filter, Printer, FileSpreadsheet, ChevronDown, ChevronUp, X,
   Loader2, CheckSquare, Square, Sparkles, Search, ArrowUpDown,
+  Archive, FolderOpen, Trash2, Clock, User as UserIcon,
 } from "lucide-react";
+// Auth context — we need who the user is so we can stamp archives with the
+// creator's id / username / full name. Without this we couldn't tell who
+// built a given archive later.
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
