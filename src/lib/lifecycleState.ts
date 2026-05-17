@@ -244,6 +244,25 @@ export function calculateLifecycleState(cow: LifecycleCowInput | null | undefine
   //  since the female state set is richer and ambiguous animals are usually
   //  treated as females in this dairy CRM.)
 
+  // ─── Fresh-cow short-circuit (highest priority for females) ───────────────
+  // Business rule (per product spec):
+  //   sex === 0  AND  presence === 0 (in herd)  AND
+  //   last_birth_date is not null  AND  (today - last_birth_date) <= 21 days
+  // ⇒ classify as "گاو تازه‌زا" (cow_fresh).
+  // We place this BEFORE the age-based calf/heifer gates so a freshly calved
+  // cow whose date_of_birth happens to be missing or odd is still recognized.
+  // We use sex === 0 strictly (not null) to honor the spec exactly.
+  if (
+    sex === 0 &&
+    presence === 0 &&
+    lastBirth != null &&
+    daysSinceCalving != null &&
+    daysSinceCalving >= 0 &&
+    daysSinceCalving <= 21
+  ) {
+    return make("cow_fresh", `${daysSinceCalving} روز از زایش گذشته`);
+  }
+
   if (age != null && age <= 3) return make("female_calf_milk", `سن ${age} ماه`);
   if (age != null && age <= 6) return make("female_calf_weaned", `سن ${age} ماه`);
   if (age != null && age < 12) return make("female_rearing", `سن ${age} ماه`);
