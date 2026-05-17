@@ -867,6 +867,19 @@ export default function LivestockListBuilder() {
               <Button size="sm" variant="outline" onClick={exportXlsx}>
                 <FileSpreadsheet className="w-4 h-4 ml-2" /> خروجی اکسل
               </Button>
+              {/* Archive button — opens the save-archive dialog. We only show
+                  it when there are rows so the user can't archive nothing.
+                  The archive stores the exact cow ids displayed, the active
+                  filters, and the chosen columns so it can be reopened later
+                  with the same shape. */}
+              <Button
+                size="sm"
+                onClick={() => setSaveArchiveOpen(true)}
+                disabled={rows.length === 0}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                <Archive className="w-4 h-4 ml-2" /> آرشیو
+              </Button>
             </div>
           </div>
 
