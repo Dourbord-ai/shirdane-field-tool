@@ -1062,22 +1062,41 @@ export default function LivestockListBuilder() {
 // =============================================================================
 // Tiny helper components
 // =============================================================================
+// Each filter group accepts a `tone` so the 3 main filter sections render
+// with visually distinct colored headers — easier to scan a long form.
+// Tones use semantic tokens with /10 opacity so they remain theme-friendly.
+type GroupTone = "primary" | "accent" | "info" | "warning";
+const GROUP_TONE_CLASSES: Record<GroupTone, { wrap: string; header: string; dot: string }> = {
+  primary: { wrap: "border-primary/40",      header: "bg-primary/10 hover:bg-primary/15 text-primary",        dot: "bg-primary" },
+  accent:  { wrap: "border-emerald-400/40",  header: "bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-300", dot: "bg-emerald-400" },
+  info:    { wrap: "border-sky-400/40",      header: "bg-sky-500/10 hover:bg-sky-500/15 text-sky-300",        dot: "bg-sky-400" },
+  warning: { wrap: "border-amber-400/40",    header: "bg-amber-500/10 hover:bg-amber-500/15 text-amber-300",  dot: "bg-amber-400" },
+};
+
 function FilterGroup({
-  title, id, open, onToggle, children,
+  title, id, open, onToggle, children, tone = "primary",
 }: {
   title: string; id: string; open: string | null;
   onToggle: (v: string | null) => void; children: React.ReactNode;
+  tone?: GroupTone;
 }) {
   const isOpen = open === id;
+  const t = GROUP_TONE_CLASSES[tone];
   return (
-    <div className="rounded-lg border border-border">
+    <div className={cn("rounded-lg border", t.wrap)}>
       <button type="button"
-        className="w-full flex items-center justify-between p-3 text-sm font-bold text-foreground hover:bg-secondary/40"
+        className={cn(
+          "w-full flex items-center justify-between p-3 text-sm font-bold transition-colors",
+          t.header,
+        )}
         onClick={() => onToggle(isOpen ? null : id)}>
-        <span>{title}</span>
+        <span className="flex items-center gap-2">
+          <span className={cn("w-2 h-2 rounded-full", t.dot)} />
+          {title}
+        </span>
         {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
-      {isOpen && <div className="p-3 border-t border-border">{children}</div>}
+      {isOpen && <div className="p-3 border-t border-border bg-background/30">{children}</div>}
     </div>
   );
 }
