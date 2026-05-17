@@ -62,15 +62,11 @@ export default function AppHeader() {
         </div>
       </div>
 
-      {/* Desktop search */}
-      <div className="hidden lg:flex flex-1 max-w-md items-center gap-2 rounded-xl bg-secondary/60 border border-border/60 px-3 py-2">
-        <Search className="w-4 h-4 text-muted-foreground" />
-        <input
-          dir="rtl"
-          placeholder="جستجو..."
-          className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
-        />
-      </div>
+      {/* Desktop search — mirrors the on-page Livestock search.
+          Submitting (Enter) or typing+debounce navigates to /livestock?q=<query>
+          so the result list is the same one the user gets from the Livestock page. */}
+      <HeaderSearchBox />
+
 
       <div className="flex-1 lg:hidden" />
 
