@@ -277,6 +277,25 @@ function PartyDialog({ editing, onChange, onClose, onSave }: { editing: Partial<
           <Field label="کد شعبه"><Input value={editing.branch_code || ""} onChange={(e) => onChange({ ...editing, branch_code: e.target.value })} /></Field>
           <Field label="آدرس" full><Textarea rows={2} value={editing.address || ""} onChange={(e) => onChange({ ...editing, address: e.target.value })} /></Field>
           <Field label="توضیحات" full><Textarea rows={2} value={editing.description || ""} onChange={(e) => onChange({ ...editing, description: e.target.value })} /></Field>
+          {/* Sepidar AccountSLRef used as PartyAccountSLRef on payment voucher rows.
+              Optional — left blank means "use global setting or 193 fallback".
+              We parse to integer or null so the DB column stays clean. */}
+          <Field label="کد حساب طرف در سپیدار (PartyAccountSLRef)" full>
+            <Input
+              dir="ltr"
+              inputMode="numeric"
+              placeholder="در صورت خالی بودن از مقدار پیش‌فرض استفاده می‌شود"
+              value={editing.party_account_sl_ref != null ? String(editing.party_account_sl_ref) : ""}
+              onChange={(e) => {
+                const raw = e.target.value.trim();
+                const num = raw === "" ? null : Number(raw);
+                onChange({
+                  ...editing,
+                  party_account_sl_ref: Number.isFinite(num as number) ? (num as number) : null,
+                });
+              }}
+            />
+          </Field>
         </div>
         <div className="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-card">
           <Button variant="outline" onClick={onClose}>انصراف</Button>
