@@ -60,6 +60,18 @@ export default function BankTransferTab() {
         .select("id").single();
       if (error || !tr) throw error || new Error("insert failed");
 
+      // Lifecycle step 1: as soon as the transfer row exists, immediately
+      // mark both bank transactions as "assigning" (در حال تخصیص). This
+      // prevents any other request/transfer from picking the same transactions
+      // while Sepidar voucher posting is still in progress. The DB-level
+      // unique partial indexes (uq_finance_bank_transfer_active_*_tx) also
+      // enforce this even under concurrent calls.
+      await supabase.from("finance_bank_transactions").update({
+        assignment_status: "assigning",
+        assigned_operation_type: "bank_transfer",
+        assigned_operation_id: tr.id,
+      }).in("id", [fromId, toId]);
+
       const items: VoucherItemInput[] = [
         { bank_id: toTx.bank_id, account_type: "bank", debit: toAmount, credit: 0, description: "بانک مقصد" },
         { bank_id: fromTx.bank_id, account_type: "bank", debit: 0, credit: fromAmount, description: "بانک مبدا" },
@@ -82,12 +94,15 @@ export default function BankTransferTab() {
         items,
       });
 
-      await supabase.from("finance_bank_transactions").update({
-        assignment_status: "assigned", assigned_operation_type: "bank_transfer", assigned_operation_id: tr.id,
-      }).in("id", [fromId, toId]);
-
       await supabase.from("finance_bank_transfers").update({ voucher_id: v.id }).eq("id", tr.id);
       await sepidarSyncPlaceholder(v.id, "post_voucher");
+
+      // Lifecycle step 2: Sepidar voucher posting succeeded → promote both
+      // transactions to "assigned" (تخصیص شده). If Sepidar throws, the catch
+      // below rolls them back to "unassigned" so the user can retry.
+      await supabase.from("finance_bank_transactions").update({
+        assignment_status: "assigned",
+      }).in("id", [fromId, toId]);
 
       toast.success("انتقال ثبت و سند داخلی صادر شد");
       setFromId(null); setFromTx(null); setToId(null); setToTx(null);
