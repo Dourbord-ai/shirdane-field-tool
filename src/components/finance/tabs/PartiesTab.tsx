@@ -434,6 +434,9 @@ function PartyDetailDrawer({
               <Row label="کد تفصیل" value={party.sepidar_dl_code != null ? String(party.sepidar_dl_code) : "—"} />
               <Row label="شناسه طرف حساب" value={party.sepidar_party_id != null ? String(party.sepidar_party_id) : "—"} />
               <Row label="شناسه حساب" value={party.sepidar_account_id != null ? String(party.sepidar_account_id) : "—"} />
+              {/* PartyAccountSLRef used by bridge.CreatePaymentRequestVoucher / CreateBankVoucher.
+                  Blank ⇒ edge function will fall back to settings, then to legacy 193. */}
+              <Row label="کد حساب طرف (PartyAccountSLRef)" value={party.party_account_sl_ref != null ? String(party.party_account_sl_ref) : "—"} />
               <Row label="عنوان در سپیدار" value={party.sepidar_full_name || "—"} />
               <Row label="تعداد تلاش" value={String(party.sepidar_sync_attempts ?? 0)} />
             </div>
