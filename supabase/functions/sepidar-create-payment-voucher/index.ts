@@ -118,18 +118,22 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "شناسه ثبت‌کننده (creator) الزامی است." }, 400);
 
   // ---- Resolve PartyAccountSLRef -------------------------------------------------
-  // Prefer caller-provided value; otherwise load from Supabase setting; else fallback 193.
+  // Resolution priority (documented architecture):
+  //   1) explicit body.partyAccountSLRef from the caller (rare — power users)
+  //   2) finance_parties.party_account_sl_ref looked up by sepidar_party_id
+  //   3) finance_sepidar_settings.sepidar_party_account_sl_ref (global default)
+  //   4) hardcoded fallback 193 (kept only so calls don't blow up if mis-configured)
   let partyAccountSLRef: number;
-  let slRefSource: "request" | "settings" | "fallback" = "request";
+  let slRefSource: SLRefSource = "request";
   if (body.partyAccountSLRef != null && `${body.partyAccountSLRef}`.trim() !== "") {
     const v = Number(body.partyAccountSLRef);
     if (!Number.isFinite(v) || v <= 0)
       return json({ success: false, message: "partyAccountSLRef نامعتبر است." }, 400);
     partyAccountSLRef = v;
   } else {
-    const loaded = await loadConfiguredPartyAccountSLRef();
-    partyAccountSLRef = loaded.value;
-    slRefSource = loaded.isFallback ? "fallback" : "settings";
+    const resolved = await resolvePartyAccountSLRef(partyId);
+    partyAccountSLRef = resolved.value;
+    slRefSource = resolved.source;
   }
 
   // ---- Sepidar SQL config --------------------------------------------------------
