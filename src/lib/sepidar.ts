@@ -158,6 +158,32 @@ export async function createSepidarPaymentVoucher(input: CreateVoucherInput): Pr
   return callEdge<CreateVoucherResponse>("sepidar-create-payment-voucher", input as unknown as Json);
 }
 
+// Input for creating a Sepidar party-to-party transfer voucher.
+export interface CreatePartyTransferVoucherInput {
+  fromPartyId: number;
+  fromPartyAccountSLRef: number;
+  toPartyId: number;
+  toPartyAccountSLRef: number;
+  amount: number;
+  voucherDate?: string | null;
+  description?: string | null;
+  creator?: number | null;
+}
+export interface CreatePartyTransferVoucherResponse {
+  success: true;
+  voucherId: number | string | null;
+  voucherNumber: number | string | null;
+  data: Json;
+}
+export async function createSepidarPartyTransferVoucher(
+  input: CreatePartyTransferVoucherInput,
+): Promise<CreatePartyTransferVoucherResponse> {
+  if (!input.fromPartyId || input.fromPartyId <= 0) throw new Error("شناسه ذینفع مبدأ سپیدار وارد نشده است.");
+  if (!input.toPartyId || input.toPartyId <= 0) throw new Error("شناسه ذینفع مقصد سپیدار وارد نشده است.");
+  if (!input.amount || input.amount <= 0) throw new Error("مبلغ سند نامعتبر است.");
+  return callEdge<CreatePartyTransferVoucherResponse>("sepidar-create-party-transfer-voucher", input as unknown as Json);
+}
+
 export interface AllocateTransactionInput {
   paymentRequestItemId?: string | null;
   transactionId?: string | number | null;
