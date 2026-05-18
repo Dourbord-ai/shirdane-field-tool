@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.sepidar-financial-document-details]
 verify_jwt = false
+
+[functions.sepidar-create-interbank-transfer-voucher]
+verify_jwt = false
+
+[functions.sepidar-create-party-transfer-voucher]
+verify_jwt = false
