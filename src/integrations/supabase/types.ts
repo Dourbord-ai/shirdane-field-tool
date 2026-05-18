@@ -2009,6 +2009,7 @@ export type Database = {
           national_id: string | null
           nationality: string | null
           ownership_type: string | null
+          party_account_sl_ref: number | null
           postal_code: string | null
           raw_legacy_status: Json | null
           rejected_at: string | null
@@ -2052,6 +2053,7 @@ export type Database = {
           national_id?: string | null
           nationality?: string | null
           ownership_type?: string | null
+          party_account_sl_ref?: number | null
           postal_code?: string | null
           raw_legacy_status?: Json | null
           rejected_at?: string | null
@@ -2095,6 +2097,7 @@ export type Database = {
           national_id?: string | null
           nationality?: string | null
           ownership_type?: string | null
+          party_account_sl_ref?: number | null
           postal_code?: string | null
           raw_legacy_status?: Json | null
           rejected_at?: string | null
