@@ -35,3 +35,9 @@ verify_jwt = false
 
 [functions.sepidar-beneficiaries]
 verify_jwt = false
+
+[functions.sepidar-financial-documents]
+verify_jwt = false
+
+[functions.sepidar-financial-document-details]
+verify_jwt = false
