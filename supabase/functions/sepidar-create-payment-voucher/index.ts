@@ -1,8 +1,8 @@
 // Edge Function: sepidar-create-payment-voucher
 // Do not change Sepidar SQL env variable names. Official env is SEPIDAR_SQL_SERVER, not SEPIDAR_SQL_HOST.
 // Calls ONLY bridge.CreatePaymentRequestVoucher.
-// TODO (after DEV_ACCESS_MODE off): require permission `finance.sepidar.create_voucher`.
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,27 +12,53 @@ const corsHeaders = {
 };
 
 type Body = {
-  paymentRequestId?: string | null;
-  paymentRequestItemId?: string | null;
   partyId?: number | string | null;
+  requestType?: number | string | null;
   amount?: number | string | null;
-  paymentType?: string | null;
-  description?: string | null;
   voucherDate?: string | null;
+  description?: string | null;
+  description1?: string | null;
+  description2?: string | null;
+  creator?: number | string | null;
+  partyAccountSLRef?: number | string | null;
 };
-
-function persianizeError(raw: string): string {
-  const m = (raw || "").toLowerCase();
-  if (m.includes("login failed") || m.includes("18456")) return "نام کاربری یا رمز عبور اتصال سپیدار اشتباه است.";
-  if (m.includes("etimedout") || m.includes("timeout") || m.includes("econnrefused") || m.includes("enotfound") || m.includes("socket") || m.includes("network"))
-    return "ارتباط با سرور سپیدار برقرار نشد.";
-  if (m.includes("could not find stored procedure") || m.includes("cannot find") || m.includes("2812"))
-    return "پروسیژر ثبت سند پرداخت در سپیدار پیدا نشد.";
-  return "خطا در ثبت سند پرداخت سپیدار.";
-}
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+// Fallback constant — only used if no setting row exists in Supabase.
+// In the legacy working system, PartyAccountSLRef was fixed to 193.
+const FALLBACK_PARTY_ACCOUNT_SL_REF = 193;
+
+// Load sepidar_party_account_sl_ref from finance_sepidar_settings (single row).
+// Returns the configured value, or the documented fallback when no row/value exists.
+async function loadConfiguredPartyAccountSLRef(): Promise<{ value: number; isFallback: boolean }> {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (!supabaseUrl || !serviceKey) {
+      return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+    }
+    const sb = createClient(supabaseUrl, serviceKey);
+    const { data, error } = await sb
+      .from("finance_sepidar_settings")
+      .select("sepidar_party_account_sl_ref")
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn("[sepidar-create-voucher] settings load error", error.message);
+      return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+    }
+    const v = data?.sepidar_party_account_sl_ref;
+    if (v != null && Number.isFinite(Number(v))) {
+      return { value: Number(v), isFallback: false };
+    }
+    return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+  } catch (e) {
+    console.warn("[sepidar-create-voucher] settings load exception", e);
+    return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -41,40 +67,90 @@ Deno.serve(async (req) => {
   let body: Body = {};
   try { body = await req.json(); } catch { return json({ success: false, message: "بدنه درخواست نامعتبر است." }, 400); }
 
+  // ---- Validate required inputs --------------------------------------------------
   const partyId = body.partyId != null ? Number(body.partyId) : NaN;
+  const requestType = body.requestType != null ? Number(body.requestType) : NaN;
   const amount = body.amount != null ? Number(body.amount) : NaN;
+  const creator = body.creator != null ? Number(body.creator) : NaN;
+  const voucherDate = (body.voucherDate ?? "").toString().trim();
+
   if (!Number.isFinite(partyId) || partyId <= 0)
     return json({ success: false, message: "شناسه ذینفع سپیدار معتبر نیست." }, 400);
+  if (!Number.isFinite(requestType) || (requestType !== 0 && requestType !== 1))
+    return json({ success: false, message: "نوع درخواست (requestType) باید 0 یا 1 باشد." }, 400);
   if (!Number.isFinite(amount) || amount <= 0)
     return json({ success: false, message: "مبلغ سند نامعتبر است." }, 400);
+  if (!voucherDate)
+    return json({ success: false, message: "تاریخ سند الزامی است." }, 400);
+  if (!Number.isFinite(creator) || creator <= 0)
+    return json({ success: false, message: "شناسه ثبت‌کننده (creator) الزامی است." }, 400);
 
-  // Centralized env validation + config — see _shared/sepidarSqlClient.ts.
+  // ---- Resolve PartyAccountSLRef -------------------------------------------------
+  // Prefer caller-provided value; otherwise load from Supabase setting; else fallback 193.
+  let partyAccountSLRef: number;
+  let slRefSource: "request" | "settings" | "fallback" = "request";
+  if (body.partyAccountSLRef != null && `${body.partyAccountSLRef}`.trim() !== "") {
+    const v = Number(body.partyAccountSLRef);
+    if (!Number.isFinite(v) || v <= 0)
+      return json({ success: false, message: "partyAccountSLRef نامعتبر است." }, 400);
+    partyAccountSLRef = v;
+  } else {
+    const loaded = await loadConfiguredPartyAccountSLRef();
+    partyAccountSLRef = loaded.value;
+    slRefSource = loaded.isFallback ? "fallback" : "settings";
+  }
+
+  // ---- Sepidar SQL config --------------------------------------------------------
   const cfg = getSepidarSqlConfig();
   if (!cfg.ok) return json({ success: false, message: cfg.message }, 500);
 
   let pool: sql.ConnectionPool | null = null;
   try {
-    console.log("[sepidar-create-voucher] start", { partyId, amount, paymentType: body.paymentType });
+    console.log("[sepidar-create-voucher] start", {
+      ...cfg.meta, partyId, requestType, amount, voucherDate, creator, partyAccountSLRef, slRefSource,
+    });
     pool = await new sql.ConnectionPool(cfg.config).connect();
     const r = pool.request();
-    r.input("PaymentRequestId", sql.NVarChar, body.paymentRequestId ?? null);
-    r.input("PaymentRequestItemId", sql.NVarChar, body.paymentRequestItemId ?? null);
     r.input("PartyId", sql.Int, partyId);
+    r.input("PartyAccountSLRef", sql.Int, partyAccountSLRef);
+    r.input("RequestType", sql.Int, requestType);
     r.input("Amount", sql.Decimal(18, 2), amount);
-    r.input("PaymentType", sql.NVarChar, body.paymentType ?? null);
+    r.input("VoucherDate", sql.NVarChar, voucherDate);
     r.input("Description", sql.NVarChar, body.description ?? null);
-    r.input("VoucherDate", sql.NVarChar, body.voucherDate ?? null);
+    r.input("Description1", sql.NVarChar, body.description1 ?? null);
+    r.input("Description2", sql.NVarChar, body.description2 ?? null);
+    r.input("Creator", sql.Int, creator);
+
     const result = await r.execute("bridge.CreatePaymentRequestVoucher");
     const rows = (result.recordset as Record<string, unknown>[]) || [];
-    const first = rows[0] || {};
-    const voucherId = first.VoucherId ?? first.voucherId ?? first.Id ?? null;
-    const voucherNumber = first.VoucherNumber ?? first.voucherNumber ?? first.Number ?? null;
-    console.log("[sepidar-create-voucher] ok", { voucherId, voucherNumber });
-    return json({ success: true, voucherId, voucherNumber, data: first, raw: rows });
+    const row = rows[0] || {};
+
+    // SP returns success = 0/1. Treat 0 as a business failure.
+    const successFlag = Number((row as any).success ?? (row as any).Success ?? 1);
+    if (successFlag === 0) {
+      const errMsg = (row as any).error_message ?? (row as any).ErrorMessage ?? "unknown SP failure";
+      console.error("[sepidar-create-voucher] SP returned success=0", errMsg, row);
+      return json({
+        success: false,
+        message: "ثبت سند پرداخت در سپیدار ناموفق بود.",
+        rawError: String(errMsg),
+      });
+    }
+
+    console.log("[sepidar-create-voucher] ok", row);
+    return json({
+      success: true,
+      message: "سند پرداخت سپیدار با موفقیت ثبت شد.",
+      data: row,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[sepidar-create-voucher] error", msg, e);
-    return json({ success: false, message: persianizeError(msg), rawError: msg });
+    return json({
+      success: false,
+      message: "ثبت سند پرداخت سپیدار قابل انجام نیست.",
+      rawError: msg,
+    });
   } finally {
     try { if (pool) await pool.close(); } catch (closeErr) { console.warn("pool close", closeErr); }
   }

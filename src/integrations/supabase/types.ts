@@ -2664,6 +2664,7 @@ export type Database = {
           default_prepayment_account_id: number | null
           default_receive_account_id: number | null
           id: string
+          sepidar_party_account_sl_ref: number | null
           updated_at: string
         }
         Insert: {
@@ -2679,6 +2680,7 @@ export type Database = {
           default_prepayment_account_id?: number | null
           default_receive_account_id?: number | null
           id?: string
+          sepidar_party_account_sl_ref?: number | null
           updated_at?: string
         }
         Update: {
@@ -2694,6 +2696,7 @@ export type Database = {
           default_prepayment_account_id?: number | null
           default_receive_account_id?: number | null
           id?: string
+          sepidar_party_account_sl_ref?: number | null
           updated_at?: string
         }
         Relationships: [
