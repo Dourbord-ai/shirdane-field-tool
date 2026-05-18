@@ -119,6 +119,16 @@ export async function getSepidarBeneficiaryStatement(
   });
 }
 
+// Input for creating a Sepidar payment voucher.
+//
+// Architecture note (read carefully):
+//   - The party-side AccountSLRef is per-party. Prefer leaving `partyAccountSLRef`
+//     undefined and let the edge function resolve it from
+//     finance_parties.party_account_sl_ref. The legacy hardcoded 193 is now ONLY
+//     a last-resort fallback inside the edge function.
+//   - `bankAccountSLRef` / `bankDLRef` / `partyDLRef` are reserved for the
+//     upcoming bridge.CreateBankVoucher flow. They're already wired here so the
+//     UI can be migrated without touching this signature again.
 export interface CreateVoucherInput {
   paymentRequestId?: string | null;
   paymentRequestItemId?: string | null;
@@ -127,6 +137,14 @@ export interface CreateVoucherInput {
   paymentType?: string | null; // creditor | prepayment | on_account (or Persian)
   description?: string | null;
   voucherDate?: string | null; // shamsi or iso
+  // Optional override — when set, edge function uses this value verbatim.
+  partyAccountSLRef?: number | null;
+  // Reserved for bridge.CreateBankVoucher (bank-side leg of the voucher).
+  bankAccountSLRef?: number | null;
+  bankDLRef?: number | null;
+  partyDLRef?: number | null;
+  requestType?: number | null;
+  creator?: number | null;
 }
 export interface CreateVoucherResponse {
   success: true;

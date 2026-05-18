@@ -48,6 +48,9 @@ interface Party {
   sepidar_dl_id: number | null;
   sepidar_dl_code: number | null;
   sepidar_account_id: number | null;
+  // Per-party PartyAccountSLRef used when creating Sepidar payment vouchers.
+  // When null, the edge function falls back to settings → 193 (legacy default).
+  party_account_sl_ref: number | null;
   sepidar_full_name: string | null;
   sepidar_synced_at: string | null;
   sepidar_sync_attempts: number | null;
@@ -274,6 +277,25 @@ function PartyDialog({ editing, onChange, onClose, onSave }: { editing: Partial<
           <Field label="کد شعبه"><Input value={editing.branch_code || ""} onChange={(e) => onChange({ ...editing, branch_code: e.target.value })} /></Field>
           <Field label="آدرس" full><Textarea rows={2} value={editing.address || ""} onChange={(e) => onChange({ ...editing, address: e.target.value })} /></Field>
           <Field label="توضیحات" full><Textarea rows={2} value={editing.description || ""} onChange={(e) => onChange({ ...editing, description: e.target.value })} /></Field>
+          {/* Sepidar AccountSLRef used as PartyAccountSLRef on payment voucher rows.
+              Optional — left blank means "use global setting or 193 fallback".
+              We parse to integer or null so the DB column stays clean. */}
+          <Field label="کد حساب طرف در سپیدار (PartyAccountSLRef)" full>
+            <Input
+              dir="ltr"
+              inputMode="numeric"
+              placeholder="در صورت خالی بودن از مقدار پیش‌فرض استفاده می‌شود"
+              value={editing.party_account_sl_ref != null ? String(editing.party_account_sl_ref) : ""}
+              onChange={(e) => {
+                const raw = e.target.value.trim();
+                const num = raw === "" ? null : Number(raw);
+                onChange({
+                  ...editing,
+                  party_account_sl_ref: Number.isFinite(num as number) ? (num as number) : null,
+                });
+              }}
+            />
+          </Field>
         </div>
         <div className="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-card">
           <Button variant="outline" onClick={onClose}>انصراف</Button>
@@ -412,6 +434,9 @@ function PartyDetailDrawer({
               <Row label="کد تفصیل" value={party.sepidar_dl_code != null ? String(party.sepidar_dl_code) : "—"} />
               <Row label="شناسه طرف حساب" value={party.sepidar_party_id != null ? String(party.sepidar_party_id) : "—"} />
               <Row label="شناسه حساب" value={party.sepidar_account_id != null ? String(party.sepidar_account_id) : "—"} />
+              {/* PartyAccountSLRef used by bridge.CreatePaymentRequestVoucher / CreateBankVoucher.
+                  Blank ⇒ edge function will fall back to settings, then to legacy 193. */}
+              <Row label="کد حساب طرف (PartyAccountSLRef)" value={party.party_account_sl_ref != null ? String(party.party_account_sl_ref) : "—"} />
               <Row label="عنوان در سپیدار" value={party.sepidar_full_name || "—"} />
               <Row label="تعداد تلاش" value={String(party.sepidar_sync_attempts ?? 0)} />
             </div>

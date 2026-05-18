@@ -26,38 +26,70 @@ type Body = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-// Fallback constant — only used if no setting row exists in Supabase.
-// In the legacy working system, PartyAccountSLRef was fixed to 193.
+// Documented fallback — used ONLY when neither the party row nor the global
+// setting has a value. In the legacy working system, PartyAccountSLRef
+// happened to be 193 for every party; the new architecture stores the
+// real value per-party in finance_parties.party_account_sl_ref.
 const FALLBACK_PARTY_ACCOUNT_SL_REF = 193;
 
-// Load sepidar_party_account_sl_ref from finance_sepidar_settings (single row).
-// Returns the configured value, or the documented fallback when no row/value exists.
-async function loadConfiguredPartyAccountSLRef(): Promise<{ value: number; isFallback: boolean }> {
+// Source identifier — used purely for logs/debug so we can see where the
+// final PartyAccountSLRef came from. Never returned to the client as the
+// authoritative value.
+type SLRefSource = "request" | "party" | "settings" | "fallback";
+
+// Resolve PartyAccountSLRef in the documented priority order:
+//   1) caller-provided body.partyAccountSLRef
+//   2) finance_parties.party_account_sl_ref for the matching sepidar_party_id
+//   3) finance_sepidar_settings.sepidar_party_account_sl_ref (global default)
+//   4) hardcoded fallback 193 (temporary, kept only for safety)
+async function resolvePartyAccountSLRef(
+  sepidarPartyId: number,
+): Promise<{ value: number; source: SLRefSource }> {
+  // Build a service-role client. If env is missing (very unlikely) we fall
+  // straight through to the documented constant so the call still works.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !serviceKey) {
+    return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, source: "fallback" };
+  }
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  // Step 2 — party-specific value. We look up by sepidar_party_id (the same
+  // numeric id we send to the SP as @PartyId) so the FE never needs to know
+  // about Supabase row UUIDs.
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    if (!supabaseUrl || !serviceKey) {
-      return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+    const { data: partyRow } = await sb
+      .from("finance_parties")
+      .select("party_account_sl_ref")
+      .eq("sepidar_party_id", sepidarPartyId)
+      .limit(1)
+      .maybeSingle();
+    const pv = (partyRow as { party_account_sl_ref?: number | null } | null)?.party_account_sl_ref;
+    if (pv != null && Number.isFinite(Number(pv)) && Number(pv) > 0) {
+      return { value: Number(pv), source: "party" };
     }
-    const sb = createClient(supabaseUrl, serviceKey);
-    const { data, error } = await sb
+  } catch (e) {
+    console.warn("[sepidar-create-voucher] party lookup failed", e);
+  }
+
+  // Step 3 — global setting fallback.
+  try {
+    const { data: settingsRow } = await sb
       .from("finance_sepidar_settings")
       .select("sepidar_party_account_sl_ref")
       .limit(1)
       .maybeSingle();
-    if (error) {
-      console.warn("[sepidar-create-voucher] settings load error", error.message);
-      return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+    const sv = (settingsRow as { sepidar_party_account_sl_ref?: number | null } | null)
+      ?.sepidar_party_account_sl_ref;
+    if (sv != null && Number.isFinite(Number(sv)) && Number(sv) > 0) {
+      return { value: Number(sv), source: "settings" };
     }
-    const v = data?.sepidar_party_account_sl_ref;
-    if (v != null && Number.isFinite(Number(v))) {
-      return { value: Number(v), isFallback: false };
-    }
-    return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
   } catch (e) {
-    console.warn("[sepidar-create-voucher] settings load exception", e);
-    return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, isFallback: true };
+    console.warn("[sepidar-create-voucher] settings lookup failed", e);
   }
+
+  // Step 4 — last-resort constant.
+  return { value: FALLBACK_PARTY_ACCOUNT_SL_REF, source: "fallback" };
 }
 
 Deno.serve(async (req) => {
@@ -86,18 +118,22 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "شناسه ثبت‌کننده (creator) الزامی است." }, 400);
 
   // ---- Resolve PartyAccountSLRef -------------------------------------------------
-  // Prefer caller-provided value; otherwise load from Supabase setting; else fallback 193.
+  // Resolution priority (documented architecture):
+  //   1) explicit body.partyAccountSLRef from the caller (rare — power users)
+  //   2) finance_parties.party_account_sl_ref looked up by sepidar_party_id
+  //   3) finance_sepidar_settings.sepidar_party_account_sl_ref (global default)
+  //   4) hardcoded fallback 193 (kept only so calls don't blow up if mis-configured)
   let partyAccountSLRef: number;
-  let slRefSource: "request" | "settings" | "fallback" = "request";
+  let slRefSource: SLRefSource = "request";
   if (body.partyAccountSLRef != null && `${body.partyAccountSLRef}`.trim() !== "") {
     const v = Number(body.partyAccountSLRef);
     if (!Number.isFinite(v) || v <= 0)
       return json({ success: false, message: "partyAccountSLRef نامعتبر است." }, 400);
     partyAccountSLRef = v;
   } else {
-    const loaded = await loadConfiguredPartyAccountSLRef();
-    partyAccountSLRef = loaded.value;
-    slRefSource = loaded.isFallback ? "fallback" : "settings";
+    const resolved = await resolvePartyAccountSLRef(partyId);
+    partyAccountSLRef = resolved.value;
+    slRefSource = resolved.source;
   }
 
   // ---- Sepidar SQL config --------------------------------------------------------
