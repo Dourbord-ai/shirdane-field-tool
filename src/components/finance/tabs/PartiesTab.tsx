@@ -48,6 +48,9 @@ interface Party {
   sepidar_dl_id: number | null;
   sepidar_dl_code: number | null;
   sepidar_account_id: number | null;
+  // Per-party PartyAccountSLRef used when creating Sepidar payment vouchers.
+  // When null, the edge function falls back to settings → 193 (legacy default).
+  party_account_sl_ref: number | null;
   sepidar_full_name: string | null;
   sepidar_synced_at: string | null;
   sepidar_sync_attempts: number | null;
