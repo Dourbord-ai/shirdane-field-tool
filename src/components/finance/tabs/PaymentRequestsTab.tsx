@@ -22,6 +22,7 @@ import { SepidarBeneficiarySelector } from "@/components/finance/SepidarBenefici
 
 interface PR {
   id: string;
+  legacy_id: number | null;
   title: string | null;
   description: string | null;
   request_type: string | null;
@@ -29,6 +30,8 @@ interface PR {
   status: string | null;
   total_amount: number | null;
   confirmed_amount: number | null;
+  total_paid_amount: number | null;
+  remaining_amount: number | null;
   created_at: string;
 }
 
