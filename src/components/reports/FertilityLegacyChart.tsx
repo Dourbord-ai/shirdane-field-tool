@@ -355,6 +355,8 @@ export default function FertilityLegacyChart() {
     setHeiferMode("all");
     setDayRange("all");
     setPregMode("all");
+    // Reset the شکم/دوره picker back to "همه" so all periods are shown again.
+    setPeriodFilter("all");
     setSortKey("days_desc");
   };
 
