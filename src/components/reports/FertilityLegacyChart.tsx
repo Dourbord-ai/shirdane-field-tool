@@ -19,6 +19,54 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { GlobalCard } from "@/components/global/KPIWidget";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { RefreshCcw, X, Filter } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Legacy CRM color palette by fertility status id — matches the old
+// reporting screen exactly so users transitioning from the legacy system
+// see the same colors for each وضعیت تولیدمثل. Falls back to
+// `status_color` from the DB when an id isn't in this map.
+const LEGACY_STATUS_COLOR_BY_ID: Record<number, string> = {
+  1: "#A9CCE3",  // بدون وضعیت — light blue
+  2: "#F5B041",  // فحل شده — peach/orange
+  3: "#E67E22",  // تلقیح شده — orange
+  4: "#27AE60",  // تست اولیه مثبت — green
+  5: "#A9D08E",  // تست اولیه مشکوک — light green
+  6: "#E74C3C",  // تست اولیه منفی — red
+  7: "#CD6155",  // تست نهایی منفی — soft red
+  8: "#5B6FA8",  // آبستن قطعی — blue/purple
+  9: "#F1C40F",  // سقط کرده — yellow
+  12: "#ECF0F1", // تازه زا — white/off-white
+  14: "#F5B7B1", // شستشو شده — pink
+  15: "#BDC3C7", // کلین تست مثبت — gray
+  16: "#B03A2E", // تحت درمان — brownish red
+  17: "#E6B0AA", // تست تکمیلی منفی — pinkish red
+  18: "#7F8C8D", // تست تکمیلی مثبت — dark gray
+  19: "#F5B7B1", // تست خشکی منفی — pink
+  20: "#95A5A6", // تست خشکی مثبت — gray
+  21: "#5DADE2", // همزمان شده جهت فحلی — blue
+  22: "#FADBD8", // توقف برنامه همزمان سازی — very light pink
+};
+
+// Resolve final bar color: prefer the legacy palette by status id, then
+// the DB-provided status_color, then a neutral gray fallback.
+const resolveStatusColor = (
+  statusId: number | null | undefined,
+  fallback: string | null | undefined,
+): string => {
+  if (statusId != null && LEGACY_STATUS_COLOR_BY_ID[statusId]) {
+    return LEGACY_STATUS_COLOR_BY_ID[statusId];
+  }
+  return fallback ?? "#9CA3AF";
+};
 
 // Row shape returned by the view. All optional because Supabase may return
 // null for cows with missing fertility data.
@@ -117,6 +165,11 @@ export default function FertilityLegacyChart() {
   const [periodFilter, setPeriodFilter] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("days_desc");
   const [filtersOpen, setFiltersOpen] = useState(!isMobile);
+
+  // Pending click — when a user clicks a bar we capture the cow here and
+  // open a confirmation dialog. Confirming opens the cow profile in a new
+  // tab; cancelling clears the pending selection.
+  const [pendingCow, setPendingCow] = useState<FertilityChartRow | null>(null);
 
   // Stable ref to the ECharts instance so we can resize on layout changes.
   const chartRef = useRef<ReactECharts | null>(null);
@@ -221,7 +274,9 @@ export default function FertilityLegacyChart() {
     const map = new Map<string, { color: string; count: number }>();
     filtered.forEach((r) => {
       const k = r.chart_status ?? "نامشخص";
-      const c = r.status_color ?? "#9CA3AF";
+      // Use the legacy palette for legend swatches too, so the colors
+      // shown in the legend match the bars exactly.
+      const c = resolveStatusColor(r.last_fertility_status, r.status_color);
       const cur = map.get(k) ?? { color: c, count: 0 };
       cur.count += 1;
       cur.color = c;
@@ -241,8 +296,12 @@ export default function FertilityLegacyChart() {
     // Bar series with per-cow color via itemStyle callback.
     const barData = filtered.map((r) => ({
       value: r.chart_days ?? 0,
-      itemStyle: { color: r.status_color ?? "#9CA3AF", borderRadius: [4, 4, 0, 0] },
-      // Stash row in extra so tooltip can look it up by dataIndex.
+      itemStyle: {
+        // Apply the legacy CRM palette per status id (falls back to the
+        // DB-provided status_color when an id isn't mapped).
+        color: resolveStatusColor(r.last_fertility_status, r.status_color),
+        borderRadius: [4, 4, 0, 0],
+      },
     }));
 
     // Triangle markers above heifer bars only.
@@ -383,11 +442,12 @@ export default function FertilityLegacyChart() {
     };
   }, [filtered]);
 
-  // Bar-click → navigate to livestock profile. Wrapped in try/catch so
-  // a missing route never crashes the chart.
+  // Bar-click → open a confirmation dialog ("ورود به پروفایل").
+  // On confirm we open the cow profile in a NEW TAB so the user's place
+  // in the chart (filters, zoom, scroll) is preserved.
   const onChartClick = (params: any) => {
     // Guard: clicking on markLines / scatter / empty area also fires this
-    // handler but without a valid bar dataIndex. Only navigate when we
+    // handler but without a valid bar dataIndex. Only react when we
     // actually clicked a cow bar — otherwise ECharts internals can throw
     // "Cannot read properties of undefined (reading 'getRawIndex')".
     if (!params || params.componentType !== "series" || params.seriesType !== "bar") return;
@@ -395,11 +455,24 @@ export default function FertilityLegacyChart() {
     if (typeof idx !== "number") return;
     const r = filtered[idx];
     if (!r) return;
+    // Stage the cow for the AlertDialog — actual navigation happens on
+    // confirm so accidental clicks don't whisk the user away.
+    setPendingCow(r);
+  };
+
+  // Confirm handler — opens the cow profile in a new browser tab.
+  // We use window.open with noopener,noreferrer for safer cross-tab access.
+  const confirmOpenProfile = () => {
+    if (!pendingCow) return;
+    const url = `/livestock/${pendingCow.livestock_id}`;
     try {
-      navigate(`/livestock/${r.livestock_id}`);
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch {
-      toast(`شناسه دام: ${r.livestock_id}`);
+      // Fallback: in-app navigation if window.open is blocked.
+      navigate(url);
+      toast(`شناسه دام: ${pendingCow.livestock_id}`);
     }
+    setPendingCow(null);
   };
 
   // Reset all filter state back to defaults.
@@ -660,6 +733,43 @@ export default function FertilityLegacyChart() {
           />
         )}
       </div>
+
+      {/* Confirmation dialog shown after clicking a bar. Asks the user
+          whether they want to open the cow profile in a new tab. Using
+          AlertDialog (vs a plain Dialog) because this is a navigational
+          action the user should explicitly acknowledge. */}
+      <AlertDialog
+        open={pendingCow !== null}
+        onOpenChange={(open) => { if (!open) setPendingCow(null); }}
+      >
+        <AlertDialogContent dir="rtl" className="text-right">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ورود به پروفایل</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingCow ? (
+                <>
+                  آیا می‌خواهید پروفایل دام
+                  {" "}
+                  <strong>
+                    {pendingCow.bodynumber != null
+                      ? `بدنه ${pendingCow.bodynumber}`
+                      : `#${pendingCow.livestock_id}`}
+                  </strong>
+                  {pendingCow.earnumber != null && <> (گوش {pendingCow.earnumber})</>}
+                  {" "}
+                  در یک تب جدید باز شود؟
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmOpenProfile}>
+              ورود به پروفایل
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
