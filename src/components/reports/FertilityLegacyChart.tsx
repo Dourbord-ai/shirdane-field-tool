@@ -19,6 +19,54 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { GlobalCard } from "@/components/global/KPIWidget";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { RefreshCcw, X, Filter } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Legacy CRM color palette by fertility status id — matches the old
+// reporting screen exactly so users transitioning from the legacy system
+// see the same colors for each وضعیت تولیدمثل. Falls back to
+// `status_color` from the DB when an id isn't in this map.
+const LEGACY_STATUS_COLOR_BY_ID: Record<number, string> = {
+  1: "#A9CCE3",  // بدون وضعیت — light blue
+  2: "#F5B041",  // فحل شده — peach/orange
+  3: "#E67E22",  // تلقیح شده — orange
+  4: "#27AE60",  // تست اولیه مثبت — green
+  5: "#A9D08E",  // تست اولیه مشکوک — light green
+  6: "#E74C3C",  // تست اولیه منفی — red
+  7: "#CD6155",  // تست نهایی منفی — soft red
+  8: "#5B6FA8",  // آبستن قطعی — blue/purple
+  9: "#F1C40F",  // سقط کرده — yellow
+  12: "#ECF0F1", // تازه زا — white/off-white
+  14: "#F5B7B1", // شستشو شده — pink
+  15: "#BDC3C7", // کلین تست مثبت — gray
+  16: "#B03A2E", // تحت درمان — brownish red
+  17: "#E6B0AA", // تست تکمیلی منفی — pinkish red
+  18: "#7F8C8D", // تست تکمیلی مثبت — dark gray
+  19: "#F5B7B1", // تست خشکی منفی — pink
+  20: "#95A5A6", // تست خشکی مثبت — gray
+  21: "#5DADE2", // همزمان شده جهت فحلی — blue
+  22: "#FADBD8", // توقف برنامه همزمان سازی — very light pink
+};
+
+// Resolve final bar color: prefer the legacy palette by status id, then
+// the DB-provided status_color, then a neutral gray fallback.
+const resolveStatusColor = (
+  statusId: number | null | undefined,
+  fallback: string | null | undefined,
+): string => {
+  if (statusId != null && LEGACY_STATUS_COLOR_BY_ID[statusId]) {
+    return LEGACY_STATUS_COLOR_BY_ID[statusId];
+  }
+  return fallback ?? "#9CA3AF";
+};
 
 // Row shape returned by the view. All optional because Supabase may return
 // null for cows with missing fertility data.
