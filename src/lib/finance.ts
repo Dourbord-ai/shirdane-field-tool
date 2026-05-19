@@ -71,6 +71,10 @@ export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
 };
 
 export const RECEIVE_ID_STATUS_LABEL: Record<string, string> = {
+  // Legacy imported rows may still carry `draft`; in this flow it means
+  // "awaiting management approval" — surface the same Persian label so the
+  // user never sees the technical word «پیش‌نویس».
+  draft: "در انتظار تایید",
   pending_approval: "در انتظار تایید",
   approved: "تایید شده",
   sync_failed: "خطای سپیدار",
