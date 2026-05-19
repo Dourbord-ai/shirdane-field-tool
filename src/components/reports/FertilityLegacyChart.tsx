@@ -359,7 +359,8 @@ export default function FertilityLegacyChart() {
     setDayRange("all");
     setPregMode("all");
     // Reset the شکم/دوره picker back to "همه" so all periods are shown again.
-    setPeriodFilter("all");
+    // Empty array means "no period filter" — matches the multi-select semantics.
+    setPeriodFilter([]);
     setSortKey("days_desc");
   };
 
