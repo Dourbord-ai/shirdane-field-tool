@@ -103,6 +103,9 @@ export interface FertilityChartRow {
   prediction_of_birth_date_days: number | null;
   dry_days: number | null;
   last_birth_to_pregnancy_days: number | null;
+  // Added in the view: pen/location label and Persian milking status.
+  last_location_name: string | null;
+  milking_status: string | null;
 }
 
 // Persian digit helper for the period dropdown labels.

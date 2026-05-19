@@ -4643,9 +4643,11 @@ export type Database = {
           last_erotic_date: string | null
           last_fertility_status: number | null
           last_inoculation_date: string | null
+          last_location_name: string | null
           last_period: number | null
           last_pregnancy_date: string | null
           livestock_id: number | null
+          milking_status: string | null
           number_of_births: number | null
           prediction_of_birth_date: string | null
           prediction_of_birth_date_days: number | null
