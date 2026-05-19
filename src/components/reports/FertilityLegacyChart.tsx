@@ -733,6 +733,43 @@ export default function FertilityLegacyChart() {
           />
         )}
       </div>
+
+      {/* Confirmation dialog shown after clicking a bar. Asks the user
+          whether they want to open the cow profile in a new tab. Using
+          AlertDialog (vs a plain Dialog) because this is a navigational
+          action the user should explicitly acknowledge. */}
+      <AlertDialog
+        open={pendingCow !== null}
+        onOpenChange={(open) => { if (!open) setPendingCow(null); }}
+      >
+        <AlertDialogContent dir="rtl" className="text-right">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ورود به پروفایل</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingCow ? (
+                <>
+                  آیا می‌خواهید پروفایل دام
+                  {" "}
+                  <strong>
+                    {pendingCow.bodynumber != null
+                      ? `بدنه ${pendingCow.bodynumber}`
+                      : `#${pendingCow.livestock_id}`}
+                  </strong>
+                  {pendingCow.earnumber != null && <> (گوش {pendingCow.earnumber})</>}
+                  {" "}
+                  در یک تب جدید باز شود؟
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmOpenProfile}>
+              ورود به پروفایل
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
