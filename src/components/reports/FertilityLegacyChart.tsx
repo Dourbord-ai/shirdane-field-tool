@@ -263,6 +263,12 @@ export default function FertilityLegacyChart() {
       yAxis: {
         type: "value",
         name: "تعداد روز",
+        // Hard cap at 300 — fertility legacy chart only meaningfully shows
+        // 0..300 days. Any data rows with absurd values (e.g. 250000) come
+        // from bad legacy imports and get clipped instead of breaking scale.
+        min: 0,
+        max: 300,
+        interval: 20,
         nameTextStyle: { color: "#94a3b8", fontFamily: "Vazirmatn, sans-serif" },
         axisLabel: { color: "#94a3b8", fontFamily: "Vazirmatn, sans-serif" },
         splitLine: { lineStyle: { color: "rgba(148,163,184,0.1)" } },
@@ -473,43 +479,45 @@ export default function FertilityLegacyChart() {
         ))}
       </div>
 
-      {/* Chart + legend layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-4">
-        <div className="card-dashboard p-2">
-          {filtered.length === 0 ? (
-            <div className="py-24 text-center text-muted-foreground">داده‌ای برای نمایش وجود ندارد.</div>
-          ) : (
-            <ReactECharts
-              ref={chartRef}
-              option={option}
-              notMerge
-              lazyUpdate
-              style={{ height: isMobile ? 420 : 620, width: "100%" }}
-              onEvents={{ click: onChartClick }}
-            />
-          )}
-        </div>
-
-        {/* Status legend — counts + percentages from filtered data */}
-        <div className="card-dashboard p-3 h-fit">
-          <h3 className="text-sm font-semibold text-foreground mb-2">راهنمای وضعیت</h3>
-          <div className="space-y-1.5 max-h-[580px] overflow-auto pr-1">
-            {legend.length === 0 && (
-              <p className="text-xs text-muted-foreground">موردی برای نمایش نیست.</p>
-            )}
+      {/* Status legend — placed ABOVE the chart as horizontal pills so it
+          reads as a header ("راهنمای وضعیت") instead of competing with the
+          chart for horizontal space. Counts + percentages reflect filtered data. */}
+      <div className="card-dashboard p-3">
+        <h3 className="text-sm font-semibold text-foreground mb-2">راهنمای وضعیت</h3>
+        {legend.length === 0 ? (
+          <p className="text-xs text-muted-foreground">موردی برای نمایش نیست.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
             {legend.map((l) => (
-              <div key={l.status} className="flex items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: l.color }} />
-                  <span className="truncate text-foreground">{l.status}</span>
-                </div>
+              <div
+                key={l.status}
+                className="flex items-center gap-2 text-xs px-2.5 py-1 rounded-full border border-border bg-card/60"
+              >
+                <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: l.color }} />
+                <span className="text-foreground whitespace-nowrap">{l.status}</span>
                 <span className="text-muted-foreground whitespace-nowrap">
                   {l.count.toLocaleString("fa-IR")} • {l.pct.toFixed(1)}%
                 </span>
               </div>
             ))}
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* Chart — now spans full width since the legend moved on top. */}
+      <div className="card-dashboard p-2">
+        {filtered.length === 0 ? (
+          <div className="py-24 text-center text-muted-foreground">داده‌ای برای نمایش وجود ندارد.</div>
+        ) : (
+          <ReactECharts
+            ref={chartRef}
+            option={option}
+            notMerge
+            lazyUpdate
+            style={{ height: isMobile ? 420 : 620, width: "100%" }}
+            onEvents={{ click: onChartClick }}
+          />
+        )}
       </div>
     </div>
   );
