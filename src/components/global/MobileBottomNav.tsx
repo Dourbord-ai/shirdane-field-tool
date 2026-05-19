@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 // bar (mirrors the desktop GlobalSidebar list).
 const primary = [
   { title: "داشبورد",  icon: LayoutDashboard, to: "/dashboard" },
-  { title: "گزارش‌ها", icon: BarChart3,       to: "/dashboard" },
+  { title: "گزارش‌ها", icon: BarChart3,       to: "/reports" },
   { title: "افزودن",   icon: Plus,            to: "/milk-record/quick", isFab: true },
   { title: "دام‌ها",   icon: Beef,            to: "/livestock" },
 ];
@@ -26,7 +26,7 @@ const allItems = [
   { title: "قبوض آزمایشگاه",  icon: Receipt,         to: "/receipts/lab" },
   { title: "خرید و فروش",     icon: ShoppingCart,    to: "/invoices" },
   { title: "باروری",          icon: HeartPulse,      to: "/fertility/operations" },
-  { title: "گزارش‌ها",        icon: BarChart3,       to: "/dashboard" },
+  { title: "گزارش‌ها",        icon: BarChart3,       to: "/reports" },
   { title: "امور مالی",       icon: Wallet,          to: "/finance" },
   { title: "منابع انسانی",    icon: Users,           to: "/hr" },
   { title: "مدارک",           icon: Award,           to: "/certificates" },

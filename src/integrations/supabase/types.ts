@@ -543,6 +543,13 @@ export type Database = {
             foreignKeyName: "cow_locations_cow_id_fkey"
             columns: ["cow_id"]
             isOneToOne: false
+            referencedRelation: "analytics_fertility_legacy_chart"
+            referencedColumns: ["livestock_id"]
+          },
+          {
+            foreignKeyName: "cow_locations_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
             referencedRelation: "cows"
             referencedColumns: ["id"]
           },
@@ -605,6 +612,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cow_statuses_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_fertility_legacy_chart"
+            referencedColumns: ["livestock_id"]
+          },
           {
             foreignKeyName: "cow_statuses_cow_id_fkey"
             columns: ["cow_id"]
@@ -773,6 +787,13 @@ export type Database = {
             foreignKeyName: "cow_syncs_cow_id_fkey"
             columns: ["cow_id"]
             isOneToOne: false
+            referencedRelation: "analytics_fertility_legacy_chart"
+            referencedColumns: ["livestock_id"]
+          },
+          {
+            foreignKeyName: "cow_syncs_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
             referencedRelation: "cows"
             referencedColumns: ["id"]
           },
@@ -835,6 +856,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cow_types_cow_id_fkey"
+            columns: ["cow_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_fertility_legacy_chart"
+            referencedColumns: ["livestock_id"]
+          },
           {
             foreignKeyName: "cow_types_cow_id_fkey"
             columns: ["cow_id"]
@@ -3766,6 +3794,13 @@ export type Database = {
             foreignKeyName: "livestock_milk_records_livestock_id_fkey"
             columns: ["livestock_id"]
             isOneToOne: false
+            referencedRelation: "analytics_fertility_legacy_chart"
+            referencedColumns: ["livestock_id"]
+          },
+          {
+            foreignKeyName: "livestock_milk_records_livestock_id_fkey"
+            columns: ["livestock_id"]
+            isOneToOne: false
             referencedRelation: "cows"
             referencedColumns: ["id"]
           },
@@ -3851,6 +3886,13 @@ export type Database = {
           weight?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "livestock_physical_statuses_livestock_id_fkey"
+            columns: ["livestock_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_fertility_legacy_chart"
+            referencedColumns: ["livestock_id"]
+          },
           {
             foreignKeyName: "livestock_physical_statuses_livestock_id_fkey"
             columns: ["livestock_id"]
@@ -4582,7 +4624,30 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      analytics_fertility_legacy_chart: {
+        Row: {
+          bodynumber: number | null
+          chart_day_source: string | null
+          chart_days: number | null
+          chart_status: string | null
+          date_of_birth: string | null
+          earnumber: number | null
+          is_dry: boolean | null
+          is_heifer: boolean | null
+          is_pregnancy: boolean | null
+          last_abortion_date: string | null
+          last_birth_date: string | null
+          last_dry_date: string | null
+          last_erotic_date: string | null
+          last_fertility_status: number | null
+          last_inoculation_date: string | null
+          last_pregnancy_date: string | null
+          livestock_id: number | null
+          number_of_births: number | null
+          status_color: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       ensure_app_users_for_hr_users: {
