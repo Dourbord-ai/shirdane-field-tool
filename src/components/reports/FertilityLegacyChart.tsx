@@ -376,7 +376,13 @@ export default function FertilityLegacyChart() {
   // Bar-click → navigate to livestock profile. Wrapped in try/catch so
   // a missing route never crashes the chart.
   const onChartClick = (params: any) => {
+    // Guard: clicking on markLines / scatter / empty area also fires this
+    // handler but without a valid bar dataIndex. Only navigate when we
+    // actually clicked a cow bar — otherwise ECharts internals can throw
+    // "Cannot read properties of undefined (reading 'getRawIndex')".
+    if (!params || params.componentType !== "series" || params.seriesType !== "bar") return;
     const idx = params?.dataIndex;
+    if (typeof idx !== "number") return;
     const r = filtered[idx];
     if (!r) return;
     try {
