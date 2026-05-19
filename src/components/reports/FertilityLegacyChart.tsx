@@ -731,18 +731,34 @@ export default function FertilityLegacyChart() {
           <p className="text-xs text-muted-foreground">موردی برای نمایش نیست.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {legend.map((l) => (
-              <div
-                key={l.status}
-                className="flex items-center gap-2 text-xs px-2.5 py-1 rounded-full border border-border bg-card/60"
-              >
-                <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: l.color }} />
-                <span className="text-foreground whitespace-nowrap">{l.status}</span>
-                <span className="text-muted-foreground whitespace-nowrap">
-                  {l.count.toLocaleString("fa-IR")} • {l.pct.toFixed(1)}%
-                </span>
-              </div>
-            ))}
+            {legend.map((l) => {
+              // A legend pill is "فعال" when its status is in statusFilter,
+              // meaning bars for that status are visible in the chart.
+              // Clicking toggles it: active → remove (hide), inactive → add
+              // (show more bars). Defaults to آبستن قطعی / تست اولیه مثبت /
+              // تلقیح شده so the chart starts focused on what matters most.
+              const active = statusFilter.includes(l.status);
+              return (
+                <button
+                  key={l.status}
+                  type="button"
+                  onClick={() => toggleStatus(l.status)}
+                  className={`flex items-center gap-2 text-xs px-2.5 py-1 rounded-full border transition ${
+                    active
+                      ? "border-primary bg-primary/15 ring-1 ring-primary/40 shadow-sm"
+                      : "border-border bg-card/60 opacity-60 hover:opacity-100"
+                  }`}
+                  aria-pressed={active}
+                  title={active ? "برای مخفی کردن کلیک کنید" : "برای نمایش کلیک کنید"}
+                >
+                  <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: l.color }} />
+                  <span className="text-foreground whitespace-nowrap">{l.status}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    {l.count.toLocaleString("fa-IR")} • {l.pct.toFixed(1)}%
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
