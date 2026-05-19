@@ -291,8 +291,12 @@ export default function FertilityLegacyChart() {
     // Bar series with per-cow color via itemStyle callback.
     const barData = filtered.map((r) => ({
       value: r.chart_days ?? 0,
-      itemStyle: { color: r.status_color ?? "#9CA3AF", borderRadius: [4, 4, 0, 0] },
-      // Stash row in extra so tooltip can look it up by dataIndex.
+      itemStyle: {
+        // Apply the legacy CRM palette per status id (falls back to the
+        // DB-provided status_color when an id isn't mapped).
+        color: resolveStatusColor(r.last_fertility_status, r.status_color),
+        borderRadius: [4, 4, 0, 0],
+      },
     }));
 
     // Triangle markers above heifer bars only.
