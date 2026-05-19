@@ -111,18 +111,32 @@ export default function ReceiveIdentificationTab() {
       .select("*")
       .eq("is_deleted", false)
       .order("created_at", { ascending: false })
-      .limit(200);
-    if (filter) q = q.eq("status", filter);
+      .limit(500);
+    if (filter === "pending_approval") {
+      // Legacy imported rows may carry status="draft" — in this flow it
+      // means "awaiting approval", so include both keys under the single
+      // user-facing filter «در انتظار تایید».
+      q = q.in("status", ["pending_approval", "draft"]);
+    } else if (filter) {
+      q = q.eq("status", filter);
+    }
     const { data } = await q;
     setItems((data as RI[]) || []);
     setLoading(false);
   }
 
-  async function approve(ri: RI) {
+  async function approveAndSync(ri: RI) {
+    // Explicit confirmation per spec — this triggers Sepidar registration
+    // through the existing approveReceiveIdentification helper which:
+    //   1) flips status pending_approval/draft → approved
+    //   2) creates/links finance_vouchers
+    //   3) updates sepidar_sync_status to "synced" on success
+    // Failure path stores sepidar_error_message which is displayed below.
+    if (!confirm("این درخواست تایید و در سپیدار ثبت شود؟")) return;
     setBusyId(ri.id);
     try {
       const res = await approveReceiveIdentification(ri.id);
-      if (res.ok) toast.success("تایید شد و سند صادر گردید");
+      if (res.ok) toast.success("تایید و در سپیدار ثبت شد");
       else toastFinanceError(toast, res.error || new Error("خطا در ثبت سپیدار"));
       void load();
     } catch (e: unknown) {
