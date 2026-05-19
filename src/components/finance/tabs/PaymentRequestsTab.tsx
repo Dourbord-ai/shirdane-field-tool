@@ -68,9 +68,34 @@ export default function PaymentRequestsTab() {
   const [requests, setRequests] = useState<PR[]>([]);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<PR | null>(null);
-  const [typeFilter, setTypeFilter] = useState<string>("");
 
-  useEffect(() => { void load(); }, [typeFilter]);
+  // ---- Server-side filters (refetch on change) -------------------------
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+
+  // ---- Local filters (applied after fetch, so they compose with the
+  // server-side filters above and with the debounced search). --------------
+  const [paymentFilter, setPaymentFilter] = useState<string>(""); // "" | paid | unpaid
+  const [voucherFilter, setVoucherFilter] = useState<string>(""); // "" | with | without
+
+  // ---- Debounced search input -------------------------------------------
+  // We keep two pieces of state: `searchInput` mirrors the controlled text
+  // box, `searchTerm` is updated 300 ms after the user stops typing and
+  // drives the actual filter so we don't refetch on every keystroke.
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearchTerm(searchInput.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  // We need per-request voucher presence (vouchers live on the *items*
+  // table). We fetch a Set of request ids that have at least one item with
+  // a non-null voucher_id and consult it in the client-side filter.
+  const [requestsWithVoucher, setRequestsWithVoucher] = useState<Set<string>>(new Set());
+
+  useEffect(() => { void load(); }, [typeFilter, statusFilter]);
+
   async function load() {
     let q = supabase
       .from("finance_payment_requests")
@@ -78,37 +103,124 @@ export default function PaymentRequestsTab() {
       .eq("is_deleted", false)
       .order("created_at", { ascending: false });
     if (typeFilter) q = q.eq("legacy_request_type_code", Number(typeFilter));
+    if (statusFilter) q = q.eq("status", statusFilter);
     const { data } = await q;
-    setRequests((data as PR[]) || []);
+    const rows = (data as PR[]) || [];
+    setRequests(rows);
+    // Compute voucher presence in a single follow-up query — much cheaper
+    // than a join because finance_payment_request_items is narrow.
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      const { data: items } = await supabase
+        .from("finance_payment_request_items")
+        .select("payment_request_id")
+        .in("payment_request_id", ids)
+        .not("voucher_id", "is", null);
+      setRequestsWithVoucher(new Set((items || []).map((i: { payment_request_id: string }) => i.payment_request_id)));
+    } else {
+      setRequestsWithVoucher(new Set());
+    }
   }
+
+  // Apply local filters (search + paid/unpaid + voucher). Memoised so the
+  // expensive string scans don't run on unrelated re-renders.
+  const filtered = useMemo(() => {
+    const needle = searchTerm.toLowerCase();
+    return requests.filter((r) => {
+      // Code search hits either the UUID prefix or the legacy_id integer.
+      if (needle) {
+        const hay = [
+          r.title || "",
+          r.description || "",
+          r.id,
+          r.legacy_id != null ? String(r.legacy_id) : "",
+        ].join(" ").toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      if (paymentFilter === "paid") {
+        // Treat zero remaining OR explicit `paid` status as fully paid.
+        const remaining = Number(r.remaining_amount ?? r.total_amount ?? 0);
+        if (!(r.status === "paid" || remaining <= 0)) return false;
+      } else if (paymentFilter === "unpaid") {
+        const remaining = Number(r.remaining_amount ?? r.total_amount ?? 0);
+        const paid = Number(r.total_paid_amount ?? 0);
+        if (paid > 0 && remaining <= 0) return false;
+      }
+      if (voucherFilter === "with" && !requestsWithVoucher.has(r.id)) return false;
+      if (voucherFilter === "without" && requestsWithVoucher.has(r.id)) return false;
+      return true;
+    });
+  }, [requests, searchTerm, paymentFilter, voucherFilter, requestsWithVoucher]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold">درخواست‌های پرداخت</h2>
-        <div className="flex items-center gap-2">
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-          >
-            <option value="">همه موارد</option>
-            {PAYMENT_REQUEST_TYPES.map((t) => (
-              <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
-            ))}
-          </select>
-          <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
-        </div>
+        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+      </div>
+
+      {/* Filter toolbar — search + type + status + voucher + payment.
+          All filters compose: server-side ones refetch, client-side ones
+          narrow the in-memory list. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <Input
+          placeholder="جستجو در کد / عنوان / توضیحات…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="">همه موارد</option>
+          {PAYMENT_REQUEST_TYPES.map((t) => (
+            <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="">همه وضعیت‌ها</option>
+          {/* Use a controlled subset of statuses — only the ones the
+              business asked us to expose as filters. */}
+          {["pending_approval", "approved", "rejected", "cancelled", "paid", "partially_paid"].map((s) => (
+            <option key={s} value={s}>{PAYMENT_REQUEST_STATUS_LABEL[s] || s}</option>
+          ))}
+        </select>
+        <select
+          value={voucherFilter}
+          onChange={(e) => setVoucherFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="">سند: همه</option>
+          <option value="with">دارای سند</option>
+          <option value="without">بدون سند</option>
+        </select>
+        <select
+          value={paymentFilter}
+          onChange={(e) => setPaymentFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+        >
+          <option value="">پرداخت: همه</option>
+          <option value="paid">پرداخت کامل</option>
+          <option value="unpaid">پرداخت نشده</option>
+        </select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {requests.map((r) => (
+        {filtered.map((r) => (
           <button key={r.id} onClick={() => setDetail(r)} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all">
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
               <FinanceStatusBadge status={r.status} />
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">{getPaymentRequestTypeLabel(r.legacy_request_type_code)}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
+              {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
+            </p>
             {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
             <div className="mt-3 pt-3 border-t flex items-center justify-between">
               <JalaliDateCell value={r.created_at} />
@@ -116,9 +228,9 @@ export default function PaymentRequestsTab() {
             </div>
           </button>
         ))}
-        {requests.length === 0 && (
+        {filtered.length === 0 && (
           <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-            درخواستی ثبت نشده
+            درخواستی یافت نشد
           </div>
         )}
       </div>
