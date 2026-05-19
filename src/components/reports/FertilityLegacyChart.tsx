@@ -446,6 +446,20 @@ export default function FertilityLegacyChart() {
                 <SelectItem value="dry">فقط خشک</SelectItem>
               </SelectContent>
             </Select>
+            {/* دوره (شکم) — lactation period filter.
+                Pulled from cows.last_period via the analytics view.
+                We hardcode 1..7 because business rules only label up to شکم هفتم. */}
+            <Select value={periodFilter} onValueChange={setPeriodFilter}>
+              <SelectTrigger><SelectValue placeholder="دوره" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">همه دوره‌ها</SelectItem>
+                {/* Render each شکم label from the PERIOD_LABEL map.
+                    Object.entries preserves insertion order in modern JS. */}
+                {Object.entries(PERIOD_LABEL).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
               <SelectTrigger><SelectValue placeholder="مرتب‌سازی" /></SelectTrigger>
               <SelectContent>
