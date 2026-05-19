@@ -263,6 +263,12 @@ export default function FertilityLegacyChart() {
       yAxis: {
         type: "value",
         name: "تعداد روز",
+        // Hard cap at 300 — fertility legacy chart only meaningfully shows
+        // 0..300 days. Any data rows with absurd values (e.g. 250000) come
+        // from bad legacy imports and get clipped instead of breaking scale.
+        min: 0,
+        max: 300,
+        interval: 20,
         nameTextStyle: { color: "#94a3b8", fontFamily: "Vazirmatn, sans-serif" },
         axisLabel: { color: "#94a3b8", fontFamily: "Vazirmatn, sans-serif" },
         splitLine: { lineStyle: { color: "rgba(148,163,184,0.1)" } },
