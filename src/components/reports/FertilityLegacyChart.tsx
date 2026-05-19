@@ -44,6 +44,17 @@ export interface FertilityChartRow {
   last_pregnancy_date: string | null;
   last_abortion_date: string | null;
   last_dry_date: string | null;
+  // Legacy CRM-derived fields (added in the view to match the old C# chart):
+  // - pregnancy_days: روز از آخرین تلقیح (today - last_inoculation_date)
+  // - prediction_of_birth_date: last_inoculation_date + 279 روز
+  // - prediction_of_birth_date_days: روز باقی‌مانده تا زایش پیش‌بینی شده
+  // - dry_days: روز خشکی (today - last_dry_date) فقط وقتی is_dry = true
+  // - last_birth_to_pregnancy_days: فاصله آخرین زایش تا تلقیح بعدی
+  pregnancy_days: number | null;
+  prediction_of_birth_date: string | null;
+  prediction_of_birth_date_days: number | null;
+  dry_days: number | null;
+  last_birth_to_pregnancy_days: number | null;
 }
 
 // Persian digit helper for the period dropdown labels.
