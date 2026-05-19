@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,16 +6,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TransactionSelector, PartySelector } from "@/components/finance/selectors";
-import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
+import { MoneyCell, JalaliDateCell } from "@/components/finance/atoms";
+import { cn } from "@/lib/utils";
 import {
   createReceiveIdentification,
   approveReceiveIdentification,
   rejectReceiveIdentification,
   cancelReceiveIdentification,
   partyName,
+  receiveIdStatusLabel,
 } from "@/lib/finance";
 import { toast } from "sonner";
-import { CheckCircle2, X, Plus, XCircle } from "lucide-react";
+import { CheckCircle2, X, Plus, XCircle, Send } from "lucide-react";
+
+// Render a status badge using ONLY the receive-identification label map so
+// that imported rows with status="draft" surface as «در انتظار تایید» rather
+// than the generic «پیش‌نویس» from the payment-request label map.
+function ReceiveIdStatusBadge({ status }: { status: string | null | undefined }) {
+  const key = status || "pending_approval";
+  // Visual tone mirrors FinanceStatusBadge but is kept local so the receive
+  // identifications tab is fully self-consistent.
+  const tone: Record<string, string> = {
+    draft: "bg-amber-100 text-amber-800",
+    pending_approval: "bg-amber-100 text-amber-800",
+    approved: "bg-emerald-100 text-emerald-800",
+    sync_failed: "bg-red-100 text-red-800",
+    rejected: "bg-red-100 text-red-800",
+    cancelled: "bg-muted text-muted-foreground",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
+        tone[key] || "bg-muted text-muted-foreground",
+      )}
+    >
+      {receiveIdStatusLabel(key)}
+    </span>
+  );
+}
 
 interface RI {
   id: string;
@@ -82,18 +111,32 @@ export default function ReceiveIdentificationTab() {
       .select("*")
       .eq("is_deleted", false)
       .order("created_at", { ascending: false })
-      .limit(200);
-    if (filter) q = q.eq("status", filter);
+      .limit(500);
+    if (filter === "pending_approval") {
+      // Legacy imported rows may carry status="draft" — in this flow it
+      // means "awaiting approval", so include both keys under the single
+      // user-facing filter «در انتظار تایید».
+      q = q.in("status", ["pending_approval", "draft"]);
+    } else if (filter) {
+      q = q.eq("status", filter);
+    }
     const { data } = await q;
     setItems((data as RI[]) || []);
     setLoading(false);
   }
 
-  async function approve(ri: RI) {
+  async function approveAndSync(ri: RI) {
+    // Explicit confirmation per spec — this triggers Sepidar registration
+    // through the existing approveReceiveIdentification helper which:
+    //   1) flips status pending_approval/draft → approved
+    //   2) creates/links finance_vouchers
+    //   3) updates sepidar_sync_status to "synced" on success
+    // Failure path stores sepidar_error_message which is displayed below.
+    if (!confirm("این درخواست تایید و در سپیدار ثبت شود؟")) return;
     setBusyId(ri.id);
     try {
       const res = await approveReceiveIdentification(ri.id);
-      if (res.ok) toast.success("تایید شد و سند صادر گردید");
+      if (res.ok) toast.success("تایید و در سپیدار ثبت شد");
       else toastFinanceError(toast, res.error || new Error("خطا در ثبت سپیدار"));
       void load();
     } catch (e: unknown) {
@@ -151,14 +194,20 @@ export default function ReceiveIdentificationTab() {
           {items.map((r) => {
             const party = r.party_id ? parties[r.party_id] : null;
             const bank = r.bank_id ? banks[r.bank_id] : null;
-            const canApprove = r.status === "pending_approval" || r.status === "sync_failed";
-            const canReject = r.status === "pending_approval" || r.status === "sync_failed";
-            const canCancel = r.status === "pending_approval";
+            // Treat draft as pending_approval for action eligibility — the
+            // imported data uses both keys interchangeably.
+            const isPending = r.status === "pending_approval" || r.status === "draft";
+            // The Sepidar registration button is hidden once the record is
+            // already attached to a voucher OR already reported as synced.
+            const alreadySynced = !!r.voucher_id;
+            const canApprove = (isPending || r.status === "sync_failed") && !alreadySynced;
+            const canReject = isPending || r.status === "sync_failed";
+            const canCancel = isPending;
             return (
               <div key={r.id} className="rounded-xl border bg-card p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="font-bold text-sm">{r.title || "شناسایی دریافت"}</div>
-                  <FinanceStatusBadge status={r.status} />
+                  <ReceiveIdStatusBadge status={r.status} />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">
                   <div>
@@ -191,9 +240,9 @@ export default function ReceiveIdentificationTab() {
                 )}
                 <div className="flex flex-wrap gap-1.5">
                   {canApprove && (
-                    <Button size="sm" onClick={() => approve(r)} disabled={busyId === r.id}>
-                      <CheckCircle2 className="w-3.5 h-3.5 ml-1" />
-                      {r.status === "sync_failed" ? "تلاش مجدد ثبت سپیدار" : "تایید و ثبت سند"}
+                    <Button size="sm" onClick={() => approveAndSync(r)} disabled={busyId === r.id}>
+                      <Send className="w-3.5 h-3.5 ml-1" />
+                      {r.status === "sync_failed" ? "تلاش مجدد ثبت سپیدار" : "تایید و ثبت در سپیدار"}
                     </Button>
                   )}
                   {canReject && (
@@ -206,8 +255,11 @@ export default function ReceiveIdentificationTab() {
                       لغو
                     </Button>
                   )}
-                  {r.status === "approved" && r.voucher_id && (
-                    <span className="text-[11px] text-emerald-700">سند: {r.voucher_id.slice(0, 8)}…</span>
+                  {alreadySynced && (
+                    <span className="inline-flex items-center gap-1 text-emerald-700 text-[11px] font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> ثبت‌شده در سپیدار
+                      {r.voucher_id && <span className="font-mono opacity-70">• {r.voucher_id.slice(0, 8)}…</span>}
+                    </span>
                   )}
                 </div>
               </div>

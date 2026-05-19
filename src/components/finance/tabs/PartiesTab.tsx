@@ -12,8 +12,9 @@ import {
   PARTY_APPROVAL_STATUS_LABEL,
   syncPartyToSepidar,
   isPartyReadyForPosting,
+  isPartySyncedInSepidar,
 } from "@/lib/finance";
-import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle, GitCompareArrows } from "lucide-react";
+import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle, GitCompareArrows, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import BeneficiaryStatementCompareDialog from "@/components/finance/BeneficiaryStatementCompareDialog";
 
@@ -325,10 +326,15 @@ function PartyDetailDrawer({
   const [showError, setShowError] = useState(false);
 
   const ready = isPartyReadyForPosting(party);
-  const canApprove = party.approval_status === "pending_approval" || party.approval_status === "rejected";
-  const canReject = party.approval_status === "pending_approval" || party.approval_status === "approved";
-  const canSync = party.approval_status === "approved";
-  const canRetry = party.approval_status === "sync_failed";
+  // Treat any party that already has Sepidar identifiers (or an explicit
+  // `synced` sync status) as "registered in Sepidar". For such parties we
+  // MUST NOT show the "ثبت در سپیدار" button — they already exist there and
+  // re-posting would create duplicates. Instead we render a readonly badge.
+  const alreadySynced = isPartySyncedInSepidar(party);
+  const canApprove = (party.approval_status === "pending_approval" || party.approval_status === "rejected") && !alreadySynced;
+  const canReject = (party.approval_status === "pending_approval" || party.approval_status === "approved") && !alreadySynced;
+  const canSync = party.approval_status === "approved" && !alreadySynced;
+  const canRetry = party.approval_status === "sync_failed" && !alreadySynced;
 
   async function approve() {
     setBusy(true);
@@ -461,6 +467,11 @@ function PartyDetailDrawer({
             )}
 
             <div className="grid grid-cols-2 gap-2">
+              {alreadySynced && (
+                <div className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-2 text-xs font-bold">
+                  <ShieldCheck className="w-4 h-4" /> ثبت‌شده در سپیدار
+                </div>
+              )}
               {canApprove && (
                 <Button size="sm" disabled={busy} onClick={approve}>
                   <CheckCircle2 className="w-4 h-4 ml-1" /> تایید اطلاعات
