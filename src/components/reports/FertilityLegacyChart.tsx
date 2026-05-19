@@ -103,6 +103,9 @@ export interface FertilityChartRow {
   prediction_of_birth_date_days: number | null;
   dry_days: number | null;
   last_birth_to_pregnancy_days: number | null;
+  // Added in the view: pen/location label and Persian milking status.
+  last_location_name: string | null;
+  milking_status: string | null;
 }
 
 // Persian digit helper for the period dropdown labels.
@@ -330,17 +333,17 @@ export default function FertilityLegacyChart() {
           const line = (label: string, value: any) =>
             `<div><span style="color:#94a3b8">${label}:</span> <strong>${value ?? dash}</strong></div>`;
           return `<div style="direction:rtl;text-align:right;font-family:Vazirmatn,sans-serif;min-width:240px">
-            ${line("شماره دام", r.bodynumber)}
-            ${line("شماره گوش", r.earnumber)}
-            ${line("وضعیت", r.chart_status)}
-            ${line("تعداد روز نمایش داده شده", r.chart_days)}
-            ${line("منبع محاسبه روز", r.chart_day_source)}
-            ${line("روز از تلقیح", r.pregnancy_days)}
-            ${line("تاریخ پیش‌بینی زایش", r.prediction_of_birth_date)}
-            ${line("روز مانده تا زایش", r.prediction_of_birth_date_days)}
-            ${line("روز خشکی", r.dry_days)}
-            ${line("فاصله زایش تا تلقیح", r.last_birth_to_pregnancy_days)}
-            ${line("تلیسه", r.is_heifer ? "بله" : "خیر")}
+            ${line("بدن", r.bodynumber)}
+            ${line("گوش", r.earnumber)}
+            ${line("میزان آبستنی", r.pregnancy_days)}
+            ${line("مدت زایش تا آبستنی", r.last_birth_to_pregnancy_days)}
+            ${line("تعداد زایش", r.number_of_births)}
+            ${line("آخرین تلقیح", r.last_inoculation_date)}
+            ${line("پیش بینی زایش", r.prediction_of_birth_date)}
+            ${line("در بهاربند", r.last_location_name)}
+            ${line("وضعیت باروری فعلی", r.chart_status)}
+            ${line("وضعیت دوشش", r.milking_status)}
+            ${line("میزان خشکی", r.dry_days)}
           </div>`;
         },
       },
