@@ -442,11 +442,12 @@ export default function FertilityLegacyChart() {
     };
   }, [filtered]);
 
-  // Bar-click → navigate to livestock profile. Wrapped in try/catch so
-  // a missing route never crashes the chart.
+  // Bar-click → open a confirmation dialog ("ورود به پروفایل").
+  // On confirm we open the cow profile in a NEW TAB so the user's place
+  // in the chart (filters, zoom, scroll) is preserved.
   const onChartClick = (params: any) => {
     // Guard: clicking on markLines / scatter / empty area also fires this
-    // handler but without a valid bar dataIndex. Only navigate when we
+    // handler but without a valid bar dataIndex. Only react when we
     // actually clicked a cow bar — otherwise ECharts internals can throw
     // "Cannot read properties of undefined (reading 'getRawIndex')".
     if (!params || params.componentType !== "series" || params.seriesType !== "bar") return;
@@ -454,11 +455,24 @@ export default function FertilityLegacyChart() {
     if (typeof idx !== "number") return;
     const r = filtered[idx];
     if (!r) return;
+    // Stage the cow for the AlertDialog — actual navigation happens on
+    // confirm so accidental clicks don't whisk the user away.
+    setPendingCow(r);
+  };
+
+  // Confirm handler — opens the cow profile in a new browser tab.
+  // We use window.open with noopener,noreferrer for safer cross-tab access.
+  const confirmOpenProfile = () => {
+    if (!pendingCow) return;
+    const url = `/livestock/${pendingCow.livestock_id}`;
     try {
-      navigate(`/livestock/${r.livestock_id}`);
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch {
-      toast(`شناسه دام: ${r.livestock_id}`);
+      // Fallback: in-app navigation if window.open is blocked.
+      navigate(url);
+      toast(`شناسه دام: ${pendingCow.livestock_id}`);
     }
+    setPendingCow(null);
   };
 
   // Reset all filter state back to defaults.
