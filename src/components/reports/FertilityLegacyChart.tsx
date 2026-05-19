@@ -100,6 +100,9 @@ export default function FertilityLegacyChart() {
   const [heiferMode, setHeiferMode] = useState<HeiferMode>("all");
   const [dayRange, setDayRange] = useState<DayRange>("all");
   const [pregMode, setPregMode] = useState<PregMode>("all");
+  // periodFilter — "all" or a specific شکم value as string ("1".."7").
+  // Stored as string so the shadcn Select can use it directly without coercion.
+  const [periodFilter, setPeriodFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("days_desc");
   const [filtersOpen, setFiltersOpen] = useState(!isMobile);
 
