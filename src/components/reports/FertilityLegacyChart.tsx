@@ -186,7 +186,7 @@ export default function FertilityLegacyChart() {
       }
     });
     return out;
-  }, [rows, debouncedSearch, statusFilter, heiferMode, dayRange, pregMode, sortKey]);
+  }, [rows, debouncedSearch, statusFilter, heiferMode, dayRange, pregMode, periodFilter, sortKey]);
 
   // KPI cards reflect filtered data (per spec).
   const kpis = useMemo(() => {
