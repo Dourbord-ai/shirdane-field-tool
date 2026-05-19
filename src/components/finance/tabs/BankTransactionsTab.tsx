@@ -261,6 +261,36 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <h3 className="font-bold">جزئیات خام</h3>
               <Button size="sm" variant="ghost" onClick={() => setOpenRaw(null)}><X className="w-4 h-4" /></Button>
             </div>
+            {/* Original file download — only shown when the row was
+                created by an Excel/CSV import that archived its source
+                file into the `finance-imports` bucket. */}
+            {openRaw.imported_file_path && (
+              <div className="p-4 border-b flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs">
+                  <div className="font-bold">فایل اصلی</div>
+                  <div className="text-muted-foreground truncate max-w-[280px]">
+                    {openRaw.original_file_name || openRaw.imported_file_name || openRaw.imported_file_path}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    // Bucket is private → mint a short-lived signed URL on click.
+                    const { data, error } = await supabase.storage
+                      .from("finance-imports")
+                      .createSignedUrl(openRaw.imported_file_path!, 60);
+                    if (error || !data?.signedUrl) {
+                      toast.error("دریافت فایل اصلی ناموفق بود");
+                      return;
+                    }
+                    window.open(data.signedUrl, "_blank", "noopener");
+                  }}
+                >
+                  <Download className="w-4 h-4 ml-1" /> دانلود فایل اصلی
+                </Button>
+              </div>
+            )}
             <pre dir="ltr" className="p-4 text-xs overflow-x-auto whitespace-pre-wrap">{JSON.stringify(openRaw.raw_data ?? openRaw, null, 2)}</pre>
           </div>
         </div>
