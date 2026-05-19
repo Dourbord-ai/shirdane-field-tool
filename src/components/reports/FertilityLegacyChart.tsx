@@ -507,7 +507,7 @@ export default function FertilityLegacyChart() {
   // Reset all filter state back to defaults.
   const resetFilters = () => {
     setSearch("");
-    setStatusFilter([]);
+    setStatusFilter(DEFAULT_STATUSES);
     setHeiferMode("all");
     setDayRange("all");
     setPregMode("all");
