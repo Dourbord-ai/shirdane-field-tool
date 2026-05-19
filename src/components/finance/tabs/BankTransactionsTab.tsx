@@ -34,6 +34,12 @@ interface Tx {
   assigned_operation_type: string | null;
   assigned_operation_id: string | null;
   raw_data: unknown;
+  // Path inside the `finance-imports` Storage bucket where the original
+  // Excel/CSV file was archived at import-time. Null for manual rows or
+  // legacy rows imported before archival was wired up.
+  imported_file_path: string | null;
+  original_file_name: string | null;
+  imported_file_name: string | null;
 }
 
 interface BankRef { id: string; title: string | null; bank_name: string | null }
@@ -255,6 +261,36 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <h3 className="font-bold">جزئیات خام</h3>
               <Button size="sm" variant="ghost" onClick={() => setOpenRaw(null)}><X className="w-4 h-4" /></Button>
             </div>
+            {/* Original file download — only shown when the row was
+                created by an Excel/CSV import that archived its source
+                file into the `finance-imports` bucket. */}
+            {openRaw.imported_file_path && (
+              <div className="p-4 border-b flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs">
+                  <div className="font-bold">فایل اصلی</div>
+                  <div className="text-muted-foreground truncate max-w-[280px]">
+                    {openRaw.original_file_name || openRaw.imported_file_name || openRaw.imported_file_path}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    // Bucket is private → mint a short-lived signed URL on click.
+                    const { data, error } = await supabase.storage
+                      .from("finance-imports")
+                      .createSignedUrl(openRaw.imported_file_path!, 60);
+                    if (error || !data?.signedUrl) {
+                      toast.error("دریافت فایل اصلی ناموفق بود");
+                      return;
+                    }
+                    window.open(data.signedUrl, "_blank", "noopener");
+                  }}
+                >
+                  <Download className="w-4 h-4 ml-1" /> دانلود فایل اصلی
+                </Button>
+              </div>
+            )}
             <pre dir="ltr" className="p-4 text-xs overflow-x-auto whitespace-pre-wrap">{JSON.stringify(openRaw.raw_data ?? openRaw, null, 2)}</pre>
           </div>
         </div>
@@ -462,6 +498,32 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const validRows = parsed.filter((r) => r.status === "valid");
     if (validRows.length === 0) return toast.error("ردیف معتبری برای ثبت نیست");
     setSaving(true);
+
+    // ──────────────────────────────────────────────────────────────────
+    // STEP 1 — Archive the original Excel/CSV file to Supabase Storage
+    // BEFORE inserting any rows. We do this first so every inserted row
+    // can reference the same archived path; if the upload fails we abort
+    // the whole import (Persian error) and no transactions are created.
+    // Bucket: finance-imports (private, see migration).
+    // Path shape: {bank_id}/{yyyy-mm-dd}/{uuid}-{original-name}
+    // ──────────────────────────────────────────────────────────────────
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const today = new Date().toISOString().slice(0, 10);
+    const storagePath = `${bankId}/${today}/${crypto.randomUUID()}-${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from("finance-imports")
+      .upload(storagePath, file, {
+        upsert: false,
+        contentType: file.type || "application/octet-stream",
+      });
+    if (upErr) {
+      setSaving(false);
+      // Persian error per spec — stop the import on upload failure.
+      toast.error(`بارگذاری فایل اصلی در فضای ذخیره‌سازی ناموفق بود: ${upErr.message}`);
+      return;
+    }
+
+    // STEP 2 — Insert parsed rows, each carrying the archived path.
     let inserted = 0;
     for (const r of validRows) {
       const payload = {
@@ -477,6 +539,8 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         assignment_status: "unassigned",
         original_file_name: file.name,
         imported_file_name: title,
+        // New column added by migration — lets us download the source file later.
+        imported_file_path: storagePath,
         raw_data: r.raw as unknown as Record<string, unknown>,
       };
       const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
