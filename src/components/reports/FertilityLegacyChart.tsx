@@ -100,9 +100,10 @@ export default function FertilityLegacyChart() {
   const [heiferMode, setHeiferMode] = useState<HeiferMode>("all");
   const [dayRange, setDayRange] = useState<DayRange>("all");
   const [pregMode, setPregMode] = useState<PregMode>("all");
-  // periodFilter — "all" or a specific شکم value as string ("1".."7").
-  // Stored as string so the shadcn Select can use it directly without coercion.
-  const [periodFilter, setPeriodFilter] = useState<string>("all");
+  // periodFilter — set of selected شکم values as strings ("1".."7").
+  // Stored as string[] (not a single string) so the user can multi-select
+  // several دوره‌ها at once, just like the chart_status pills above.
+  const [periodFilter, setPeriodFilter] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("days_desc");
   const [filtersOpen, setFiltersOpen] = useState(!isMobile);
 
