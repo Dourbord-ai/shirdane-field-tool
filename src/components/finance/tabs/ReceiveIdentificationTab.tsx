@@ -194,14 +194,20 @@ export default function ReceiveIdentificationTab() {
           {items.map((r) => {
             const party = r.party_id ? parties[r.party_id] : null;
             const bank = r.bank_id ? banks[r.bank_id] : null;
-            const canApprove = r.status === "pending_approval" || r.status === "sync_failed";
-            const canReject = r.status === "pending_approval" || r.status === "sync_failed";
-            const canCancel = r.status === "pending_approval";
+            // Treat draft as pending_approval for action eligibility — the
+            // imported data uses both keys interchangeably.
+            const isPending = r.status === "pending_approval" || r.status === "draft";
+            // The Sepidar registration button is hidden once the record is
+            // already attached to a voucher OR already reported as synced.
+            const alreadySynced = !!r.voucher_id;
+            const canApprove = (isPending || r.status === "sync_failed") && !alreadySynced;
+            const canReject = isPending || r.status === "sync_failed";
+            const canCancel = isPending;
             return (
               <div key={r.id} className="rounded-xl border bg-card p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="font-bold text-sm">{r.title || "شناسایی دریافت"}</div>
-                  <FinanceStatusBadge status={r.status} />
+                  <ReceiveIdStatusBadge status={r.status} />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">
                   <div>
@@ -234,9 +240,9 @@ export default function ReceiveIdentificationTab() {
                 )}
                 <div className="flex flex-wrap gap-1.5">
                   {canApprove && (
-                    <Button size="sm" onClick={() => approve(r)} disabled={busyId === r.id}>
-                      <CheckCircle2 className="w-3.5 h-3.5 ml-1" />
-                      {r.status === "sync_failed" ? "تلاش مجدد ثبت سپیدار" : "تایید و ثبت سند"}
+                    <Button size="sm" onClick={() => approveAndSync(r)} disabled={busyId === r.id}>
+                      <Send className="w-3.5 h-3.5 ml-1" />
+                      {r.status === "sync_failed" ? "تلاش مجدد ثبت سپیدار" : "تایید و ثبت در سپیدار"}
                     </Button>
                   )}
                   {canReject && (
@@ -249,8 +255,11 @@ export default function ReceiveIdentificationTab() {
                       لغو
                     </Button>
                   )}
-                  {r.status === "approved" && r.voucher_id && (
-                    <span className="text-[11px] text-emerald-700">سند: {r.voucher_id.slice(0, 8)}…</span>
+                  {alreadySynced && (
+                    <span className="inline-flex items-center gap-1 text-emerald-700 text-[11px] font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> ثبت‌شده در سپیدار
+                      {r.voucher_id && <span className="font-mono opacity-70">• {r.voucher_id.slice(0, 8)}…</span>}
+                    </span>
                   )}
                 </div>
               </div>
