@@ -166,6 +166,11 @@ export default function FertilityLegacyChart() {
   const [sortKey, setSortKey] = useState<SortKey>("days_desc");
   const [filtersOpen, setFiltersOpen] = useState(!isMobile);
 
+  // Pending click — when a user clicks a bar we capture the cow here and
+  // open a confirmation dialog. Confirming opens the cow profile in a new
+  // tab; cancelling clears the pending selection.
+  const [pendingCow, setPendingCow] = useState<FertilityChartRow | null>(null);
+
   // Stable ref to the ECharts instance so we can resize on layout changes.
   const chartRef = useRef<ReactECharts | null>(null);
 
