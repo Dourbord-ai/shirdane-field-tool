@@ -317,12 +317,47 @@ export default function FertilityLegacyChart() {
           type: "bar",
           data: barData,
           barMaxWidth: 22,
+          // ---- Management threshold lines (روزهای کلیدی باروری) ----
+          // Each threshold gets its own color (cool → warm) so the user can
+          // distinguish them at a glance. Labels sit on a colored pill that's
+          // always visible, and emphasis.lineStyle makes the line glow when
+          // the user hovers near it (ECharts auto-emphasizes the closest mark).
           markLine: {
-            silent: true,
+            // silent:false → markLines emit hover events so emphasis works.
+            silent: false,
             symbol: ["none", "none"],
-            label: { color: "#94a3b8", fontFamily: "Vazirmatn, sans-serif", fontSize: 10 },
-            lineStyle: { color: "rgba(239,68,68,0.4)", type: "dashed" },
-            data: [32, 60, 130, 220, 250, 270].map((y) => ({ yAxis: y, label: { formatter: `${y}` } })),
+            // Default styling (overridden per-line via data[].lineStyle).
+            lineStyle: { width: 1.5, type: "dashed", opacity: 0.85 },
+            label: {
+              show: true,
+              position: "insideEndTop",
+              color: "#0B1220",
+              fontFamily: "Vazirmatn, sans-serif",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: [2, 6, 2, 6],
+              borderRadius: 4,
+            },
+            // Hover state — thicker, fully opaque, label scales up.
+            emphasis: {
+              lineStyle: { width: 3, opacity: 1, shadowBlur: 8, shadowColor: "rgba(255,255,255,0.35)" },
+              label: { fontSize: 13, padding: [3, 8, 3, 8] },
+            },
+            // Per-threshold colors picked to match the legacy CRM semantics:
+            //  32  → اولین فحلی پس از زایش (blue)
+            //  60  → آماده‌ی تلقیح (teal)
+            //  130 → باید آبستن باشد (amber)
+            //  220 → دیر-آبستن (orange)
+            //  250 → خشک‌شدن (red)
+            //  270 → نزدیک زایش (deep red)
+            data: [
+              { yAxis: 32,  lineStyle: { color: "#38BDF8" }, label: { formatter: "۳۲", backgroundColor: "#38BDF8" } },
+              { yAxis: 60,  lineStyle: { color: "#14B8A6" }, label: { formatter: "۶۰", backgroundColor: "#14B8A6" } },
+              { yAxis: 130, lineStyle: { color: "#F59E0B" }, label: { formatter: "۱۳۰", backgroundColor: "#F59E0B" } },
+              { yAxis: 220, lineStyle: { color: "#F97316" }, label: { formatter: "۲۲۰", backgroundColor: "#F97316" } },
+              { yAxis: 250, lineStyle: { color: "#EF4444" }, label: { formatter: "۲۵۰", backgroundColor: "#EF4444" } },
+              { yAxis: 270, lineStyle: { color: "#B91C1C" }, label: { formatter: "۲۷۰", backgroundColor: "#B91C1C" } },
+            ],
           },
         },
         {
@@ -341,7 +376,13 @@ export default function FertilityLegacyChart() {
   // Bar-click → navigate to livestock profile. Wrapped in try/catch so
   // a missing route never crashes the chart.
   const onChartClick = (params: any) => {
+    // Guard: clicking on markLines / scatter / empty area also fires this
+    // handler but without a valid bar dataIndex. Only navigate when we
+    // actually clicked a cow bar — otherwise ECharts internals can throw
+    // "Cannot read properties of undefined (reading 'getRawIndex')".
+    if (!params || params.componentType !== "series" || params.seriesType !== "bar") return;
     const idx = params?.dataIndex;
+    if (typeof idx !== "number") return;
     const r = filtered[idx];
     if (!r) return;
     try {
