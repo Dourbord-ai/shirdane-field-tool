@@ -178,14 +178,28 @@ export default function PaymentRequestsTab() {
         ].join(" ").toLowerCase();
         if (!hay.includes(needle)) return false;
       }
+      // -------- Payment-state mirror (must match server-side rules) -----
+      // We normalise NULL → 0 for every numeric field, then evaluate the
+      // exact same predicates we sent to Postgres. This guarantees the UI
+      // and the query never disagree (e.g. during a refetch race or when a
+      // status_filter narrows the result on top).
+      const confirmed = Number(r.confirmed_amount ?? 0);
+      const paid = Number(r.total_paid_amount ?? 0);
+      const remaining = Number(r.remaining_amount ?? 0);
       if (paymentFilter === "paid") {
-        // Treat zero remaining OR explicit `paid` status as fully paid.
-        const remaining = Number(r.remaining_amount ?? r.total_amount ?? 0);
-        if (!(r.status === "paid" || remaining <= 0)) return false;
+        // Fully paid = approved-with-amount AND nothing left to settle.
+        // We deliberately DO NOT honour `status === 'paid'` alone, because
+        // legacy rows can carry stale statuses without matching numbers.
+        if (!(confirmed > 0 && remaining <= 0)) return false;
+      } else if (paymentFilter === "partial") {
+        // Some money has moved but the row isn't fully settled yet.
+        if (!(confirmed > 0 && paid > 0 && remaining > 0)) return false;
       } else if (paymentFilter === "unpaid") {
-        const remaining = Number(r.remaining_amount ?? r.total_amount ?? 0);
-        const paid = Number(r.total_paid_amount ?? 0);
-        if (paid > 0 && remaining <= 0) return false;
+        // Approved with an amount, but no allocation has happened yet.
+        if (!(confirmed > 0 && paid === 0 && remaining > 0)) return false;
+      } else if (paymentFilter === "pending") {
+        // No confirmed amount → can't be classified into the paid bucket.
+        if (!(confirmed === 0)) return false;
       }
       if (voucherFilter === "with" && !requestsWithVoucher.has(r.id)) return false;
       if (voucherFilter === "without" && requestsWithVoucher.has(r.id)) return false;
@@ -246,8 +260,12 @@ export default function PaymentRequestsTab() {
           className="h-10 rounded-md border border-input bg-background px-2 text-sm"
         >
           <option value="">پرداخت: همه</option>
+          {/* Four mutually-exclusive buckets, definitions matching the
+              numeric predicates in `load()` and the mirror in `filtered`. */}
           <option value="paid">پرداخت کامل</option>
+          <option value="partial">پرداخت ناقص</option>
           <option value="unpaid">پرداخت نشده</option>
+          <option value="pending">در انتظار تایید مبلغ</option>
         </select>
       </div>
 
