@@ -1680,6 +1680,7 @@ export type Database = {
           imported_at: string | null
           imported_by: string | null
           imported_file_name: string | null
+          imported_file_path: string | null
           is_deleted: boolean | null
           last_four_digits_card_number: string | null
           legacy_id: number | null
@@ -1717,6 +1718,7 @@ export type Database = {
           imported_at?: string | null
           imported_by?: string | null
           imported_file_name?: string | null
+          imported_file_path?: string | null
           is_deleted?: boolean | null
           last_four_digits_card_number?: string | null
           legacy_id?: number | null
@@ -1754,6 +1756,7 @@ export type Database = {
           imported_at?: string | null
           imported_by?: string | null
           imported_file_name?: string | null
+          imported_file_path?: string | null
           is_deleted?: boolean | null
           last_four_digits_card_number?: string | null
           legacy_id?: number | null

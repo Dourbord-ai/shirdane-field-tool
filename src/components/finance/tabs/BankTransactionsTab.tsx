@@ -462,6 +462,32 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const validRows = parsed.filter((r) => r.status === "valid");
     if (validRows.length === 0) return toast.error("ردیف معتبری برای ثبت نیست");
     setSaving(true);
+
+    // ──────────────────────────────────────────────────────────────────
+    // STEP 1 — Archive the original Excel/CSV file to Supabase Storage
+    // BEFORE inserting any rows. We do this first so every inserted row
+    // can reference the same archived path; if the upload fails we abort
+    // the whole import (Persian error) and no transactions are created.
+    // Bucket: finance-imports (private, see migration).
+    // Path shape: {bank_id}/{yyyy-mm-dd}/{uuid}-{original-name}
+    // ──────────────────────────────────────────────────────────────────
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const today = new Date().toISOString().slice(0, 10);
+    const storagePath = `${bankId}/${today}/${crypto.randomUUID()}-${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from("finance-imports")
+      .upload(storagePath, file, {
+        upsert: false,
+        contentType: file.type || "application/octet-stream",
+      });
+    if (upErr) {
+      setSaving(false);
+      // Persian error per spec — stop the import on upload failure.
+      toast.error(`بارگذاری فایل اصلی در فضای ذخیره‌سازی ناموفق بود: ${upErr.message}`);
+      return;
+    }
+
+    // STEP 2 — Insert parsed rows, each carrying the archived path.
     let inserted = 0;
     for (const r of validRows) {
       const payload = {
@@ -477,6 +503,8 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         assignment_status: "unassigned",
         original_file_name: file.name,
         imported_file_name: title,
+        // New column added by migration — lets us download the source file later.
+        imported_file_path: storagePath,
         raw_data: r.raw as unknown as Record<string, unknown>,
       };
       const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
