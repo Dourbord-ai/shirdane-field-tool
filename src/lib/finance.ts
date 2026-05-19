@@ -349,6 +349,27 @@ export function isPartyReadyForPosting(p: {
   );
 }
 
+/**
+ * Lenient check used by the UI to decide whether to show the
+ * "ثبت در سپیدار" button at all.  Legacy/imported parties may have any of
+ * the Sepidar id columns populated without a clean `synced` status, but for
+ * the operator they are effectively "already in Sepidar" and the registration
+ * button must be suppressed in favour of a readonly badge.
+ */
+export function isPartySyncedInSepidar(p: {
+  sepidar_party_id?: number | null;
+  sepidar_dl_id?: number | null;
+  sepidar_account_id?: number | null;
+  sepidar_sync_status?: string | null;
+}): boolean {
+  return (
+    p.sepidar_sync_status === "synced" ||
+    p.sepidar_party_id != null ||
+    p.sepidar_dl_id != null ||
+    p.sepidar_account_id != null
+  );
+}
+
 export async function assertPartiesReadyForPosting(partyIds: string[]): Promise<void> {
   const ids = Array.from(new Set(partyIds.filter(Boolean)));
   if (ids.length === 0) return;
