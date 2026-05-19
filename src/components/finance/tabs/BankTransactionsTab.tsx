@@ -34,6 +34,12 @@ interface Tx {
   assigned_operation_type: string | null;
   assigned_operation_id: string | null;
   raw_data: unknown;
+  // Path inside the `finance-imports` Storage bucket where the original
+  // Excel/CSV file was archived at import-time. Null for manual rows or
+  // legacy rows imported before archival was wired up.
+  imported_file_path: string | null;
+  original_file_name: string | null;
+  imported_file_name: string | null;
 }
 
 interface BankRef { id: string; title: string | null; bank_name: string | null }
