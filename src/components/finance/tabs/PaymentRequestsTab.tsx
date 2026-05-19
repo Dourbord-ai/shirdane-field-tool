@@ -10,6 +10,9 @@ import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
+// Jalali calendar UI that returns a Jalali "YYYY/MM/DD" string — used here
+// because the filter targets the legacy `transaction_jalali_date` text column.
+import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
   PAYMENT_AMOUNT_TYPES,
