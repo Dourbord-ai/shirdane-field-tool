@@ -158,7 +158,11 @@ export default function FertilityLegacyChart() {
   // Filter state — every change re-derives memoized data, no refetch.
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search, 250);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  // Default selected statuses — per product spec, the chart opens showing
+  // only the three most operationally relevant fertility states. Users can
+  // click any other state in راهنمای وضعیت to reveal more bars.
+  const DEFAULT_STATUSES = ["آبستن قطعی", "تست اولیه مثبت", "تلقیح شده"];
+  const [statusFilter, setStatusFilter] = useState<string[]>(DEFAULT_STATUSES);
   const [heiferMode, setHeiferMode] = useState<HeiferMode>("all");
   const [dayRange, setDayRange] = useState<DayRange>("all");
   const [pregMode, setPregMode] = useState<PregMode>("all");
@@ -272,24 +276,46 @@ export default function FertilityLegacyChart() {
     return { total, heifers, over130, over220, over250, avg, pregnant, dry };
   }, [filtered]);
 
-  // Legend rows — aggregated per status for the side panel.
+  // Legend rows — aggregated per status. Built from rows ignoring the
+  // current statusFilter so users can always see ALL available statuses in
+  // راهنمای وضعیت and click any of them to add/remove bars from the chart.
+  // Counts reflect all other active filters (search, heifer, day range…).
   const legend = useMemo(() => {
+    const q = debouncedSearch.trim();
+    const dayMin = dayRange === "all" ? 0 : parseInt(dayRange, 10);
+    const baseRows = rows.filter((r) => {
+      if (q) {
+        const bodyMatch = r.bodynumber != null && String(r.bodynumber).includes(q);
+        const earMatch = r.earnumber != null && String(r.earnumber).includes(q);
+        if (!bodyMatch && !earMatch) return false;
+      }
+      if (heiferMode === "heifer" && !r.is_heifer) return false;
+      if (heiferMode === "cow" && r.is_heifer) return false;
+      if (dayMin > 0 && (r.chart_days ?? 0) <= dayMin) return false;
+      if (pregMode === "pregnant" && !r.is_pregnancy) return false;
+      if (pregMode === "open" && r.is_pregnancy) return false;
+      if (pregMode === "dry" && !r.is_dry) return false;
+      if (periodFilter.length > 0) {
+        const lp = String(r.last_period ?? "");
+        if (!periodFilter.includes(lp)) return false;
+      }
+      return true;
+    });
+
     const map = new Map<string, { color: string; count: number }>();
-    filtered.forEach((r) => {
+    baseRows.forEach((r) => {
       const k = r.chart_status ?? "نامشخص";
-      // Use the legacy palette for legend swatches too, so the colors
-      // shown in the legend match the bars exactly.
       const c = resolveStatusColor(r.last_fertility_status, r.status_color);
       const cur = map.get(k) ?? { color: c, count: 0 };
       cur.count += 1;
       cur.color = c;
       map.set(k, cur);
     });
-    const total = filtered.length || 1;
+    const total = baseRows.length || 1;
     return Array.from(map.entries())
       .map(([status, v]) => ({ status, color: v.color, count: v.count, pct: (v.count / total) * 100 }))
       .sort((a, b) => b.count - a.count);
-  }, [filtered]);
+  }, [rows, debouncedSearch, heiferMode, dayRange, pregMode, periodFilter]);
 
   // Build ECharts option. Memoized so React doesn't rebuild it
   // unless filtered data actually changes.
@@ -481,7 +507,7 @@ export default function FertilityLegacyChart() {
   // Reset all filter state back to defaults.
   const resetFilters = () => {
     setSearch("");
-    setStatusFilter([]);
+    setStatusFilter(DEFAULT_STATUSES);
     setHeiferMode("all");
     setDayRange("all");
     setPregMode("all");
@@ -705,18 +731,34 @@ export default function FertilityLegacyChart() {
           <p className="text-xs text-muted-foreground">موردی برای نمایش نیست.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {legend.map((l) => (
-              <div
-                key={l.status}
-                className="flex items-center gap-2 text-xs px-2.5 py-1 rounded-full border border-border bg-card/60"
-              >
-                <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: l.color }} />
-                <span className="text-foreground whitespace-nowrap">{l.status}</span>
-                <span className="text-muted-foreground whitespace-nowrap">
-                  {l.count.toLocaleString("fa-IR")} • {l.pct.toFixed(1)}%
-                </span>
-              </div>
-            ))}
+            {legend.map((l) => {
+              // A legend pill is "فعال" when its status is in statusFilter,
+              // meaning bars for that status are visible in the chart.
+              // Clicking toggles it: active → remove (hide), inactive → add
+              // (show more bars). Defaults to آبستن قطعی / تست اولیه مثبت /
+              // تلقیح شده so the chart starts focused on what matters most.
+              const active = statusFilter.includes(l.status);
+              return (
+                <button
+                  key={l.status}
+                  type="button"
+                  onClick={() => toggleStatus(l.status)}
+                  className={`flex items-center gap-2 text-xs px-2.5 py-1 rounded-full border transition ${
+                    active
+                      ? "border-primary bg-primary/15 ring-1 ring-primary/40 shadow-sm"
+                      : "border-border bg-card/60 opacity-60 hover:opacity-100"
+                  }`}
+                  aria-pressed={active}
+                  title={active ? "برای مخفی کردن کلیک کنید" : "برای نمایش کلیک کنید"}
+                >
+                  <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: l.color }} />
+                  <span className="text-foreground whitespace-nowrap">{l.status}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    {l.count.toLocaleString("fa-IR")} • {l.pct.toFixed(1)}%
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
