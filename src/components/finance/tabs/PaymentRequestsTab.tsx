@@ -76,9 +76,16 @@ export default function PaymentRequestsTab() {
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
-  // ---- Local filters (applied after fetch, so they compose with the
-  // server-side filters above and with the debounced search). --------------
-  const [paymentFilter, setPaymentFilter] = useState<string>(""); // "" | paid | unpaid
+  // ---- Payment-state filter --------------------------------------------
+  // Mirrors the business definitions exactly:
+  //   "paid"     → confirmed_amount > 0 AND remaining_amount <= 0
+  //   "partial"  → confirmed_amount > 0 AND total_paid_amount > 0 AND remaining_amount > 0
+  //   "unpaid"   → confirmed_amount > 0 AND total_paid_amount = 0 AND remaining_amount > 0
+  //   "pending"  → confirmed_amount IS NULL OR confirmed_amount = 0 (not yet approved with an amount)
+  // The same predicate is applied BOTH server-side (Supabase .gt/.lte/.is)
+  // and client-side, so the visible list always matches the rule even if a
+  // refetch is in flight or another filter narrows the result further.
+  const [paymentFilter, setPaymentFilter] = useState<string>(""); // "" | paid | partial | unpaid | pending
   const [voucherFilter, setVoucherFilter] = useState<string>(""); // "" | with | without
 
   // ---- Debounced search input -------------------------------------------
@@ -97,16 +104,47 @@ export default function PaymentRequestsTab() {
   // a non-null voucher_id and consult it in the client-side filter.
   const [requestsWithVoucher, setRequestsWithVoucher] = useState<Set<string>>(new Set());
 
-  useEffect(() => { void load(); }, [typeFilter, statusFilter]);
+  // Refetch whenever any SERVER-side filter changes. paymentFilter is now
+  // server-side too (it maps to numeric column predicates), so it joins the
+  // dependency list. Local-only filters (search, voucher presence) stay out.
+  useEffect(() => { void load(); }, [typeFilter, statusFilter, paymentFilter]);
 
   async function load() {
     let q = supabase
       .from("finance_payment_requests")
       .select("*")
       .eq("is_deleted", false)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      // The legacy import contains ~1546 rows; the PostgREST default cap is
+      // 1000. We explicitly request a wider range so the client can see and
+      // filter every record. Pagination upgrade can layer on top later.
+      .range(0, 4999);
     if (typeFilter) q = q.eq("legacy_request_type_code", Number(typeFilter));
     if (statusFilter) q = q.eq("status", statusFilter);
+
+    // -------- Server-side numeric payment-state predicates --------------
+    // We translate the business rules directly into Supabase filters so the
+    // database does the heavy lifting and pagination/sorting work correctly.
+    // NOTE: PostgREST treats NULL as "unknown" — `.gt('x', 0)` will exclude
+    // rows where x IS NULL, which is exactly what we want for "paid/partial/
+    // unpaid" (they all require confirmed_amount > 0).
+    if (paymentFilter === "paid") {
+      q = q.gt("confirmed_amount", 0).lte("remaining_amount", 0);
+    } else if (paymentFilter === "partial") {
+      q = q.gt("confirmed_amount", 0).gt("total_paid_amount", 0).gt("remaining_amount", 0);
+    } else if (paymentFilter === "unpaid") {
+      // total_paid_amount may be NULL for never-touched rows → treat as 0.
+      // PostgREST has no "eq null" helper for "= 0"; we use .or() to match
+      // either explicit zero OR NULL, then require positive remaining.
+      q = q
+        .gt("confirmed_amount", 0)
+        .gt("remaining_amount", 0)
+        .or("total_paid_amount.is.null,total_paid_amount.eq.0");
+    } else if (paymentFilter === "pending") {
+      // No confirmed amount yet → cannot classify as paid/partial/unpaid.
+      q = q.or("confirmed_amount.is.null,confirmed_amount.eq.0");
+    }
+
     const { data } = await q;
     const rows = (data as PR[]) || [];
     setRequests(rows);
