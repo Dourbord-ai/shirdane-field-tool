@@ -10,6 +10,8 @@ import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/fina
 import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
 import { toast } from "sonner";
 import { CheckCircle2, Plus, X, ArrowRight, FileCheck2 } from "lucide-react";
+// Unified Jalali UI / Gregorian-ISO value date picker.
+import DatePicker from "@/components/DatePicker";
 
 // List row shape for finance_party_transfers. We deliberately fetch a narrow
 // set of columns to keep the query fast over the legacy import (≈207 rows).
