@@ -467,6 +467,11 @@ function PartyDetailDrawer({
             )}
 
             <div className="grid grid-cols-2 gap-2">
+              {alreadySynced && (
+                <div className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-2 text-xs font-bold">
+                  <ShieldCheck className="w-4 h-4" /> ثبت‌شده در سپیدار
+                </div>
+              )}
               {canApprove && (
                 <Button size="sm" disabled={busy} onClick={approve}>
                   <CheckCircle2 className="w-4 h-4 ml-1" /> تایید اطلاعات
