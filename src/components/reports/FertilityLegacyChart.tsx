@@ -35,6 +35,9 @@ export interface FertilityChartRow {
   is_pregnancy: boolean | null;
   is_dry: boolean | null;
   number_of_births: number | null;
+  // last_period = شکم/دوره شیردهی (lactation period). Comes from cows.last_period.
+  // 0/NULL = تلیسه (no calving yet); 1..7+ = شکم اول … شکم هفتم.
+  last_period: number | null;
   last_birth_date: string | null;
   last_erotic_date: string | null;
   last_inoculation_date: string | null;
@@ -42,6 +45,18 @@ export interface FertilityChartRow {
   last_abortion_date: string | null;
   last_dry_date: string | null;
 }
+
+// Persian digit helper for the period dropdown labels.
+// Keeps the UI consistent with the rest of the Damban Persian RTL pages.
+const PERIOD_LABEL: Record<string, string> = {
+  "1": "شکم اول",
+  "2": "شکم دوم",
+  "3": "شکم سوم",
+  "4": "شکم چهارم",
+  "5": "شکم پنجم",
+  "6": "شکم ششم",
+  "7": "شکم هفتم",
+};
 
 // Sort modes — Persian labels mapped to comparator keys.
 type SortKey = "days_desc" | "days_asc" | "body" | "status";
