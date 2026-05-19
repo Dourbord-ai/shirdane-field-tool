@@ -269,7 +269,9 @@ export default function FertilityLegacyChart() {
     const map = new Map<string, { color: string; count: number }>();
     filtered.forEach((r) => {
       const k = r.chart_status ?? "نامشخص";
-      const c = r.status_color ?? "#9CA3AF";
+      // Use the legacy palette for legend swatches too, so the colors
+      // shown in the legend match the bars exactly.
+      const c = resolveStatusColor(r.last_fertility_status, r.status_color);
       const cur = map.get(k) ?? { color: c, count: 0 };
       cur.count += 1;
       cur.color = c;
