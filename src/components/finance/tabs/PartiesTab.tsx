@@ -326,10 +326,15 @@ function PartyDetailDrawer({
   const [showError, setShowError] = useState(false);
 
   const ready = isPartyReadyForPosting(party);
-  const canApprove = party.approval_status === "pending_approval" || party.approval_status === "rejected";
-  const canReject = party.approval_status === "pending_approval" || party.approval_status === "approved";
-  const canSync = party.approval_status === "approved";
-  const canRetry = party.approval_status === "sync_failed";
+  // Treat any party that already has Sepidar identifiers (or an explicit
+  // `synced` sync status) as "registered in Sepidar". For such parties we
+  // MUST NOT show the "ثبت در سپیدار" button — they already exist there and
+  // re-posting would create duplicates. Instead we render a readonly badge.
+  const alreadySynced = isPartySyncedInSepidar(party);
+  const canApprove = (party.approval_status === "pending_approval" || party.approval_status === "rejected") && !alreadySynced;
+  const canReject = (party.approval_status === "pending_approval" || party.approval_status === "approved") && !alreadySynced;
+  const canSync = party.approval_status === "approved" && !alreadySynced;
+  const canRetry = party.approval_status === "sync_failed" && !alreadySynced;
 
   async function approve() {
     setBusy(true);
