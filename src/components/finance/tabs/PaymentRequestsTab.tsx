@@ -10,6 +10,9 @@ import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
+// Jalali calendar UI that returns a Jalali "YYYY/MM/DD" string — used here
+// because the filter targets the legacy `transaction_jalali_date` text column.
+import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
   PAYMENT_AMOUNT_TYPES,
@@ -861,8 +864,12 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
               <option value="">همه بانک‌ها</option>
               {banks.map((b) => <option key={b.id} value={b.id}>{b.title || b.bank_name}</option>)}
             </select>
-            <Input placeholder="تاریخ از (شمسی)" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            <Input placeholder="تاریخ تا (شمسی)" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            {/* These two filters target the legacy `transaction_jalali_date`
+                text column, which stores Jalali strings — so we use the
+                Shamsi (string-out) picker rather than the new Gregorian
+                DatePicker. Both pickers render the SAME Jalali calendar UI. */}
+            <ShamsiDatePicker value={fromDate} onChange={setFromDate} placeholder="تاریخ از (شمسی)" />
+            <ShamsiDatePicker value={toDate} onChange={setToDate} placeholder="تاریخ تا (شمسی)" />
             <Input dir="ltr" placeholder="مبلغ" value={amountFilter} onChange={(e) => setAmountFilter(e.target.value)} />
             <Input placeholder="شرح" value={descFilter} onChange={(e) => setDescFilter(e.target.value)} />
             <Input placeholder="شماره سند" value={docFilter} onChange={(e) => setDocFilter(e.target.value)} />

@@ -12,6 +12,8 @@ import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
 import { toast } from "sonner";
+// Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
+import DatePicker from "@/components/DatePicker";
 
 interface Tx {
   id: string;
@@ -267,7 +269,10 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
+  // Hold the picked moment as a Gregorian ISO timestamp (Tehran-anchored).
+  // The DatePicker shows a Jalali calendar but emits Gregorian, matching the
+  // shape Postgres expects for `transaction_datetime` (timestamptz).
+  const [date, setDate] = useState<string | null>(new Date().toISOString());
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -278,7 +283,8 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
     setSaving(true);
     const payload = {
       bank_id: bankId,
-      transaction_datetime: new Date(date).toISOString(),
+      // `date` is already a valid Gregorian ISO timestamp from the picker.
+      transaction_datetime: date ?? new Date().toISOString(),
       transaction_type: type,
       deposit_amount: type === "deposit" ? amt : 0,
       withdraw_amount: type === "withdraw" ? amt : 0,
@@ -321,7 +327,9 @@ function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () =
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">تاریخ و ساعت</Label>
-              <Input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} />
+              {/* Jalali calendar UI; value flows as Gregorian ISO so the
+                  existing insert payload doesn't need any other changes. */}
+              <DatePicker mode="datetime" value={date} onChange={setDate} />
             </div>
           </div>
           <div className="space-y-1.5">

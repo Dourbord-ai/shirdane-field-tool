@@ -10,6 +10,8 @@ import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/fina
 import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
 import { toast } from "sonner";
 import { CheckCircle2, Plus, X, ArrowRight, FileCheck2 } from "lucide-react";
+// Unified Jalali UI / Gregorian-ISO value date picker.
+import DatePicker from "@/components/DatePicker";
 
 // List row shape for finance_party_transfers. We deliberately fetch a narrow
 // set of columns to keep the query fast over the legacy import (≈207 rows).
@@ -149,7 +151,8 @@ export default function PartyTransferTab() {
 function PartyTransferFormDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [fromParty, setFromParty] = useState<string | null>(null);
   const [toParty, setToParty] = useState<string | null>(null);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // Gregorian ISO date ("YYYY-MM-DD"). The UI picker shows a Jalali calendar.
+  const [date, setDate] = useState<string | null>(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -170,7 +173,9 @@ function PartyTransferFormDialog({ onClose, onDone }: { onClose: () => void; onD
           from_party_id: fromParty,
           to_party_id: toParty,
           amount: amt,
-          transfer_datetime: new Date(date).toISOString(),
+          // Anchor at start of day (Tehran) so the timestamptz column stores
+          // the same calendar day the user picked from the Jalali calendar.
+          transfer_datetime: date ? new Date(`${date}T00:00:00+03:30`).toISOString() : new Date().toISOString(),
           title,
           description,
           status: "approved",
@@ -233,7 +238,8 @@ function PartyTransferFormDialog({ onClose, onDone }: { onClose: () => void; onD
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs">تاریخ جابه‌جایی</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              {/* Jalali UI, Gregorian "YYYY-MM-DD" value flows back into state. */}
+              <DatePicker value={date} onChange={setDate} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">مبلغ</Label>
