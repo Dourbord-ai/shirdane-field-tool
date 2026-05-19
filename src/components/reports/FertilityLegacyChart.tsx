@@ -158,7 +158,11 @@ export default function FertilityLegacyChart() {
   // Filter state — every change re-derives memoized data, no refetch.
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search, 250);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  // Default selected statuses — per product spec, the chart opens showing
+  // only the three most operationally relevant fertility states. Users can
+  // click any other state in راهنمای وضعیت to reveal more bars.
+  const DEFAULT_STATUSES = ["آبستن قطعی", "تست اولیه مثبت", "تلقیح شده"];
+  const [statusFilter, setStatusFilter] = useState<string[]>(DEFAULT_STATUSES);
   const [heiferMode, setHeiferMode] = useState<HeiferMode>("all");
   const [dayRange, setDayRange] = useState<DayRange>("all");
   const [pregMode, setPregMode] = useState<PregMode>("all");
