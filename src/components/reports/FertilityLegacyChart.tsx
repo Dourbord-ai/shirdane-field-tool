@@ -44,6 +44,17 @@ export interface FertilityChartRow {
   last_pregnancy_date: string | null;
   last_abortion_date: string | null;
   last_dry_date: string | null;
+  // Legacy CRM-derived fields (added in the view to match the old C# chart):
+  // - pregnancy_days: روز از آخرین تلقیح (today - last_inoculation_date)
+  // - prediction_of_birth_date: last_inoculation_date + 279 روز
+  // - prediction_of_birth_date_days: روز باقی‌مانده تا زایش پیش‌بینی شده
+  // - dry_days: روز خشکی (today - last_dry_date) فقط وقتی is_dry = true
+  // - last_birth_to_pregnancy_days: فاصله آخرین زایش تا تلقیح بعدی
+  pregnancy_days: number | null;
+  prediction_of_birth_date: string | null;
+  prediction_of_birth_date_days: number | null;
+  dry_days: number | null;
+  last_birth_to_pregnancy_days: number | null;
 }
 
 // Persian digit helper for the period dropdown labels.
@@ -259,19 +270,18 @@ export default function FertilityLegacyChart() {
           if (!r) return "";
           const line = (label: string, value: any) =>
             `<div><span style="color:#94a3b8">${label}:</span> <strong>${value ?? dash}</strong></div>`;
-          return `<div style="direction:rtl;text-align:right;font-family:Vazirmatn,sans-serif;min-width:220px">
+          return `<div style="direction:rtl;text-align:right;font-family:Vazirmatn,sans-serif;min-width:240px">
             ${line("شماره دام", r.bodynumber)}
             ${line("شماره گوش", r.earnumber)}
-            ${line("تعداد روز", r.chart_days)}
             ${line("وضعیت", r.chart_status)}
-            ${line("تلیسه", r.is_heifer ? "بله" : "خیر")}
+            ${line("تعداد روز نمایش داده شده", r.chart_days)}
             ${line("منبع محاسبه روز", r.chart_day_source)}
-            ${line("آخرین زایش", r.last_birth_date)}
-            ${line("آخرین فحلی", r.last_erotic_date)}
-            ${line("آخرین تلقیح", r.last_inoculation_date)}
-            ${line("آخرین تست آبستنی", r.last_pregnancy_date)}
-            ${line("آخرین سقط", r.last_abortion_date)}
-            ${line("آخرین خشکی", r.last_dry_date)}
+            ${line("روز از تلقیح", r.pregnancy_days)}
+            ${line("تاریخ پیش‌بینی زایش", r.prediction_of_birth_date)}
+            ${line("روز مانده تا زایش", r.prediction_of_birth_date_days)}
+            ${line("روز خشکی", r.dry_days)}
+            ${line("فاصله زایش تا تلقیح", r.last_birth_to_pregnancy_days)}
+            ${line("تلیسه", r.is_heifer ? "بله" : "خیر")}
           </div>`;
         },
       },
