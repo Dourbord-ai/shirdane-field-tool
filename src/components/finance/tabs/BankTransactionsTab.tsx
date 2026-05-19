@@ -12,6 +12,8 @@ import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
 import { toast } from "sonner";
+// Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
+import DatePicker from "@/components/DatePicker";
 
 interface Tx {
   id: string;
