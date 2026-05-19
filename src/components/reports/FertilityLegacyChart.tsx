@@ -416,68 +416,113 @@ export default function FertilityLegacyChart() {
 
         {filtersOpen && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Input
-              placeholder="جستجوی شماره بدنه / شماره گوش"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="text-right"
-            />
-            <Select value={heiferMode} onValueChange={(v) => setHeiferMode(v as HeiferMode)}>
-              <SelectTrigger><SelectValue placeholder="تلیسه" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">همه</SelectItem>
-                <SelectItem value="heifer">فقط تلیسه‌ها</SelectItem>
-                <SelectItem value="cow">فقط گاوها</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={dayRange} onValueChange={(v) => setDayRange(v as DayRange)}>
-              <SelectTrigger><SelectValue placeholder="بازه روز" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">همه</SelectItem>
-                <SelectItem value="32">بالای ۳۲ روز</SelectItem>
-                <SelectItem value="60">بالای ۶۰ روز</SelectItem>
-                <SelectItem value="130">بالای ۱۳۰ روز</SelectItem>
-                <SelectItem value="220">بالای ۲۲۰ روز</SelectItem>
-                <SelectItem value="250">بالای ۲۵۰ روز</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={pregMode} onValueChange={(v) => setPregMode(v as PregMode)}>
-              <SelectTrigger><SelectValue placeholder="آبستنی / خشکی" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">همه</SelectItem>
-                <SelectItem value="pregnant">فقط آبستن</SelectItem>
-                <SelectItem value="open">فقط غیرآبستن</SelectItem>
-                <SelectItem value="dry">فقط خشک</SelectItem>
-              </SelectContent>
-            </Select>
-            {/* دوره (شکم) — lactation period filter.
-                Pulled from cows.last_period via the analytics view.
-                We hardcode 1..7 because business rules only label up to شکم هفتم. */}
-            <Select value={periodFilter} onValueChange={setPeriodFilter}>
-              <SelectTrigger><SelectValue placeholder="دوره" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">همه دوره‌ها</SelectItem>
-                {/* Render each شکم label from the PERIOD_LABEL map.
-                    Object.entries preserves insertion order in modern JS. */}
-                {Object.entries(PERIOD_LABEL).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-              <SelectTrigger><SelectValue placeholder="مرتب‌سازی" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="days_desc">بیشترین روز</SelectItem>
-                <SelectItem value="days_asc">کمترین روز</SelectItem>
-                <SelectItem value="body">شماره بدنه</SelectItem>
-                <SelectItem value="status">وضعیت تولیدمثل</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Each filter is wrapped in a labeled block so the user can tell
+                exactly what the input/select is going to filter. Labels use
+                muted-foreground so they don't compete visually with values. */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">جستجو</label>
+              <Input
+                placeholder="شماره بدنه / شماره گوش"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="text-right"
+              />
+            </div>
 
-            {/* Status multi-select rendered as toggleable pills since shadcn
-                Select has no multi-select. Pills auto-list every chart_status
-                value present in the data. */}
-            <div className="sm:col-span-2 lg:col-span-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">نوع دام</label>
+              <Select value={heiferMode} onValueChange={(v) => setHeiferMode(v as HeiferMode)}>
+                <SelectTrigger><SelectValue placeholder="تلیسه" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">همه</SelectItem>
+                  <SelectItem value="heifer">فقط تلیسه‌ها</SelectItem>
+                  <SelectItem value="cow">فقط گاوها</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">بازه روز</label>
+              <Select value={dayRange} onValueChange={(v) => setDayRange(v as DayRange)}>
+                <SelectTrigger><SelectValue placeholder="بازه روز" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">همه</SelectItem>
+                  <SelectItem value="32">بالای ۳۲ روز</SelectItem>
+                  <SelectItem value="60">بالای ۶۰ روز</SelectItem>
+                  <SelectItem value="130">بالای ۱۳۰ روز</SelectItem>
+                  <SelectItem value="220">بالای ۲۲۰ روز</SelectItem>
+                  <SelectItem value="250">بالای ۲۵۰ روز</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">آبستنی / خشکی</label>
+              <Select value={pregMode} onValueChange={(v) => setPregMode(v as PregMode)}>
+                <SelectTrigger><SelectValue placeholder="آبستنی / خشکی" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">همه</SelectItem>
+                  <SelectItem value="pregnant">فقط آبستن</SelectItem>
+                  <SelectItem value="open">فقط غیرآبستن</SelectItem>
+                  <SelectItem value="dry">فقط خشک</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">مرتب‌سازی</label>
+              <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                <SelectTrigger><SelectValue placeholder="مرتب‌سازی" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="days_desc">بیشترین روز</SelectItem>
+                  <SelectItem value="days_asc">کمترین روز</SelectItem>
+                  <SelectItem value="body">شماره بدنه</SelectItem>
+                  <SelectItem value="status">وضعیت تولیدمثل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* دوره (شکم) — multi-select pills (شکم اول … شکم هفتم).
+                Spans 3 columns on desktop so all 7 pills sit on one row. */}
+            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+              <label className="text-xs text-muted-foreground font-medium">
+                دوره (شکم) — انتخاب چندتایی
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(PERIOD_LABEL).map(([value, label]) => {
+                  // active = is this شکم currently in the selected set?
+                  const active = periodFilter.includes(value);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() =>
+                        // Toggle pattern: if already selected → remove,
+                        // otherwise → append. Same UX as the status pills.
+                        setPeriodFilter((prev) =>
+                          prev.includes(value)
+                            ? prev.filter((x) => x !== value)
+                            : [...prev, value],
+                        )
+                      }
+                      className={`text-xs px-2.5 py-1 rounded-full border transition ${
+                        active
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-card text-muted-foreground border-border hover:border-primary/40"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Status multi-select rendered as toggleable pills (chart_status). */}
+            <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+              <label className="text-xs text-muted-foreground font-medium">
+                وضعیت تولیدمثل — انتخاب چندتایی
+              </label>
               <div className="flex flex-wrap gap-1.5">
                 {statusOptions.map((s) => {
                   const active = statusFilter.includes(s);
