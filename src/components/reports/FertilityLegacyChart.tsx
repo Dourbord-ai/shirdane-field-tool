@@ -167,12 +167,14 @@ export default function FertilityLegacyChart() {
       if (pregMode === "pregnant" && !r.is_pregnancy) return false;
       if (pregMode === "open" && r.is_pregnancy) return false;
       if (pregMode === "dry" && !r.is_dry) return false;
-      // دوره (شکم) filter — match cows by their lactation period (last_period).
-      // Only applied when the user picks a specific شکم; "all" skips the check.
-      if (periodFilter !== "all") {
-        // Parse the dropdown value once; defensive coercion in case of bad data.
-        const want = parseInt(periodFilter, 10);
-        if ((r.last_period ?? 0) !== want) return false;
+      // دوره (شکم) filter — multi-select. If the user picked any شکم values
+      // the cow's last_period must match one of them (OR semantics across
+      // periods, AND with all other filter categories — same pattern as the
+      // status pills above).
+      if (periodFilter.length > 0) {
+        // Stringify so we can compare against the dropdown values directly.
+        const lp = String(r.last_period ?? "");
+        if (!periodFilter.includes(lp)) return false;
       }
       return true;
     });
