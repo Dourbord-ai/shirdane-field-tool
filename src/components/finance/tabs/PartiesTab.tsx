@@ -12,8 +12,9 @@ import {
   PARTY_APPROVAL_STATUS_LABEL,
   syncPartyToSepidar,
   isPartyReadyForPosting,
+  isPartySyncedInSepidar,
 } from "@/lib/finance";
-import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle, GitCompareArrows } from "lucide-react";
+import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle, GitCompareArrows, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import BeneficiaryStatementCompareDialog from "@/components/finance/BeneficiaryStatementCompareDialog";
 
