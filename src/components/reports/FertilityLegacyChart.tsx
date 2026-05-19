@@ -35,6 +35,9 @@ export interface FertilityChartRow {
   is_pregnancy: boolean | null;
   is_dry: boolean | null;
   number_of_births: number | null;
+  // last_period = شکم/دوره شیردهی (lactation period). Comes from cows.last_period.
+  // 0/NULL = تلیسه (no calving yet); 1..7+ = شکم اول … شکم هفتم.
+  last_period: number | null;
   last_birth_date: string | null;
   last_erotic_date: string | null;
   last_inoculation_date: string | null;
@@ -42,6 +45,18 @@ export interface FertilityChartRow {
   last_abortion_date: string | null;
   last_dry_date: string | null;
 }
+
+// Persian digit helper for the period dropdown labels.
+// Keeps the UI consistent with the rest of the Damban Persian RTL pages.
+const PERIOD_LABEL: Record<string, string> = {
+  "1": "شکم اول",
+  "2": "شکم دوم",
+  "3": "شکم سوم",
+  "4": "شکم چهارم",
+  "5": "شکم پنجم",
+  "6": "شکم ششم",
+  "7": "شکم هفتم",
+};
 
 // Sort modes — Persian labels mapped to comparator keys.
 type SortKey = "days_desc" | "days_asc" | "body" | "status";
@@ -85,6 +100,9 @@ export default function FertilityLegacyChart() {
   const [heiferMode, setHeiferMode] = useState<HeiferMode>("all");
   const [dayRange, setDayRange] = useState<DayRange>("all");
   const [pregMode, setPregMode] = useState<PregMode>("all");
+  // periodFilter — "all" or a specific شکم value as string ("1".."7").
+  // Stored as string so the shadcn Select can use it directly without coercion.
+  const [periodFilter, setPeriodFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("days_desc");
   const [filtersOpen, setFiltersOpen] = useState(!isMobile);
 
@@ -148,6 +166,13 @@ export default function FertilityLegacyChart() {
       if (pregMode === "pregnant" && !r.is_pregnancy) return false;
       if (pregMode === "open" && r.is_pregnancy) return false;
       if (pregMode === "dry" && !r.is_dry) return false;
+      // دوره (شکم) filter — match cows by their lactation period (last_period).
+      // Only applied when the user picks a specific شکم; "all" skips the check.
+      if (periodFilter !== "all") {
+        // Parse the dropdown value once; defensive coercion in case of bad data.
+        const want = parseInt(periodFilter, 10);
+        if ((r.last_period ?? 0) !== want) return false;
+      }
       return true;
     });
 
@@ -161,7 +186,7 @@ export default function FertilityLegacyChart() {
       }
     });
     return out;
-  }, [rows, debouncedSearch, statusFilter, heiferMode, dayRange, pregMode, sortKey]);
+  }, [rows, debouncedSearch, statusFilter, heiferMode, dayRange, pregMode, periodFilter, sortKey]);
 
   // KPI cards reflect filtered data (per spec).
   const kpis = useMemo(() => {
@@ -330,6 +355,8 @@ export default function FertilityLegacyChart() {
     setHeiferMode("all");
     setDayRange("all");
     setPregMode("all");
+    // Reset the شکم/دوره picker back to "همه" so all periods are shown again.
+    setPeriodFilter("all");
     setSortKey("days_desc");
   };
 
@@ -417,6 +444,20 @@ export default function FertilityLegacyChart() {
                 <SelectItem value="pregnant">فقط آبستن</SelectItem>
                 <SelectItem value="open">فقط غیرآبستن</SelectItem>
                 <SelectItem value="dry">فقط خشک</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* دوره (شکم) — lactation period filter.
+                Pulled from cows.last_period via the analytics view.
+                We hardcode 1..7 because business rules only label up to شکم هفتم. */}
+            <Select value={periodFilter} onValueChange={setPeriodFilter}>
+              <SelectTrigger><SelectValue placeholder="دوره" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">همه دوره‌ها</SelectItem>
+                {/* Render each شکم label from the PERIOD_LABEL map.
+                    Object.entries preserves insertion order in modern JS. */}
+                {Object.entries(PERIOD_LABEL).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
