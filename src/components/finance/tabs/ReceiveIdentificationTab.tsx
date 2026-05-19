@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,16 +6,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TransactionSelector, PartySelector } from "@/components/finance/selectors";
-import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
+import { MoneyCell, JalaliDateCell } from "@/components/finance/atoms";
+import { cn } from "@/lib/utils";
 import {
   createReceiveIdentification,
   approveReceiveIdentification,
   rejectReceiveIdentification,
   cancelReceiveIdentification,
   partyName,
+  receiveIdStatusLabel,
 } from "@/lib/finance";
 import { toast } from "sonner";
-import { CheckCircle2, X, Plus, XCircle } from "lucide-react";
+import { CheckCircle2, X, Plus, XCircle, Send } from "lucide-react";
+
+// Render a status badge using ONLY the receive-identification label map so
+// that imported rows with status="draft" surface as «در انتظار تایید» rather
+// than the generic «پیش‌نویس» from the payment-request label map.
+function ReceiveIdStatusBadge({ status }: { status: string | null | undefined }) {
+  const key = status || "pending_approval";
+  // Visual tone mirrors FinanceStatusBadge but is kept local so the receive
+  // identifications tab is fully self-consistent.
+  const tone: Record<string, string> = {
+    draft: "bg-amber-100 text-amber-800",
+    pending_approval: "bg-amber-100 text-amber-800",
+    approved: "bg-emerald-100 text-emerald-800",
+    sync_failed: "bg-red-100 text-red-800",
+    rejected: "bg-red-100 text-red-800",
+    cancelled: "bg-muted text-muted-foreground",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
+        tone[key] || "bg-muted text-muted-foreground",
+      )}
+    >
+      {receiveIdStatusLabel(key)}
+    </span>
+  );
+}
 
 interface RI {
   id: string;
