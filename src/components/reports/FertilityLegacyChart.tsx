@@ -276,24 +276,46 @@ export default function FertilityLegacyChart() {
     return { total, heifers, over130, over220, over250, avg, pregnant, dry };
   }, [filtered]);
 
-  // Legend rows — aggregated per status for the side panel.
+  // Legend rows — aggregated per status. Built from rows ignoring the
+  // current statusFilter so users can always see ALL available statuses in
+  // راهنمای وضعیت and click any of them to add/remove bars from the chart.
+  // Counts reflect all other active filters (search, heifer, day range…).
   const legend = useMemo(() => {
+    const q = debouncedSearch.trim();
+    const dayMin = dayRange === "all" ? 0 : parseInt(dayRange, 10);
+    const baseRows = rows.filter((r) => {
+      if (q) {
+        const bodyMatch = r.bodynumber != null && String(r.bodynumber).includes(q);
+        const earMatch = r.earnumber != null && String(r.earnumber).includes(q);
+        if (!bodyMatch && !earMatch) return false;
+      }
+      if (heiferMode === "heifer" && !r.is_heifer) return false;
+      if (heiferMode === "cow" && r.is_heifer) return false;
+      if (dayMin > 0 && (r.chart_days ?? 0) <= dayMin) return false;
+      if (pregMode === "pregnant" && !r.is_pregnancy) return false;
+      if (pregMode === "open" && r.is_pregnancy) return false;
+      if (pregMode === "dry" && !r.is_dry) return false;
+      if (periodFilter.length > 0) {
+        const lp = String(r.last_period ?? "");
+        if (!periodFilter.includes(lp)) return false;
+      }
+      return true;
+    });
+
     const map = new Map<string, { color: string; count: number }>();
-    filtered.forEach((r) => {
+    baseRows.forEach((r) => {
       const k = r.chart_status ?? "نامشخص";
-      // Use the legacy palette for legend swatches too, so the colors
-      // shown in the legend match the bars exactly.
       const c = resolveStatusColor(r.last_fertility_status, r.status_color);
       const cur = map.get(k) ?? { color: c, count: 0 };
       cur.count += 1;
       cur.color = c;
       map.set(k, cur);
     });
-    const total = filtered.length || 1;
+    const total = baseRows.length || 1;
     return Array.from(map.entries())
       .map(([status, v]) => ({ status, color: v.color, count: v.count, pct: (v.count / total) * 100 }))
       .sort((a, b) => b.count - a.count);
-  }, [filtered]);
+  }, [rows, debouncedSearch, heiferMode, dayRange, pregMode, periodFilter]);
 
   // Build ECharts option. Memoized so React doesn't rebuild it
   // unless filtered data actually changes.
