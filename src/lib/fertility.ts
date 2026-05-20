@@ -120,7 +120,14 @@ export const formatEventDate = (d: string | number | Date | null | undefined) =>
  * - operator_name: shown for all event types except pregnancy_test rows
  *   where the operator_name field is actually the vet (avoids double-print).
  */
-export function deriveEventPeople(e: FertilityEvent): {
+export function deriveEventPeople(
+  e: FertilityEvent,
+  // Optional resolver — supplied by callers that have access to the
+  // useLegacyUserNames hook. Maps legacy numeric IDs (e.g. "2") to a real
+  // display name (e.g. "محمد فرهمند"). Falls through to the raw value when
+  // no resolver is supplied so existing callers don't break.
+  resolveName?: (v: number | string | null | undefined) => string | null,
+): {
   operator_name: string | null;
   doctor_name: string | null;
 } {
@@ -134,12 +141,20 @@ export function deriveEventPeople(e: FertilityEvent): {
 
   const isPregnancy = e.event_type === "pregnancy_test";
   // Prefer the explicit metadata vet field; otherwise reuse legacy operator_name.
-  const doctor = isPregnancy ? metaVet || e.operator_name || null : null;
+  const rawDoctor = isPregnancy ? metaVet || e.operator_name || null : null;
   // If the operator slot was actually used for the vet, don't repeat it.
-  const operator =
-    isPregnancy && !metaVet && e.operator_name === doctor
+  // operator_user_id is the canonical numeric ID; fall back to operator_name
+  // (which the importer sometimes filled with a number-as-string).
+  const rawOperator =
+    isPregnancy && !metaVet && e.operator_name === rawDoctor
       ? null
       : e.operator_name ?? null;
+  const opSource = rawOperator ?? e.operator_user_id ?? null;
+
+  // Resolve numeric IDs → real names when we have a resolver; otherwise
+  // return the raw string unchanged.
+  const operator = resolveName ? resolveName(opSource) : (rawOperator as string | null);
+  const doctor = resolveName ? resolveName(rawDoctor) : (rawDoctor as string | null);
 
   return { operator_name: operator, doctor_name: doctor };
 }
