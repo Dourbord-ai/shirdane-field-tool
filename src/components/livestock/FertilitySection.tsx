@@ -735,17 +735,6 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
                     </p>
                   )}
                 </div>
-                <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
-                  <p className="text-xs text-muted-foreground">آخرین وضعیت باروری</p>
-                  <p className="text-base font-bold text-foreground mt-1">
-                    {fertilityLabel(latestStatus)}
-                  </p>
-                  {latestStatusEvent?.event_date && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      تاریخ ثبت: {formatEventDate(latestStatusEvent.event_date)}
-                    </p>
-                  )}
-                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {Object.entries(FERTILITY_EVENT_LABELS).map(([type, label]) => (
                     <div
