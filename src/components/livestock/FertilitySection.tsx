@@ -45,6 +45,9 @@ import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHe
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
+// Shared helper that picks the freshest fertility_status_id from a cow's
+// event timeline (mirrors the SQL rebuild_cow_fertility_cache logic).
+import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
 
 type Props = {
   livestockId: number;
