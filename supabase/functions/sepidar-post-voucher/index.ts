@@ -400,7 +400,16 @@ Deno.serve(async (req) => {
 
       const amount = Number(r.amount ?? 0);
       const date = toSqlDate(r.transaction_datetime ?? vRow.voucher_date);
-      const description = firstNonEmpty(r.title, r.description, desc);
+
+      // Legacy template descriptions (دریافت / واریز ...).
+      const descs = buildVoucherDescriptions({
+        branch: "receive_identification",
+        date,
+        sourceRow: r,
+        partyName: firstNonEmpty(p.full_name, p.name, p.title),
+        bankName: firstNonEmpty(b.bank_name, b.name, b.title, b.account_number),
+      });
+      console.log("[sepidar-post-voucher] descriptions(receive_identification)", descs);
 
       const req = pool.request();
       req.input("BankAccountSLRef", sql.Int, Number(bankAccountSL));
@@ -410,9 +419,9 @@ Deno.serve(async (req) => {
       req.input("RequestType", sql.Int, REQUEST_TYPE.receive_identification);
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
-      req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(r.description) || "");
-      req.input("Description2", sql.NVarChar(sql.MAX), "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -427,6 +436,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
