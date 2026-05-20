@@ -22,7 +22,7 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { checkFertilityOperation } from "@/lib/fertilityValidation";
+
 import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 
@@ -166,17 +166,20 @@ export default function HeatRegistrationDialog({
     const dateStr = formatJalali(date);
     const eventDate = `${dateStr} ${time}`;
 
-    const validation = await checkFertilityOperation({
-      livestock_id: livestockId,
-      fertility_operation_id: 1,
-      event_date: eventDate,
-      event_time: time || null,
-    });
-    if (!validation.ok) {
+    // New simple validation — heat (ثبت فحلی) requires current status «عدم آبستن».
+    const { validateFertilityOperation } = await import("@/lib/fertilityValidation");
+    const validation = await validateFertilityOperation(
+      livestockId,
+      "فحلی",
+      undefined,
+      eventDate
+    );
+    if (!validation.isValid) {
       setSubmitting(false);
-      setValidationMessages(validation.messages);
+      setValidationMessages([validation.message]);
       return;
     }
+
 
     const metadata = {
       erotic_type_id: Number(heatTypeId),
@@ -186,7 +189,7 @@ export default function HeatRegistrationDialog({
       uterine_infection: uterineInfection === "yes",
       time,
       operator_name: selectedUser?.full_name ?? selectedUser?.username ?? null,
-      matched_rule_id: validation.matched_rule_id ?? null,
+      matched_rule_id: null,
     };
 
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({

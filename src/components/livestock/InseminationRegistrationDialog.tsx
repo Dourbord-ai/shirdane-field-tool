@@ -24,7 +24,7 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { checkFertilityOperation } from "@/lib/fertilityValidation";
+
 import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 
 type AppUser = { id: string; full_name: string | null; username: string };
@@ -269,18 +269,21 @@ export default function InseminationRegistrationDialog({
       }
     }
 
-    const validation = await checkFertilityOperation({
-      livestock_id: livestockId,
-      fertility_operation_id: 2,
-      event_date: eventDate,
-      event_time: time || null,
-    });
-    if (!validation.ok) {
+    // New simple validation — insemination (ثبت تلقیح) requires current status «فحلی».
+    const { validateFertilityOperation } = await import("@/lib/fertilityValidation");
+    const validation = await validateFertilityOperation(
+      livestockId,
+      "تلقیح",
+      undefined,
+      eventDate
+    );
+    if (!validation.isValid) {
       setSubmitting(false);
-      setValidationMessages(validation.messages);
+      setValidationMessages([validation.message]);
       return;
     }
-    metadata.matched_rule_id = validation.matched_rule_id ?? null;
+    metadata.matched_rule_id = null;
+
 
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
       livestock_id: livestockId,
