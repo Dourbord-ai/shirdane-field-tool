@@ -130,6 +130,117 @@ function firstNonEmpty(...vals: Array<unknown>): string {
   return "";
 }
 
+// ---------------------------------------------------------------------------
+// Jalali (Shamsi) date helper — inlined because Edge Functions cannot import
+// from src/. Mirrors src/lib/jalali.ts::gregorianToJalali so descriptions sent
+// to Sepidar match the legacy app output format (e.g. 1405/02/30).
+// ---------------------------------------------------------------------------
+const _G_D_M = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+function gregorianToJalali(gy: number, gm: number, gd: number) {
+  const gy2 = gm > 2 ? gy + 1 : gy;
+  let days =
+    355666 + 365 * gy + Math.floor((gy2 + 3) / 4) -
+    Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) +
+    gd + _G_D_M[gm - 1];
+  let jy = -1595 + 33 * Math.floor(days / 12053);
+  days %= 12053;
+  jy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) { jy += Math.floor((days - 1) / 365); days = (days - 1) % 365; }
+  let jm: number, jd: number;
+  if (days < 186) { jm = 1 + Math.floor(days / 31); jd = 1 + (days % 31); }
+  else { jm = 7 + Math.floor((days - 186) / 30); jd = 1 + ((days - 186) % 30); }
+  return { jy, jm, jd };
+}
+
+// Returns a Jalali string formatted YYYY/MM/DD matching the legacy app
+// description style. Accepts Date, ISO string, or null.
+function formatJalaliForSepidarDescription(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return "";
+  const { jy, jm, jd } = gregorianToJalali(
+    date.getFullYear(), date.getMonth() + 1, date.getDate(),
+  );
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${jy}/${pad(jm)}/${pad(jd)}`;
+}
+
+// Read a field from either a top-level column or row.raw_data (jsonb).
+// Used to detect optional legacy descriptors like change_status_description /
+// extra_description that may live in the imported raw payload.
+function rawField(row: Record<string, unknown> | null | undefined, key: string): string {
+  if (!row) return "";
+  const direct = (row as Record<string, unknown>)[key];
+  if (direct != null && String(direct).trim()) return String(direct).trim();
+  const raw = (row as Record<string, unknown>).raw_data ?? (row as Record<string, unknown>).data;
+  if (raw && typeof raw === "object") {
+    const v = (raw as Record<string, unknown>)[key];
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  return "";
+}
+
+// Builds Description / Description1 / Description2 strings for each Sepidar
+// voucher branch using legacy templates. Centralised so every branch shares
+// the same generation logic and we can safely override finance_vouchers.description.
+function buildVoucherDescriptions(args: {
+  branch: string;
+  date: Date;
+  sourceRow: Record<string, unknown>;
+  fromPartyName?: string;
+  toPartyName?: string;
+  partyName?: string;
+  bankName?: string;
+  fromBankName?: string;
+  toBankName?: string;
+}): { description: string; description1: string; description2: string } {
+  const dateStr = formatJalaliForSepidarDescription(args.date);
+  const src = args.sourceRow ?? {};
+  const baseDesc = firstNonEmpty(src.description, src.title);
+  const extra = rawField(src, "extra_description") || rawField(src, "change_status_description");
+  const extraSuffix = extra ? ` (${extra})` : "";
+
+  switch (args.branch) {
+    case "party_transfer": {
+      const desc = `جا به جایی در تاریخ ${dateStr} بابت ${baseDesc}`;
+      const long = `جا به جایی در تاریخ ${dateStr} از ${args.fromPartyName ?? ""} به ${args.toPartyName ?? ""} بابت ${baseDesc}`;
+      return {
+        description: desc + extraSuffix,
+        description1: long + extraSuffix,
+        description2: long + extraSuffix,
+      };
+    }
+    case "bank_transfer": {
+      const desc = ` تاریخ ${dateStr}`;
+      const long = ` تاریخ ${dateStr} از حساب بانکی ${args.fromBankName ?? ""} به ${args.toBankName ?? ""} بابت ${baseDesc}`;
+      return {
+        description: desc + extraSuffix,
+        description1: long + extraSuffix,
+        description2: long + extraSuffix,
+      };
+    }
+    case "receive_identification": {
+      return {
+        description: `دریافت در تاریخ ${dateStr} بابت ${baseDesc}` + extraSuffix,
+        description1: `واریز در تاریخ ${dateStr} توسط ${args.partyName ?? ""} بابت ${baseDesc}` + extraSuffix,
+        description2: `واریز در تاریخ ${dateStr} به حساب بانکی ${args.bankName ?? ""} بابت ${baseDesc}` + extraSuffix,
+      };
+    }
+    case "payment_allocation":
+    case "payment_request": {
+      const tail = baseDesc ? ` ${baseDesc}` : "";
+      return {
+        description: `پرداخت در تاریخ ${dateStr}${tail}` + extraSuffix,
+        description1: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""}${tail}` + extraSuffix,
+        description2: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""} به ${args.partyName ?? ""}${tail}` + extraSuffix,
+      };
+    }
+    default:
+      return { description: baseDesc, description1: "", description2: "" };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST")
@@ -289,7 +400,16 @@ Deno.serve(async (req) => {
 
       const amount = Number(r.amount ?? 0);
       const date = toSqlDate(r.transaction_datetime ?? vRow.voucher_date);
-      const description = firstNonEmpty(r.title, r.description, desc);
+
+      // Legacy template descriptions (دریافت / واریز ...).
+      const descs = buildVoucherDescriptions({
+        branch: "receive_identification",
+        date,
+        sourceRow: r,
+        partyName: firstNonEmpty(p.full_name, p.name, p.title),
+        bankName: firstNonEmpty(b.bank_name, b.name, b.title, b.account_number),
+      });
+      console.log("[sepidar-post-voucher] descriptions(receive_identification)", descs);
 
       const req = pool.request();
       req.input("BankAccountSLRef", sql.Int, Number(bankAccountSL));
@@ -299,9 +419,9 @@ Deno.serve(async (req) => {
       req.input("RequestType", sql.Int, REQUEST_TYPE.receive_identification);
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
-      req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(r.description) || "");
-      req.input("Description2", sql.NVarChar(sql.MAX), "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -316,6 +436,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
@@ -444,15 +565,53 @@ Deno.serve(async (req) => {
       if (sepPartyAcc == null)
         return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده (sepidar_account_id)." };
 
+      // Resolve the related bank for legacy description (برداشت ... از حساب بانکی X).
+      // Try alloc.bank_id → priRow.bank_id → prRow.bank_id → related bank_transaction.
+      let bankRow: Record<string, unknown> | null = null;
+      const a = (alloc ?? {}) as Record<string, unknown>;
+      const bankIdCandidate =
+        (a.bank_id as string | null) ||
+        (priRow?.bank_id as string | null) ||
+        (prRow?.bank_id as string | null) ||
+        null;
+      if (bankIdCandidate) {
+        const { data: bk } = await sb
+          .from("finance_banks").select("*").eq("id", bankIdCandidate).maybeSingle();
+        bankRow = (bk as Record<string, unknown> | null) ?? null;
+      }
+      if (!bankRow && a.bank_transaction_id) {
+        const { data: btx } = await sb
+          .from("finance_bank_transactions").select("bank_id").eq("id", a.bank_transaction_id as string).maybeSingle();
+        const bid = (btx as Record<string, unknown> | null)?.bank_id as string | undefined;
+        if (bid) {
+          const { data: bk } = await sb
+            .from("finance_banks").select("*").eq("id", bid).maybeSingle();
+          bankRow = (bk as Record<string, unknown> | null) ?? null;
+        }
+      }
+
+      // Pick the most specific "item" row available to feed the description tail.
+      const itemRow = (priRow ?? a ?? prRow ?? {}) as Record<string, unknown>;
+      const descs = buildVoucherDescriptions({
+        branch: "payment_allocation",
+        date,
+        sourceRow: itemRow,
+        partyName: firstNonEmpty(partyRow.full_name, partyRow.name, partyRow.title),
+        bankName: bankRow
+          ? firstNonEmpty(bankRow.bank_name, bankRow.name, bankRow.title, bankRow.account_number)
+          : "",
+      });
+      console.log("[sepidar-post-voucher] descriptions(payment)", descs);
+
       const req = pool.request();
       req.input("PartyId", sql.Int, Number(sepPartyId));
       req.input("PartyAccountSLRef", sql.Int, Number(sepPartyAcc));
       req.input("RequestType", sql.Int, requestTypeCode);
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
-      req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(priRow?.description) || "");
-      req.input("Description2", sql.NVarChar(sql.MAX), firstNonEmpty(prRow?.description) || "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -465,6 +624,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
@@ -505,7 +665,15 @@ Deno.serve(async (req) => {
 
       const amount = Number(t.from_amount ?? t.to_amount ?? 0);
       const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
-      const description = firstNonEmpty(t.description, desc);
+
+      const descs = buildVoucherDescriptions({
+        branch: "bank_transfer",
+        date,
+        sourceRow: t,
+        fromBankName: firstNonEmpty(fb.bank_name, fb.name, fb.title, fb.account_number),
+        toBankName: firstNonEmpty(tb.bank_name, tb.name, tb.title, tb.account_number),
+      });
+      console.log("[sepidar-post-voucher] descriptions(bank_transfer)", descs);
 
       const req = pool.request();
       req.input("FromBankAccountSLRef", sql.Int, Number(fromAcc));
@@ -514,7 +682,9 @@ Deno.serve(async (req) => {
       req.input("ToBankDLRef", sql.Int, Number(toDL));
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -528,6 +698,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
@@ -568,7 +739,15 @@ Deno.serve(async (req) => {
 
       const amount = Number(t.amount ?? 0);
       const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
-      const description = firstNonEmpty(t.title, t.description, desc);
+
+      const descs = buildVoucherDescriptions({
+        branch: "party_transfer",
+        date,
+        sourceRow: t,
+        fromPartyName: firstNonEmpty(fp.full_name, fp.name, fp.title),
+        toPartyName: firstNonEmpty(tp.full_name, tp.name, tp.title),
+      });
+      console.log("[sepidar-post-voucher] descriptions(party_transfer)", descs);
 
       const req = pool.request();
       req.input("FromPartyId", sql.Int, Number(fpId));
@@ -577,7 +756,9 @@ Deno.serve(async (req) => {
       req.input("ToPartyAccountSLRef", sql.Int, Number(tpAcc));
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -591,6 +772,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
@@ -667,15 +849,47 @@ Deno.serve(async (req) => {
     if (sepidarDaily != null) update.sepidar_daily_number = Number(sepidarDaily);
 
     await sb.from("finance_vouchers").update(update).eq("id", voucherId);
+
+    // -----------------------------------------------------------------------
+    // Inter-bank transfer EXTRA Sepidar side-tables.
+    // The legacy app filled two additional Sepidar tables besides the voucher
+    // when an inter-bank transfer was registered. The bridge procedures for
+    // those tables are NOT confirmed in this environment yet, so we attach a
+    // status flag to the sync log and emit a TODO so we don't silently lose
+    // the requirement, but we DO NOT fail the voucher posting.
+    // ----------------------------------------------------------------------- 
+    let interbank_extra_tables_synced = false;
+    let interbank_extra_tables_message = "";
+    if (branch === "bank_transfer" || sOp === "bank_transfer") {
+      // TODO(sepidar): wire bridge SPs for the two extra inter-bank tables once
+      // their signatures are confirmed (likely a Cheque/TransferLink pair).
+      // Until then we keep the main voucher posting successful.
+      interbank_extra_tables_message =
+        "Inter-bank extra Sepidar tables are not implemented yet";
+      console.warn("[sepidar-post-voucher] interbank-extra", interbank_extra_tables_message);
+    }
+
+    const logPayload: Record<string, unknown> = {
+      ...(row as Record<string, unknown>),
+      sp_name: spName,
+      interbank_extra_tables_synced,
+      interbank_extra_tables_message,
+    };
     await sb.from("finance_sepidar_sync_logs").insert({
       voucher_id: voucherId,
       operation_type: "post_voucher",
       status: "success",
-      response_payload: row as never,
+      response_payload: logPayload as never,
     } as never);
 
-    console.log("[sepidar-post-voucher] ok", { voucherId, spName, row });
-    return json({ success: true, message: "سند با موفقیت در سپیدار ثبت شد.", data: row });
+    console.log("[sepidar-post-voucher] ok", { voucherId, spName, row, interbank_extra_tables_synced });
+    return json({
+      success: true,
+      message: "سند با موفقیت در سپیدار ثبت شد.",
+      data: row,
+      interbank_extra_tables_synced,
+      interbank_extra_tables_message,
+    });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
     const message = persianizeError(raw);
