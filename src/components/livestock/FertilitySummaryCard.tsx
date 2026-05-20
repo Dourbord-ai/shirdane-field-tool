@@ -228,7 +228,7 @@ export default function FertilitySummaryCard({ cow }: Props) {
           <Metric label="آخرین تلقیح" value={s.lastAIDate ? formatShamsi(s.lastAIDate) : "—"} />
           <Metric label="روز از آخرین تلقیح" value={fa(s.daysSinceLastAI, " روز")} />
           <Metric label="اسپرم" value={s.lastSperm ?? "—"} />
-          <Metric label="تلقیح‌کننده" value={s.lastInseminator ?? "—"} />
+          <Metric label="تلقیح‌کننده" value={inseminatorName ?? "—"} />
         </Group>
 
         {/* ===== Heat / Estrus ===== */}
