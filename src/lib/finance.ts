@@ -207,21 +207,19 @@ export async function createVoucher(opts: {
   return voucher;
 }
 
-// ---------- Sepidar placeholder ----------
-export async function sepidarSyncPlaceholder(voucher_id: string, op: string) {
-  await supabase.from("finance_sepidar_sync_logs").insert({
-    voucher_id,
-    operation_type: op,
-    request_payload: { placeholder: true },
-    response_payload: { placeholder: true, message: "Sepidar bridge not yet connected" },
-    status: "pending",
-    error_message: null,
-  });
-  await supabase
-    .from("finance_vouchers")
-    .update({ sepidar_sync_status: "syncing", sepidar_sync_attempts: 1 })
-    .eq("id", voucher_id);
+// ---------- Sepidar voucher sync (real bridge) ----------
+// Backwards-compatible wrapper kept for the legacy call sites in VouchersTab,
+// PartyTransferTab, BankTransferTab. It now forwards to the real edge function
+// via `syncVoucherToSepidar`. The `op` argument is retained so log lines /
+// retry buttons keep the same signature, but every operation maps to the same
+// `post_voucher` SP call — there is no separate "retry" path on the bridge.
+export async function sepidarSyncPlaceholder(voucher_id: string, _op: string) {
+  // Delegate to the real implementation. We intentionally do NOT pre-insert a
+  // sync-log row here anymore — the edge function writes the authoritative
+  // success/failure log itself, so doing it twice would just create noise.
+  return await syncVoucherToSepidar(voucher_id);
 }
+
 
 // ---------- Beneficiary (party) Sepidar sync — placeholder bridge ----------
 // Represents legacy stored procedure: SpAddSepidarBankParty
@@ -406,45 +404,50 @@ export async function recalculateBankUnassignedBalances(bankId: string): Promise
     .eq("id", bankId);
 }
 
-// ---------- Voucher → Sepidar placeholder ----------
+// ---------- Voucher → Sepidar (real bridge) ----------
+// The previous placeholder has been removed. This now calls the
+// `sepidar-post-voucher` Edge Function, which in turn invokes the SQL Server
+// bridge stored procedure and updates `finance_vouchers.sepidar_*` columns
+// server-side. We still surface a `{status, error_message}` shape so existing
+// call sites in this file keep working without changes.
 export interface SepidarVoucherResponse {
   status: "synced" | "failed";
   error_message: string | null;
 }
 
 export async function syncVoucherToSepidar(voucherId: string): Promise<SepidarVoucherResponse> {
-  await supabase
-    .from("finance_vouchers")
-    .update({ sepidar_sync_status: "syncing" })
-    .eq("id", voucherId);
+  // Invoke the Edge Function. We do NOT pre-flip `sepidar_sync_status` here —
+  // the function itself sets `syncing`, then `synced`/`failed`, so the DB is
+  // the single source of truth and we avoid an extra round-trip.
+  try {
+    const { data, error } = await supabase.functions.invoke("sepidar-post-voucher", {
+      body: { voucher_id: voucherId },
+    });
 
-  // Placeholder: real Sepidar bridge not connected yet.
-  await new Promise((r) => setTimeout(r, 400));
-  const response: SepidarVoucherResponse = {
-    status: "failed",
-    error_message: "پل سپیدار هنوز متصل نشده است (placeholder)",
-  };
+    // Network/transport error from supabase-js (function unreachable, 5xx, etc.).
+    if (error) {
+      const msg = error.message || "ارتباط با تابع سپیدار برقرار نشد.";
+      return { status: "failed", error_message: msg };
+    }
 
-  await supabase.from("finance_sepidar_sync_logs").insert({
-    voucher_id: voucherId,
-    operation_type: "post_voucher",
-    request_payload: { voucher_id: voucherId } as never,
-    response_payload: response as never,
-    status: response.status === "synced" ? "success" : "failed",
-    error_message: response.error_message,
-  } as never);
+    // The edge function returns `{ success, message, rawError? }`. When the
+    // bridge SP reports a business failure, `success` is false and `message`
+    // is already a Persian, user-facing string.
+    const ok = (data as { success?: boolean } | null)?.success === true;
+    if (ok) return { status: "synced", error_message: null };
 
-  await supabase
-    .from("finance_vouchers")
-    .update({
-      sepidar_sync_status: response.status,
-      sepidar_error_message: response.error_message,
-      status: response.status === "synced" ? "posted" : "draft",
-    })
-    .eq("id", voucherId);
-
-  return response;
+    const msg =
+      (data as { message?: string } | null)?.message ??
+      "ثبت سند در سپیدار ناموفق بود.";
+    return { status: "failed", error_message: msg };
+  } catch (e) {
+    // Defensive catch — supabase-js shouldn't throw here, but if Deno
+    // serialization or a CORS preflight breaks we still need to mark failure.
+    const msg = e instanceof Error ? e.message : "خطای ناشناخته در اتصال به سپیدار.";
+    return { status: "failed", error_message: msg };
+  }
 }
+
 
 // ---------- Receive Identification workflow ----------
 export interface CreateReceiveIdInput {
