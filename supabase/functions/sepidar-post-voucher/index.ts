@@ -648,16 +648,25 @@ Deno.serve(async (req) => {
 
       // Pick the most specific "item" row available to feed the description tail.
       const itemRow = (priRow ?? a ?? prRow ?? {}) as Record<string, unknown>;
+      const partyName = resolvePartyDisplayName(partyRow);
+      const bankName = resolveBankDisplayName(bankRow);
+      if (!partyName || !bankName) {
+        return { ok: false, message: MISSING_NAME_ERR };
+      }
       const descs = buildVoucherDescriptions({
         branch: "payment_allocation",
         date,
         sourceRow: itemRow,
-        partyName: firstNonEmpty(partyRow.full_name, partyRow.name, partyRow.title),
-        bankName: bankRow
-          ? firstNonEmpty(bankRow.bank_name, bankRow.name, bankRow.title, bankRow.account_number)
-          : "",
+        partyName,
+        bankName,
       });
-      console.log("[sepidar-post-voucher] descriptions(payment)", descs);
+      console.log("[sepidar-post-voucher] descriptions(payment)", {
+        voucher_id: voucherId,
+        source_operation_type: sOp || vType,
+        partyName,
+        bankName,
+        ...descs,
+      });
 
       const req = pool.request();
       req.input("PartyId", sql.Int, Number(sepPartyId));
