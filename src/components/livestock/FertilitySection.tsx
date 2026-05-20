@@ -760,6 +760,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               onCreateCalves={setCalvesReviewEvent}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
 
@@ -773,6 +774,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
           <TabsContent value="insemination">
@@ -783,6 +785,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
           <TabsContent value="pregnancy_test">
@@ -793,6 +796,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
 
@@ -809,6 +813,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               onCreateCalves={setCalvesReviewEvent}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
 
@@ -820,6 +825,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
           <TabsContent value="prescription">
@@ -828,6 +834,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               emptyText="نسخه/درمانی ثبت نشده است"
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
 
@@ -839,6 +846,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               emptyText="شستشو یا کلین تستی ثبت نشده است"
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
 
@@ -851,6 +859,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               emptyText="برنامه همزمان‌سازی ثبت نشده است"
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
+              resolveUserName={resolveUserName}
             />
           </TabsContent>
         </Tabs>
