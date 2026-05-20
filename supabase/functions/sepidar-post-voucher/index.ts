@@ -181,9 +181,48 @@ function rawField(row: Record<string, unknown> | null | undefined, key: string):
   return "";
 }
 
+// -----------------------------------------------------------------------------
+// Display-name resolvers — Sepidar descriptions must always show *real* names,
+// never raw numeric ids or empty strings. If neither table can produce a name
+// the caller is expected to abort with a Persian error message.
+// -----------------------------------------------------------------------------
+
+// finance_parties → human-readable name following ownership_type rules.
+function resolvePartyDisplayName(p: Record<string, unknown> | null | undefined): string {
+  if (!p) return "";
+  const ownership = String(p.ownership_type ?? "").toLowerCase();
+  if (ownership === "legal") {
+    const co = firstNonEmpty(p.company_name, p.sepidar_full_name, p.title, p.name);
+    if (co) return co;
+  } else {
+    const fn = String(p.first_name ?? "").trim();
+    const ln = String(p.last_name ?? "").trim();
+    const full = `${fn} ${ln}`.trim();
+    if (full) return full;
+  }
+  return firstNonEmpty(
+    p.company_name, p.sepidar_full_name, p.full_name, p.title, p.name,
+  );
+}
+
+// finance_banks → human-readable bank label. Never the numeric id.
+function resolveBankDisplayName(b: Record<string, unknown> | null | undefined): string {
+  if (!b) return "";
+  const title = firstNonEmpty(b.title, b.sepidar_full_title);
+  if (title) return title;
+  const bank = firstNonEmpty(b.bank_name, b.account_holder_name);
+  const acct = String(b.account_number ?? "").trim();
+  if (bank && acct) {
+    // last digits → keep description compact (matches legacy output).
+    const tail = acct.length > 4 ? acct.slice(-4) : acct;
+    return `${bank} ${tail}`;
+  }
+  return bank || acct || "";
+}
+
 // Builds Description / Description1 / Description2 strings for each Sepidar
 // voucher branch using legacy templates. Centralised so every branch shares
-// the same generation logic and we can safely override finance_vouchers.description.
+// the same generation logic.
 function buildVoucherDescriptions(args: {
   branch: string;
   date: Date;
@@ -194,52 +233,58 @@ function buildVoucherDescriptions(args: {
   bankName?: string;
   fromBankName?: string;
   toBankName?: string;
+  // Optional bank_transfer extras.
+  paymentHeaderNumber?: string | number | null;
+  draftNumber?: string | number | null;
 }): { description: string; description1: string; description2: string } {
   const dateStr = formatJalaliForSepidarDescription(args.date);
   const src = args.sourceRow ?? {};
   const baseDesc = firstNonEmpty(src.description, src.title);
-  const extra = rawField(src, "extra_description") || rawField(src, "change_status_description");
-  const extraSuffix = extra ? ` (${extra})` : "";
+  const itemDesc = baseDesc; // alias used by payment templates per spec
 
   switch (args.branch) {
     case "party_transfer": {
-      const desc = `جا به جایی در تاریخ ${dateStr} بابت ${baseDesc}`;
       const long = `جا به جایی در تاریخ ${dateStr} از ${args.fromPartyName ?? ""} به ${args.toPartyName ?? ""} بابت ${baseDesc}`;
       return {
-        description: desc + extraSuffix,
-        description1: long + extraSuffix,
-        description2: long + extraSuffix,
+        description: `جا به جایی در تاریخ ${dateStr} بابت ${baseDesc}`,
+        description1: long,
+        description2: long,
       };
     }
     case "bank_transfer": {
-      const desc = ` تاریخ ${dateStr}`;
-      const long = ` تاریخ ${dateStr} از حساب بانکی ${args.fromBankName ?? ""} به ${args.toBankName ?? ""} بابت ${baseDesc}`;
+      const phn = args.paymentHeaderNumber != null && String(args.paymentHeaderNumber).trim()
+        ? String(args.paymentHeaderNumber).trim() : "";
+      const dn = args.draftNumber != null && String(args.draftNumber).trim()
+        ? String(args.draftNumber).trim() : "1";
+      const long = `برداشت طی حواله شماره ${dn} تاریخ ${dateStr} از حساب بانکی ${args.fromBankName ?? ""} به ${args.toBankName ?? ""} بابت جا به جایی`;
       return {
-        description: desc + extraSuffix,
-        description1: long + extraSuffix,
-        description2: long + extraSuffix,
+        description: `بابت پرداخت طی اعلامیه پرداخت شماره ${phn} تاریخ ${dateStr}`,
+        description1: long,
+        description2: long,
       };
     }
     case "receive_identification": {
       return {
-        description: `دریافت در تاریخ ${dateStr} بابت ${baseDesc}` + extraSuffix,
-        description1: `واریز در تاریخ ${dateStr} توسط ${args.partyName ?? ""} بابت ${baseDesc}` + extraSuffix,
-        description2: `واریز در تاریخ ${dateStr} به حساب بانکی ${args.bankName ?? ""} بابت ${baseDesc}` + extraSuffix,
+        description: `دریافت در تاریخ ${dateStr} بابت ${baseDesc}`,
+        description1: `واریز در تاریخ ${dateStr} به حساب بانکی ${args.bankName ?? ""} بابت ${baseDesc}`,
+        description2: `واریز در تاریخ ${dateStr} توسط ${args.partyName ?? ""} بابت ${baseDesc}`,
       };
     }
     case "payment_allocation":
     case "payment_request": {
-      const tail = baseDesc ? ` ${baseDesc}` : "";
       return {
-        description: `پرداخت در تاریخ ${dateStr}${tail}` + extraSuffix,
-        description1: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""}${tail}` + extraSuffix,
-        description2: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""} به ${args.partyName ?? ""}${tail}` + extraSuffix,
+        description: `پرداخت در تاریخ ${dateStr} بابت ${itemDesc}`,
+        description1: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""} به ${args.partyName ?? ""} بابت ${itemDesc}`,
+        description2: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""} بابت ${itemDesc}`,
       };
     }
     default:
       return { description: baseDesc, description1: "", description2: "" };
   }
 }
+
+// Persian error helper for missing party/bank display names.
+const MISSING_NAME_ERR = "نام ذینفع/بانک برای توضیحات سند پیدا نشد";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
