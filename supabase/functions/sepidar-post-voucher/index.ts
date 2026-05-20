@@ -1,30 +1,34 @@
 // Edge Function: sepidar-post-voucher
 // ----------------------------------------------------------------------------
-// Posts a finance_vouchers row (with its finance_voucher_items) to Sepidar by
-// calling the SQL Server bridge stored procedure. This replaces the
-// placeholder `syncVoucherToSepidar` that previously lived in src/lib/finance.ts.
+// Posts a finance_vouchers row to Sepidar by calling the matching strongly-typed
+// bridge stored procedure for its voucher_type / source_operation_type:
 //
-// Flow:
-//   1. Load the voucher header + items from Postgres using the service role key.
-//   2. Build a JSON header + JSON items payload.
-//   3. Call the bridge stored procedure (configurable via SEPIDAR_POST_VOUCHER_SP,
-//      defaults to `bridge.PostFinanceVoucher`).
-//   4. On success → update finance_vouchers.sepidar_sync_status='synced' plus the
-//      returned sepidar_* ids.
-//   5. On failure → update finance_vouchers.sepidar_sync_status='failed' and
-//      save sepidar_error_message.
+//   receive_identification           -> bridge.CreateBankVoucher
+//   payment_allocation / request     -> bridge.CreatePaymentRequestVoucher
+//   bank_transfer                    -> bridge.CreateSimpleInterBankTransferVoucher
+//   party_transfer                   -> bridge.CreatePartyTransferVoucher
 //
-// Env (re-uses the official Sepidar SQL variables — DO NOT rename):
+// Each branch loads the original source row + related parties/banks, validates
+// the required Sepidar mapping ids, and binds typed sql.Request().input(...)
+// parameters that match the procedure signatures exactly.
+//
+// On success → finance_vouchers.sepidar_sync_status='synced' + sepidar ids + status='posted'.
+// On failure → finance_vouchers.sepidar_sync_status='failed' + sepidar_error_message.
+//
+// Env (re-uses the existing Sepidar SQL secrets — DO NOT rename):
 //   SEPIDAR_SQL_SERVER / SEPIDAR_SQL_PORT / SEPIDAR_SQL_DATABASE
 //   SEPIDAR_SQL_USER   / SEPIDAR_SQL_PASSWORD
 //   SEPIDAR_SQL_ENCRYPT / SEPIDAR_SQL_TRUST_CERT
-//   SEPIDAR_POST_VOUCHER_SP   (optional, default `bridge.PostFinanceVoucher`)
-//   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY  (auto-injected by Supabase)
+//   SEPIDAR_POST_VOUCHER_SP   (optional ops override — forces a specific SP name
+//                              but still uses the typed params of the detected
+//                              voucher_type branch)
+//   SEPIDAR_DEFAULT_CREATOR   (optional, default 'lovable-bridge')
+//   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY  (auto-injected)
 
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-// Inline CORS headers — keeps the function self-contained.
+// CORS — kept inline so the function is self-contained.
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -32,7 +36,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// JSON helper that always includes CORS headers, even on errors.
+// Helper: always emit JSON with CORS headers.
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), {
     status: s,
@@ -41,8 +45,7 @@ const json = (b: unknown, s = 200) =>
 
 type Body = { voucher_id?: string | null };
 
-// Translate raw SQL Server driver errors into Persian, user-friendly messages.
-// The raw message is still returned in `rawError` for debugging.
+// Translate raw SQL Server errors into Persian, user-friendly text.
 function persianizeError(raw: string): string {
   const m = (raw || "").toLowerCase();
   if (m.includes("login failed") || m.includes("18456"))
@@ -65,8 +68,7 @@ function persianizeError(raw: string): string {
   return "ثبت سند در سپیدار با خطا مواجه شد.";
 }
 
-// Mark the voucher as failed and log the error message. Best-effort — never
-// throws because we're already inside a failure handler.
+// Mark voucher as failed + log. Best-effort, never throws.
 async function markFailed(
   sb: ReturnType<typeof createClient>,
   voucherId: string,
@@ -91,6 +93,41 @@ async function markFailed(
   } catch (e) {
     console.warn("[sepidar-post-voucher] markFailed log failed", e);
   }
+}
+
+// Default SP names per branch.
+const DEFAULT_SP: Record<string, string> = {
+  receive_identification: "bridge.CreateBankVoucher",
+  payment_allocation: "bridge.CreatePaymentRequestVoucher",
+  payment_request: "bridge.CreatePaymentRequestVoucher",
+  bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
+  party_transfer: "bridge.CreatePartyTransferVoucher",
+};
+
+// RequestType mapping per Sepidar conventions:
+//   1 = payment, 2 = receive
+const REQUEST_TYPE: Record<string, number> = {
+  receive_identification: 2,
+  payment_allocation: 1,
+  payment_request: 1,
+};
+
+// Build a safe ISO date string for SQL Server datetime input.
+function toSqlDate(v: unknown): Date {
+  if (v == null) return new Date();
+  const d = new Date(v as string);
+  if (isNaN(d.getTime())) return new Date();
+  return d;
+}
+
+// Trim helper that returns the first non-empty value or a fallback.
+function firstNonEmpty(...vals: Array<unknown>): string {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return "";
 }
 
 Deno.serve(async (req) => {
@@ -119,7 +156,7 @@ Deno.serve(async (req) => {
     );
   const sb = createClient(supabaseUrl, serviceKey);
 
-  // ---- Load voucher header + items --------------------------------------------
+  // ---- Load voucher header -----------------------------------------------------
   const { data: voucher, error: vErr } = await sb
     .from("finance_vouchers")
     .select("*")
@@ -136,9 +173,13 @@ Deno.serve(async (req) => {
     );
   }
 
-  const attempts =
-    Number((voucher as { sepidar_sync_attempts?: number }).sepidar_sync_attempts ?? 0) + 1;
+  const vRow = voucher as Record<string, unknown>;
+  const attempts = Number(vRow.sepidar_sync_attempts ?? 0) + 1;
 
+  // Voucher items are still loaded so we keep the existing "no items = abort"
+  // safety guard. Even though the typed SPs read directly from the source row,
+  // an empty voucher means upstream construction is broken and posting would be
+  // meaningless.
   const { data: items, error: iErr } = await sb
     .from("finance_voucher_items")
     .select("*")
@@ -156,7 +197,7 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "سند هیچ ردیفی ندارد." }, 400);
   }
 
-  // Optimistic UI marker — flips back to failed below on any error.
+  // Optimistic UI marker — flips to failed below on any error.
   await sb
     .from("finance_vouchers")
     .update({ sepidar_sync_status: "syncing", sepidar_sync_attempts: attempts })
@@ -169,67 +210,424 @@ Deno.serve(async (req) => {
     return json({ success: false, message: cfg.message }, 500);
   }
 
-  // SP selection:
-  // 1) explicit override via SEPIDAR_POST_VOUCHER_SP wins (ops escape hatch)
-  // 2) otherwise auto-select by voucher_type / source_operation_type
-  //    so each financial flow lands on its dedicated bridge procedure.
-  const override = Deno.env.get("SEPIDAR_POST_VOUCHER_SP");
-  const vRow = voucher as Record<string, unknown>;
+  // Determine branch.
   const vType = String(vRow.voucher_type ?? "").trim().toLowerCase();
   const sOp = String(vRow.source_operation_type ?? "").trim().toLowerCase();
-  const key = vType || sOp;
-  const SP_MAP: Record<string, string> = {
-    receive_identification: "bridge.CreateBankVoucher",
-    payment_allocation: "bridge.CreatePaymentRequestVoucher",
-    payment_request: "bridge.CreatePaymentRequestVoucher",
-    bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
-    party_transfer: "bridge.CreatePartyTransferVoucher",
-  };
-  // Allow fallback: if vType doesn't match, try source_operation_type too.
-  const autoSp = SP_MAP[key] || SP_MAP[sOp] || SP_MAP[vType];
-  const spName = override || autoSp;
-  if (!spName) {
+  const branch = vType || sOp; // we accept either
+  const sourceId = String(vRow.source_operation_id ?? "").trim();
+
+  const overrideSp = Deno.env.get("SEPIDAR_POST_VOUCHER_SP") || "";
+  const defaultSp = DEFAULT_SP[branch] || DEFAULT_SP[sOp] || DEFAULT_SP[vType];
+  if (!defaultSp) {
     const msg = `نوع سند برای ثبت در سپیدار پشتیبانی نمی‌شود (voucher_type=${vType || "-"}, source_operation_type=${sOp || "-"}).`;
     await markFailed(sb, voucherId, msg, attempts);
     return json({ success: false, message: msg }, 400);
   }
+  const spName = overrideSp || defaultSp;
+  const creator = Deno.env.get("SEPIDAR_DEFAULT_CREATOR") || "lovable-bridge";
 
-  // Build JSON payloads. We keep this generic so the SP can pick the fields it
-  // needs without us hard-coding every column shape.
-  const headerJson = JSON.stringify(voucher);
-  const itemsJson = JSON.stringify(items);
+  // ---- Helpers to build typed requests per branch -----------------------------
+  // Each branch loads its specific source row + related parties/banks, then
+  // builds a typed sql.Request with EXACT parameters the SP expects.
+  // Returns either { request, params, logParams } or { error }.
 
+  type Branch =
+    | { ok: true; request: sql.Request; logParams: Record<string, unknown> }
+    | { ok: false; message: string };
+
+  async function buildBranch(pool: sql.ConnectionPool): Promise<Branch> {
+    if (!sourceId) {
+      return { ok: false, message: "شناسه عملیات مبدا (source_operation_id) خالی است." };
+    }
+
+    const baseDate = toSqlDate(vRow.voucher_date);
+    const desc = firstNonEmpty(vRow.description, vRow.title);
+
+    // ---------- 1) receive_identification -> CreateBankVoucher ----------------
+    if (branch === "receive_identification" || sOp === "receive_identification") {
+      const { data: rec, error } = await sb
+        .from("finance_receive_identifications")
+        .select("*")
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (error || !rec)
+        return { ok: false, message: "رکورد شناسایی وصول مرتبط با سند یافت نشد." };
+
+      const r = rec as Record<string, unknown>;
+      const partyId = r.party_id as string | null;
+      const bankId = r.bank_id as string | null;
+      if (!partyId)
+        return { ok: false, message: "طرف حساب در شناسایی وصول مشخص نیست." };
+      if (!bankId)
+        return { ok: false, message: "حساب بانکی در شناسایی وصول مشخص نیست." };
+
+      const [{ data: party }, { data: bank }] = await Promise.all([
+        sb.from("finance_parties").select("*").eq("id", partyId).maybeSingle(),
+        sb.from("finance_banks").select("*").eq("id", bankId).maybeSingle(),
+      ]);
+      if (!party) return { ok: false, message: "اطلاعات طرف حساب یافت نشد." };
+      if (!bank) return { ok: false, message: "اطلاعات بانک یافت نشد." };
+
+      const p = party as Record<string, unknown>;
+      const b = bank as Record<string, unknown>;
+      const bankAccountSL = b.sepidar_account_id as number | null;
+      const bankDL = b.sepidar_dl_id as number | null;
+      const sepPartyId = p.sepidar_party_id as number | null;
+      const sepPartyAcc = (p.party_account_sl_ref ?? p.sepidar_account_id) as number | null;
+      if (bankAccountSL == null)
+        return { ok: false, message: "نگاشت حساب معین بانک در سپیدار انجام نشده (sepidar_account_id بانک)." };
+      if (bankDL == null)
+        return { ok: false, message: "نگاشت تفصیلی بانک در سپیدار انجام نشده (sepidar_dl_id بانک)." };
+      if (sepPartyId == null)
+        return { ok: false, message: "نگاشت طرف حساب در سپیدار انجام نشده (sepidar_party_id)." };
+      if (sepPartyAcc == null)
+        return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده (sepidar_account_id)." };
+
+      const amount = Number(r.amount ?? 0);
+      const date = toSqlDate(r.transaction_datetime ?? vRow.voucher_date);
+      const description = firstNonEmpty(r.title, r.description, desc);
+
+      const req = pool.request();
+      req.input("BankAccountSLRef", sql.Int, Number(bankAccountSL));
+      req.input("BankDLRef", sql.Int, Number(bankDL));
+      req.input("PartyId", sql.Int, Number(sepPartyId));
+      req.input("PartyAccountSLRef", sql.Int, Number(sepPartyAcc));
+      req.input("RequestType", sql.Int, REQUEST_TYPE.receive_identification);
+      req.input("Amount", sql.Decimal(18, 2), amount);
+      req.input("VoucherDate", sql.DateTime, date);
+      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(r.description) || "");
+      req.input("Description2", sql.NVarChar(sql.MAX), "");
+      req.input("Creator", sql.NVarChar(100), creator);
+
+      return {
+        ok: true,
+        request: req,
+        logParams: {
+          BankAccountSLRef: bankAccountSL,
+          BankDLRef: bankDL,
+          PartyId: sepPartyId,
+          PartyAccountSLRef: sepPartyAcc,
+          RequestType: REQUEST_TYPE.receive_identification,
+          Amount: amount,
+          VoucherDate: date.toISOString(),
+          Creator: creator,
+        },
+      };
+    }
+
+    // ---------- 2) payment_allocation / payment_request -----------------------
+    if (
+      branch === "payment_allocation" ||
+      branch === "payment_request" ||
+      sOp === "payment_allocation" ||
+      sOp === "payment_request"
+    ) {
+      // Try allocation first (most common upstream type), fall back to request.
+      let amount = 0;
+      let date = baseDate;
+      let description = desc;
+      let partyRow: Record<string, unknown> | null = null;
+      let requestTypeCode: number = REQUEST_TYPE.payment_allocation;
+
+      const { data: alloc } = await sb
+        .from("finance_payment_allocations")
+        .select("*")
+        .eq("id", sourceId)
+        .maybeSingle();
+
+      let prRow: Record<string, unknown> | null = null;
+      let priRow: Record<string, unknown> | null = null;
+
+      if (alloc) {
+        const a = alloc as Record<string, unknown>;
+        amount = Number(a.amount ?? 0);
+        date = toSqlDate(a.allocation_datetime ?? vRow.voucher_date);
+
+        if (a.payment_request_item_id) {
+          const { data: pri } = await sb
+            .from("finance_payment_request_items")
+            .select("*")
+            .eq("id", a.payment_request_item_id as string)
+            .maybeSingle();
+          priRow = (pri as Record<string, unknown> | null) ?? null;
+        }
+        if (a.payment_request_id) {
+          const { data: pr } = await sb
+            .from("finance_payment_requests")
+            .select("*")
+            .eq("id", a.payment_request_id as string)
+            .maybeSingle();
+          prRow = (pr as Record<string, unknown> | null) ?? null;
+        }
+
+        const partyId =
+          (a.party_id as string | null) ||
+          (priRow?.party_id as string | null) ||
+          null;
+        if (!partyId) return { ok: false, message: "طرف حساب در تخصیص پرداخت مشخص نیست." };
+        const { data: party } = await sb
+          .from("finance_parties")
+          .select("*")
+          .eq("id", partyId)
+          .maybeSingle();
+        partyRow = (party as Record<string, unknown> | null) ?? null;
+      } else {
+        // Treat sourceId as a payment_request id (or item id) directly.
+        const { data: pr } = await sb
+          .from("finance_payment_requests")
+          .select("*")
+          .eq("id", sourceId)
+          .maybeSingle();
+        prRow = (pr as Record<string, unknown> | null) ?? null;
+        if (!prRow) {
+          // try as item id
+          const { data: pri } = await sb
+            .from("finance_payment_request_items")
+            .select("*")
+            .eq("id", sourceId)
+            .maybeSingle();
+          priRow = (pri as Record<string, unknown> | null) ?? null;
+          if (priRow?.payment_request_id) {
+            const { data: pr2 } = await sb
+              .from("finance_payment_requests")
+              .select("*")
+              .eq("id", priRow.payment_request_id as string)
+              .maybeSingle();
+            prRow = (pr2 as Record<string, unknown> | null) ?? null;
+          }
+        }
+        if (!prRow && !priRow)
+          return { ok: false, message: "درخواست/ردیف پرداخت مرتبط با سند یافت نشد." };
+
+        amount = Number(priRow?.amount ?? prRow?.total_amount ?? 0);
+        date = toSqlDate(vRow.voucher_date);
+        const partyId =
+          (priRow?.party_id as string | null) ||
+          null;
+        if (!partyId) return { ok: false, message: "طرف حساب در ردیف درخواست پرداخت مشخص نیست." };
+        const { data: party } = await sb
+          .from("finance_parties")
+          .select("*")
+          .eq("id", partyId)
+          .maybeSingle();
+        partyRow = (party as Record<string, unknown> | null) ?? null;
+      }
+
+      if (!partyRow) return { ok: false, message: "اطلاعات طرف حساب یافت نشد." };
+
+      // RequestType: map from payment_requests.request_type if available;
+      // otherwise from legacy_request_type_code; otherwise default to payment=1.
+      const prType = String(prRow?.request_type ?? "").toLowerCase();
+      const prLegacy = Number(prRow?.legacy_request_type_code ?? priRow?.legacy_request_type_code ?? 0);
+      if (prType === "receive" || prType === "receipt") requestTypeCode = 2;
+      else if (prType === "payment" || prType === "pay") requestTypeCode = 1;
+      else if (prLegacy > 0) requestTypeCode = prLegacy;
+      else requestTypeCode = REQUEST_TYPE.payment_allocation;
+
+      description = firstNonEmpty(
+        prRow?.title,
+        prRow?.description,
+        priRow?.description,
+        vRow.description,
+        vRow.title,
+      );
+
+      const sepPartyId = partyRow.sepidar_party_id as number | null;
+      const sepPartyAcc = (partyRow.party_account_sl_ref ?? partyRow.sepidar_account_id) as number | null;
+      if (sepPartyId == null)
+        return { ok: false, message: "نگاشت طرف حساب در سپیدار انجام نشده (sepidar_party_id)." };
+      if (sepPartyAcc == null)
+        return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده (sepidar_account_id)." };
+
+      const req = pool.request();
+      req.input("PartyId", sql.Int, Number(sepPartyId));
+      req.input("PartyAccountSLRef", sql.Int, Number(sepPartyAcc));
+      req.input("RequestType", sql.Int, requestTypeCode);
+      req.input("Amount", sql.Decimal(18, 2), amount);
+      req.input("VoucherDate", sql.DateTime, date);
+      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(priRow?.description) || "");
+      req.input("Description2", sql.NVarChar(sql.MAX), firstNonEmpty(prRow?.description) || "");
+      req.input("Creator", sql.NVarChar(100), creator);
+
+      return {
+        ok: true,
+        request: req,
+        logParams: {
+          PartyId: sepPartyId,
+          PartyAccountSLRef: sepPartyAcc,
+          RequestType: requestTypeCode,
+          Amount: amount,
+          VoucherDate: date.toISOString(),
+          Creator: creator,
+        },
+      };
+    }
+
+    // ---------- 3) bank_transfer -> CreateSimpleInterBankTransferVoucher ------
+    if (branch === "bank_transfer" || sOp === "bank_transfer") {
+      const { data: bt, error } = await sb
+        .from("finance_bank_transfers")
+        .select("*")
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (error || !bt)
+        return { ok: false, message: "انتقال بین بانکی مرتبط با سند یافت نشد." };
+
+      const t = bt as Record<string, unknown>;
+      const fromId = t.from_bank_id as string | null;
+      const toId = t.to_bank_id as string | null;
+      if (!fromId || !toId)
+        return { ok: false, message: "بانک مبدا/مقصد در انتقال مشخص نیست." };
+
+      const [{ data: fromBank }, { data: toBank }] = await Promise.all([
+        sb.from("finance_banks").select("*").eq("id", fromId).maybeSingle(),
+        sb.from("finance_banks").select("*").eq("id", toId).maybeSingle(),
+      ]);
+      if (!fromBank) return { ok: false, message: "اطلاعات بانک مبدا یافت نشد." };
+      if (!toBank) return { ok: false, message: "اطلاعات بانک مقصد یافت نشد." };
+
+      const fb = fromBank as Record<string, unknown>;
+      const tb = toBank as Record<string, unknown>;
+      const fromAcc = fb.sepidar_account_id as number | null;
+      const fromDL = fb.sepidar_dl_id as number | null;
+      const toAcc = tb.sepidar_account_id as number | null;
+      const toDL = tb.sepidar_dl_id as number | null;
+      if (fromAcc == null || fromDL == null)
+        return { ok: false, message: "نگاشت بانک مبدا در سپیدار ناقص است (sepidar_account_id/sepidar_dl_id)." };
+      if (toAcc == null || toDL == null)
+        return { ok: false, message: "نگاشت بانک مقصد در سپیدار ناقص است (sepidar_account_id/sepidar_dl_id)." };
+
+      const amount = Number(t.from_amount ?? t.to_amount ?? 0);
+      const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
+      const description = firstNonEmpty(t.description, desc);
+
+      const req = pool.request();
+      req.input("FromBankAccountSLRef", sql.Int, Number(fromAcc));
+      req.input("FromBankDLRef", sql.Int, Number(fromDL));
+      req.input("ToBankAccountSLRef", sql.Int, Number(toAcc));
+      req.input("ToBankDLRef", sql.Int, Number(toDL));
+      req.input("Amount", sql.Decimal(18, 2), amount);
+      req.input("VoucherDate", sql.DateTime, date);
+      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Creator", sql.NVarChar(100), creator);
+
+      return {
+        ok: true,
+        request: req,
+        logParams: {
+          FromBankAccountSLRef: fromAcc,
+          FromBankDLRef: fromDL,
+          ToBankAccountSLRef: toAcc,
+          ToBankDLRef: toDL,
+          Amount: amount,
+          VoucherDate: date.toISOString(),
+          Creator: creator,
+        },
+      };
+    }
+
+    // ---------- 4) party_transfer -> CreatePartyTransferVoucher ---------------
+    if (branch === "party_transfer" || sOp === "party_transfer") {
+      const { data: pt, error } = await sb
+        .from("finance_party_transfers")
+        .select("*")
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (error || !pt)
+        return { ok: false, message: "انتقال بین طرف حساب‌ها مرتبط با سند یافت نشد." };
+
+      const t = pt as Record<string, unknown>;
+      const fromId = t.from_party_id as string | null;
+      const toId = t.to_party_id as string | null;
+      if (!fromId || !toId)
+        return { ok: false, message: "طرف حساب مبدا/مقصد در انتقال مشخص نیست." };
+
+      const [{ data: fromParty }, { data: toParty }] = await Promise.all([
+        sb.from("finance_parties").select("*").eq("id", fromId).maybeSingle(),
+        sb.from("finance_parties").select("*").eq("id", toId).maybeSingle(),
+      ]);
+      if (!fromParty) return { ok: false, message: "اطلاعات طرف حساب مبدا یافت نشد." };
+      if (!toParty) return { ok: false, message: "اطلاعات طرف حساب مقصد یافت نشد." };
+
+      const fp = fromParty as Record<string, unknown>;
+      const tp = toParty as Record<string, unknown>;
+      const fpId = fp.sepidar_party_id as number | null;
+      const fpAcc = (fp.party_account_sl_ref ?? fp.sepidar_account_id) as number | null;
+      const tpId = tp.sepidar_party_id as number | null;
+      const tpAcc = (tp.party_account_sl_ref ?? tp.sepidar_account_id) as number | null;
+      if (fpId == null || fpAcc == null)
+        return { ok: false, message: "نگاشت طرف حساب مبدا در سپیدار ناقص است (sepidar_party_id/sepidar_account_id)." };
+      if (tpId == null || tpAcc == null)
+        return { ok: false, message: "نگاشت طرف حساب مقصد در سپیدار ناقص است (sepidar_party_id/sepidar_account_id)." };
+
+      const amount = Number(t.amount ?? 0);
+      const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
+      const description = firstNonEmpty(t.title, t.description, desc);
+
+      const req = pool.request();
+      req.input("FromPartyId", sql.Int, Number(fpId));
+      req.input("FromPartyAccountSLRef", sql.Int, Number(fpAcc));
+      req.input("ToPartyId", sql.Int, Number(tpId));
+      req.input("ToPartyAccountSLRef", sql.Int, Number(tpAcc));
+      req.input("Amount", sql.Decimal(18, 2), amount);
+      req.input("VoucherDate", sql.DateTime, date);
+      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Creator", sql.NVarChar(100), creator);
+
+      return {
+        ok: true,
+        request: req,
+        logParams: {
+          FromPartyId: fpId,
+          FromPartyAccountSLRef: fpAcc,
+          ToPartyId: tpId,
+          ToPartyAccountSLRef: tpAcc,
+          Amount: amount,
+          VoucherDate: date.toISOString(),
+          Creator: creator,
+        },
+      };
+    }
+
+    return {
+      ok: false,
+      message: `شاخه ناشناخته برای ثبت سند سپیدار (branch=${branch || "-"}).`,
+    };
+  }
+
+  // ---- Execute -----------------------------------------------------------------
   let pool: sql.ConnectionPool | null = null;
   try {
+    pool = await new sql.ConnectionPool(cfg.config).connect();
+
+    const built = await buildBranch(pool);
+    if (!built.ok) {
+      await markFailed(sb, voucherId, built.message, attempts);
+      return json({ success: false, message: built.message }, 400);
+    }
+
     console.log("[sepidar-post-voucher] start", {
       ...cfg.meta,
       voucherId,
-      itemCount: items.length,
+      voucherType: vType,
+      sourceOp: sOp,
+      sourceId,
       spName,
+      params: built.logParams,
+      itemCount: items.length,
     });
 
-    pool = await new sql.ConnectionPool(cfg.config).connect();
-    const r = pool.request();
-    r.input("VoucherId", sql.NVarChar, voucherId);
-    r.input("VoucherHeader", sql.NVarChar(sql.MAX), headerJson);
-    r.input("VoucherItems", sql.NVarChar(sql.MAX), itemsJson);
-
-    const result = await r.execute(spName);
+    const result = await built.request.execute(spName);
     const row = ((result.recordset as Record<string, unknown>[]) || [])[0] || {};
 
-    // SP contract: success = 0 (failure) or 1 (success). Same as the other
-    // bridge SPs in this project.
+    // SP contract: success = 0 (failure) or 1 (success) when explicitly returned.
     const successFlag = Number(
-      (row as Record<string, unknown>).success ??
-        (row as Record<string, unknown>).Success ??
-        1,
+      row.success ?? row.Success ?? 1,
     );
     if (successFlag === 0) {
-      const errMsg = String(
-        (row as Record<string, unknown>).error_message ??
-          (row as Record<string, unknown>).ErrorMessage ??
-          "unknown SP failure",
-      );
+      const errMsg = String(row.error_message ?? row.ErrorMessage ?? "unknown SP failure");
       console.error("[sepidar-post-voucher] SP returned success=0", errMsg, row);
       await markFailed(sb, voucherId, errMsg, attempts);
       return json({
@@ -239,11 +637,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Extract Sepidar ids if the SP returned them. All optional — we only
-    // persist the ones present so we don't overwrite good data with NULL.
+    // Pick first non-null id under any of the accepted aliases.
     const pick = (...keys: string[]) => {
       for (const k of keys) {
-        const v = (row as Record<string, unknown>)[k];
+        const v = row[k];
         if (v != null && v !== "") return v;
       }
       return null;
@@ -273,12 +670,12 @@ Deno.serve(async (req) => {
       response_payload: row as never,
     } as never);
 
-    console.log("[sepidar-post-voucher] ok", row);
+    console.log("[sepidar-post-voucher] ok", { voucherId, spName, row });
     return json({ success: true, message: "سند با موفقیت در سپیدار ثبت شد.", data: row });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
     const message = persianizeError(raw);
-    console.error("[sepidar-post-voucher] error", raw, e);
+    console.error("[sepidar-post-voucher] error", { voucherId, spName, raw });
     await markFailed(sb, voucherId, message, attempts);
     return json({ success: false, message, rawError: raw }, 500);
   } finally {
