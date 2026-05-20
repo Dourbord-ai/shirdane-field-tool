@@ -297,6 +297,7 @@ function EventList({
   onCreateCalves,
   onEdit,
   onCancel,
+  resolveUserName,
 }: {
   events: FertilityEvent[];
   emptyText: string;
@@ -306,6 +307,8 @@ function EventList({
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
+  // Threaded through to EventCard so operator/vet IDs become real names.
+  resolveUserName?: (v: number | string | null | undefined) => string | null;
 }) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
@@ -318,6 +321,7 @@ function EventList({
           onCreateCalves={onCreateCalves}
           onEdit={onEdit}
           onCancel={onCancel}
+          resolveUserName={resolveUserName}
         />
       ))}
     </div>
