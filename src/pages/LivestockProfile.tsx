@@ -140,6 +140,22 @@ export default function LivestockProfile() {
   // Note: no realtime/polling — profile refreshes only after a successful user action
   // via the onOperationSaved callback passed to FertilitySection.
 
+  // ---- Live "آخرین وضعیت باروری" ---------------------------------------
+  // MUST be called unconditionally before any early returns so React's
+  // Rules of Hooks aren't violated. The shared `useFertilitySummary` hook
+  // guards itself with `enabled: !!cowId`, so passing `cow?.id` is safe even
+  // before the cow row finishes loading.
+  const { events: fertilityEvents } = useFertilitySummary(cow?.id, {
+    cow: cow ? { id: cow.id } : null,
+  });
+  // Derive the freshest status id from the timeline (falls back to the
+  // cached cow row when no events exist).
+  const liveStatus = deriveLatestStatus(
+    fertilityEvents,
+    cow?.last_fertility_status ?? null,
+  );
+  const liveStatusId = liveStatus?.id ?? null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
@@ -165,17 +181,6 @@ export default function LivestockProfile() {
   const female = isFemale(cow.sextype, cow.sex);
   const tag = cow.tag_number || cow.earnumber || cow.bodynumber || "—";
   const inHerd = (cow.existancestatus ?? 0) === 0;
-
-  // ---- Live "آخرین وضعیت باروری" ---------------------------------------
-  // Pull this cow's events (deduped via react-query with the FertilitySummary
-  // card) and pick the freshest derivable status id. We pass the cached
-  // `cow.last_fertility_status` as the fallback so cows with zero events
-  // still show their last known status.
-  const { events: fertilityEvents } = useFertilitySummary(cow.id, { cow: { id: cow.id } });
-  const liveStatus = deriveLatestStatus(fertilityEvents, cow.last_fertility_status);
-  // `liveStatusId` is what every display in this file should consume going
-  // forward — never read `cow.last_fertility_status` directly.
-  const liveStatusId = liveStatus?.id ?? null;
 
   return (
     <div className="py-4 space-y-4 animate-fade-in livestock-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen">
