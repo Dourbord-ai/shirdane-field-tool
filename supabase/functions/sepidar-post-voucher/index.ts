@@ -122,6 +122,10 @@ const PARTY_TRANSFER_PARAM_NAMES = [
 const EXTRA_PARTY_TRANSFER_PARAM_ERR =
   "پارامتر اضافی برای CreatePartyTransferVoucher ارسال شده است";
 
+function sameParamList(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length && actual.every((name, index) => name === expected[index]);
+}
+
 // RequestType mapping per Sepidar conventions:
 //   1 = payment, 2 = receive
 const REQUEST_TYPE: Record<string, number> = {
@@ -947,6 +951,23 @@ Deno.serve(async (req) => {
       itemCount: items.length,
     });
 
+    const driverParamNames = Object.keys(
+      ((built.request as unknown as { parameters?: Record<string, unknown> }).parameters) || {},
+    );
+    const executionParamNames = driverParamNames.length > 0 ? driverParamNames : built.paramNames;
+    console.log("EXECUTING_SP", spName, executionParamNames);
+
+    if (
+      spName === "bridge.CreatePartyTransferVoucher" &&
+      !sameParamList(executionParamNames, PARTY_TRANSFER_PARAM_NAMES)
+    ) {
+      console.error("EXECUTING_SP_PARAM_MISMATCH", spName, {
+        expected: PARTY_TRANSFER_PARAM_NAMES,
+        actual: executionParamNames,
+      });
+      throw new Error(EXTRA_PARTY_TRANSFER_PARAM_ERR);
+    }
+
     const result = await built.request.execute(spName);
     const row = ((result.recordset as Record<string, unknown>[]) || [])[0] || {};
 
@@ -1007,7 +1028,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    const message = persianizeError(raw);
+    const message = raw === EXTRA_PARTY_TRANSFER_PARAM_ERR ? raw : persianizeError(raw);
     console.error("[sepidar-post-voucher] error", { voucherId, spName, raw });
     await markFailed(sb, voucherId, message, attempts);
     return json({ success: false, message, rawError: raw }, 500);
