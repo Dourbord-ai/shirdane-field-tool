@@ -12,7 +12,9 @@
 //  - Mini timeline strip at the bottom — last cycle, chip per event, scrollable.
 // =============================================================================
 
+import { useMemo } from "react";
 import { useFertilitySummary } from "@/hooks/useFertilitySummary";
+import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
 import type { CowSnapshot } from "@/lib/fertility/fertilityRiskEngine";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { fertilityEventLabel, eventBadgeClass } from "@/lib/fertility";
