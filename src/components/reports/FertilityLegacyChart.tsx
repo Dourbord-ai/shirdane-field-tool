@@ -10,6 +10,10 @@ import ReactECharts from "echarts-for-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+// formatShamsi converts an ISO Gregorian date (YYYY-MM-DD) into Persian
+// Jalali ("YYYY/MM/DD" with Persian digits) for display only. The DB keeps
+// the clean Gregorian value untouched.
+import { formatShamsi } from "@/lib/dateDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -106,6 +110,13 @@ export interface FertilityChartRow {
   // Added in the view: pen/location label and Persian milking status.
   last_location_name: string | null;
   milking_status: string | null;
+  // New Gregorian DATE fields derived directly from livestock_fertility_events
+  // (added in the migration). Data stays clean ISO; UI formats them as Shamsi.
+  last_inoculation_date_g: string | null;
+  last_birth_date_g: string | null;
+  last_dry_date_g: string | null;
+  last_erotic_date_g: string | null;
+  prediction_of_birth_date_g: string | null;
 }
 
 // Persian digit helper for the period dropdown labels.
@@ -364,8 +375,8 @@ export default function FertilityLegacyChart() {
             ${line("میزان آبستنی", r.pregnancy_days)}
             ${line("مدت زایش تا آبستنی", r.last_birth_to_pregnancy_days)}
             ${line("تعداد زایش", r.number_of_births)}
-            ${line("آخرین تلقیح", r.last_inoculation_date)}
-            ${line("پیش بینی زایش", r.prediction_of_birth_date)}
+            ${line("آخرین تلقیح", r.last_inoculation_date_g ? formatShamsi(r.last_inoculation_date_g) : dash)}
+            ${line("پیش بینی زایش", r.prediction_of_birth_date_g ? formatShamsi(r.prediction_of_birth_date_g) : dash)}
             ${line("در بهاربند", r.last_location_name)}
             ${line("وضعیت باروری فعلی", r.chart_status)}
             ${line("وضعیت دوشش", r.milking_status)}
