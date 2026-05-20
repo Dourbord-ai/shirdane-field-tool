@@ -692,38 +692,49 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
             />
           </TabsContent>
 
-          {/* Per-type */}
+          {/* Per-type tabs — each one shows the relevant TabInsightHeader chips
+              above the list and enrichment chips on each card via enrichmentMap. */}
           <TabsContent value="heat">
+            <TabInsightHeader tab="heat" summary={summary} />
             <EventList
               events={byType.heat ?? []}
               emptyText="رویداد فحلی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
           </TabsContent>
           <TabsContent value="insemination">
+            <TabInsightHeader tab="insemination" summary={summary} />
             <EventList
               events={byType.insemination ?? []}
               emptyText="تلقیحی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
           </TabsContent>
           <TabsContent value="pregnancy_test">
+            <TabInsightHeader tab="pregnancy_test" summary={summary} />
             <EventList
               events={byType.pregnancy_test ?? []}
               emptyText="تست آبستنی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
           </TabsContent>
 
           <TabsContent value="calving_abortion">
+            {/* Show calving header — most of these tabs land on a زایش flow first;
+                سقط chips overlap mostly so this is the right default. */}
+            <TabInsightHeader tab="calving" summary={summary} />
             <EventList
               events={[...(byType.calving ?? []), ...(byType.abortion ?? [])].sort((a, b) =>
                 (b.event_date ?? "").localeCompare(a.event_date ?? ""),
               )}
               emptyText="رویداد زایش یا سقط ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onCreateCalves={setCalvesReviewEvent}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
@@ -731,9 +742,11 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
           </TabsContent>
 
           <TabsContent value="dry_off">
+            <TabInsightHeader tab="dry_off" summary={summary} />
             <EventList
               events={byType.dry_off ?? []}
               emptyText="خشک کردنی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
