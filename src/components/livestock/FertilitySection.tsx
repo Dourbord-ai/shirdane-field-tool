@@ -45,6 +45,9 @@ import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHe
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
+// Shared helper that picks the freshest fertility_status_id from a cow's
+// event timeline (mirrors the SQL rebuild_cow_fertility_cache logic).
+import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
 
 type Props = {
   livestockId: number;
@@ -457,47 +460,14 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
   );
 
   // ---- Real-time "آخرین وضعیت باروری" ----------------------------------
-  // The cached cow.last_fertility_status field (passed in as `latestStatus`
-  // prop) can be stale or NULL for cows whose events were imported without
-  // `fertility_operation_id`. Derive it directly from the event list so the
-  // display always matches what the user can see in the timeline.
-  //
-  // Strategy: walk events newest → oldest and return the first event with
-  // either an explicit `fertility_status_id` (from the paired status row),
-  // or — when missing — an implied status from the `event_type`. This mirrors
-  // the SQL `rebuild_cow_fertility_cache` function.
-  const derivedLatestStatus = useMemo(() => {
-    const IMPLIED: Record<string, number> = {
-      heat: 2,
-      insemination: 3,
-      abortion: 9,
-      calving: 12,
-      dry_off: 10,
-      rinse: 14,
-      clean_test: 15,
-      synchronization: 21,
-      sync_detail: 21,
-    };
-    for (const e of visibleEvents) {
-      const explicit = (e as any).fertility_status_id ?? (e as any).status_code ?? null;
-      if (explicit != null) return { id: explicit as number, event: e };
-      // pregnancy_test: derive status from result text (مثبت اولیه / تکمیلی…).
-      if (e.event_type === "pregnancy_test") {
-        const r = (e.result ?? "").toString();
-        if (/تکمیلی.*مثبت/.test(r)) return { id: 18, event: e };
-        if (/تکمیلی.*منفی/.test(r)) return { id: 17, event: e };
-        if (/نهایی.*مثبت|آبستن قطعی/.test(r)) return { id: 8, event: e };
-        if (/نهایی.*منفی/.test(r)) return { id: 7, event: e };
-        if (/اولیه.*مثبت|مثبت/.test(r)) return { id: 4, event: e };
-        if (/اولیه.*منفی|منفی/.test(r)) return { id: 6, event: e };
-        if (/مشکوک/.test(r)) return { id: 5, event: e };
-      }
-      const implied = IMPLIED[e.event_type as string];
-      if (implied != null) return { id: implied, event: e };
-    }
-    // Final fallback to the cached cow row prop.
-    return latestStatus != null ? { id: latestStatus, event: null as FertilityEvent | null } : null;
-  }, [visibleEvents, latestStatus]);
+  // Delegated to the shared `deriveLatestStatus` helper so this component and
+  // the parent LivestockProfile page always agree on which status id is the
+  // "latest" — and the rule stays in sync with the SQL `rebuild_cow_fertility_cache`
+  // function. `latestStatus` (cached cow row prop) is used only as fallback.
+  const derivedLatestStatus = useMemo(
+    () => deriveLatestStatus(visibleEvents, latestStatus),
+    [visibleEvents, latestStatus],
+  );
 
   // ---- Legacy user-ID → real name resolver ------------------------------
   // Collect every numeric operator/registered_by ID referenced by the events

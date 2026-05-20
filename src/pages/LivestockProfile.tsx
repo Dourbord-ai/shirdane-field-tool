@@ -20,6 +20,12 @@ import { cowImageFor } from "@/lib/cowImage";
 // (created_at, purchase_date, pre_entry_*) is routed through this so the
 // page never accidentally shows Gregorian numerals or raw ISO strings.
 import { formatShamsi } from "@/lib/dateDisplay";
+// Pull events for THIS cow via the same shared hook the summary card uses
+// (react-query dedupes the query, so this is free) so we can derive
+// "آخرین وضعیت باروری" from the freshest event instead of the cached
+// `cows.last_fertility_status` field which is often stale.
+import { useFertilitySummary } from "@/hooks/useFertilitySummary";
+import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
 
 type Cow = {
   id: number;
@@ -134,6 +140,22 @@ export default function LivestockProfile() {
   // Note: no realtime/polling — profile refreshes only after a successful user action
   // via the onOperationSaved callback passed to FertilitySection.
 
+  // ---- Live "آخرین وضعیت باروری" ---------------------------------------
+  // MUST be called unconditionally before any early returns so React's
+  // Rules of Hooks aren't violated. The shared `useFertilitySummary` hook
+  // guards itself with `enabled: !!cowId`, so passing `cow?.id` is safe even
+  // before the cow row finishes loading.
+  const { events: fertilityEvents } = useFertilitySummary(cow?.id, {
+    cow: cow ? { id: cow.id } : null,
+  });
+  // Derive the freshest status id from the timeline (falls back to the
+  // cached cow row when no events exist).
+  const liveStatus = deriveLatestStatus(
+    fertilityEvents,
+    cow?.last_fertility_status ?? null,
+  );
+  const liveStatusId = liveStatus?.id ?? null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
@@ -196,8 +218,8 @@ export default function LivestockProfile() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")}
-              {female && cow.last_fertility_status != null && (
-                <> • {fertilityLabel(cow.last_fertility_status)}</>
+              {female && liveStatusId != null && (
+                <> • {fertilityLabel(liveStatusId)}</>
               )}
             </p>
           </div>
@@ -255,7 +277,7 @@ export default function LivestockProfile() {
       {female && (
         <Section title="وضعیت دام ماده">
           <Row label="وضعیت دوشش" value={dryLabel(cow.is_dry)} />
-          <Row label="آخرین وضعیت باروری" value={fertilityLabel(cow.last_fertility_status)} />
+          <Row label="آخرین وضعیت باروری" value={fertilityLabel(liveStatusId)} />
         </Section>
       )}
 
@@ -270,12 +292,12 @@ export default function LivestockProfile() {
               id: cow.id,
               date_of_birth: cow.date_of_birth,
               is_dry: cow.is_dry,
-              last_fertility_status: cow.last_fertility_status,
+              last_fertility_status: liveStatusId,
             }}
           />
           <FertilitySection
             livestockId={cow.id}
-            latestStatus={cow.last_fertility_status}
+            latestStatus={liveStatusId}
             onOperationSaved={() => {
               console.log("Fertility operation saved; refreshing cow profile UI", cow.id);
               refresh();
