@@ -565,15 +565,53 @@ Deno.serve(async (req) => {
       if (sepPartyAcc == null)
         return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده (sepidar_account_id)." };
 
+      // Resolve the related bank for legacy description (برداشت ... از حساب بانکی X).
+      // Try alloc.bank_id → priRow.bank_id → prRow.bank_id → related bank_transaction.
+      let bankRow: Record<string, unknown> | null = null;
+      const a = (alloc ?? {}) as Record<string, unknown>;
+      const bankIdCandidate =
+        (a.bank_id as string | null) ||
+        (priRow?.bank_id as string | null) ||
+        (prRow?.bank_id as string | null) ||
+        null;
+      if (bankIdCandidate) {
+        const { data: bk } = await sb
+          .from("finance_banks").select("*").eq("id", bankIdCandidate).maybeSingle();
+        bankRow = (bk as Record<string, unknown> | null) ?? null;
+      }
+      if (!bankRow && a.bank_transaction_id) {
+        const { data: btx } = await sb
+          .from("finance_bank_transactions").select("bank_id").eq("id", a.bank_transaction_id as string).maybeSingle();
+        const bid = (btx as Record<string, unknown> | null)?.bank_id as string | undefined;
+        if (bid) {
+          const { data: bk } = await sb
+            .from("finance_banks").select("*").eq("id", bid).maybeSingle();
+          bankRow = (bk as Record<string, unknown> | null) ?? null;
+        }
+      }
+
+      // Pick the most specific "item" row available to feed the description tail.
+      const itemRow = (priRow ?? a ?? prRow ?? {}) as Record<string, unknown>;
+      const descs = buildVoucherDescriptions({
+        branch: "payment_allocation",
+        date,
+        sourceRow: itemRow,
+        partyName: firstNonEmpty(partyRow.full_name, partyRow.name, partyRow.title),
+        bankName: bankRow
+          ? firstNonEmpty(bankRow.bank_name, bankRow.name, bankRow.title, bankRow.account_number)
+          : "",
+      });
+      console.log("[sepidar-post-voucher] descriptions(payment)", descs);
+
       const req = pool.request();
       req.input("PartyId", sql.Int, Number(sepPartyId));
       req.input("PartyAccountSLRef", sql.Int, Number(sepPartyAcc));
       req.input("RequestType", sql.Int, requestTypeCode);
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
-      req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(priRow?.description) || "");
-      req.input("Description2", sql.NVarChar(sql.MAX), firstNonEmpty(prRow?.description) || "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -586,6 +624,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
