@@ -719,8 +719,21 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
                     آخرین رویداد: {formatEventDate(visibleEvents[0]?.event_date)}
                   </span>
                   <span className="text-[11px] px-2 py-1 rounded-full border bg-accent text-accent-foreground border-border">
-                    وضعیت: {fertilityLabel(latestStatus)}
+                    وضعیت: {fertilityLabel(derivedLatestStatus?.id ?? null)}
                   </span>
+                </div>
+                <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
+                  <p className="text-xs text-muted-foreground">آخرین وضعیت باروری</p>
+                  <p className="text-base font-bold text-foreground mt-1">
+                    {fertilityLabel(derivedLatestStatus?.id ?? null)}
+                  </p>
+                  {(derivedLatestStatus?.event?.event_date || latestStatusEvent?.event_date) && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      تاریخ ثبت: {formatEventDate(
+                        derivedLatestStatus?.event?.event_date ?? latestStatusEvent?.event_date,
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
                   <p className="text-xs text-muted-foreground">آخرین وضعیت باروری</p>
