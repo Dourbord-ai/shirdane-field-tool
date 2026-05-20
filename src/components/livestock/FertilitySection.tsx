@@ -64,13 +64,97 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "sync", label: "پروتکل همزمان‌سازی" },
 ];
 
+// EnrichmentChip — tiny labelled tag rendered under an event card to surface
+// derived row-level facts (AI #, gap from previous, outcome, linked AI, etc).
+function EnrichmentChip({ label, value, tone = "default" }: { label: string; value: React.ReactNode; tone?: "default" | "info" | "warn" | "danger" | "success" }) {
+  const toneClass =
+    tone === "info" ? "bg-sky-500/10 text-sky-400 border-sky-500/30"
+    : tone === "warn" ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+    : tone === "danger" ? "bg-destructive/10 text-destructive border-destructive/30"
+    : tone === "success" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+    : "bg-muted text-muted-foreground border-border";
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${toneClass}`}>
+      <span className="opacity-80">{label}:</span>
+      <span className="font-bold">{value ?? "—"}</span>
+    </span>
+  );
+}
+
+// Render per-row enrichment chips for a single event, based on its derived
+// EnrichedEvent from the FertilityTimeline. Each event type surfaces a
+// different subset of facts per the spec.
+function renderEnrichment(ee: EnrichedEvent | undefined): React.ReactNode {
+  if (!ee) return null;
+  const chips: React.ReactNode[] = [];
+  const t = ee.event.event_type;
+  if (t === "insemination") {
+    if (ee.aiNumberInCycle) chips.push(<EnrichmentChip key="n" label="تلقیح #" value={`${ee.aiNumberInCycle}`} />);
+    if (ee.daysFromPrevAI != null) chips.push(<EnrichmentChip key="g" label="فاصله از قبلی" value={`${ee.daysFromPrevAI} روز`} />);
+    if (ee.aiOutcome) {
+      const map: Record<string, { label: string; tone: any }> = {
+        pregnant: { label: "منجر به آبستنی", tone: "success" },
+        failed: { label: "ناموفق", tone: "danger" },
+        unknown: { label: "نامشخص", tone: "default" },
+      };
+      const m = map[ee.aiOutcome];
+      chips.push(<EnrichmentChip key="o" label="نتیجه" value={m.label} tone={m.tone} />);
+    }
+  }
+  if (t === "pregnancy_test") {
+    if (ee.daysAfterLinkedAI != null) chips.push(<EnrichmentChip key="d" label="بعد از تلقیح" value={`${ee.daysAfterLinkedAI} روز`} />);
+    if (ee.pregTestTiming) {
+      const map: Record<string, { label: string; tone: any }> = {
+        early: { label: "زودهنگام", tone: "warn" },
+        standard: { label: "استاندارد", tone: "success" },
+        late: { label: "دیرهنگام", tone: "warn" },
+        unknown: { label: "نامشخص", tone: "default" },
+      };
+      const m = map[ee.pregTestTiming];
+      chips.push(<EnrichmentChip key="t" label="اعتبار" value={m.label} tone={m.tone} />);
+    }
+    if (ee.linkedInseminationDate) chips.push(<EnrichmentChip key="ai" label="تلقیح مرتبط" value={formatShamsi(ee.linkedInseminationDate)} tone="info" />);
+    if (ee.abortionFollowed) chips.push(<EnrichmentChip key="ab" label="بعد از این" value="سقط ثبت شد" tone="danger" />);
+  }
+  if (t === "calving") {
+    if (ee.daysAfterLinkedAI != null) chips.push(<EnrichmentChip key="g" label="طول آبستنی" value={`${ee.daysAfterLinkedAI} روز`} />);
+    if (ee.linkedInseminationDate) chips.push(<EnrichmentChip key="ai" label="تلقیح منجر به زایش" value={formatShamsi(ee.linkedInseminationDate)} tone="success" />);
+  }
+  if (t === "abortion") {
+    if (ee.daysAfterLinkedAI != null) chips.push(<EnrichmentChip key="g" label="سن آبستنی" value={`${ee.daysAfterLinkedAI} روز`} />);
+    if (ee.abortionClass) {
+      const map: Record<string, { label: string; tone: any }> = {
+        early: { label: "زودرس", tone: "warn" },
+        mid: { label: "میان‌دوره", tone: "default" },
+        late: { label: "دیررس", tone: "danger" },
+        unknown: { label: "نامشخص", tone: "default" },
+      };
+      const m = map[ee.abortionClass];
+      chips.push(<EnrichmentChip key="c" label="نوع" value={m.label} tone={m.tone} />);
+    }
+    if (ee.linkedInseminationDate) chips.push(<EnrichmentChip key="ai" label="تلقیح مرتبط" value={formatShamsi(ee.linkedInseminationDate)} tone="info" />);
+  }
+  if (t === "heat") {
+    if (ee.heatNumberInCycle) chips.push(<EnrichmentChip key="n" label="فحلی #" value={`${ee.heatNumberInCycle}`} />);
+    if (ee.daysFromPrevHeat != null) chips.push(<EnrichmentChip key="g" label="فاصله از قبلی" value={`${ee.daysFromPrevHeat} روز`} />);
+    if (ee.heatCycleClass && ee.heatCycleClass !== "unknown") {
+      chips.push(<EnrichmentChip key="c" label="سیکل" value={ee.heatCycleClass === "normal" ? "طبیعی" : "غیرطبیعی"} tone={ee.heatCycleClass === "normal" ? "success" : "warn"} />);
+    }
+    if (ee.daysToNextAI != null) chips.push(<EnrichmentChip key="ai" label="تا تلقیح بعدی" value={`${ee.daysToNextAI} روز`} />);
+  }
+  if (chips.length === 0) return null;
+  return <div className="flex flex-wrap gap-1 pt-1">{chips}</div>;
+}
+
 function EventCard({
   e,
+  enrichment,
   onCreateCalves,
   onEdit,
   onCancel,
 }: {
   e: FertilityEvent;
+  enrichment?: EnrichedEvent;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
