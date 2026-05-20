@@ -117,7 +117,19 @@ function Group({
 }
 
 export default function FertilitySummaryCard({ cow }: Props) {
-  const { summary, timeline, loading } = useFertilitySummary(cow.id, { cow });
+  const { summary, timeline, events, loading } = useFertilitySummary(cow.id, { cow });
+
+  // Collect every legacy numeric user reference across this cow's events so
+  // operator/vet labels show real names (e.g. "محمد فرهمند") instead of "2".
+  const operatorIds = useMemo(() => {
+    const ids: Array<number | string | null> = [];
+    for (const e of events) {
+      ids.push(e.operator_user_id ?? null);
+      ids.push(e.operator_name ?? null);
+    }
+    return ids;
+  }, [events]);
+  const { resolve: resolveName } = useLegacyUserNames(operatorIds);
 
   if (loading) {
     return (
@@ -129,6 +141,11 @@ export default function FertilitySummaryCard({ cow }: Props) {
 
   const s = summary;
   const riskClass = RISK_STYLES[s.riskLevel];
+
+  // Pre-resolved display names — `||` keeps null → "—" handling at the cell level.
+  const inseminatorName = resolveName(s.lastInseminator);
+  const vetName = resolveName(s.lastPregnancyTest?.vet ?? null);
+  const pregOperatorName = resolveName(s.lastPregnancyTest?.operator ?? null);
 
   return (
     <TooltipProvider delayDuration={250}>
