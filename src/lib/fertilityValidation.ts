@@ -22,9 +22,41 @@ export type FertilityValidationResult = {
  * Always call this BEFORE inserting into livestock_fertility_events.
  * Returns ok=false if validation failed or the operation is not allowed.
  */
+// ============================================================
+// TEMPORARY FEATURE FLAG — DISABLE_FERTILITY_VALIDATION
+// While true, checkFertilityOperation() short-circuits and
+// always returns ok=true so that ALL fertility forms (Heat,
+// Insemination, Pregnancy Check, Calving, Abortion, Dry Off,
+// Rinse, Sync, etc.) save without invoking the
+// check-fertility-operation Edge Function.
+//
+// Re-enable validation by setting VITE_DISABLE_FERTILITY_VALIDATION
+// to "false" (or removing it) — the validation architecture and
+// Edge Function are intentionally preserved.
+// ============================================================
+export const DISABLE_FERTILITY_VALIDATION =
+  (import.meta.env.VITE_DISABLE_FERTILITY_VALIDATION ?? "true") !== "false";
+
 export async function checkFertilityOperation(
   payload: FertilityValidationPayload
 ): Promise<FertilityValidationResult> {
+  // Temporary bypass — see DISABLE_FERTILITY_VALIDATION above.
+  if (DISABLE_FERTILITY_VALIDATION) {
+    console.warn(
+      "[fertilityValidation] BYPASSED — DISABLE_FERTILITY_VALIDATION flag is ON. " +
+        "check-fertility-operation Edge Function was NOT called.",
+      payload
+    );
+    return {
+      ok: true,
+      allowed: true,
+      messages: [],
+      matched_rule_id: null,
+      failed_rules: [],
+      raw: { bypassed: true },
+    };
+  }
+
   const validationPayload = {
     livestock_id: payload.livestock_id,
     fertility_operation_id: payload.fertility_operation_id,
