@@ -665,7 +665,15 @@ Deno.serve(async (req) => {
 
       const amount = Number(t.from_amount ?? t.to_amount ?? 0);
       const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
-      const description = firstNonEmpty(t.description, desc);
+
+      const descs = buildVoucherDescriptions({
+        branch: "bank_transfer",
+        date,
+        sourceRow: t,
+        fromBankName: firstNonEmpty(fb.bank_name, fb.name, fb.title, fb.account_number),
+        toBankName: firstNonEmpty(tb.bank_name, tb.name, tb.title, tb.account_number),
+      });
+      console.log("[sepidar-post-voucher] descriptions(bank_transfer)", descs);
 
       const req = pool.request();
       req.input("FromBankAccountSLRef", sql.Int, Number(fromAcc));
@@ -674,7 +682,9 @@ Deno.serve(async (req) => {
       req.input("ToBankDLRef", sql.Int, Number(toDL));
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), description || "");
+      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
+      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
+      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
       req.input("Creator", sql.Int, creator);
 
       return {
@@ -688,6 +698,7 @@ Deno.serve(async (req) => {
           Amount: amount,
           VoucherDate: date.toISOString(),
           Creator: creator,
+          ...descs,
         },
       };
     }
