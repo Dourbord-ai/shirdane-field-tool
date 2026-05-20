@@ -218,8 +218,8 @@ export default function LivestockProfile() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")}
-              {female && cow.last_fertility_status != null && (
-                <> • {fertilityLabel(cow.last_fertility_status)}</>
+              {female && liveStatusId != null && (
+                <> • {fertilityLabel(liveStatusId)}</>
               )}
             </p>
           </div>
@@ -277,7 +277,7 @@ export default function LivestockProfile() {
       {female && (
         <Section title="وضعیت دام ماده">
           <Row label="وضعیت دوشش" value={dryLabel(cow.is_dry)} />
-          <Row label="آخرین وضعیت باروری" value={fertilityLabel(cow.last_fertility_status)} />
+          <Row label="آخرین وضعیت باروری" value={fertilityLabel(liveStatusId)} />
         </Section>
       )}
 
@@ -292,12 +292,12 @@ export default function LivestockProfile() {
               id: cow.id,
               date_of_birth: cow.date_of_birth,
               is_dry: cow.is_dry,
-              last_fertility_status: cow.last_fertility_status,
+              last_fertility_status: liveStatusId,
             }}
           />
           <FertilitySection
             livestockId={cow.id}
-            latestStatus={cow.last_fertility_status}
+            latestStatus={liveStatusId}
             onOperationSaved={() => {
               console.log("Fertility operation saved; refreshing cow profile UI", cow.id);
               refresh();
