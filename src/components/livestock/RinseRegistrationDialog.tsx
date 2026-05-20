@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// Helper that converts the Jalali date picked in the UI to Gregorian for DB.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -110,7 +112,8 @@ export default function RinseRegistrationDialog({
       livestock_id: livestockId,
       event_type: "rinse",
       fertility_operation_id: 8,
-      event_date: eventDate,
+      // Persist the Gregorian (میلادی) equivalent of the Jalali pick.
+      event_date: toGregorianForDb(date!, time),
       operator_user_id: null,
       operator_name: operatorName,
       notes: description || null,

@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/select";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// Helper that turns the picked Jalali date into a real Gregorian string for DB.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
 import { toast } from "sonner";
 import { Loader2, Upload, X } from "lucide-react";
 
@@ -251,7 +253,8 @@ export default function CalvingRegistrationDialog({
       livestock_id: livestockId,
       event_type: "calving",
       fertility_operation_id: 6,
-      event_date: eventDate,
+      // Store the Gregorian (میلادی) date in Supabase.
+      event_date: toGregorianForDb(date!, time),
       notes: description || null,
       status_code: 12,
       legacy_table_name: "manual",

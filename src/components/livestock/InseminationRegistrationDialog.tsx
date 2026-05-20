@@ -22,6 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// Helper to push میلادی dates into Supabase from a Jalali picker.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -289,7 +291,8 @@ export default function InseminationRegistrationDialog({
       livestock_id: livestockId,
       event_type: "insemination",
       fertility_operation_id: 2,
-      event_date: eventDate,
+      // Store the Gregorian equivalent of the picked Jalali date.
+      event_date: toGregorianForDb(date!, time),
       operator_user_id: null,
       operator_name: selectedUser?.full_name ?? selectedUser?.username ?? null,
       notes: description || null,

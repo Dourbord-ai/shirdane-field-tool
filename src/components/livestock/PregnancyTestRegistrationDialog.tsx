@@ -22,6 +22,8 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// Helper to convert Jalali picker output to Gregorian for Supabase storage.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -175,7 +177,8 @@ export default function PregnancyTestRegistrationDialog({
       livestock_id: livestockId,
       event_type: "pregnancy_test",
       fertility_operation_id: opId,
-      event_date: eventDate,
+      // Gregorian (میلادی) string written to DB regardless of UI calendar.
+      event_date: toGregorianForDb(date!, time),
       operator_user_id: null,
       operator_name: operatorName,
       notes: description || null,
