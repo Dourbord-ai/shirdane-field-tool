@@ -207,21 +207,19 @@ export async function createVoucher(opts: {
   return voucher;
 }
 
-// ---------- Sepidar placeholder ----------
-export async function sepidarSyncPlaceholder(voucher_id: string, op: string) {
-  await supabase.from("finance_sepidar_sync_logs").insert({
-    voucher_id,
-    operation_type: op,
-    request_payload: { placeholder: true },
-    response_payload: { placeholder: true, message: "Sepidar bridge not yet connected" },
-    status: "pending",
-    error_message: null,
-  });
-  await supabase
-    .from("finance_vouchers")
-    .update({ sepidar_sync_status: "syncing", sepidar_sync_attempts: 1 })
-    .eq("id", voucher_id);
+// ---------- Sepidar voucher sync (real bridge) ----------
+// Backwards-compatible wrapper kept for the legacy call sites in VouchersTab,
+// PartyTransferTab, BankTransferTab. It now forwards to the real edge function
+// via `syncVoucherToSepidar`. The `op` argument is retained so log lines /
+// retry buttons keep the same signature, but every operation maps to the same
+// `post_voucher` SP call — there is no separate "retry" path on the bridge.
+export async function sepidarSyncPlaceholder(voucher_id: string, _op: string) {
+  // Delegate to the real implementation. We intentionally do NOT pre-insert a
+  // sync-log row here anymore — the edge function writes the authoritative
+  // success/failure log itself, so doing it twice would just create noise.
+  return await syncVoucherToSepidar(voucher_id);
 }
+
 
 // ---------- Beneficiary (party) Sepidar sync — placeholder bridge ----------
 // Represents legacy stored procedure: SpAddSepidarBankParty
