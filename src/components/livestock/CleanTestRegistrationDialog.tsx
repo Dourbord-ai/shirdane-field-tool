@@ -23,6 +23,8 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// Helper that turns Jalali → Gregorian so DB always stores میلادی.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -124,7 +126,8 @@ export default function CleanTestRegistrationDialog({
       livestock_id: livestockId,
       event_type: "clean_test",
       fertility_operation_id: 10,
-      event_date: eventDate,
+      // Persist the Gregorian (میلادی) form of the user's Jalali pick.
+      event_date: toGregorianForDb(date!, time),
       operator_user_id: null,
       operator_name: operatorName,
       notes: description || null,
