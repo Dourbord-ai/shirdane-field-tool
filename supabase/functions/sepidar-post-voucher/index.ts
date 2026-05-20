@@ -104,6 +104,24 @@ const DEFAULT_SP: Record<string, string> = {
   party_transfer: "bridge.CreatePartyTransferVoucher",
 };
 
+// The SQL Server bridge procedure for party-to-party transfers is especially
+// strict about its signature. Keeping the allowed parameter list in one place
+// lets us log and fail fast before the SQL driver calls the procedure, so an
+// accidental future Description1/Description2 binding cannot reach Sepidar.
+const PARTY_TRANSFER_PARAM_NAMES = [
+  "FromPartyId",
+  "FromPartyAccountSLRef",
+  "ToPartyId",
+  "ToPartyAccountSLRef",
+  "Amount",
+  "VoucherDate",
+  "Description",
+  "Creator",
+];
+
+const EXTRA_PARTY_TRANSFER_PARAM_ERR =
+  "پارامتر اضافی برای CreatePartyTransferVoucher ارسال شده است";
+
 // RequestType mapping per Sepidar conventions:
 //   1 = payment, 2 = receive
 const REQUEST_TYPE: Record<string, number> = {
