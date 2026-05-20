@@ -10,6 +10,8 @@ import {
 } from "@/lib/livestock";
 import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart } from "lucide-react";
 import FertilitySection from "@/components/livestock/FertilitySection";
+// New: derived "خلاصه باروری" card computed from the real fertility-event timeline.
+import FertilitySummaryCard from "@/components/livestock/FertilitySummaryCard";
 import CowChangeSection from "@/components/livestock/CowChangeSection";
 import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
 import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
@@ -259,7 +261,18 @@ export default function LivestockProfile() {
 
       {/* Fertility tabs (female only) */}
       {female && (
-        <div id="fertility-section">
+        <div id="fertility-section" className="space-y-4">
+          {/* Derived summary block — all values come from livestock_fertility_events
+              via useFertilitySummary; cow row passed only for is_dry/is_pregnancy
+              fallback. Mounted above the operations tabs per spec. */}
+          <FertilitySummaryCard
+            cow={{
+              id: cow.id,
+              date_of_birth: cow.date_of_birth,
+              is_dry: cow.is_dry,
+              last_fertility_status: cow.last_fertility_status,
+            }}
+          />
           <FertilitySection
             livestockId={cow.id}
             latestStatus={cow.last_fertility_status}

@@ -38,6 +38,12 @@ import CancelFertilityEventDialog from "./CancelFertilityEventDialog";
 import EditFertilityEventDialog from "./EditFertilityEventDialog";
 import { Switch } from "@/components/ui/switch";
 import { Baby, Pencil, Ban } from "lucide-react";
+// New: derived timeline + summary used by per-tab headers and row enrichment.
+// All math centralised in src/lib/fertility/* so dialogs/cards/tabs share logic.
+import { useFertilitySummary } from "@/hooks/useFertilitySummary";
+import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHeader";
+import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
+import { formatShamsi } from "@/lib/dateDisplay";
 
 type Props = {
   livestockId: number;
@@ -58,13 +64,97 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "sync", label: "پروتکل همزمان‌سازی" },
 ];
 
+// EnrichmentChip — tiny labelled tag rendered under an event card to surface
+// derived row-level facts (AI #, gap from previous, outcome, linked AI, etc).
+function EnrichmentChip({ label, value, tone = "default" }: { label: string; value: React.ReactNode; tone?: "default" | "info" | "warn" | "danger" | "success" }) {
+  const toneClass =
+    tone === "info" ? "bg-sky-500/10 text-sky-400 border-sky-500/30"
+    : tone === "warn" ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+    : tone === "danger" ? "bg-destructive/10 text-destructive border-destructive/30"
+    : tone === "success" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+    : "bg-muted text-muted-foreground border-border";
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${toneClass}`}>
+      <span className="opacity-80">{label}:</span>
+      <span className="font-bold">{value ?? "—"}</span>
+    </span>
+  );
+}
+
+// Render per-row enrichment chips for a single event, based on its derived
+// EnrichedEvent from the FertilityTimeline. Each event type surfaces a
+// different subset of facts per the spec.
+function renderEnrichment(ee: EnrichedEvent | undefined): React.ReactNode {
+  if (!ee) return null;
+  const chips: React.ReactNode[] = [];
+  const t = ee.event.event_type;
+  if (t === "insemination") {
+    if (ee.aiNumberInCycle) chips.push(<EnrichmentChip key="n" label="تلقیح #" value={`${ee.aiNumberInCycle}`} />);
+    if (ee.daysFromPrevAI != null) chips.push(<EnrichmentChip key="g" label="فاصله از قبلی" value={`${ee.daysFromPrevAI} روز`} />);
+    if (ee.aiOutcome) {
+      const map: Record<string, { label: string; tone: any }> = {
+        pregnant: { label: "منجر به آبستنی", tone: "success" },
+        failed: { label: "ناموفق", tone: "danger" },
+        unknown: { label: "نامشخص", tone: "default" },
+      };
+      const m = map[ee.aiOutcome];
+      chips.push(<EnrichmentChip key="o" label="نتیجه" value={m.label} tone={m.tone} />);
+    }
+  }
+  if (t === "pregnancy_test") {
+    if (ee.daysAfterLinkedAI != null) chips.push(<EnrichmentChip key="d" label="بعد از تلقیح" value={`${ee.daysAfterLinkedAI} روز`} />);
+    if (ee.pregTestTiming) {
+      const map: Record<string, { label: string; tone: any }> = {
+        early: { label: "زودهنگام", tone: "warn" },
+        standard: { label: "استاندارد", tone: "success" },
+        late: { label: "دیرهنگام", tone: "warn" },
+        unknown: { label: "نامشخص", tone: "default" },
+      };
+      const m = map[ee.pregTestTiming];
+      chips.push(<EnrichmentChip key="t" label="اعتبار" value={m.label} tone={m.tone} />);
+    }
+    if (ee.linkedInseminationDate) chips.push(<EnrichmentChip key="ai" label="تلقیح مرتبط" value={formatShamsi(ee.linkedInseminationDate)} tone="info" />);
+    if (ee.abortionFollowed) chips.push(<EnrichmentChip key="ab" label="بعد از این" value="سقط ثبت شد" tone="danger" />);
+  }
+  if (t === "calving") {
+    if (ee.daysAfterLinkedAI != null) chips.push(<EnrichmentChip key="g" label="طول آبستنی" value={`${ee.daysAfterLinkedAI} روز`} />);
+    if (ee.linkedInseminationDate) chips.push(<EnrichmentChip key="ai" label="تلقیح منجر به زایش" value={formatShamsi(ee.linkedInseminationDate)} tone="success" />);
+  }
+  if (t === "abortion") {
+    if (ee.daysAfterLinkedAI != null) chips.push(<EnrichmentChip key="g" label="سن آبستنی" value={`${ee.daysAfterLinkedAI} روز`} />);
+    if (ee.abortionClass) {
+      const map: Record<string, { label: string; tone: any }> = {
+        early: { label: "زودرس", tone: "warn" },
+        mid: { label: "میان‌دوره", tone: "default" },
+        late: { label: "دیررس", tone: "danger" },
+        unknown: { label: "نامشخص", tone: "default" },
+      };
+      const m = map[ee.abortionClass];
+      chips.push(<EnrichmentChip key="c" label="نوع" value={m.label} tone={m.tone} />);
+    }
+    if (ee.linkedInseminationDate) chips.push(<EnrichmentChip key="ai" label="تلقیح مرتبط" value={formatShamsi(ee.linkedInseminationDate)} tone="info" />);
+  }
+  if (t === "heat") {
+    if (ee.heatNumberInCycle) chips.push(<EnrichmentChip key="n" label="فحلی #" value={`${ee.heatNumberInCycle}`} />);
+    if (ee.daysFromPrevHeat != null) chips.push(<EnrichmentChip key="g" label="فاصله از قبلی" value={`${ee.daysFromPrevHeat} روز`} />);
+    if (ee.heatCycleClass && ee.heatCycleClass !== "unknown") {
+      chips.push(<EnrichmentChip key="c" label="سیکل" value={ee.heatCycleClass === "normal" ? "طبیعی" : "غیرطبیعی"} tone={ee.heatCycleClass === "normal" ? "success" : "warn"} />);
+    }
+    if (ee.daysToNextAI != null) chips.push(<EnrichmentChip key="ai" label="تا تلقیح بعدی" value={`${ee.daysToNextAI} روز`} />);
+  }
+  if (chips.length === 0) return null;
+  return <div className="flex flex-wrap gap-1 pt-1">{chips}</div>;
+}
+
 function EventCard({
   e,
+  enrichment,
   onCreateCalves,
   onEdit,
   onCancel,
 }: {
   e: FertilityEvent;
+  enrichment?: EnrichedEvent;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
@@ -177,6 +267,11 @@ function EventCard({
           )}
         </div>
       )}
+      {/* Per-row enrichment chips derived from the FertilityTimeline.
+          Only renders when the parent passed an `enrichment` prop and the
+          calculation actually produced one. Cancelled rows are excluded
+          from the timeline so they'll always be undefined here. */}
+      {!cancelled && renderEnrichment(enrichment)}
     </div>
   );
 }
@@ -193,12 +288,16 @@ function EmptyList({ text }: { text: string }) {
 function EventList({
   events,
   emptyText,
+  enrichmentMap,
   onCreateCalves,
   onEdit,
   onCancel,
 }: {
   events: FertilityEvent[];
   emptyText: string;
+  // Optional id → EnrichedEvent map. When provided, each card renders extra
+  // derived chips (AI #, outcome, linked AI, etc).
+  enrichmentMap?: Map<string, EnrichedEvent>;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
@@ -210,6 +309,7 @@ function EventList({
         <EventCard
           key={e.id}
           e={e}
+          enrichment={enrichmentMap?.get(e.id)}
           onCreateCalves={onCreateCalves}
           onEdit={onEdit}
           onCancel={onCancel}
@@ -330,6 +430,17 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
     }
     return map;
   }, [visibleEvents]);
+
+  // Derived summary + timeline for this cow (single hook; realtime; memoised).
+  // We use it to (a) render TabInsightHeader chips above each operation tab,
+  // and (b) build an id→EnrichedEvent map so EventCard can show per-row
+  // derived facts (AI #, outcome, linked AI, etc).
+  const { summary, timeline } = useFertilitySummary(livestockId);
+  const enrichmentMap = useMemo(() => {
+    const m = new Map<string, EnrichedEvent>();
+    for (const ee of timeline.all) m.set(ee.event.id, ee);
+    return m;
+  }, [timeline]);
 
   const latestStatusEvent = useMemo(
     () => visibleEvents.find((e) => e.event_type === "fertility_status") ?? null,
@@ -581,38 +692,49 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
             />
           </TabsContent>
 
-          {/* Per-type */}
+          {/* Per-type tabs — each one shows the relevant TabInsightHeader chips
+              above the list and enrichment chips on each card via enrichmentMap. */}
           <TabsContent value="heat">
+            <TabInsightHeader tab="heat" summary={summary} />
             <EventList
               events={byType.heat ?? []}
               emptyText="رویداد فحلی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
           </TabsContent>
           <TabsContent value="insemination">
+            <TabInsightHeader tab="insemination" summary={summary} />
             <EventList
               events={byType.insemination ?? []}
               emptyText="تلقیحی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
           </TabsContent>
           <TabsContent value="pregnancy_test">
+            <TabInsightHeader tab="pregnancy_test" summary={summary} />
             <EventList
               events={byType.pregnancy_test ?? []}
               emptyText="تست آبستنی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
           </TabsContent>
 
           <TabsContent value="calving_abortion">
+            {/* Show calving header — most of these tabs land on a زایش flow first;
+                سقط chips overlap mostly so this is the right default. */}
+            <TabInsightHeader tab="calving" summary={summary} />
             <EventList
               events={[...(byType.calving ?? []), ...(byType.abortion ?? [])].sort((a, b) =>
                 (b.event_date ?? "").localeCompare(a.event_date ?? ""),
               )}
               emptyText="رویداد زایش یا سقط ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onCreateCalves={setCalvesReviewEvent}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
@@ -620,9 +742,11 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
           </TabsContent>
 
           <TabsContent value="dry_off">
+            <TabInsightHeader tab="dry_off" summary={summary} />
             <EventList
               events={byType.dry_off ?? []}
               emptyText="خشک کردنی ثبت نشده است"
+              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
             />
