@@ -810,6 +810,16 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [
+          "FromBankAccountSLRef",
+          "FromBankDLRef",
+          "ToBankAccountSLRef",
+          "ToBankDLRef",
+          "Amount",
+          "VoucherDate",
+          "Description",
+          "Creator",
+        ],
         logParams: {
           FromBankAccountSLRef: fromAcc,
           FromBankDLRef: fromDL,
@@ -895,6 +905,7 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [...PARTY_TRANSFER_PARAM_NAMES],
         logParams: {
           FromPartyId: fpId,
           FromPartyAccountSLRef: fpAcc,
