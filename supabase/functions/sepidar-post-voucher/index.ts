@@ -224,7 +224,11 @@ Deno.serve(async (req) => {
     return json({ success: false, message: msg }, 400);
   }
   const spName = overrideSp || defaultSp;
-  const creator = Deno.env.get("SEPIDAR_DEFAULT_CREATOR") || "lovable-bridge";
+  const creatorRaw = Deno.env.get("SEPIDAR_CREATOR_ID") || "1";
+  const creator = Number(creatorRaw);
+  if (!Number.isInteger(creator) || creator <= 0) {
+    throw new Error("SEPIDAR_CREATOR_ID باید عدد صحیح معتبر باشد");
+  }
 
   // ---- Helpers to build typed requests per branch -----------------------------
   // Each branch loads its specific source row + related parties/banks, then
