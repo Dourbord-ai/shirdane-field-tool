@@ -501,6 +501,19 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [
+          "BankAccountSLRef",
+          "BankDLRef",
+          "PartyId",
+          "PartyAccountSLRef",
+          "RequestType",
+          "Amount",
+          "VoucherDate",
+          "Description",
+          "Description1",
+          "Description2",
+          "Creator",
+        ],
         logParams: {
           BankAccountSLRef: bankAccountSL,
           BankDLRef: bankDL,
@@ -700,6 +713,17 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [
+          "PartyId",
+          "PartyAccountSLRef",
+          "RequestType",
+          "Amount",
+          "VoucherDate",
+          "Description",
+          "Description1",
+          "Description2",
+          "Creator",
+        ],
         logParams: {
           PartyId: sepPartyId,
           PartyAccountSLRef: sepPartyAcc,
