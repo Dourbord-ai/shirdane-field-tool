@@ -410,7 +410,7 @@ Deno.serve(async (req) => {
   // Returns either { request, params, logParams } or { error }.
 
   type Branch =
-    | { ok: true; request: sql.Request; logParams: Record<string, unknown> }
+    | { ok: true; request: sql.Request; logParams: Record<string, unknown>; paramNames: string[] }
     | { ok: false; message: string };
 
   async function buildBranch(pool: sql.ConnectionPool): Promise<Branch> {
