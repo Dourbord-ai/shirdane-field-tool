@@ -44,6 +44,7 @@ import { useFertilitySummary } from "@/hooks/useFertilitySummary";
 import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHeader";
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
+import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
 
 type Props = {
   livestockId: number;
