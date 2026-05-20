@@ -79,23 +79,27 @@ export function useFertilitySummary(
   });
 
   // -- Realtime sync: invalidate the query whenever a row for this cow changes.
+  //    Use a unique channel name per effect-run so React StrictMode's double
+  //    invoke (or rapid re-mounts) never tries to .on() a channel that has
+  //    already been subscribed — Supabase forbids adding callbacks post-subscribe.
   useEffect(() => {
     if (!realtime || !cowId) return;
-    const channel = supabase
-      .channel(`fertility_summary_${cowId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "livestock_fertility_events",
-          filter: `livestock_id=eq.${cowId}`,
-        },
-        () => {
-          qc.invalidateQueries({ queryKey });
-        },
-      )
-      .subscribe();
+    const channel = supabase.channel(
+      `fertility_summary_${cowId}_${Math.random().toString(36).slice(2)}`,
+    );
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "livestock_fertility_events",
+        filter: `livestock_id=eq.${cowId}`,
+      },
+      () => {
+        qc.invalidateQueries({ queryKey });
+      },
+    );
+    channel.subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
