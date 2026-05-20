@@ -134,11 +134,35 @@ function meta(ee: EnrichedEvent | null | undefined, key: string): string | null 
 // -----------------------------------------------------------------------------
 // deriveFertilitySummary — main API consumed by useFertilitySummary hook.
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// ChartViewRow — minimal subset of `analytics_fertility_legacy_chart` we use
+// to override the timeline-derived numbers. The view is the same source the
+// reports bar chart reads from, so passing it here keeps the FertilitySummary
+// card 1:1 with the chart (آبستنی، خشکی، پیش‌بینی زایش، روزهای باز …).
+// -----------------------------------------------------------------------------
+export interface ChartViewRow {
+  is_pregnancy?: boolean | null;
+  is_dry?: boolean | null;
+  pregnancy_days?: number | null;
+  prediction_of_birth_date_days?: number | null;
+  last_inoculation_date_g?: string | null;
+  prediction_of_birth_date_g?: string | null;
+  last_birth_date_g?: string | null;
+  last_dry_date_g?: string | null;
+  last_erotic_date_g?: string | null;
+  dry_days?: number | null;
+  last_birth_to_pregnancy_days?: number | null;
+  number_of_births?: number | null;
+  chart_status?: string | null;
+}
+
 export function deriveFertilitySummary(
   cow: CowSnapshot,
   timeline: FertilityTimeline,
+  chartRow?: ChartViewRow | null,
 ): FertilitySummary {
   const current = timeline.current?.events ?? [];
+
 
   // ---- Last events of each type ------------------------------------------
   const lastOf = (type: string): EnrichedEvent | null => {
