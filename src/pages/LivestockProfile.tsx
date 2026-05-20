@@ -166,6 +166,17 @@ export default function LivestockProfile() {
   const tag = cow.tag_number || cow.earnumber || cow.bodynumber || "—";
   const inHerd = (cow.existancestatus ?? 0) === 0;
 
+  // ---- Live "آخرین وضعیت باروری" ---------------------------------------
+  // Pull this cow's events (deduped via react-query with the FertilitySummary
+  // card) and pick the freshest derivable status id. We pass the cached
+  // `cow.last_fertility_status` as the fallback so cows with zero events
+  // still show their last known status.
+  const { events: fertilityEvents } = useFertilitySummary(cow.id, { cow: { id: cow.id } });
+  const liveStatus = deriveLatestStatus(fertilityEvents, cow.last_fertility_status);
+  // `liveStatusId` is what every display in this file should consume going
+  // forward — never read `cow.last_fertility_status` directly.
+  const liveStatusId = liveStatus?.id ?? null;
+
   return (
     <div className="py-4 space-y-4 animate-fade-in livestock-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen">
       {/* Back */}
