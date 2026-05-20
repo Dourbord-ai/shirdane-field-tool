@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.sepidar-create-party-transfer-voucher]
 verify_jwt = false
+
+[functions.sepidar-post-voucher]
+verify_jwt = false
