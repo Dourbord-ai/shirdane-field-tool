@@ -731,14 +731,27 @@ Deno.serve(async (req) => {
       const amount = Number(t.from_amount ?? t.to_amount ?? 0);
       const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
 
+      const fromBankName = resolveBankDisplayName(fb);
+      const toBankName = resolveBankDisplayName(tb);
+      if (!fromBankName || !toBankName) {
+        return { ok: false, message: MISSING_NAME_ERR };
+      }
       const descs = buildVoucherDescriptions({
         branch: "bank_transfer",
         date,
         sourceRow: t,
-        fromBankName: firstNonEmpty(fb.bank_name, fb.name, fb.title, fb.account_number),
-        toBankName: firstNonEmpty(tb.bank_name, tb.name, tb.title, tb.account_number),
+        fromBankName,
+        toBankName,
+        paymentHeaderNumber: (t.payment_header_number ?? t.payment_announcement_number ?? null) as string | number | null,
+        draftNumber: (t.draft_number ?? t.transfer_number ?? null) as string | number | null,
       });
-      console.log("[sepidar-post-voucher] descriptions(bank_transfer)", descs);
+      console.log("[sepidar-post-voucher] descriptions(bank_transfer)", {
+        voucher_id: voucherId,
+        source_operation_type: sOp || vType,
+        fromBankName,
+        toBankName,
+        ...descs,
+      });
 
       const req = pool.request();
       req.input("FromBankAccountSLRef", sql.Int, Number(fromAcc));
