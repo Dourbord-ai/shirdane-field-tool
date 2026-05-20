@@ -209,7 +209,7 @@ function EventCard({
         // Derive { operator, doctor } from the event using the shared helper so
         // pregnancy_test rows (which historically stored the vet in operator_name)
         // get split into a dedicated «دامپزشک» line without breaking other types.
-        const { operator_name, doctor_name } = deriveEventPeople(e);
+        const { operator_name, doctor_name } = deriveEventPeople(e, resolveUserName);
         return (
           <>
             {operator_name && (
