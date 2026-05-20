@@ -446,15 +446,26 @@ Deno.serve(async (req) => {
       const amount = Number(r.amount ?? 0);
       const date = toSqlDate(r.transaction_datetime ?? vRow.voucher_date);
 
-      // Legacy template descriptions (دریافت / واریز ...).
+      const partyName = resolvePartyDisplayName(p);
+      const bankName = resolveBankDisplayName(b);
+      if (!partyName || !bankName) {
+        return { ok: false, message: MISSING_NAME_ERR };
+      }
+
       const descs = buildVoucherDescriptions({
         branch: "receive_identification",
         date,
         sourceRow: r,
-        partyName: firstNonEmpty(p.full_name, p.name, p.title),
-        bankName: firstNonEmpty(b.bank_name, b.name, b.title, b.account_number),
+        partyName,
+        bankName,
       });
-      console.log("[sepidar-post-voucher] descriptions(receive_identification)", descs);
+      console.log("[sepidar-post-voucher] descriptions(receive_identification)", {
+        voucher_id: voucherId,
+        source_operation_type: sOp || vType,
+        partyName,
+        bankName,
+        ...descs,
+      });
 
       const req = pool.request();
       req.input("BankAccountSLRef", sql.Int, Number(bankAccountSL));
