@@ -20,6 +20,12 @@ import { cowImageFor } from "@/lib/cowImage";
 // (created_at, purchase_date, pre_entry_*) is routed through this so the
 // page never accidentally shows Gregorian numerals or raw ISO strings.
 import { formatShamsi } from "@/lib/dateDisplay";
+// Pull events for THIS cow via the same shared hook the summary card uses
+// (react-query dedupes the query, so this is free) so we can derive
+// "آخرین وضعیت باروری" from the freshest event instead of the cached
+// `cows.last_fertility_status` field which is often stale.
+import { useFertilitySummary } from "@/hooks/useFertilitySummary";
+import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
 
 type Cow = {
   id: number;
