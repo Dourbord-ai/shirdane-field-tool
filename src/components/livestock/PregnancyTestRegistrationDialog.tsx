@@ -149,20 +149,27 @@ export default function PregnancyTestRegistrationDialog({
     };
 
     const opId = TEST_TYPE_OP_ID[testType];
-    const validation = await checkFertilityOperation({
-      livestock_id: livestockId,
-      fertility_operation_id: opId,
-      event_date: eventDate,
-      event_time: time || null,
-      result_code: String(statusCode),
-      fertility_status_id: statusCode,
-    });
-    if (!validation.ok) {
+    // New simple validation — pregnancy test gated by days-since-آخرین تلقیح.
+    const { validateFertilityOperation } = await import("@/lib/fertilityValidation");
+    const stageMap: Record<TestType, "اولی" | "نهایی" | "تکمیلی" | "خشکی"> = {
+      initial: "اولی",
+      final: "نهایی",
+      extra: "تکمیلی",
+      dry: "خشکی",
+    };
+    const validation = await validateFertilityOperation(
+      livestockId,
+      "تست آبستنی",
+      stageMap[testType],
+      formatJalali(date)
+    );
+    if (!validation.isValid) {
       setSubmitting(false);
-      setValidationMessages(validation.messages);
+      setValidationMessages([validation.message]);
       return;
     }
-    (metadata as any).matched_rule_id = validation.matched_rule_id ?? null;
+    (metadata as any).matched_rule_id = null;
+
 
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
       livestock_id: livestockId,
