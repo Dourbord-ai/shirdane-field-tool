@@ -134,11 +134,35 @@ function meta(ee: EnrichedEvent | null | undefined, key: string): string | null 
 // -----------------------------------------------------------------------------
 // deriveFertilitySummary — main API consumed by useFertilitySummary hook.
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// ChartViewRow — minimal subset of `analytics_fertility_legacy_chart` we use
+// to override the timeline-derived numbers. The view is the same source the
+// reports bar chart reads from, so passing it here keeps the FertilitySummary
+// card 1:1 with the chart (آبستنی، خشکی، پیش‌بینی زایش، روزهای باز …).
+// -----------------------------------------------------------------------------
+export interface ChartViewRow {
+  is_pregnancy?: boolean | null;
+  is_dry?: boolean | null;
+  pregnancy_days?: number | null;
+  prediction_of_birth_date_days?: number | null;
+  last_inoculation_date_g?: string | null;
+  prediction_of_birth_date_g?: string | null;
+  last_birth_date_g?: string | null;
+  last_dry_date_g?: string | null;
+  last_erotic_date_g?: string | null;
+  dry_days?: number | null;
+  last_birth_to_pregnancy_days?: number | null;
+  number_of_births?: number | null;
+  chart_status?: string | null;
+}
+
 export function deriveFertilitySummary(
   cow: CowSnapshot,
   timeline: FertilityTimeline,
+  chartRow?: ChartViewRow | null,
 ): FertilitySummary {
   const current = timeline.current?.events ?? [];
+
 
   // ---- Last events of each type ------------------------------------------
   const lastOf = (type: string): EnrichedEvent | null => {
@@ -279,15 +303,52 @@ export function deriveFertilitySummary(
     ? daysSince(parseEventDate(cow.date_of_birth))
     : null;
 
+  // ---- Chart-view overrides ----------------------------------------------
+  // The reports bar chart (`analytics_fertility_legacy_chart`) is the
+  // single source of truth for the high-level fertility numbers. When the
+  // view has a value, we PREFER it over the timeline-derived value so the
+  // profile card displays exactly what the chart shows. Falls back to the
+  // timeline-derived value when the view doesn't have data.
+  const cr = chartRow ?? {};
+  // Parse helper — view returns ISO YYYY-MM-DD or null.
+  const pDate = (s?: string | null) => (s ? parseEventDate(s) : null);
+
+  const vIsPregnant = cr.is_pregnancy ?? null;
+  const vIsDry = cr.is_dry ?? null;
+  const vLastAI = pDate(cr.last_inoculation_date_g);
+  const vExpCalving = pDate(cr.prediction_of_birth_date_g);
+  const vLastCalving = pDate(cr.last_birth_date_g);
+  const vDryDate = pDate(cr.last_dry_date_g);
+  const vLastHeat = pDate(cr.last_erotic_date_g);
+
+  const finalIsPregnant = vIsPregnant ?? isPregnant;
+  const finalDaysPregnant = cr.pregnancy_days ?? daysPregnant;
+  const finalExpCalving = vExpCalving ?? expectedCalvingDate;
+  const finalDaysToCalving =
+    cr.prediction_of_birth_date_days ?? daysToCalving;
+  const finalLastAI = vLastAI ?? lastAI?.date ?? null;
+  const finalDaysSinceLastAI = finalLastAI ? daysSince(finalLastAI) : null;
+  const finalLastCalving = vLastCalving ?? lastCalving?.date ?? null;
+  const finalDim = finalLastCalving ? daysSince(finalLastCalving) : dim;
+  const finalIsDry = vIsDry ?? isDry;
+  const finalDryDate = vDryDate ?? dryDate;
+  const finalDryDuration = finalDryDate ? daysSince(finalDryDate) : dryDuration;
+  const finalOpenDays = cr.last_birth_to_pregnancy_days ?? openDays;
+  const finalCalvingCount = cr.number_of_births ?? calvingCount;
+  const finalLastHeat = vLastHeat ?? lastHeat?.date ?? null;
+  const finalPredictedDry = finalExpCalving
+    ? addDays(finalExpCalving, -DRY_OFF_BEFORE_CALVING)
+    : predictedDryDate;
+
   return {
     currentState: state,
     riskLevel,
     riskReason,
 
-    isPregnant,
-    daysPregnant,
-    expectedCalvingDate,
-    daysToCalving,
+    isPregnant: !!finalIsPregnant,
+    daysPregnant: finalDaysPregnant,
+    expectedCalvingDate: finalExpCalving,
+    daysToCalving: finalDaysToCalving,
     inseminationsThisPregnancy: conceptionAI
       ? currentAIs.filter(
           (a) => (a.date?.getTime() ?? 0) <= (conceptionAI.date?.getTime() ?? 0),
@@ -310,8 +371,8 @@ export function deriveFertilitySummary(
     totalInseminations: allAIs.length,
     inseminationsCurrentCycle: currentAIs.length,
     consecutiveFailedAI: consecutiveFailed,
-    daysSinceLastAI: lastAI ? daysSince(lastAI.date) : null,
-    lastAIDate: lastAI?.date ?? null,
+    daysSinceLastAI: finalDaysSinceLastAI,
+    lastAIDate: finalLastAI,
     lastSperm:
       meta(lastAI, "sperm_name") ||
       meta(lastAI, "sperm") ||
@@ -319,7 +380,7 @@ export function deriveFertilitySummary(
       null,
     lastInseminator: lastAI?.event.operator_name ?? null,
 
-    lastHeatDate: lastHeat?.date ?? null,
+    lastHeatDate: finalLastHeat,
     heatToAIInterval: heatToAI,
     heatsSinceLastCalving,
     lastHeatCycleNormal:
@@ -329,20 +390,20 @@ export function deriveFertilitySummary(
         ? false
         : null,
 
-    lastCalvingDate: lastCalving?.date ?? null,
-    dim,
-    calvingCount,
+    lastCalvingDate: finalLastCalving,
+    dim: finalDim,
+    calvingCount: finalCalvingCount,
     lastCalvingType: lastCalving?.event.result ?? null,
     prevCalvingInterval,
-    predictedDryDate,
+    predictedDryDate: finalPredictedDry,
 
-    openDays,
+    openDays: finalOpenDays,
     ageDays,
 
-    isDry,
-    dryDate,
-    dryDuration,
-    expectedReturnToMilking,
+    isDry: finalIsDry,
+    dryDate: finalDryDate,
+    dryDuration: finalDryDuration,
+    expectedReturnToMilking: finalExpCalving,
   };
 }
 

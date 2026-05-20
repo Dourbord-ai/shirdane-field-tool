@@ -105,6 +105,25 @@ export function useFertilitySummary(
     };
   }, [cowId, realtime, qc, queryKey]);
 
+  // -- Also fetch the same row the reports bar chart uses, so the summary
+  //    card displays exactly the data shown in /reports نمودار وضعیت
+  //    تولیدمثل. The view is the single source of truth for high-level
+  //    fertility fields (آبستنی، خشکی، پیش‌بینی زایش، روزهای باز …).
+  const { data: chartRow } = useQuery({
+    queryKey: ["fertility_chart_row", cowId],
+    enabled: !!cowId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("analytics_fertility_legacy_chart")
+        .select("*")
+        .eq("livestock_id", cowId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as any | null;
+    },
+    staleTime: 30_000,
+  });
+
   // -- Derive timeline + summary. Memoised by data reference so re-renders
   //    don't recompute on unrelated state changes.
   const timeline = useMemo(() => (data ? buildTimeline(data) : EMPTY_TIMELINE), [data]);
@@ -113,8 +132,9 @@ export function useFertilitySummary(
       deriveFertilitySummary(
         opts.cow ?? { id: cowId ?? 0 },
         timeline,
+        chartRow ?? null,
       ),
-    [opts.cow, cowId, timeline],
+    [opts.cow, cowId, timeline, chartRow],
   );
 
   return {
