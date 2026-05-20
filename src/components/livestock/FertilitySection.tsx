@@ -153,12 +153,16 @@ function EventCard({
   onCreateCalves,
   onEdit,
   onCancel,
+  // Optional resolver for legacy numeric user IDs → real names. When omitted,
+  // raw values are shown (so the component still works in isolation).
+  resolveUserName,
 }: {
   e: FertilityEvent;
   enrichment?: EnrichedEvent;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
+  resolveUserName?: (v: number | string | null | undefined) => string | null;
 }) {
   const calves = (e.metadata as any)?.calves as any[] | undefined;
   const hasCalves = e.event_type === "calving" && Array.isArray(calves) && calves.length > 0;
