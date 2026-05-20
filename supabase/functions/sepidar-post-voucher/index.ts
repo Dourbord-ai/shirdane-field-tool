@@ -760,9 +760,9 @@ Deno.serve(async (req) => {
       req.input("ToBankDLRef", sql.Int, Number(toDL));
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
-      req.input("Description", sql.NVarChar(sql.MAX), descs.description);
-      req.input("Description1", sql.NVarChar(sql.MAX), descs.description1);
-      req.input("Description2", sql.NVarChar(sql.MAX), descs.description2);
+      // CreateSimpleInterBankTransferVoucher accepts ONLY @Description.
+      // Description1/Description2 are kept for internal logging only above.
+      req.input("Description", sql.NVarChar(500), descs.description);
       req.input("Creator", sql.Int, creator);
 
       return {
