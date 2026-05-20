@@ -106,6 +106,13 @@ export interface FertilityChartRow {
   // Added in the view: pen/location label and Persian milking status.
   last_location_name: string | null;
   milking_status: string | null;
+  // New Gregorian DATE fields derived directly from livestock_fertility_events
+  // (added in the migration). Data stays clean ISO; UI formats them as Shamsi.
+  last_inoculation_date_g: string | null;
+  last_birth_date_g: string | null;
+  last_dry_date_g: string | null;
+  last_erotic_date_g: string | null;
+  prediction_of_birth_date_g: string | null;
 }
 
 // Persian digit helper for the period dropdown labels.
