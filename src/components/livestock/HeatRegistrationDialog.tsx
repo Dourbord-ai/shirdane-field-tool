@@ -166,17 +166,20 @@ export default function HeatRegistrationDialog({
     const dateStr = formatJalali(date);
     const eventDate = `${dateStr} ${time}`;
 
-    const validation = await checkFertilityOperation({
-      livestock_id: livestockId,
-      fertility_operation_id: 1,
-      event_date: eventDate,
-      event_time: time || null,
-    });
-    if (!validation.ok) {
+    // New simple validation — heat (ثبت فحلی) requires current status «عدم آبستن».
+    const { validateFertilityOperation } = await import("@/lib/fertilityValidation");
+    const validation = await validateFertilityOperation(
+      livestockId,
+      "فحلی",
+      undefined,
+      eventDate
+    );
+    if (!validation.isValid) {
       setSubmitting(false);
-      setValidationMessages(validation.messages);
+      setValidationMessages([validation.message]);
       return;
     }
+
 
     const metadata = {
       erotic_type_id: Number(heatTypeId),
