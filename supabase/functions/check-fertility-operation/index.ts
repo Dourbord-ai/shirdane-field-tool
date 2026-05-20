@@ -188,6 +188,29 @@ interface Condition {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // ============================================================
+  // TEMPORARY BYPASS — DISABLE_FERTILITY_VALIDATION env flag.
+  // While set to "true" (default during the migration/data-fix
+  // phase), this function short-circuits and returns allowed=true
+  // without running any validation. The full validation logic
+  // below is intentionally preserved; flip the env var to "false"
+  // to restore normal behaviour.
+  // ============================================================
+  const bypassFlag = Deno.env.get("DISABLE_FERTILITY_VALIDATION") ?? "true";
+  if (bypassFlag !== "false") {
+    console.warn(
+      "[check-fertility-operation] BYPASSED — DISABLE_FERTILITY_VALIDATION env flag is ON. No validation executed.",
+    );
+    return json({
+      allowed: true,
+      messages: [],
+      matched_rule_id: null,
+      failed_rules: [],
+      bypassed: true,
+    });
+  }
+
+
   try {
     const body = (await req.json()) as Body;
     const cow_id = Number(body.cow_id ?? body.livestock_id);
