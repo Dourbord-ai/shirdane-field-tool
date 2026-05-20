@@ -431,6 +431,17 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
     return map;
   }, [visibleEvents]);
 
+  // Derived summary + timeline for this cow (single hook; realtime; memoised).
+  // We use it to (a) render TabInsightHeader chips above each operation tab,
+  // and (b) build an id→EnrichedEvent map so EventCard can show per-row
+  // derived facts (AI #, outcome, linked AI, etc).
+  const { summary, timeline } = useFertilitySummary(livestockId);
+  const enrichmentMap = useMemo(() => {
+    const m = new Map<string, EnrichedEvent>();
+    for (const ee of timeline.all) m.set(ee.event.id, ee);
+    return m;
+  }, [timeline]);
+
   const latestStatusEvent = useMemo(
     () => visibleEvents.find((e) => e.event_type === "fertility_status") ?? null,
     [visibleEvents],
