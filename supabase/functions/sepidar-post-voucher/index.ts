@@ -22,7 +22,7 @@
 //   SEPIDAR_POST_VOUCHER_SP   (optional ops override — forces a specific SP name
 //                              but still uses the typed params of the detected
 //                              voucher_type branch)
-//   SEPIDAR_DEFAULT_CREATOR   (optional, default 'lovable-bridge')
+//   SEPIDAR_CREATOR_ID         (optional numeric, default 1)
 //   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY  (auto-injected)
 
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
@@ -224,7 +224,11 @@ Deno.serve(async (req) => {
     return json({ success: false, message: msg }, 400);
   }
   const spName = overrideSp || defaultSp;
-  const creator = Deno.env.get("SEPIDAR_DEFAULT_CREATOR") || "lovable-bridge";
+  const creatorRaw = Deno.env.get("SEPIDAR_CREATOR_ID") || "1";
+  const creator = Number(creatorRaw);
+  if (!Number.isInteger(creator) || creator <= 0) {
+    throw new Error("SEPIDAR_CREATOR_ID باید عدد صحیح معتبر باشد");
+  }
 
   // ---- Helpers to build typed requests per branch -----------------------------
   // Each branch loads its specific source row + related parties/banks, then
@@ -298,7 +302,7 @@ Deno.serve(async (req) => {
       req.input("Description", sql.NVarChar(sql.MAX), description || "");
       req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(r.description) || "");
       req.input("Description2", sql.NVarChar(sql.MAX), "");
-      req.input("Creator", sql.NVarChar(100), creator);
+      req.input("Creator", sql.Int, creator);
 
       return {
         ok: true,
@@ -449,7 +453,7 @@ Deno.serve(async (req) => {
       req.input("Description", sql.NVarChar(sql.MAX), description || "");
       req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(priRow?.description) || "");
       req.input("Description2", sql.NVarChar(sql.MAX), firstNonEmpty(prRow?.description) || "");
-      req.input("Creator", sql.NVarChar(100), creator);
+      req.input("Creator", sql.Int, creator);
 
       return {
         ok: true,
@@ -511,7 +515,7 @@ Deno.serve(async (req) => {
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
       req.input("Description", sql.NVarChar(sql.MAX), description || "");
-      req.input("Creator", sql.NVarChar(100), creator);
+      req.input("Creator", sql.Int, creator);
 
       return {
         ok: true,
@@ -574,7 +578,7 @@ Deno.serve(async (req) => {
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, date);
       req.input("Description", sql.NVarChar(sql.MAX), description || "");
-      req.input("Creator", sql.NVarChar(100), creator);
+      req.input("Creator", sql.Int, creator);
 
       return {
         ok: true,
