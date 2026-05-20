@@ -189,7 +189,7 @@ export default function HeatRegistrationDialog({
       uterine_infection: uterineInfection === "yes",
       time,
       operator_name: selectedUser?.full_name ?? selectedUser?.username ?? null,
-      matched_rule_id: validation.matched_rule_id ?? null,
+      matched_rule_id: null,
     };
 
     const { error } = await supabase.from("livestock_fertility_events" as any).insert({
