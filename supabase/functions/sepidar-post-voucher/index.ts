@@ -104,6 +104,28 @@ const DEFAULT_SP: Record<string, string> = {
   party_transfer: "bridge.CreatePartyTransferVoucher",
 };
 
+// The SQL Server bridge procedure for party-to-party transfers is especially
+// strict about its signature. Keeping the allowed parameter list in one place
+// lets us log and fail fast before the SQL driver calls the procedure, so an
+// accidental future Description1/Description2 binding cannot reach Sepidar.
+const PARTY_TRANSFER_PARAM_NAMES = [
+  "FromPartyId",
+  "FromPartyAccountSLRef",
+  "ToPartyId",
+  "ToPartyAccountSLRef",
+  "Amount",
+  "VoucherDate",
+  "Description",
+  "Creator",
+];
+
+const EXTRA_PARTY_TRANSFER_PARAM_ERR =
+  "پارامتر اضافی برای CreatePartyTransferVoucher ارسال شده است";
+
+function sameParamList(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length && actual.every((name, index) => name === expected[index]);
+}
+
 // RequestType mapping per Sepidar conventions:
 //   1 = payment, 2 = receive
 const REQUEST_TYPE: Record<string, number> = {
@@ -392,7 +414,7 @@ Deno.serve(async (req) => {
   // Returns either { request, params, logParams } or { error }.
 
   type Branch =
-    | { ok: true; request: sql.Request; logParams: Record<string, unknown> }
+    | { ok: true; request: sql.Request; logParams: Record<string, unknown>; paramNames: string[] }
     | { ok: false; message: string };
 
   async function buildBranch(pool: sql.ConnectionPool): Promise<Branch> {
@@ -483,6 +505,19 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [
+          "BankAccountSLRef",
+          "BankDLRef",
+          "PartyId",
+          "PartyAccountSLRef",
+          "RequestType",
+          "Amount",
+          "VoucherDate",
+          "Description",
+          "Description1",
+          "Description2",
+          "Creator",
+        ],
         logParams: {
           BankAccountSLRef: bankAccountSL,
           BankDLRef: bankDL,
@@ -682,6 +717,17 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [
+          "PartyId",
+          "PartyAccountSLRef",
+          "RequestType",
+          "Amount",
+          "VoucherDate",
+          "Description",
+          "Description1",
+          "Description2",
+          "Creator",
+        ],
         logParams: {
           PartyId: sepPartyId,
           PartyAccountSLRef: sepPartyAcc,
@@ -768,6 +814,16 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [
+          "FromBankAccountSLRef",
+          "FromBankDLRef",
+          "ToBankAccountSLRef",
+          "ToBankDLRef",
+          "Amount",
+          "VoucherDate",
+          "Description",
+          "Creator",
+        ],
         logParams: {
           FromBankAccountSLRef: fromAcc,
           FromBankDLRef: fromDL,
@@ -853,6 +909,7 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        paramNames: [...PARTY_TRANSFER_PARAM_NAMES],
         logParams: {
           FromPartyId: fpId,
           FromPartyAccountSLRef: fpAcc,
@@ -893,6 +950,23 @@ Deno.serve(async (req) => {
       params: built.logParams,
       itemCount: items.length,
     });
+
+    const driverParamNames = Object.keys(
+      ((built.request as unknown as { parameters?: Record<string, unknown> }).parameters) || {},
+    );
+    const executionParamNames = driverParamNames.length > 0 ? driverParamNames : built.paramNames;
+    console.log("EXECUTING_SP", spName, executionParamNames);
+
+    if (
+      spName === "bridge.CreatePartyTransferVoucher" &&
+      !sameParamList(executionParamNames, PARTY_TRANSFER_PARAM_NAMES)
+    ) {
+      console.error("EXECUTING_SP_PARAM_MISMATCH", spName, {
+        expected: PARTY_TRANSFER_PARAM_NAMES,
+        actual: executionParamNames,
+      });
+      throw new Error(EXTRA_PARTY_TRANSFER_PARAM_ERR);
+    }
 
     const result = await built.request.execute(spName);
     const row = ((result.recordset as Record<string, unknown>[]) || [])[0] || {};
@@ -954,7 +1028,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    const message = persianizeError(raw);
+    const message = raw === EXTRA_PARTY_TRANSFER_PARAM_ERR ? raw : persianizeError(raw);
     console.error("[sepidar-post-voucher] error", { voucherId, spName, raw });
     await markFailed(sb, voucherId, message, attempts);
     return json({ success: false, message, rawError: raw }, 500);
