@@ -20,6 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// Helper: converts the Jalali date the user picked into a real
+// Gregorian "YYYY-MM-DD HH:MM" string so it lands in Supabase as میلادی.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -197,7 +200,8 @@ export default function HeatRegistrationDialog({
       event_type: "heat",
       fertility_operation_id: 1,
       erotic_type_id: Number(heatTypeId),
-      event_date: eventDate,
+      // Store Gregorian (میلادی) in DB even though UI picks Jalali.
+      event_date: toGregorianForDb(date!, time),
       operator_user_id: null,
       operator_name: selectedUser?.full_name ?? selectedUser?.username ?? null,
       notes: description || null,
