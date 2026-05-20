@@ -818,14 +818,25 @@ Deno.serve(async (req) => {
       const amount = Number(t.amount ?? 0);
       const date = toSqlDate(t.transfer_datetime ?? vRow.voucher_date);
 
+      const fromPartyName = resolvePartyDisplayName(fp);
+      const toPartyName = resolvePartyDisplayName(tp);
+      if (!fromPartyName || !toPartyName) {
+        return { ok: false, message: MISSING_NAME_ERR };
+      }
       const descs = buildVoucherDescriptions({
         branch: "party_transfer",
         date,
         sourceRow: t,
-        fromPartyName: firstNonEmpty(fp.full_name, fp.name, fp.title),
-        toPartyName: firstNonEmpty(tp.full_name, tp.name, tp.title),
+        fromPartyName,
+        toPartyName,
       });
-      console.log("[sepidar-post-voucher] descriptions(party_transfer)", descs);
+      console.log("[sepidar-post-voucher] descriptions(party_transfer)", {
+        voucher_id: voucherId,
+        source_operation_type: sOp || vType,
+        fromPartyName,
+        toPartyName,
+        ...descs,
+      });
 
       const req = pool.request();
       req.input("FromPartyId", sql.Int, Number(fpId));
