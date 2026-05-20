@@ -22,7 +22,7 @@ import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { checkFertilityOperation } from "@/lib/fertilityValidation";
+
 import FertilityValidationAlert from "@/components/livestock/FertilityValidationAlert";
 import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
 
