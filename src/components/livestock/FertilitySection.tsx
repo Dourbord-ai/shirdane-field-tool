@@ -267,6 +267,11 @@ function EventCard({
           )}
         </div>
       )}
+      {/* Per-row enrichment chips derived from the FertilityTimeline.
+          Only renders when the parent passed an `enrichment` prop and the
+          calculation actually produced one. Cancelled rows are excluded
+          from the timeline so they'll always be undefined here. */}
+      {!cancelled && renderEnrichment(enrichment)}
     </div>
   );
 }
@@ -283,12 +288,16 @@ function EmptyList({ text }: { text: string }) {
 function EventList({
   events,
   emptyText,
+  enrichmentMap,
   onCreateCalves,
   onEdit,
   onCancel,
 }: {
   events: FertilityEvent[];
   emptyText: string;
+  // Optional id → EnrichedEvent map. When provided, each card renders extra
+  // derived chips (AI #, outcome, linked AI, etc).
+  enrichmentMap?: Map<string, EnrichedEvent>;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
@@ -300,6 +309,7 @@ function EventList({
         <EventCard
           key={e.id}
           e={e}
+          enrichment={enrichmentMap?.get(e.id)}
           onCreateCalves={onCreateCalves}
           onEdit={onEdit}
           onCancel={onCancel}
