@@ -38,6 +38,12 @@ import CancelFertilityEventDialog from "./CancelFertilityEventDialog";
 import EditFertilityEventDialog from "./EditFertilityEventDialog";
 import { Switch } from "@/components/ui/switch";
 import { Baby, Pencil, Ban } from "lucide-react";
+// New: derived timeline + summary used by per-tab headers and row enrichment.
+// All math centralised in src/lib/fertility/* so dialogs/cards/tabs share logic.
+import { useFertilitySummary } from "@/hooks/useFertilitySummary";
+import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHeader";
+import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
+import { formatShamsi } from "@/lib/dateDisplay";
 
 type Props = {
   livestockId: number;
