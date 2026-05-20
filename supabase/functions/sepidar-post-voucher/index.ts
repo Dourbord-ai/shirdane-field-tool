@@ -169,9 +169,30 @@ Deno.serve(async (req) => {
     return json({ success: false, message: cfg.message }, 500);
   }
 
-  // The bridge SP name is configurable so DBAs can rename without a redeploy.
-  const spName =
-    Deno.env.get("SEPIDAR_POST_VOUCHER_SP") || "bridge.PostFinanceVoucher";
+  // SP selection:
+  // 1) explicit override via SEPIDAR_POST_VOUCHER_SP wins (ops escape hatch)
+  // 2) otherwise auto-select by voucher_type / source_operation_type
+  //    so each financial flow lands on its dedicated bridge procedure.
+  const override = Deno.env.get("SEPIDAR_POST_VOUCHER_SP");
+  const vRow = voucher as Record<string, unknown>;
+  const vType = String(vRow.voucher_type ?? "").trim().toLowerCase();
+  const sOp = String(vRow.source_operation_type ?? "").trim().toLowerCase();
+  const key = vType || sOp;
+  const SP_MAP: Record<string, string> = {
+    receive_identification: "bridge.CreateBankVoucher",
+    payment_allocation: "bridge.CreatePaymentRequestVoucher",
+    payment_request: "bridge.CreatePaymentRequestVoucher",
+    bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
+    party_transfer: "bridge.CreatePartyTransferVoucher",
+  };
+  // Allow fallback: if vType doesn't match, try source_operation_type too.
+  const autoSp = SP_MAP[key] || SP_MAP[sOp] || SP_MAP[vType];
+  const spName = override || autoSp;
+  if (!spName) {
+    const msg = `نوع سند برای ثبت در سپیدار پشتیبانی نمی‌شود (voucher_type=${vType || "-"}, source_operation_type=${sOp || "-"}).`;
+    await markFailed(sb, voucherId, msg, attempts);
+    return json({ success: false, message: msg }, 400);
+  }
 
   // Build JSON payloads. We keep this generic so the SP can pick the fields it
   // needs without us hard-coding every column shape.
