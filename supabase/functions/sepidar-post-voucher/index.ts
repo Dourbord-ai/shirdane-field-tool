@@ -22,7 +22,7 @@
 //   SEPIDAR_POST_VOUCHER_SP   (optional ops override — forces a specific SP name
 //                              but still uses the typed params of the detected
 //                              voucher_type branch)
-//   SEPIDAR_DEFAULT_CREATOR   (optional, default 'lovable-bridge')
+//   SEPIDAR_CREATOR_ID         (optional numeric, default 1)
 //   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY  (auto-injected)
 
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
