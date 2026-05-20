@@ -10,6 +10,10 @@ import ReactECharts from "echarts-for-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+// formatShamsi converts an ISO Gregorian date (YYYY-MM-DD) into Persian
+// Jalali ("YYYY/MM/DD" with Persian digits) for display only. The DB keeps
+// the clean Gregorian value untouched.
+import { formatShamsi } from "@/lib/dateDisplay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
