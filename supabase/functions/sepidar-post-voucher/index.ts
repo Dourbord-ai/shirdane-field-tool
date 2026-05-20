@@ -850,45 +850,18 @@ Deno.serve(async (req) => {
 
     await sb.from("finance_vouchers").update(update).eq("id", voucherId);
 
-    // -----------------------------------------------------------------------
-    // Inter-bank transfer EXTRA Sepidar side-tables.
-    // The legacy app filled two additional Sepidar tables besides the voucher
-    // when an inter-bank transfer was registered. The bridge procedures for
-    // those tables are NOT confirmed in this environment yet, so we attach a
-    // status flag to the sync log and emit a TODO so we don't silently lose
-    // the requirement, but we DO NOT fail the voucher posting.
-    // ----------------------------------------------------------------------- 
-    let interbank_extra_tables_synced = false;
-    let interbank_extra_tables_message = "";
-    if (branch === "bank_transfer" || sOp === "bank_transfer") {
-      // TODO(sepidar): wire bridge SPs for the two extra inter-bank tables once
-      // their signatures are confirmed (likely a Cheque/TransferLink pair).
-      // Until then we keep the main voucher posting successful.
-      interbank_extra_tables_message =
-        "Inter-bank extra Sepidar tables are not implemented yet";
-      console.warn("[sepidar-post-voucher] interbank-extra", interbank_extra_tables_message);
-    }
-
-    const logPayload: Record<string, unknown> = {
-      ...(row as Record<string, unknown>),
-      sp_name: spName,
-      interbank_extra_tables_synced,
-      interbank_extra_tables_message,
-    };
     await sb.from("finance_sepidar_sync_logs").insert({
       voucher_id: voucherId,
       operation_type: "post_voucher",
       status: "success",
-      response_payload: logPayload as never,
+      response_payload: { ...(row as Record<string, unknown>), sp_name: spName } as never,
     } as never);
 
-    console.log("[sepidar-post-voucher] ok", { voucherId, spName, row, interbank_extra_tables_synced });
+    console.log("[sepidar-post-voucher] ok", { voucherId, spName, row });
     return json({
       success: true,
       message: "سند با موفقیت در سپیدار ثبت شد.",
       data: row,
-      interbank_extra_tables_synced,
-      interbank_extra_tables_message,
     });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
