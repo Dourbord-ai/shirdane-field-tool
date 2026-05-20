@@ -375,8 +375,8 @@ export default function FertilityLegacyChart() {
             ${line("میزان آبستنی", r.pregnancy_days)}
             ${line("مدت زایش تا آبستنی", r.last_birth_to_pregnancy_days)}
             ${line("تعداد زایش", r.number_of_births)}
-            ${line("آخرین تلقیح", r.last_inoculation_date)}
-            ${line("پیش بینی زایش", r.prediction_of_birth_date)}
+            ${line("آخرین تلقیح", r.last_inoculation_date_g ? formatShamsi(r.last_inoculation_date_g) : dash)}
+            ${line("پیش بینی زایش", r.prediction_of_birth_date_g ? formatShamsi(r.prediction_of_birth_date_g) : dash)}
             ${line("در بهاربند", r.last_location_name)}
             ${line("وضعیت باروری فعلی", r.chart_status)}
             ${line("وضعیت دوشش", r.milking_status)}
