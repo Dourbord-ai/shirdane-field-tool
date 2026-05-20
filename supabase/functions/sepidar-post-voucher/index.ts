@@ -130,6 +130,117 @@ function firstNonEmpty(...vals: Array<unknown>): string {
   return "";
 }
 
+// ---------------------------------------------------------------------------
+// Jalali (Shamsi) date helper — inlined because Edge Functions cannot import
+// from src/. Mirrors src/lib/jalali.ts::gregorianToJalali so descriptions sent
+// to Sepidar match the legacy app output format (e.g. 1405/02/30).
+// ---------------------------------------------------------------------------
+const _G_D_M = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+function gregorianToJalali(gy: number, gm: number, gd: number) {
+  const gy2 = gm > 2 ? gy + 1 : gy;
+  let days =
+    355666 + 365 * gy + Math.floor((gy2 + 3) / 4) -
+    Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) +
+    gd + _G_D_M[gm - 1];
+  let jy = -1595 + 33 * Math.floor(days / 12053);
+  days %= 12053;
+  jy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) { jy += Math.floor((days - 1) / 365); days = (days - 1) % 365; }
+  let jm: number, jd: number;
+  if (days < 186) { jm = 1 + Math.floor(days / 31); jd = 1 + (days % 31); }
+  else { jm = 7 + Math.floor((days - 186) / 30); jd = 1 + ((days - 186) % 30); }
+  return { jy, jm, jd };
+}
+
+// Returns a Jalali string formatted YYYY/MM/DD matching the legacy app
+// description style. Accepts Date, ISO string, or null.
+function formatJalaliForSepidarDescription(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return "";
+  const { jy, jm, jd } = gregorianToJalali(
+    date.getFullYear(), date.getMonth() + 1, date.getDate(),
+  );
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${jy}/${pad(jm)}/${pad(jd)}`;
+}
+
+// Read a field from either a top-level column or row.raw_data (jsonb).
+// Used to detect optional legacy descriptors like change_status_description /
+// extra_description that may live in the imported raw payload.
+function rawField(row: Record<string, unknown> | null | undefined, key: string): string {
+  if (!row) return "";
+  const direct = (row as Record<string, unknown>)[key];
+  if (direct != null && String(direct).trim()) return String(direct).trim();
+  const raw = (row as Record<string, unknown>).raw_data ?? (row as Record<string, unknown>).data;
+  if (raw && typeof raw === "object") {
+    const v = (raw as Record<string, unknown>)[key];
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  return "";
+}
+
+// Builds Description / Description1 / Description2 strings for each Sepidar
+// voucher branch using legacy templates. Centralised so every branch shares
+// the same generation logic and we can safely override finance_vouchers.description.
+function buildVoucherDescriptions(args: {
+  branch: string;
+  date: Date;
+  sourceRow: Record<string, unknown>;
+  fromPartyName?: string;
+  toPartyName?: string;
+  partyName?: string;
+  bankName?: string;
+  fromBankName?: string;
+  toBankName?: string;
+}): { description: string; description1: string; description2: string } {
+  const dateStr = formatJalaliForSepidarDescription(args.date);
+  const src = args.sourceRow ?? {};
+  const baseDesc = firstNonEmpty(src.description, src.title);
+  const extra = rawField(src, "extra_description") || rawField(src, "change_status_description");
+  const extraSuffix = extra ? ` (${extra})` : "";
+
+  switch (args.branch) {
+    case "party_transfer": {
+      const desc = `جا به جایی در تاریخ ${dateStr} بابت ${baseDesc}`;
+      const long = `جا به جایی در تاریخ ${dateStr} از ${args.fromPartyName ?? ""} به ${args.toPartyName ?? ""} بابت ${baseDesc}`;
+      return {
+        description: desc + extraSuffix,
+        description1: long + extraSuffix,
+        description2: long + extraSuffix,
+      };
+    }
+    case "bank_transfer": {
+      const desc = ` تاریخ ${dateStr}`;
+      const long = ` تاریخ ${dateStr} از حساب بانکی ${args.fromBankName ?? ""} به ${args.toBankName ?? ""} بابت ${baseDesc}`;
+      return {
+        description: desc + extraSuffix,
+        description1: long + extraSuffix,
+        description2: long + extraSuffix,
+      };
+    }
+    case "receive_identification": {
+      return {
+        description: `دریافت در تاریخ ${dateStr} بابت ${baseDesc}` + extraSuffix,
+        description1: `واریز در تاریخ ${dateStr} توسط ${args.partyName ?? ""} بابت ${baseDesc}` + extraSuffix,
+        description2: `واریز در تاریخ ${dateStr} به حساب بانکی ${args.bankName ?? ""} بابت ${baseDesc}` + extraSuffix,
+      };
+    }
+    case "payment_allocation":
+    case "payment_request": {
+      const tail = baseDesc ? ` ${baseDesc}` : "";
+      return {
+        description: `پرداخت در تاریخ ${dateStr}${tail}` + extraSuffix,
+        description1: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""}${tail}` + extraSuffix,
+        description2: `برداشت در تاریخ ${dateStr} از حساب بانکی ${args.bankName ?? ""} به ${args.partyName ?? ""}${tail}` + extraSuffix,
+      };
+    }
+    default:
+      return { description: baseDesc, description1: "", description2: "" };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST")
