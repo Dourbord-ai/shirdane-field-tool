@@ -207,8 +207,8 @@ export default function FertilitySummaryCard({ cow }: Props) {
           />
           <Metric
             label="دامپزشک"
-            value={s.lastPregnancyTest?.vet ?? "—"}
-            hint={s.lastPregnancyTest?.operator ? `اپراتور: ${s.lastPregnancyTest.operator}` : null}
+            value={vetName ?? "—"}
+            hint={pregOperatorName ? `اپراتور: ${pregOperatorName}` : null}
           />
         </Group>
 
