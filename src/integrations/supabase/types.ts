@@ -3464,7 +3464,6 @@ export type Database = {
           created_by: string | null
           erotic_type_id: number | null
           event_date: string | null
-          event_date_gregorian: string | null
           event_time: string | null
           event_type: string
           fertility_operation_id: number | null
@@ -3491,7 +3490,6 @@ export type Database = {
           created_by?: string | null
           erotic_type_id?: number | null
           event_date?: string | null
-          event_date_gregorian?: string | null
           event_time?: string | null
           event_type: string
           fertility_operation_id?: number | null
@@ -3518,7 +3516,6 @@ export type Database = {
           created_by?: string | null
           erotic_type_id?: number | null
           event_date?: string | null
-          event_date_gregorian?: string | null
           event_time?: string | null
           event_type?: string
           fertility_operation_id?: number | null
