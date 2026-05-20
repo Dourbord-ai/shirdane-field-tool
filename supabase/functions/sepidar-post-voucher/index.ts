@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
       req.input("Description", sql.NVarChar(sql.MAX), description || "");
       req.input("Description1", sql.NVarChar(sql.MAX), firstNonEmpty(r.description) || "");
       req.input("Description2", sql.NVarChar(sql.MAX), "");
-      req.input("Creator", sql.NVarChar(100), creator);
+      req.input("Creator", sql.Int, creator);
 
       return {
         ok: true,
