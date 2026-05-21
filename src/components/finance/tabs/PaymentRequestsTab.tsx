@@ -151,12 +151,12 @@ export default function PaymentRequestsTab() {
     }
   }
 
-  // Apply local filters (search + paid/unpaid + voucher). Memoised so the
-  // expensive string scans don't run on unrelated re-renders.
+  // Local-only filters: text search and voucher presence. Payment status
+  // is already filtered server-side and stored as a stable column, so we
+  // don't need to mirror that predicate in JS anymore.
   const filtered = useMemo(() => {
     const needle = searchTerm.toLowerCase();
     return requests.filter((r) => {
-      // Code search hits either the UUID prefix or the legacy_id integer.
       if (needle) {
         const hay = [
           r.title || "",
@@ -166,20 +166,11 @@ export default function PaymentRequestsTab() {
         ].join(" ").toLowerCase();
         if (!hay.includes(needle)) return false;
       }
-      // -------- Payment-state mirror (must match server-side rules) -----
-      // We normalise NULL → 0 for every numeric field, then evaluate the
-      // exact same predicates we sent to Postgres. This guarantees the UI
-      // and the query never disagree (e.g. during a refetch race or when a
-      // status_filter narrows the result on top).
-      const confirmed = Number(r.confirmed_amount ?? 0);
-      const paid = Number(r.total_paid_amount ?? 0);
-      const remaining = Number(r.remaining_amount ?? 0);
-      if (paymentFilter === "paid") {
-        // Fully paid = approved-with-amount AND nothing left to settle.
-        // We deliberately DO NOT honour `status === 'paid'` alone, because
-        // legacy rows can carry stale statuses without matching numbers.
-        if (!(confirmed > 0 && remaining <= 0)) return false;
-      } else if (paymentFilter === "partial") {
+      if (voucherFilter === "with" && !requestsWithVoucher.has(r.id)) return false;
+      if (voucherFilter === "without" && requestsWithVoucher.has(r.id)) return false;
+      return true;
+    });
+  }, [requests, searchTerm, voucherFilter, requestsWithVoucher]);
         // Some money has moved but the row isn't fully settled yet.
         if (!(confirmed > 0 && paid > 0 && remaining > 0)) return false;
       } else if (paymentFilter === "unpaid") {
