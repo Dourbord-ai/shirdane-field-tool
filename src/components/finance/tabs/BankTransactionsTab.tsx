@@ -143,7 +143,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters — first row: bank / type / assignment / description search */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <BankSelector value={filterBank} onChange={setFilterBank} placeholder="همه بانک‌ها" />
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
@@ -161,6 +161,42 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </select>
         <Input placeholder="شرح..." value={filterDescr} onChange={(e) => setFilterDescr(e.target.value)} />
       </div>
+
+      {/* Filters — second row: real transaction date range + amount range.
+          Date filters hit `transaction_datetime` (not `created_at`).
+          Amount range matches abs(deposit OR withdraw) so a single range
+          covers both directions. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">از تاریخ تراکنش</Label>
+          <DatePicker value={filterFromDate} onChange={setFilterFromDate} />
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">تا تاریخ تراکنش</Label>
+          <DatePicker value={filterToDate} onChange={setFilterToDate} />
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">حداقل مبلغ</Label>
+          <Input inputMode="numeric" placeholder="0" value={filterMinAmount} onChange={(e) => setFilterMinAmount(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">حداکثر مبلغ</Label>
+          <Input inputMode="numeric" placeholder="—" value={filterMaxAmount} onChange={(e) => setFilterMaxAmount(e.target.value)} />
+        </div>
+      </div>
+
+      {(filterFromDate || filterToDate || filterMinAmount || filterMaxAmount) && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => { setFilterFromDate(null); setFilterToDate(null); setFilterMinAmount(""); setFilterMaxAmount(""); }}
+          >
+            پاک کردن فیلترهای تاریخ و مبلغ
+          </Button>
+        </div>
+      )}
+
 
       {loading ? (
         <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
