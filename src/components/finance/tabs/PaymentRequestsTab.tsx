@@ -785,25 +785,21 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <FinanceStatusBadge status={i.status} />
-                      {/* Item-level payment status — derived from approved
-                          amount vs paid amount. Hidden for rejected items
-                          because they are not part of payable totals. */}
-                      {!isRejected && (() => {
-                        const itemPayStatus =
-                          paid <= 0
-                            ? "unpaid"
-                            : amt > 0 && paid + 1e-6 >= amt
-                              ? "full_payment"
-                              : "partial_payment";
-                        return (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
-                            {PAYMENT_STATUS_LABEL[itemPayStatus]}
-                          </span>
-                        );
-                      })()}
+                      {!isRejected && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
+                          {PAYMENT_STATUS_LABEL[
+                            paid <= 0
+                              ? "unpaid"
+                              : amt > 0 && paid + 1e-6 >= amt
+                                ? "full_payment"
+                                : "partial_payment"
+                          ]}
+                        </span>
+                      )}
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         {getPaymentAmountTypeLabel(i.amount_type_code)}
                       </span>
+
 
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
