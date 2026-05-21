@@ -757,17 +757,23 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               const itemStatus = String(i.status || "");
               const isRejected = itemStatus === "rejected" || itemStatus === "cancelled" || itemStatus === "deleted";
               // Payable amount per item = the item's own approved amount
-              // (we treat any approved-family status as payable). Rejected
-              // rows have a payable of 0 and must be excluded from totals.
+              // (approved-family status). Rejected rows = 0 payable.
               const payableForItem = isRejected ? 0 : amt;
+              // Item-level payment status — derived from approved vs paid.
+              const itemPayStatus: "unpaid" | "partial_payment" | "full_payment" =
+                paid <= 0
+                  ? "unpaid"
+                  : amt > 0 && paid + 1e-6 >= amt
+                    ? "full_payment"
+                    : "partial_payment";
               // Link button mirrors the request-level rule AND requires
-              // the item itself to be in an approved-family, non-terminal
-              // state with remaining > 0. Rejected items are excluded.
+              // the item itself to be approved-family with remaining > 0.
               const terminalStatuses = ["paid", "cancelled", "rejected", "deleted"];
               const canAllocate =
                 canLinkOnRequest &&
                 remaining > 0 &&
                 !terminalStatuses.includes(itemStatus);
+
               return (
                 <div
                   key={i.id || idx}
@@ -785,11 +791,23 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <FinanceStatusBadge status={i.status} />
+                      {!isRejected && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
+                          {PAYMENT_STATUS_LABEL[
+                            paid <= 0
+                              ? "unpaid"
+                              : amt > 0 && paid + 1e-6 >= amt
+                                ? "full_payment"
+                                : "partial_payment"
+                          ]}
+                        </span>
+                      )}
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         {getPaymentAmountTypeLabel(i.amount_type_code)}
                       </span>
                     </div>
                   </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
                       <span className="text-muted-foreground">درخواستی</span>
