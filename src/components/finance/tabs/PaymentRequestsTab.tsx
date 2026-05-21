@@ -30,7 +30,11 @@ interface PR {
   description: string | null;
   request_type: string | null;
   legacy_request_type_code: number | null;
+  // Approval lifecycle (draft / pending_approval / approved / rejected / cancelled)
   status: string | null;
+  // Payment-completion lifecycle (unpaid / partial_payment / full_payment) —
+  // managed by the DB trigger + `refreshPaymentRequestPaidTotals` helper.
+  payment_status: string | null;
   total_amount: number | null;
   confirmed_amount: number | null;
   total_paid_amount: number | null;
