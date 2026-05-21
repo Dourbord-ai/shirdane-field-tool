@@ -17,6 +17,12 @@ export function MoneyCell({
   className,
   positive,
   negative,
+}: {
+  value: number | string | null | undefined;
+  className?: string;
+  positive?: boolean;
+  negative?: boolean;
+}) {
   // Deposits/positive → strong green; withdrawals/negative → strong red.
   // Use both light and dark shades so the contrast is obvious in either theme.
   const tone = positive
@@ -31,10 +37,6 @@ export function MoneyCell({
   );
 }
 
-      {formatMoney(value)}
-    </span>
-  );
-}
 
 export function JalaliDateCell({
   value,
