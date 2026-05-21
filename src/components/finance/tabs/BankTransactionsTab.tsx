@@ -373,6 +373,41 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   );
 }
 
+/**
+ * ExpandableDescription
+ * Renders a bank transaction description with three affordances so the user
+ * never loses access to the full text:
+ *   1. Native browser tooltip (title=) on hover — instant preview.
+ *   2. Two-line clamp by default so rows stay compact.
+ *   3. Inline "نمایش کامل شرح" / "بستن" toggle when the text exceeds the clamp,
+ *      revealing the full description in-place without a modal.
+ */
+function ExpandableDescription({ text }: { text: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return <span className="text-muted-foreground">—</span>;
+  // Heuristic threshold: anything beyond ~80 chars likely needs the toggle.
+  const isLong = text.length > 80;
+  return (
+    <div className="text-xs leading-relaxed">
+      <p
+        title={text}
+        className={expanded ? "whitespace-pre-wrap break-words" : "line-clamp-2 break-words"}
+      >
+        {text}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-[11px] font-bold text-primary hover:underline"
+        >
+          {expanded ? "بستن" : "نمایش کامل شرح"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ManualTxDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [bankId, setBankId] = useState<string | null>(null);
   const [type, setType] = useState<"deposit" | "withdraw">("deposit");
