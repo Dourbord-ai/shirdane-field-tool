@@ -699,13 +699,30 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
             </div>
           </div>
 
+          {/* Approval fallback banner: PR is approved but nothing linked yet */}
+
+          {headerStatus === "approved" && allocations.length === 0 && (
+            <div className="rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-3 text-xs">
+              این درخواست تأیید شده است اما هنوز تراکنش پرداختی به آن متصل نشده است.
+            </div>
+          )}
+
           {/* Items table */}
           <div className="rounded-xl border divide-y">
             {items.map((i, idx) => {
               const amt = Number(i.amount || 0);
               const paid = Number(i.paid_amount || 0);
               const remaining = Math.max(0, amt - paid);
-              const canAllocate = ["approved", "partially_paid", "sync_failed"].includes(String(i.status)) && remaining > 0;
+              // Show link button whenever the parent PR is approved (or the item itself is in a linkable state)
+              // and the item is not in a terminal/blocked state. Approval is precisely when linking is needed.
+              const itemStatus = String(i.status || "");
+              const terminalStatuses = ["paid", "cancelled", "rejected", "deleted"];
+              const linkableItemStatuses = ["approved", "partially_paid", "sync_failed", "pending_approval", "pending"];
+              const parentAllowsLinking = headerStatus === "approved" || headerStatus === "partially_paid";
+              const canAllocate =
+                remaining > 0 &&
+                !terminalStatuses.includes(itemStatus) &&
+                (parentAllowsLinking || linkableItemStatuses.includes(itemStatus));
               return (
                 <div key={i.id || idx} className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -743,6 +760,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               );
             })}
           </div>
+
 
           {/* Allocations list */}
           {allocations.length > 0 && (
