@@ -805,9 +805,9 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         {getPaymentAmountTypeLabel(i.amount_type_code)}
                       </span>
-
-
+                    </div>
                   </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
                       <span className="text-muted-foreground">درخواستی</span>
