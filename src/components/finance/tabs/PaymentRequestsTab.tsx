@@ -227,31 +227,59 @@ export default function PaymentRequestsTab() {
           <option value="">پرداخت: همه</option>
           {/* Four mutually-exclusive buckets, definitions matching the
               numeric predicates in `load()` and the mirror in `filtered`. */}
-          <option value="paid">پرداخت کامل</option>
-          <option value="partial">پرداخت ناقص</option>
+          {/* Three buckets stored on `payment_status` column directly. */}
           <option value="unpaid">پرداخت نشده</option>
-          <option value="pending">در انتظار تایید مبلغ</option>
+          <option value="partial_payment">پرداخت ناقص</option>
+          <option value="full_payment">پرداخت کامل</option>
         </select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((r) => (
-          <button key={r.id} onClick={() => setDetail(r)} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
-              <FinanceStatusBadge status={r.status} />
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
-              {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
-            </p>
-            {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
-            <div className="mt-3 pt-3 border-t flex items-center justify-between">
-              <JalaliDateCell value={r.created_at} />
-              <MoneyCell value={r.total_amount} />
-            </div>
-          </button>
-        ))}
+        {filtered.map((r) => {
+          // Compute display amounts. "approved" is the confirmed amount if
+          // present, otherwise we fall back to the originally requested total.
+          const approvedAmt = Number(r.confirmed_amount || r.total_amount || 0);
+          const paidAmt = Number(r.total_paid_amount || 0);
+          const remainingAmt = Math.max(0, approvedAmt - paidAmt);
+          return (
+            <button key={r.id} onClick={() => setDetail(r)} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
+                {/* Two distinct badges: request status (approval lifecycle)
+                    and payment status (money flow). Never combined. */}
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <FinanceStatusBadge status={r.status} />
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
+                    {PAYMENT_STATUS_LABEL[r.payment_status || "unpaid"] || "—"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
+                {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
+              </p>
+              {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
+              {/* Amounts row: requested/approved + paid + remaining */}
+              <div className="mt-3 pt-3 border-t grid grid-cols-3 gap-1 text-[11px]">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">تأیید شده</span>
+                  <MoneyCell value={approvedAmt} className="text-[11px]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">پرداخت‌شده</span>
+                  <MoneyCell value={paidAmt} className="text-[11px]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">مانده</span>
+                  <MoneyCell value={remainingAmt} className="text-[11px]" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                <JalaliDateCell value={r.created_at} />
+              </div>
+            </button>
+          );
+        })}
         {filtered.length === 0 && (
           <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             درخواستی یافت نشد
