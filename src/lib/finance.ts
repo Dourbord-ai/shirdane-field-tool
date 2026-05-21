@@ -759,9 +759,19 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
   }
   const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
   if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
-  // Approved payable = sum of approved items only (kept in confirmed_amount
-  // by the DB trigger). We deliberately do NOT fall back to total_amount —
-  // rejected items must never be payable.
+  if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
+
+  // -------------------------------------------------------------------
+  // Request-level overpayment guard. Approved payable amount = sum of
+  // approved items (kept in `confirmed_amount` by the DB trigger). We
+  // deliberately do NOT fall back to total_amount — rejected items must
+  // never count as payable.
+  // -------------------------------------------------------------------
+  const { data: header } = await supabase
+    .from("finance_payment_requests")
+    .select("confirmed_amount, total_paid_amount, status")
+    .eq("id", item.payment_request_id)
+    .maybeSingle();
   const approvedAmount = Number(header?.confirmed_amount || 0);
   const alreadyPaid = Number(header?.total_paid_amount || 0);
   if (approvedAmount <= 0) {
@@ -771,17 +781,6 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
     throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ آیتم‌های تأیید شده باشد.");
   }
 
-  // -------------------------------------------------------------------
-  const { data: header } = await supabase
-    .from("finance_payment_requests")
-    .select("total_amount, confirmed_amount, total_paid_amount, status")
-    .eq("id", item.payment_request_id)
-    .maybeSingle();
-  const approvedAmount = Number(header?.confirmed_amount || header?.total_amount || 0);
-  const alreadyPaid = Number(header?.total_paid_amount || 0);
-  if (approvedAmount > 0 && alreadyPaid + Number(input.amount) > approvedAmount + 1e-6) {
-    throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ درخواست تأیید شده باشد.");
-  }
 
   // Validate party Sepidar-ready
   if (!item.party_id) throw new Error("ذینفع ردیف نامعتبر است");
