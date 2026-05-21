@@ -51,6 +51,15 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [filterType, setFilterType] = useState<string>("");
   const [filterAssign, setFilterAssign] = useState<string>("");
   const [filterDescr, setFilterDescr] = useState("");
+  // Transaction-date range (Gregorian ISO from the Jalali DatePicker).
+  // These filter on `transaction_datetime` (the real banking date),
+  // NOT on `created_at` (when the row was inserted into our DB).
+  const [filterFromDate, setFilterFromDate] = useState<string | null>(null);
+  const [filterToDate, setFilterToDate] = useState<string | null>(null);
+  // Amount range filters — applied client-side over deposit OR withdraw amount
+  // so a single range covers both directions of the transaction.
+  const [filterMinAmount, setFilterMinAmount] = useState("");
+  const [filterMaxAmount, setFilterMaxAmount] = useState("");
   const [openManual, setOpenManual] = useState(false);
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
@@ -65,7 +74,9 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     });
   }, []);
 
-  useEffect(() => { void load(); }, [filterBank, filterType, filterAssign]);
+  // Re-fetch when server-side filters change. Date range goes here too so
+  // we don't pull 500 rows and then trim — Postgres does the work.
+  useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
 
   async function load() {
     setLoading(true);
@@ -78,15 +89,34 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterBank) q = q.eq("bank_id", filterBank);
     if (filterType) q = q.eq("transaction_type", filterType);
     if (filterAssign) q = q.eq("assignment_status", filterAssign);
+    // Inclusive range on the real transaction date column.
+    if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
+    if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
     const { data } = await q;
     setTxs((data as Tx[]) || []);
     setLoading(false);
   }
 
   const filtered = useMemo(() => {
-    if (!filterDescr) return txs;
-    return txs.filter((t) => (t.description || "").toLowerCase().includes(filterDescr.toLowerCase()));
-  }, [txs, filterDescr]);
+    // Parse amount bounds once. Empty string → no bound.
+    const min = filterMinAmount ? parseMoney(filterMinAmount) : null;
+    const max = filterMaxAmount ? parseMoney(filterMaxAmount) : null;
+    const needle = filterDescr.trim().toLowerCase();
+    return txs.filter((t) => {
+      if (needle && !(t.description || "").toLowerCase().includes(needle)) return false;
+      if (min !== null || max !== null) {
+        // Compare against whichever side of the transaction is non-zero.
+        // Falls back to abs(amount) for legacy rows that only set `amount`.
+        const v = Math.abs(
+          Number(t.deposit_amount) || Number(t.withdraw_amount) || Number(t.amount) || 0,
+        );
+        if (min !== null && v < min) return false;
+        if (max !== null && v > max) return false;
+      }
+      return true;
+    });
+  }, [txs, filterDescr, filterMinAmount, filterMaxAmount]);
+
 
   async function softDelete(t: Tx) {
     if (!confirm("حذف این تراکنش؟")) return;
