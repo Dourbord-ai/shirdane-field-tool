@@ -931,9 +931,26 @@ export async function cancelPaymentAllocation(allocationId: string): Promise<voi
 }
 
 export async function approvePaymentRequest(payment_request_id: string): Promise<void> {
+  // On approval we move the request into "approved" and recompute its
+  // payment-completion bucket from the existing allocations (which is
+  // almost always "unpaid" right after approval — but if any allocation
+  // already exists we keep the correct partial/full label).
+  const { data: header } = await supabase
+    .from("finance_payment_requests")
+    .select("total_amount, confirmed_amount, total_paid_amount")
+    .eq("id", payment_request_id)
+    .maybeSingle();
+  const approved = Number(header?.confirmed_amount || header?.total_amount || 0);
+  const paid = Number(header?.total_paid_amount || 0);
+  const paymentStatus =
+    paid <= 0 ? "unpaid" : approved > 0 && paid + 1e-6 >= approved ? "full_payment" : "partial_payment";
   await supabase
     .from("finance_payment_requests")
-    .update({ status: "approved", approved_at: new Date().toISOString() })
+    .update({
+      status: "approved",
+      approved_at: new Date().toISOString(),
+      payment_status: paymentStatus,
+    })
     .eq("id", payment_request_id);
   // Promote items pending_approval → approved
   await supabase
