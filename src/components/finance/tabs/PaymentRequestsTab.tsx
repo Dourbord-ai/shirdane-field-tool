@@ -171,20 +171,6 @@ export default function PaymentRequestsTab() {
       return true;
     });
   }, [requests, searchTerm, voucherFilter, requestsWithVoucher]);
-        // Some money has moved but the row isn't fully settled yet.
-        if (!(confirmed > 0 && paid > 0 && remaining > 0)) return false;
-      } else if (paymentFilter === "unpaid") {
-        // Approved with an amount, but no allocation has happened yet.
-        if (!(confirmed > 0 && paid === 0 && remaining > 0)) return false;
-      } else if (paymentFilter === "pending") {
-        // No confirmed amount → can't be classified into the paid bucket.
-        if (!(confirmed === 0)) return false;
-      }
-      if (voucherFilter === "with" && !requestsWithVoucher.has(r.id)) return false;
-      if (voucherFilter === "without" && requestsWithVoucher.has(r.id)) return false;
-      return true;
-    });
-  }, [requests, searchTerm, paymentFilter, voucherFilter, requestsWithVoucher]);
 
   return (
     <div className="space-y-4">
