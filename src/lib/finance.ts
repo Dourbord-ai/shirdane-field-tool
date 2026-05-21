@@ -759,11 +759,18 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
   }
   const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
   if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
-  if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
+  // Approved payable = sum of approved items only (kept in confirmed_amount
+  // by the DB trigger). We deliberately do NOT fall back to total_amount —
+  // rejected items must never be payable.
+  const approvedAmount = Number(header?.confirmed_amount || 0);
+  const alreadyPaid = Number(header?.total_paid_amount || 0);
+  if (approvedAmount <= 0) {
+    throw new Error("هیچ آیتم تأیید شده‌ای برای این درخواست وجود ندارد.");
+  }
+  if (alreadyPaid + Number(input.amount) > approvedAmount + 1e-6) {
+    throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ آیتم‌های تأیید شده باشد.");
+  }
 
-  // -------------------------------------------------------------------
-  // Request-level overpayment guard (mirrors the DB trigger so we can
-  // show the user a clean Persian error before the round-trip fails).
   // -------------------------------------------------------------------
   const { data: header } = await supabase
     .from("finance_payment_requests")
