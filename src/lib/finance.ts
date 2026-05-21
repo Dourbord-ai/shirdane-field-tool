@@ -93,6 +93,17 @@ export const PAYMENT_REQUEST_STATUS_LABEL: Record<string, string> = {
   cancelled: "لغو شده",
 };
 
+// ---------------------------------------------------------------------------
+// Payment-completion status (separate from the approval lifecycle above).
+// Lives on the new `payment_status` column of `finance_payment_requests`.
+// We surface ONLY these three buckets in the UI — they map 1:1 to the DB.
+// ---------------------------------------------------------------------------
+export const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  unpaid: "پرداخت نشده",
+  partial_payment: "پرداخت ناقص",
+  full_payment: "پرداخت کامل",
+};
+
 // Payment request item statuses
 export const PAYMENT_ITEM_STATUS_LABEL: Record<string, string> = {
   pending_approval: "در انتظار تایید",
