@@ -948,31 +948,28 @@ export async function cancelPaymentAllocation(allocationId: string): Promise<voi
 }
 
 export async function approvePaymentRequest(payment_request_id: string): Promise<void> {
-  // On approval we move the request into "approved" and recompute its
-  // payment-completion bucket from the existing allocations (which is
-  // almost always "unpaid" right after approval — but if any allocation
-  // already exists we keep the correct partial/full label).
-  const { data: header } = await supabase
-    .from("finance_payment_requests")
-    .select("total_amount, confirmed_amount, total_paid_amount")
-    .eq("id", payment_request_id)
-    .maybeSingle();
-  const approved = Number(header?.confirmed_amount || header?.total_amount || 0);
-  const paid = Number(header?.total_paid_amount || 0);
-  const paymentStatus =
-    paid <= 0 ? "unpaid" : approved > 0 && paid + 1e-6 >= approved ? "full_payment" : "partial_payment";
+  // -------------------------------------------------------------------
+  // Approve the request header. We DO NOT recompute confirmed_amount or
+  // payment_status here — the DB trigger fn_finance_recalc_payment_request
+  // already does that whenever item statuses change, and item promotion
+  // below will fire it again. This keeps a single source of truth and
+  // ensures rejected items are excluded from the approved payable total.
+  // -------------------------------------------------------------------
   await supabase
     .from("finance_payment_requests")
     .update({
       status: "approved",
       approved_at: new Date().toISOString(),
-      payment_status: paymentStatus,
     })
     .eq("id", payment_request_id);
-  // Promote items pending_approval → approved
+
+  // Promote items still pending_approval → approved. The items trigger
+  // will then recompute confirmed_amount / remaining_amount / payment_status
+  // based ONLY on approved (non-deleted) items.
   await supabase
     .from("finance_payment_request_items")
     .update({ status: "approved" })
     .eq("payment_request_id", payment_request_id)
     .in("status", ["pending_approval", "pending"]);
 }
+
