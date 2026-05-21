@@ -654,10 +654,22 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
     onClose();
   }
 
-  const headerTotal = Number(headerRefresh.total_amount || 0);
-  const headerPaid = Number((headerRefresh as PR & { total_paid_amount?: number }).total_paid_amount || 0);
-  const headerRemaining = Math.max(0, headerTotal - headerPaid);
+  // ---------------------------------------------------------------------
+  // Header amounts use the APPROVED amount (confirmed_amount fallback to
+  // total_amount) as the authoritative cap. This matches the DB trigger.
+  // ---------------------------------------------------------------------
+  const headerApproved = Number(headerRefresh.confirmed_amount || headerRefresh.total_amount || 0);
+  const headerPaid = Number(headerRefresh.total_paid_amount || 0);
+  const headerRemaining = Math.max(0, headerApproved - headerPaid);
   const headerStatus = headerRefresh.status;
+  const headerPaymentStatus = headerRefresh.payment_status || "unpaid";
+  // Linking is allowed when: request is approved (or partially_paid) AND
+  // payment is not yet fully complete AND there is remaining amount. This
+  // mirrors the BEFORE-INSERT trigger on finance_payment_allocations.
+  const canLinkOnRequest =
+    (headerStatus === "approved" || headerStatus === "partially_paid") &&
+    headerPaymentStatus !== "full_payment" &&
+    headerRemaining > 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
@@ -666,8 +678,13 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
           <div>
             <h3 className="font-bold">{pr.title || "درخواست پرداخت"}</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">{getPaymentRequestTypeLabel(pr.legacy_request_type_code)}</p>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {/* Approval status badge */}
               <FinanceStatusBadge status={headerStatus} />
+              {/* Payment-completion badge — separate concept, distinct chip */}
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
+                {PAYMENT_STATUS_LABEL[headerPaymentStatus] || "—"}
+              </span>
               <JalaliDateCell value={pr.created_at} />
             </div>
           </div>
@@ -676,27 +693,31 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         <div className="p-4 space-y-4">
           {pr.description && <p className="text-sm text-muted-foreground">{pr.description}</p>}
 
-          {/* Header summary */}
+          {/* Header summary — approved / paid / remaining */}
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ کل</div>
-              <MoneyCell value={headerTotal} className="text-sm" />
+              <div className="text-[11px] text-muted-foreground">مبلغ درخواست تأیید شده</div>
+              <MoneyCell value={headerApproved} className="text-sm" />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">پرداخت‌شده</div>
+              <div className="text-[11px] text-muted-foreground">مبلغ پرداخت‌شده</div>
               <MoneyCell value={headerPaid} className="text-sm" positive />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مانده</div>
+              <div className="text-[11px] text-muted-foreground">مبلغ باقی‌مانده</div>
               <MoneyCell value={headerRemaining} className="text-sm" negative={headerRemaining > 0} />
             </div>
           </div>
 
-          {/* Approval fallback banner: PR is approved but nothing linked yet */}
-
-          {headerStatus === "approved" && allocations.length === 0 && (
+          {/* Status messages: approved-but-incomplete warning OR fully-paid confirmation. */}
+          {headerStatus === "approved" && headerPaymentStatus !== "full_payment" && headerRemaining > 0 && (
             <div className="rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-3 text-xs">
-              این درخواست تأیید شده است اما هنوز تراکنش پرداختی به آن متصل نشده است.
+              این درخواست تأیید شده است اما پرداخت آن هنوز کامل نشده است.
+            </div>
+          )}
+          {headerPaymentStatus === "full_payment" && (
+            <div className="rounded-lg border border-emerald-300/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 p-3 text-xs">
+              پرداخت این درخواست کامل شده است.
             </div>
           )}
 
@@ -706,16 +727,18 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               const amt = Number(i.amount || 0);
               const paid = Number(i.paid_amount || 0);
               const remaining = Math.max(0, amt - paid);
-              // Show link button whenever the parent PR is approved (or the item itself is in a linkable state)
-              // and the item is not in a terminal/blocked state. Approval is precisely when linking is needed.
+              // Item-level link button mirrors the request-level rule:
+              // parent must be approved (or partially_paid) AND this row
+              // must still have a remaining balance AND must not be in a
+              // terminal state. We deliberately do NOT hide the button just
+              // because the request is "approved" — that's exactly when the
+              // user needs it.
               const itemStatus = String(i.status || "");
               const terminalStatuses = ["paid", "cancelled", "rejected", "deleted"];
-              const linkableItemStatuses = ["approved", "partially_paid", "sync_failed", "pending_approval", "pending"];
-              const parentAllowsLinking = headerStatus === "approved" || headerStatus === "partially_paid";
               const canAllocate =
+                canLinkOnRequest &&
                 remaining > 0 &&
-                !terminalStatuses.includes(itemStatus) &&
-                (parentAllowsLinking || linkableItemStatuses.includes(itemStatus));
+                !terminalStatuses.includes(itemStatus);
               return (
                 <div key={i.id || idx} className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
