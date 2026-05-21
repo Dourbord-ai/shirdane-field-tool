@@ -79,18 +79,16 @@ export default function PaymentRequestsTab() {
   // ---- Server-side filters (refetch on change) -------------------------
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-
-  // ---- Payment-state filter --------------------------------------------
-  // Mirrors the business definitions exactly:
-  //   "paid"     → confirmed_amount > 0 AND remaining_amount <= 0
-  //   "partial"  → confirmed_amount > 0 AND total_paid_amount > 0 AND remaining_amount > 0
-  //   "unpaid"   → confirmed_amount > 0 AND total_paid_amount = 0 AND remaining_amount > 0
-  //   "pending"  → confirmed_amount IS NULL OR confirmed_amount = 0 (not yet approved with an amount)
-  // The same predicate is applied BOTH server-side (Supabase .gt/.lte/.is)
-  // and client-side, so the visible list always matches the rule even if a
-  // refetch is in flight or another filter narrows the result further.
-  const [paymentFilter, setPaymentFilter] = useState<string>(""); // "" | paid | partial | unpaid | pending
-  const [voucherFilter, setVoucherFilter] = useState<string>(""); // "" | with | without
+  // ---- Payment-completion filter ---------------------------------------
+  // After the lifecycle refactor the request itself owns a `payment_status`
+  // column. We filter directly on that column so the UI and the DB never
+  // disagree about what counts as پرداخت ناقص / کامل / نشده.
+  //   ""               → no filter
+  //   "unpaid"         → payment_status = 'unpaid'
+  //   "partial_payment"→ payment_status = 'partial_payment'
+  //   "full_payment"   → payment_status = 'full_payment'
+  const [paymentFilter, setPaymentFilter] = useState<string>("");
+  const [voucherFilter, setVoucherFilter] = useState<string>("");
 
   // ---- Debounced search input -------------------------------------------
   // We keep two pieces of state: `searchInput` mirrors the controlled text
