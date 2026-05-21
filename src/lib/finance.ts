@@ -93,6 +93,17 @@ export const PAYMENT_REQUEST_STATUS_LABEL: Record<string, string> = {
   cancelled: "لغو شده",
 };
 
+// ---------------------------------------------------------------------------
+// Payment-completion status (separate from the approval lifecycle above).
+// Lives on the new `payment_status` column of `finance_payment_requests`.
+// We surface ONLY these three buckets in the UI — they map 1:1 to the DB.
+// ---------------------------------------------------------------------------
+export const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  unpaid: "پرداخت نشده",
+  partial_payment: "پرداخت ناقص",
+  full_payment: "پرداخت کامل",
+};
+
 // Payment request item statuses
 export const PAYMENT_ITEM_STATUS_LABEL: Record<string, string> = {
   pending_approval: "در انتظار تایید",
@@ -702,12 +713,25 @@ async function refreshPaymentRequestPaidTotals(payment_request_id: string): Prom
     .maybeSingle();
   const total = Number(header?.total_amount || 0);
   const remaining = Math.max(0, total - totalPaid);
+  // Approval/request lifecycle status — only promote to paid/partially_paid
+  // if we were already past approval. We must NEVER demote an approved
+  // request back to draft/pending_approval just because allocations exist.
   let headerStatus = header?.status || "approved";
   if (allPaid && list.length > 0) headerStatus = "paid";
   else if (anyPaid) headerStatus = "partially_paid";
+  // Payment-completion bucket (separate field) — derived from money flow.
+  let paymentStatus: "unpaid" | "partial_payment" | "full_payment" = "unpaid";
+  if (totalPaid <= 0) paymentStatus = "unpaid";
+  else if (total > 0 && totalPaid + 1e-6 >= total) paymentStatus = "full_payment";
+  else paymentStatus = "partial_payment";
   await supabase
     .from("finance_payment_requests")
-    .update({ total_paid_amount: totalPaid, remaining_amount: remaining, status: headerStatus })
+    .update({
+      total_paid_amount: totalPaid,
+      remaining_amount: remaining,
+      status: headerStatus,
+      payment_status: paymentStatus,
+    })
     .eq("id", payment_request_id);
 }
 
@@ -725,6 +749,21 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
   const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
   if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
   if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
+
+  // -------------------------------------------------------------------
+  // Request-level overpayment guard (mirrors the DB trigger so we can
+  // show the user a clean Persian error before the round-trip fails).
+  // -------------------------------------------------------------------
+  const { data: header } = await supabase
+    .from("finance_payment_requests")
+    .select("total_amount, confirmed_amount, total_paid_amount, status")
+    .eq("id", item.payment_request_id)
+    .maybeSingle();
+  const approvedAmount = Number(header?.confirmed_amount || header?.total_amount || 0);
+  const alreadyPaid = Number(header?.total_paid_amount || 0);
+  if (approvedAmount > 0 && alreadyPaid + Number(input.amount) > approvedAmount + 1e-6) {
+    throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ درخواست تأیید شده باشد.");
+  }
 
   // Validate party Sepidar-ready
   if (!item.party_id) throw new Error("ذینفع ردیف نامعتبر است");
@@ -892,9 +931,26 @@ export async function cancelPaymentAllocation(allocationId: string): Promise<voi
 }
 
 export async function approvePaymentRequest(payment_request_id: string): Promise<void> {
+  // On approval we move the request into "approved" and recompute its
+  // payment-completion bucket from the existing allocations (which is
+  // almost always "unpaid" right after approval — but if any allocation
+  // already exists we keep the correct partial/full label).
+  const { data: header } = await supabase
+    .from("finance_payment_requests")
+    .select("total_amount, confirmed_amount, total_paid_amount")
+    .eq("id", payment_request_id)
+    .maybeSingle();
+  const approved = Number(header?.confirmed_amount || header?.total_amount || 0);
+  const paid = Number(header?.total_paid_amount || 0);
+  const paymentStatus =
+    paid <= 0 ? "unpaid" : approved > 0 && paid + 1e-6 >= approved ? "full_payment" : "partial_payment";
   await supabase
     .from("finance_payment_requests")
-    .update({ status: "approved", approved_at: new Date().toISOString() })
+    .update({
+      status: "approved",
+      approved_at: new Date().toISOString(),
+      payment_status: paymentStatus,
+    })
     .eq("id", payment_request_id);
   // Promote items pending_approval → approved
   await supabase

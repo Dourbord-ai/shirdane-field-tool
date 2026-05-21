@@ -2441,6 +2441,7 @@ export type Database = {
           is_deleted: boolean | null
           legacy_id: number | null
           legacy_request_type_code: number | null
+          payment_status: string
           remaining_amount: number | null
           request_type: string | null
           requested_by: string | null
@@ -2462,6 +2463,7 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          payment_status?: string
           remaining_amount?: number | null
           request_type?: string | null
           requested_by?: string | null
@@ -2483,6 +2485,7 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          payment_status?: string
           remaining_amount?: number | null
           request_type?: string | null
           requested_by?: string | null
@@ -4671,6 +4674,10 @@ export type Database = {
           created_username: string
           hr_user_id: number
         }[]
+      }
+      fn_finance_recalc_payment_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
       }
       has_app_role: {
         Args: { _role_name: string; _user_id: string }

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/finance/atoms";
 import { PartySelector } from "@/components/finance/selectors";
-import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL } from "@/lib/finance";
+import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 // Jalali calendar UI that returns a Jalali "YYYY/MM/DD" string — used here
@@ -30,7 +30,11 @@ interface PR {
   description: string | null;
   request_type: string | null;
   legacy_request_type_code: number | null;
+  // Approval lifecycle (draft / pending_approval / approved / rejected / cancelled)
   status: string | null;
+  // Payment-completion lifecycle (unpaid / partial_payment / full_payment) —
+  // managed by the DB trigger + `refreshPaymentRequestPaidTotals` helper.
+  payment_status: string | null;
   total_amount: number | null;
   confirmed_amount: number | null;
   total_paid_amount: number | null;
@@ -75,18 +79,16 @@ export default function PaymentRequestsTab() {
   // ---- Server-side filters (refetch on change) -------------------------
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-
-  // ---- Payment-state filter --------------------------------------------
-  // Mirrors the business definitions exactly:
-  //   "paid"     → confirmed_amount > 0 AND remaining_amount <= 0
-  //   "partial"  → confirmed_amount > 0 AND total_paid_amount > 0 AND remaining_amount > 0
-  //   "unpaid"   → confirmed_amount > 0 AND total_paid_amount = 0 AND remaining_amount > 0
-  //   "pending"  → confirmed_amount IS NULL OR confirmed_amount = 0 (not yet approved with an amount)
-  // The same predicate is applied BOTH server-side (Supabase .gt/.lte/.is)
-  // and client-side, so the visible list always matches the rule even if a
-  // refetch is in flight or another filter narrows the result further.
-  const [paymentFilter, setPaymentFilter] = useState<string>(""); // "" | paid | partial | unpaid | pending
-  const [voucherFilter, setVoucherFilter] = useState<string>(""); // "" | with | without
+  // ---- Payment-completion filter ---------------------------------------
+  // After the lifecycle refactor the request itself owns a `payment_status`
+  // column. We filter directly on that column so the UI and the DB never
+  // disagree about what counts as پرداخت ناقص / کامل / نشده.
+  //   ""               → no filter
+  //   "unpaid"         → payment_status = 'unpaid'
+  //   "partial_payment"→ payment_status = 'partial_payment'
+  //   "full_payment"   → payment_status = 'full_payment'
+  const [paymentFilter, setPaymentFilter] = useState<string>("");
+  const [voucherFilter, setVoucherFilter] = useState<string>("");
 
   // ---- Debounced search input -------------------------------------------
   // We keep two pieces of state: `searchInput` mirrors the controlled text
@@ -122,27 +124,13 @@ export default function PaymentRequestsTab() {
     if (typeFilter) q = q.eq("legacy_request_type_code", Number(typeFilter));
     if (statusFilter) q = q.eq("status", statusFilter);
 
-    // -------- Server-side numeric payment-state predicates --------------
-    // We translate the business rules directly into Supabase filters so the
-    // database does the heavy lifting and pagination/sorting work correctly.
-    // NOTE: PostgREST treats NULL as "unknown" — `.gt('x', 0)` will exclude
-    // rows where x IS NULL, which is exactly what we want for "paid/partial/
-    // unpaid" (they all require confirmed_amount > 0).
-    if (paymentFilter === "paid") {
-      q = q.gt("confirmed_amount", 0).lte("remaining_amount", 0);
-    } else if (paymentFilter === "partial") {
-      q = q.gt("confirmed_amount", 0).gt("total_paid_amount", 0).gt("remaining_amount", 0);
-    } else if (paymentFilter === "unpaid") {
-      // total_paid_amount may be NULL for never-touched rows → treat as 0.
-      // PostgREST has no "eq null" helper for "= 0"; we use .or() to match
-      // either explicit zero OR NULL, then require positive remaining.
-      q = q
-        .gt("confirmed_amount", 0)
-        .gt("remaining_amount", 0)
-        .or("total_paid_amount.is.null,total_paid_amount.eq.0");
-    } else if (paymentFilter === "pending") {
-      // No confirmed amount yet → cannot classify as paid/partial/unpaid.
-      q = q.or("confirmed_amount.is.null,confirmed_amount.eq.0");
+    // -------- Server-side payment-completion predicate ------------------
+    // After the lifecycle refactor we filter on the dedicated
+    // `payment_status` column. The DB trigger keeps it accurate, so this
+    // is a single-column equality check — much simpler and faster than the
+    // old numeric-derived predicates.
+    if (paymentFilter) {
+      q = q.eq("payment_status", paymentFilter);
     }
 
     const { data } = await q;
@@ -163,12 +151,12 @@ export default function PaymentRequestsTab() {
     }
   }
 
-  // Apply local filters (search + paid/unpaid + voucher). Memoised so the
-  // expensive string scans don't run on unrelated re-renders.
+  // Local-only filters: text search and voucher presence. Payment status
+  // is already filtered server-side and stored as a stable column, so we
+  // don't need to mirror that predicate in JS anymore.
   const filtered = useMemo(() => {
     const needle = searchTerm.toLowerCase();
     return requests.filter((r) => {
-      // Code search hits either the UUID prefix or the legacy_id integer.
       if (needle) {
         const hay = [
           r.title || "",
@@ -178,34 +166,11 @@ export default function PaymentRequestsTab() {
         ].join(" ").toLowerCase();
         if (!hay.includes(needle)) return false;
       }
-      // -------- Payment-state mirror (must match server-side rules) -----
-      // We normalise NULL → 0 for every numeric field, then evaluate the
-      // exact same predicates we sent to Postgres. This guarantees the UI
-      // and the query never disagree (e.g. during a refetch race or when a
-      // status_filter narrows the result on top).
-      const confirmed = Number(r.confirmed_amount ?? 0);
-      const paid = Number(r.total_paid_amount ?? 0);
-      const remaining = Number(r.remaining_amount ?? 0);
-      if (paymentFilter === "paid") {
-        // Fully paid = approved-with-amount AND nothing left to settle.
-        // We deliberately DO NOT honour `status === 'paid'` alone, because
-        // legacy rows can carry stale statuses without matching numbers.
-        if (!(confirmed > 0 && remaining <= 0)) return false;
-      } else if (paymentFilter === "partial") {
-        // Some money has moved but the row isn't fully settled yet.
-        if (!(confirmed > 0 && paid > 0 && remaining > 0)) return false;
-      } else if (paymentFilter === "unpaid") {
-        // Approved with an amount, but no allocation has happened yet.
-        if (!(confirmed > 0 && paid === 0 && remaining > 0)) return false;
-      } else if (paymentFilter === "pending") {
-        // No confirmed amount → can't be classified into the paid bucket.
-        if (!(confirmed === 0)) return false;
-      }
       if (voucherFilter === "with" && !requestsWithVoucher.has(r.id)) return false;
       if (voucherFilter === "without" && requestsWithVoucher.has(r.id)) return false;
       return true;
     });
-  }, [requests, searchTerm, paymentFilter, voucherFilter, requestsWithVoucher]);
+  }, [requests, searchTerm, voucherFilter, requestsWithVoucher]);
 
   return (
     <div className="space-y-4">
@@ -262,31 +227,59 @@ export default function PaymentRequestsTab() {
           <option value="">پرداخت: همه</option>
           {/* Four mutually-exclusive buckets, definitions matching the
               numeric predicates in `load()` and the mirror in `filtered`. */}
-          <option value="paid">پرداخت کامل</option>
-          <option value="partial">پرداخت ناقص</option>
+          {/* Three buckets stored on `payment_status` column directly. */}
           <option value="unpaid">پرداخت نشده</option>
-          <option value="pending">در انتظار تایید مبلغ</option>
+          <option value="partial_payment">پرداخت ناقص</option>
+          <option value="full_payment">پرداخت کامل</option>
         </select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((r) => (
-          <button key={r.id} onClick={() => setDetail(r)} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
-              <FinanceStatusBadge status={r.status} />
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
-              {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
-            </p>
-            {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
-            <div className="mt-3 pt-3 border-t flex items-center justify-between">
-              <JalaliDateCell value={r.created_at} />
-              <MoneyCell value={r.total_amount} />
-            </div>
-          </button>
-        ))}
+        {filtered.map((r) => {
+          // Compute display amounts. "approved" is the confirmed amount if
+          // present, otherwise we fall back to the originally requested total.
+          const approvedAmt = Number(r.confirmed_amount || r.total_amount || 0);
+          const paidAmt = Number(r.total_paid_amount || 0);
+          const remainingAmt = Math.max(0, approvedAmt - paidAmt);
+          return (
+            <button key={r.id} onClick={() => setDetail(r)} className="text-right rounded-xl border bg-card p-4 hover:border-primary/30 hover:shadow-md transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-bold truncate flex-1">{r.title || "—"}</h3>
+                {/* Two distinct badges: request status (approval lifecycle)
+                    and payment status (money flow). Never combined. */}
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <FinanceStatusBadge status={r.status} />
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
+                    {PAYMENT_STATUS_LABEL[r.payment_status || "unpaid"] || "—"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
+                {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
+              </p>
+              {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
+              {/* Amounts row: requested/approved + paid + remaining */}
+              <div className="mt-3 pt-3 border-t grid grid-cols-3 gap-1 text-[11px]">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">تأیید شده</span>
+                  <MoneyCell value={approvedAmt} className="text-[11px]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">پرداخت‌شده</span>
+                  <MoneyCell value={paidAmt} className="text-[11px]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">مانده</span>
+                  <MoneyCell value={remainingAmt} className="text-[11px]" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                <JalaliDateCell value={r.created_at} />
+              </div>
+            </button>
+          );
+        })}
         {filtered.length === 0 && (
           <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             درخواستی یافت نشد
@@ -661,10 +654,22 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
     onClose();
   }
 
-  const headerTotal = Number(headerRefresh.total_amount || 0);
-  const headerPaid = Number((headerRefresh as PR & { total_paid_amount?: number }).total_paid_amount || 0);
-  const headerRemaining = Math.max(0, headerTotal - headerPaid);
+  // ---------------------------------------------------------------------
+  // Header amounts use the APPROVED amount (confirmed_amount fallback to
+  // total_amount) as the authoritative cap. This matches the DB trigger.
+  // ---------------------------------------------------------------------
+  const headerApproved = Number(headerRefresh.confirmed_amount || headerRefresh.total_amount || 0);
+  const headerPaid = Number(headerRefresh.total_paid_amount || 0);
+  const headerRemaining = Math.max(0, headerApproved - headerPaid);
   const headerStatus = headerRefresh.status;
+  const headerPaymentStatus = headerRefresh.payment_status || "unpaid";
+  // Linking is allowed when: request is approved (or partially_paid) AND
+  // payment is not yet fully complete AND there is remaining amount. This
+  // mirrors the BEFORE-INSERT trigger on finance_payment_allocations.
+  const canLinkOnRequest =
+    (headerStatus === "approved" || headerStatus === "partially_paid") &&
+    headerPaymentStatus !== "full_payment" &&
+    headerRemaining > 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
@@ -673,8 +678,13 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
           <div>
             <h3 className="font-bold">{pr.title || "درخواست پرداخت"}</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">{getPaymentRequestTypeLabel(pr.legacy_request_type_code)}</p>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {/* Approval status badge */}
               <FinanceStatusBadge status={headerStatus} />
+              {/* Payment-completion badge — separate concept, distinct chip */}
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground/80 border">
+                {PAYMENT_STATUS_LABEL[headerPaymentStatus] || "—"}
+              </span>
               <JalaliDateCell value={pr.created_at} />
             </div>
           </div>
@@ -683,27 +693,31 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         <div className="p-4 space-y-4">
           {pr.description && <p className="text-sm text-muted-foreground">{pr.description}</p>}
 
-          {/* Header summary */}
+          {/* Header summary — approved / paid / remaining */}
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ کل</div>
-              <MoneyCell value={headerTotal} className="text-sm" />
+              <div className="text-[11px] text-muted-foreground">مبلغ درخواست تأیید شده</div>
+              <MoneyCell value={headerApproved} className="text-sm" />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">پرداخت‌شده</div>
+              <div className="text-[11px] text-muted-foreground">مبلغ پرداخت‌شده</div>
               <MoneyCell value={headerPaid} className="text-sm" positive />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مانده</div>
+              <div className="text-[11px] text-muted-foreground">مبلغ باقی‌مانده</div>
               <MoneyCell value={headerRemaining} className="text-sm" negative={headerRemaining > 0} />
             </div>
           </div>
 
-          {/* Approval fallback banner: PR is approved but nothing linked yet */}
-
-          {headerStatus === "approved" && allocations.length === 0 && (
+          {/* Status messages: approved-but-incomplete warning OR fully-paid confirmation. */}
+          {headerStatus === "approved" && headerPaymentStatus !== "full_payment" && headerRemaining > 0 && (
             <div className="rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-3 text-xs">
-              این درخواست تأیید شده است اما هنوز تراکنش پرداختی به آن متصل نشده است.
+              این درخواست تأیید شده است اما پرداخت آن هنوز کامل نشده است.
+            </div>
+          )}
+          {headerPaymentStatus === "full_payment" && (
+            <div className="rounded-lg border border-emerald-300/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 p-3 text-xs">
+              پرداخت این درخواست کامل شده است.
             </div>
           )}
 
@@ -713,16 +727,18 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               const amt = Number(i.amount || 0);
               const paid = Number(i.paid_amount || 0);
               const remaining = Math.max(0, amt - paid);
-              // Show link button whenever the parent PR is approved (or the item itself is in a linkable state)
-              // and the item is not in a terminal/blocked state. Approval is precisely when linking is needed.
+              // Item-level link button mirrors the request-level rule:
+              // parent must be approved (or partially_paid) AND this row
+              // must still have a remaining balance AND must not be in a
+              // terminal state. We deliberately do NOT hide the button just
+              // because the request is "approved" — that's exactly when the
+              // user needs it.
               const itemStatus = String(i.status || "");
               const terminalStatuses = ["paid", "cancelled", "rejected", "deleted"];
-              const linkableItemStatuses = ["approved", "partially_paid", "sync_failed", "pending_approval", "pending"];
-              const parentAllowsLinking = headerStatus === "approved" || headerStatus === "partially_paid";
               const canAllocate =
+                canLinkOnRequest &&
                 remaining > 0 &&
-                !terminalStatuses.includes(itemStatus) &&
-                (parentAllowsLinking || linkableItemStatuses.includes(itemStatus));
+                !terminalStatuses.includes(itemStatus);
               return (
                 <div key={i.id || idx} className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
