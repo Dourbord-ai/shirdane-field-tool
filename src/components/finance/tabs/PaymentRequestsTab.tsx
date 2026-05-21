@@ -754,23 +754,33 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               const amt = Number(i.amount || 0);
               const paid = Number(i.paid_amount || 0);
               const remaining = Math.max(0, amt - paid);
-              // Item-level link button mirrors the request-level rule:
-              // parent must be approved (or partially_paid) AND this row
-              // must still have a remaining balance AND must not be in a
-              // terminal state. We deliberately do NOT hide the button just
-              // because the request is "approved" — that's exactly when the
-              // user needs it.
               const itemStatus = String(i.status || "");
+              const isRejected = itemStatus === "rejected" || itemStatus === "cancelled" || itemStatus === "deleted";
+              // Payable amount per item = the item's own approved amount
+              // (we treat any approved-family status as payable). Rejected
+              // rows have a payable of 0 and must be excluded from totals.
+              const payableForItem = isRejected ? 0 : amt;
+              // Link button mirrors the request-level rule AND requires
+              // the item itself to be in an approved-family, non-terminal
+              // state with remaining > 0. Rejected items are excluded.
               const terminalStatuses = ["paid", "cancelled", "rejected", "deleted"];
               const canAllocate =
                 canLinkOnRequest &&
                 remaining > 0 &&
                 !terminalStatuses.includes(itemStatus);
               return (
-                <div key={i.id || idx} className="p-3 space-y-2">
+                <div
+                  key={i.id || idx}
+                  className={
+                    "p-3 space-y-2 " +
+                    (isRejected ? "opacity-60 bg-red-50/40 dark:bg-red-950/10" : "")
+                  }
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-sm truncate">{i.party ? partyName(i.party) : "—"}</p>
+                      <p className={"font-bold text-sm truncate " + (isRejected ? "line-through" : "")}>
+                        {i.party ? partyName(i.party) : "—"}
+                      </p>
                       {i.description && <p className="text-xs text-muted-foreground truncate">{i.description}</p>}
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
@@ -780,20 +790,29 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
                       <span className="text-muted-foreground">درخواستی</span>
                       <MoneyCell value={amt} className="text-[11px]" />
                     </div>
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                      <span className="text-muted-foreground">پرداخت شده</span>
+                      <span className="text-muted-foreground">قابل پرداخت</span>
+                      <MoneyCell value={payableForItem} className="text-[11px]" />
+                    </div>
+                    <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                      <span className="text-muted-foreground">پرداخت‌شده</span>
                       <MoneyCell value={paid} className="text-[11px]" />
                     </div>
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
                       <span className="text-muted-foreground">مانده</span>
-                      <MoneyCell value={remaining} className="text-[11px]" />
+                      <MoneyCell value={isRejected ? 0 : remaining} className="text-[11px]" />
                     </div>
                   </div>
+                  {isRejected && (
+                    <div className="text-[11px] text-red-700 dark:text-red-300">
+                      این آیتم رد شده است و در محاسبات پرداخت لحاظ نمی‌شود.
+                    </div>
+                  )}
                   {canAllocate && (
                     <Button size="sm" variant="outline" className="w-full" onClick={() => setAllocItem(i)}>
                       <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
@@ -802,6 +821,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                 </div>
               );
             })}
+
           </div>
 
 
