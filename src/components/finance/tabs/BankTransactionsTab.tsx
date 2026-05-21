@@ -229,7 +229,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     <td className="p-2"><MoneyCell value={t.deposit_amount} positive /></td>
                     <td className="p-2"><MoneyCell value={t.withdraw_amount} negative /></td>
                     <td className="p-2"><MoneyCell value={t.balance_after} /></td>
-                    <td className="p-2 max-w-[200px] truncate">{t.description || "—"}</td>
+                    <td className="p-2 max-w-[260px] align-top">
+                      {/* Full description on hover via native tooltip; click to expand inline.
+                          Keeps the row compact by default but never hides text from the user. */}
+                      <ExpandableDescription text={t.description} />
+                    </td>
+
                     <td className="p-2 font-mono text-xs">{t.reference_number || t.tracking_number || "—"}</td>
                     <td className="p-2 text-xs">{t.source_type || "—"}</td>
                     <td className="p-2"><FinanceStatusBadge status={t.assignment_status} /></td>
