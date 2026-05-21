@@ -236,9 +236,12 @@ export default function PaymentRequestsTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((r) => {
-          // Compute display amounts. "approved" is the confirmed amount if
-          // present, otherwise we fall back to the originally requested total.
-          const approvedAmt = Number(r.confirmed_amount || r.total_amount || 0);
+          // Approved payable amount = confirmed_amount, which the DB trigger
+          // keeps as the SUM of approved items only (rejected items excluded).
+          // We deliberately do NOT fall back to total_amount, otherwise
+          // rejected-item value would look payable.
+          const requestedAmt = Number(r.total_amount || 0);
+          const approvedAmt = Number(r.confirmed_amount || 0);
           const paidAmt = Number(r.total_paid_amount || 0);
           const remainingAmt = Math.max(0, approvedAmt - paidAmt);
           return (
@@ -259,10 +262,16 @@ export default function PaymentRequestsTab() {
                 {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
               </p>
               {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
-              {/* Amounts row: requested/approved + paid + remaining */}
-              <div className="mt-3 pt-3 border-t grid grid-cols-3 gap-1 text-[11px]">
+              {/* Amounts row: requested / approved-payable / paid / remaining.
+                  Requested = original total. Approved = sum of approved items
+                  only (rejected items excluded). */}
+              <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-y-2 gap-x-2 text-[11px]">
                 <div className="flex flex-col">
-                  <span className="text-muted-foreground">تأیید شده</span>
+                  <span className="text-muted-foreground">مبلغ کل درخواستی</span>
+                  <MoneyCell value={requestedAmt} className="text-[11px]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">تأیید شده قابل پرداخت</span>
                   <MoneyCell value={approvedAmt} className="text-[11px]" />
                 </div>
                 <div className="flex flex-col">
@@ -280,6 +289,7 @@ export default function PaymentRequestsTab() {
             </button>
           );
         })}
+
         {filtered.length === 0 && (
           <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             درخواستی یافت نشد
