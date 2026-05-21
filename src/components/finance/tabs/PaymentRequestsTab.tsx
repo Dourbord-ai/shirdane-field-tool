@@ -665,19 +665,23 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
   }
 
   // ---------------------------------------------------------------------
-  // Header amounts use the APPROVED amount (confirmed_amount fallback to
-  // total_amount) as the authoritative cap. This matches the DB trigger.
+  // Header amounts. The DB trigger keeps `confirmed_amount` equal to the
+  // SUM of APPROVED items only — rejected items are excluded. So we use
+  // it directly with NO fallback to total_amount, otherwise the rejected
+  // value would inflate the approved/payable figure shown to the user.
   // ---------------------------------------------------------------------
-  const headerApproved = Number(headerRefresh.confirmed_amount || headerRefresh.total_amount || 0);
+  const headerRequested = Number(headerRefresh.total_amount || 0);
+  const headerApproved = Number(headerRefresh.confirmed_amount || 0);
   const headerPaid = Number(headerRefresh.total_paid_amount || 0);
   const headerRemaining = Math.max(0, headerApproved - headerPaid);
   const headerStatus = headerRefresh.status;
   const headerPaymentStatus = headerRefresh.payment_status || "unpaid";
   // Linking is allowed when: request is approved (or partially_paid) AND
-  // payment is not yet fully complete AND there is remaining amount. This
-  // mirrors the BEFORE-INSERT trigger on finance_payment_allocations.
+  // there are approved payable items AND payment is not yet fully complete
+  // AND there is remaining amount. Mirrors the BEFORE-INSERT DB trigger.
   const canLinkOnRequest =
     (headerStatus === "approved" || headerStatus === "partially_paid") &&
+    headerApproved > 0 &&
     headerPaymentStatus !== "full_payment" &&
     headerRemaining > 0;
 
@@ -703,21 +707,34 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         <div className="p-4 space-y-4">
           {pr.description && <p className="text-sm text-muted-foreground">{pr.description}</p>}
 
-          {/* Header summary — approved / paid / remaining */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Header summary — requested / approved-payable / paid / remaining */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ درخواست تأیید شده</div>
+              <div className="text-[11px] text-muted-foreground">مبلغ کل درخواستی</div>
+              <MoneyCell value={headerRequested} className="text-sm" />
+            </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-[11px] text-muted-foreground">تأیید شده قابل پرداخت</div>
               <MoneyCell value={headerApproved} className="text-sm" />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ پرداخت‌شده</div>
+              <div className="text-[11px] text-muted-foreground">پرداخت‌شده</div>
               <MoneyCell value={headerPaid} className="text-sm" positive />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ باقی‌مانده</div>
+              <div className="text-[11px] text-muted-foreground">باقی‌مانده</div>
               <MoneyCell value={headerRemaining} className="text-sm" negative={headerRemaining > 0} />
             </div>
           </div>
+
+          {/* When the request is approved but no item is payable (all rejected),
+              warn explicitly so the user understands why the link button is hidden. */}
+          {headerStatus === "approved" && headerApproved <= 0 && (
+            <div className="rounded-lg border border-red-300/60 bg-red-50 dark:bg-red-950/30 text-red-900 dark:text-red-200 p-3 text-xs">
+              هیچ آیتم تأیید شده‌ای برای این درخواست وجود ندارد، بنابراین پرداختی قابل ثبت نیست.
+            </div>
+          )}
+
 
           {/* Status messages: approved-but-incomplete warning OR fully-paid confirmation. */}
           {headerStatus === "approved" && headerPaymentStatus !== "full_payment" && headerRemaining > 0 && (
