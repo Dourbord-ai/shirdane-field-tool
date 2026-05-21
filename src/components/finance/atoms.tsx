@@ -23,10 +23,12 @@ export function MoneyCell({
   positive?: boolean;
   negative?: boolean;
 }) {
+  // Deposits/positive → strong green; withdrawals/negative → strong red.
+  // Use both light and dark shades so the contrast is obvious in either theme.
   const tone = positive
-    ? "text-emerald-700"
+    ? "text-emerald-600 dark:text-emerald-400"
     : negative
-      ? "text-red-700"
+      ? "text-red-600 dark:text-red-400"
       : "text-foreground";
   return (
     <span className={cn("font-bold tabular-nums tracking-tight", tone, className)}>
@@ -34,6 +36,7 @@ export function MoneyCell({
     </span>
   );
 }
+
 
 export function JalaliDateCell({
   value,

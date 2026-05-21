@@ -242,10 +242,14 @@ function VoucherDrawer({ voucher, onClose }: { voucher: Voucher; onClose: () => 
 
           <div className="grid grid-cols-2 gap-2">
             {voucher.status !== "posted" && <Button onClick={postVoucher} disabled={busy}><CheckCircle2 className="w-4 h-4 ml-1" /> تایید نهایی</Button>}
-            <Button onClick={sendSepidar} disabled={busy} variant="outline"><Send className="w-4 h-4 ml-1" /> ارسال به سپیدار</Button>
+            {/* Hide "ارسال به سپیدار" once the voucher is already posted/synced to Sepidar */}
+            {voucher.sepidar_sync_status !== "synced" && voucher.sepidar_sync_status !== "syncing" && (
+              <Button onClick={sendSepidar} disabled={busy} variant="outline"><Send className="w-4 h-4 ml-1" /> ارسال به سپیدار</Button>
+            )}
             {voucher.sepidar_sync_status === "failed" && <Button onClick={retrySepidar} disabled={busy} variant="outline"><RefreshCw className="w-4 h-4 ml-1" /> تلاش مجدد</Button>}
             {voucher.sepidar_sync_status === "synced" && <Button onClick={deleteFromSepidar} disabled={busy} variant="outline">حذف از سپیدار</Button>}
           </div>
+
         </div>
       </div>
     </div>

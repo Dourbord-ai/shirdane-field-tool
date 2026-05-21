@@ -51,6 +51,15 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [filterType, setFilterType] = useState<string>("");
   const [filterAssign, setFilterAssign] = useState<string>("");
   const [filterDescr, setFilterDescr] = useState("");
+  // Transaction-date range (Gregorian ISO from the Jalali DatePicker).
+  // These filter on `transaction_datetime` (the real banking date),
+  // NOT on `created_at` (when the row was inserted into our DB).
+  const [filterFromDate, setFilterFromDate] = useState<string | null>(null);
+  const [filterToDate, setFilterToDate] = useState<string | null>(null);
+  // Amount range filters — applied client-side over deposit OR withdraw amount
+  // so a single range covers both directions of the transaction.
+  const [filterMinAmount, setFilterMinAmount] = useState("");
+  const [filterMaxAmount, setFilterMaxAmount] = useState("");
   const [openManual, setOpenManual] = useState(false);
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
@@ -65,7 +74,9 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     });
   }, []);
 
-  useEffect(() => { void load(); }, [filterBank, filterType, filterAssign]);
+  // Re-fetch when server-side filters change. Date range goes here too so
+  // we don't pull 500 rows and then trim — Postgres does the work.
+  useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
 
   async function load() {
     setLoading(true);
@@ -78,15 +89,34 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterBank) q = q.eq("bank_id", filterBank);
     if (filterType) q = q.eq("transaction_type", filterType);
     if (filterAssign) q = q.eq("assignment_status", filterAssign);
+    // Inclusive range on the real transaction date column.
+    if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
+    if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
     const { data } = await q;
     setTxs((data as Tx[]) || []);
     setLoading(false);
   }
 
   const filtered = useMemo(() => {
-    if (!filterDescr) return txs;
-    return txs.filter((t) => (t.description || "").toLowerCase().includes(filterDescr.toLowerCase()));
-  }, [txs, filterDescr]);
+    // Parse amount bounds once. Empty string → no bound.
+    const min = filterMinAmount ? parseMoney(filterMinAmount) : null;
+    const max = filterMaxAmount ? parseMoney(filterMaxAmount) : null;
+    const needle = filterDescr.trim().toLowerCase();
+    return txs.filter((t) => {
+      if (needle && !(t.description || "").toLowerCase().includes(needle)) return false;
+      if (min !== null || max !== null) {
+        // Compare against whichever side of the transaction is non-zero.
+        // Falls back to abs(amount) for legacy rows that only set `amount`.
+        const v = Math.abs(
+          Number(t.deposit_amount) || Number(t.withdraw_amount) || Number(t.amount) || 0,
+        );
+        if (min !== null && v < min) return false;
+        if (max !== null && v > max) return false;
+      }
+      return true;
+    });
+  }, [txs, filterDescr, filterMinAmount, filterMaxAmount]);
+
 
   async function softDelete(t: Tx) {
     if (!confirm("حذف این تراکنش؟")) return;
@@ -113,7 +143,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters — first row: bank / type / assignment / description search */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <BankSelector value={filterBank} onChange={setFilterBank} placeholder="همه بانک‌ها" />
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
@@ -131,6 +161,42 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </select>
         <Input placeholder="شرح..." value={filterDescr} onChange={(e) => setFilterDescr(e.target.value)} />
       </div>
+
+      {/* Filters — second row: real transaction date range + amount range.
+          Date filters hit `transaction_datetime` (not `created_at`).
+          Amount range matches abs(deposit OR withdraw) so a single range
+          covers both directions. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">از تاریخ تراکنش</Label>
+          <DatePicker value={filterFromDate} onChange={setFilterFromDate} />
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">تا تاریخ تراکنش</Label>
+          <DatePicker value={filterToDate} onChange={setFilterToDate} />
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">حداقل مبلغ</Label>
+          <Input inputMode="numeric" placeholder="0" value={filterMinAmount} onChange={(e) => setFilterMinAmount(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1 block">حداکثر مبلغ</Label>
+          <Input inputMode="numeric" placeholder="—" value={filterMaxAmount} onChange={(e) => setFilterMaxAmount(e.target.value)} />
+        </div>
+      </div>
+
+      {(filterFromDate || filterToDate || filterMinAmount || filterMaxAmount) && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => { setFilterFromDate(null); setFilterToDate(null); setFilterMinAmount(""); setFilterMaxAmount(""); }}
+          >
+            پاک کردن فیلترهای تاریخ و مبلغ
+          </Button>
+        </div>
+      )}
+
 
       {loading ? (
         <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
@@ -163,7 +229,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     <td className="p-2"><MoneyCell value={t.deposit_amount} positive /></td>
                     <td className="p-2"><MoneyCell value={t.withdraw_amount} negative /></td>
                     <td className="p-2"><MoneyCell value={t.balance_after} /></td>
-                    <td className="p-2 max-w-[200px] truncate">{t.description || "—"}</td>
+                    <td className="p-2 max-w-[260px] align-top">
+                      {/* Full description on hover via native tooltip; click to expand inline.
+                          Keeps the row compact by default but never hides text from the user. */}
+                      <ExpandableDescription text={t.description} />
+                    </td>
+
                     <td className="p-2 font-mono text-xs">{t.reference_number || t.tracking_number || "—"}</td>
                     <td className="p-2 text-xs">{t.source_type || "—"}</td>
                     <td className="p-2"><FinanceStatusBadge status={t.assignment_status} /></td>
@@ -221,7 +292,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     ? <MoneyCell value={t.deposit_amount} positive />
                     : <MoneyCell value={t.withdraw_amount} negative />}
                 </div>
-                {t.description && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{t.description}</p>}
+                {t.description && (
+                  <div className="mt-2"><ExpandableDescription text={t.description} /></div>
+                )}
+
                 <div className="mt-2 flex gap-1 flex-wrap">
                   {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
                     <Button size="sm" variant="outline" onClick={() => setOpenReceiveId(t)}>
@@ -294,6 +368,41 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <pre dir="ltr" className="p-4 text-xs overflow-x-auto whitespace-pre-wrap">{JSON.stringify(openRaw.raw_data ?? openRaw, null, 2)}</pre>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ExpandableDescription
+ * Renders a bank transaction description with three affordances so the user
+ * never loses access to the full text:
+ *   1. Native browser tooltip (title=) on hover — instant preview.
+ *   2. Two-line clamp by default so rows stay compact.
+ *   3. Inline "نمایش کامل شرح" / "بستن" toggle when the text exceeds the clamp,
+ *      revealing the full description in-place without a modal.
+ */
+function ExpandableDescription({ text }: { text: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return <span className="text-muted-foreground">—</span>;
+  // Heuristic threshold: anything beyond ~80 chars likely needs the toggle.
+  const isLong = text.length > 80;
+  return (
+    <div className="text-xs leading-relaxed">
+      <p
+        title={text}
+        className={expanded ? "whitespace-pre-wrap break-words" : "line-clamp-2 break-words"}
+      >
+        {text}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-[11px] font-bold text-primary hover:underline"
+        >
+          {expanded ? "بستن" : "نمایش کامل شرح"}
+        </button>
       )}
     </div>
   );
