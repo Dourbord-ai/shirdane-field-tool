@@ -697,7 +697,10 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               <div className="text-[11px] text-muted-foreground">مانده</div>
               <MoneyCell value={headerRemaining} className="text-sm" negative={headerRemaining > 0} />
             </div>
+          </div>
+
           {/* Approval fallback banner: PR is approved but nothing linked yet */}
+
           {headerStatus === "approved" && allocations.length === 0 && (
             <div className="rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-3 text-xs">
               این درخواست تأیید شده است اما هنوز تراکنش پرداختی به آن متصل نشده است.
