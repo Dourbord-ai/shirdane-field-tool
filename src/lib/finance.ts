@@ -764,9 +764,6 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
   if (approvedAmount > 0 && alreadyPaid + Number(input.amount) > approvedAmount + 1e-6) {
     throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ درخواست تأیید شده باشد.");
   }
-  const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
-  if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
-  if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
 
   // Validate party Sepidar-ready
   if (!item.party_id) throw new Error("ذینفع ردیف نامعتبر است");
