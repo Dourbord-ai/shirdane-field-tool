@@ -292,7 +292,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     ? <MoneyCell value={t.deposit_amount} positive />
                     : <MoneyCell value={t.withdraw_amount} negative />}
                 </div>
-                {t.description && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{t.description}</p>}
+                {t.description && (
+                  <div className="mt-2"><ExpandableDescription text={t.description} /></div>
+                )}
+
                 <div className="mt-2 flex gap-1 flex-wrap">
                   {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
                     <Button size="sm" variant="outline" onClick={() => setOpenReceiveId(t)}>
