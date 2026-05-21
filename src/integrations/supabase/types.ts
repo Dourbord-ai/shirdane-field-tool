@@ -4679,6 +4679,10 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: undefined
       }
+      fn_finance_request_approved_payable: {
+        Args: { p_request_id: string }
+        Returns: number
+      }
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean

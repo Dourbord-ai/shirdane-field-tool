@@ -236,9 +236,12 @@ export default function PaymentRequestsTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((r) => {
-          // Compute display amounts. "approved" is the confirmed amount if
-          // present, otherwise we fall back to the originally requested total.
-          const approvedAmt = Number(r.confirmed_amount || r.total_amount || 0);
+          // Approved payable amount = confirmed_amount, which the DB trigger
+          // keeps as the SUM of approved items only (rejected items excluded).
+          // We deliberately do NOT fall back to total_amount, otherwise
+          // rejected-item value would look payable.
+          const requestedAmt = Number(r.total_amount || 0);
+          const approvedAmt = Number(r.confirmed_amount || 0);
           const paidAmt = Number(r.total_paid_amount || 0);
           const remainingAmt = Math.max(0, approvedAmt - paidAmt);
           return (
@@ -259,10 +262,16 @@ export default function PaymentRequestsTab() {
                 {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
               </p>
               {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
-              {/* Amounts row: requested/approved + paid + remaining */}
-              <div className="mt-3 pt-3 border-t grid grid-cols-3 gap-1 text-[11px]">
+              {/* Amounts row: requested / approved-payable / paid / remaining.
+                  Requested = original total. Approved = sum of approved items
+                  only (rejected items excluded). */}
+              <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-y-2 gap-x-2 text-[11px]">
                 <div className="flex flex-col">
-                  <span className="text-muted-foreground">تأیید شده</span>
+                  <span className="text-muted-foreground">مبلغ کل درخواستی</span>
+                  <MoneyCell value={requestedAmt} className="text-[11px]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground">تأیید شده قابل پرداخت</span>
                   <MoneyCell value={approvedAmt} className="text-[11px]" />
                 </div>
                 <div className="flex flex-col">
@@ -280,6 +289,7 @@ export default function PaymentRequestsTab() {
             </button>
           );
         })}
+
         {filtered.length === 0 && (
           <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             درخواستی یافت نشد
@@ -655,19 +665,23 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
   }
 
   // ---------------------------------------------------------------------
-  // Header amounts use the APPROVED amount (confirmed_amount fallback to
-  // total_amount) as the authoritative cap. This matches the DB trigger.
+  // Header amounts. The DB trigger keeps `confirmed_amount` equal to the
+  // SUM of APPROVED items only — rejected items are excluded. So we use
+  // it directly with NO fallback to total_amount, otherwise the rejected
+  // value would inflate the approved/payable figure shown to the user.
   // ---------------------------------------------------------------------
-  const headerApproved = Number(headerRefresh.confirmed_amount || headerRefresh.total_amount || 0);
+  const headerRequested = Number(headerRefresh.total_amount || 0);
+  const headerApproved = Number(headerRefresh.confirmed_amount || 0);
   const headerPaid = Number(headerRefresh.total_paid_amount || 0);
   const headerRemaining = Math.max(0, headerApproved - headerPaid);
   const headerStatus = headerRefresh.status;
   const headerPaymentStatus = headerRefresh.payment_status || "unpaid";
   // Linking is allowed when: request is approved (or partially_paid) AND
-  // payment is not yet fully complete AND there is remaining amount. This
-  // mirrors the BEFORE-INSERT trigger on finance_payment_allocations.
+  // there are approved payable items AND payment is not yet fully complete
+  // AND there is remaining amount. Mirrors the BEFORE-INSERT DB trigger.
   const canLinkOnRequest =
     (headerStatus === "approved" || headerStatus === "partially_paid") &&
+    headerApproved > 0 &&
     headerPaymentStatus !== "full_payment" &&
     headerRemaining > 0;
 
@@ -693,21 +707,34 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
         <div className="p-4 space-y-4">
           {pr.description && <p className="text-sm text-muted-foreground">{pr.description}</p>}
 
-          {/* Header summary — approved / paid / remaining */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Header summary — requested / approved-payable / paid / remaining */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ درخواست تأیید شده</div>
+              <div className="text-[11px] text-muted-foreground">مبلغ کل درخواستی</div>
+              <MoneyCell value={headerRequested} className="text-sm" />
+            </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-[11px] text-muted-foreground">تأیید شده قابل پرداخت</div>
               <MoneyCell value={headerApproved} className="text-sm" />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ پرداخت‌شده</div>
+              <div className="text-[11px] text-muted-foreground">پرداخت‌شده</div>
               <MoneyCell value={headerPaid} className="text-sm" positive />
             </div>
             <div className="rounded-lg border p-2">
-              <div className="text-[11px] text-muted-foreground">مبلغ باقی‌مانده</div>
+              <div className="text-[11px] text-muted-foreground">باقی‌مانده</div>
               <MoneyCell value={headerRemaining} className="text-sm" negative={headerRemaining > 0} />
             </div>
           </div>
+
+          {/* When the request is approved but no item is payable (all rejected),
+              warn explicitly so the user understands why the link button is hidden. */}
+          {headerStatus === "approved" && headerApproved <= 0 && (
+            <div className="rounded-lg border border-red-300/60 bg-red-50 dark:bg-red-950/30 text-red-900 dark:text-red-200 p-3 text-xs">
+              هیچ آیتم تأیید شده‌ای برای این درخواست وجود ندارد، بنابراین پرداختی قابل ثبت نیست.
+            </div>
+          )}
+
 
           {/* Status messages: approved-but-incomplete warning OR fully-paid confirmation. */}
           {headerStatus === "approved" && headerPaymentStatus !== "full_payment" && headerRemaining > 0 && (
@@ -727,23 +754,33 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               const amt = Number(i.amount || 0);
               const paid = Number(i.paid_amount || 0);
               const remaining = Math.max(0, amt - paid);
-              // Item-level link button mirrors the request-level rule:
-              // parent must be approved (or partially_paid) AND this row
-              // must still have a remaining balance AND must not be in a
-              // terminal state. We deliberately do NOT hide the button just
-              // because the request is "approved" — that's exactly when the
-              // user needs it.
               const itemStatus = String(i.status || "");
+              const isRejected = itemStatus === "rejected" || itemStatus === "cancelled" || itemStatus === "deleted";
+              // Payable amount per item = the item's own approved amount
+              // (we treat any approved-family status as payable). Rejected
+              // rows have a payable of 0 and must be excluded from totals.
+              const payableForItem = isRejected ? 0 : amt;
+              // Link button mirrors the request-level rule AND requires
+              // the item itself to be in an approved-family, non-terminal
+              // state with remaining > 0. Rejected items are excluded.
               const terminalStatuses = ["paid", "cancelled", "rejected", "deleted"];
               const canAllocate =
                 canLinkOnRequest &&
                 remaining > 0 &&
                 !terminalStatuses.includes(itemStatus);
               return (
-                <div key={i.id || idx} className="p-3 space-y-2">
+                <div
+                  key={i.id || idx}
+                  className={
+                    "p-3 space-y-2 " +
+                    (isRejected ? "opacity-60 bg-red-50/40 dark:bg-red-950/10" : "")
+                  }
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-sm truncate">{i.party ? partyName(i.party) : "—"}</p>
+                      <p className={"font-bold text-sm truncate " + (isRejected ? "line-through" : "")}>
+                        {i.party ? partyName(i.party) : "—"}
+                      </p>
                       {i.description && <p className="text-xs text-muted-foreground truncate">{i.description}</p>}
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
@@ -753,20 +790,29 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
                       <span className="text-muted-foreground">درخواستی</span>
                       <MoneyCell value={amt} className="text-[11px]" />
                     </div>
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
-                      <span className="text-muted-foreground">پرداخت شده</span>
+                      <span className="text-muted-foreground">قابل پرداخت</span>
+                      <MoneyCell value={payableForItem} className="text-[11px]" />
+                    </div>
+                    <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
+                      <span className="text-muted-foreground">پرداخت‌شده</span>
                       <MoneyCell value={paid} className="text-[11px]" />
                     </div>
                     <div className="rounded bg-muted/40 px-2 py-1 flex justify-between">
                       <span className="text-muted-foreground">مانده</span>
-                      <MoneyCell value={remaining} className="text-[11px]" />
+                      <MoneyCell value={isRejected ? 0 : remaining} className="text-[11px]" />
                     </div>
                   </div>
+                  {isRejected && (
+                    <div className="text-[11px] text-red-700 dark:text-red-300">
+                      این آیتم رد شده است و در محاسبات پرداخت لحاظ نمی‌شود.
+                    </div>
+                  )}
                   {canAllocate && (
                     <Button size="sm" variant="outline" className="w-full" onClick={() => setAllocItem(i)}>
                       <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
@@ -775,6 +821,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                 </div>
               );
             })}
+
           </div>
 
 
