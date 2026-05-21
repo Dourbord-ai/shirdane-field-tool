@@ -713,12 +713,25 @@ async function refreshPaymentRequestPaidTotals(payment_request_id: string): Prom
     .maybeSingle();
   const total = Number(header?.total_amount || 0);
   const remaining = Math.max(0, total - totalPaid);
+  // Approval/request lifecycle status — only promote to paid/partially_paid
+  // if we were already past approval. We must NEVER demote an approved
+  // request back to draft/pending_approval just because allocations exist.
   let headerStatus = header?.status || "approved";
   if (allPaid && list.length > 0) headerStatus = "paid";
   else if (anyPaid) headerStatus = "partially_paid";
+  // Payment-completion bucket (separate field) — derived from money flow.
+  let paymentStatus: "unpaid" | "partial_payment" | "full_payment" = "unpaid";
+  if (totalPaid <= 0) paymentStatus = "unpaid";
+  else if (total > 0 && totalPaid + 1e-6 >= total) paymentStatus = "full_payment";
+  else paymentStatus = "partial_payment";
   await supabase
     .from("finance_payment_requests")
-    .update({ total_paid_amount: totalPaid, remaining_amount: remaining, status: headerStatus })
+    .update({
+      total_paid_amount: totalPaid,
+      remaining_amount: remaining,
+      status: headerStatus,
+      payment_status: paymentStatus,
+    })
     .eq("id", payment_request_id);
 }
 
@@ -732,6 +745,24 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
   if (!item) throw new Error("ردیف درخواست یافت نشد");
   if (!["approved", "partially_paid", "sync_failed"].includes(String(item.status))) {
     throw new Error("ردیف درخواست در وضعیت قابل پرداخت نیست (نیاز به تایید مدیریت)");
+  }
+  const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
+  if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
+  if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
+
+  // -------------------------------------------------------------------
+  // Request-level overpayment guard (mirrors the DB trigger so we can
+  // show the user a clean Persian error before the round-trip fails).
+  // -------------------------------------------------------------------
+  const { data: header } = await supabase
+    .from("finance_payment_requests")
+    .select("total_amount, confirmed_amount, total_paid_amount, status")
+    .eq("id", item.payment_request_id)
+    .maybeSingle();
+  const approvedAmount = Number(header?.confirmed_amount || header?.total_amount || 0);
+  const alreadyPaid = Number(header?.total_paid_amount || 0);
+  if (approvedAmount > 0 && alreadyPaid + Number(input.amount) > approvedAmount + 1e-6) {
+    throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ درخواست تأیید شده باشد.");
   }
   const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
   if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
