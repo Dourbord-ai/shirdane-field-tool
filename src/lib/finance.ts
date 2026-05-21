@@ -680,60 +680,71 @@ function accountTypeForAmountTypeCode(code: number | null | undefined): string {
 }
 
 async function refreshPaymentRequestPaidTotals(payment_request_id: string): Promise<void> {
-  // Sum paid_amount on items, and update item statuses + header status.
+  // ---------------------------------------------------------------------
+  // Recompute item statuses and the request header's payment lifecycle.
+  //
+  // IMPORTANT: the approved/payable total is the sum of APPROVED items
+  // only — never the original `total_amount` (which still includes
+  // rejected items). The DB trigger `fn_finance_recalc_payment_request`
+  // is the source of truth and keeps `confirmed_amount`, `remaining_amount`
+  // and `payment_status` in sync; we still re-read the header afterwards
+  // so the request lifecycle bucket (`status`) tracks item-level paid
+  // progress correctly.
+  // ---------------------------------------------------------------------
   const { data: items } = await supabase
     .from("finance_payment_request_items")
     .select("id, amount, paid_amount, status")
     .eq("payment_request_id", payment_request_id);
   const list = (items || []) as { id: string; amount: number | null; paid_amount: number | null; status: string | null }[];
-  let totalPaid = 0;
-  let allPaid = list.length > 0;
+  // Track whether every APPROVED item is fully paid (rejected items don't count).
+  let approvedCount = 0;
+  let approvedAllPaid = true;
   let anyPaid = false;
   for (const it of list) {
     const amt = Number(it.amount || 0);
     const paid = Number(it.paid_amount || 0);
-    totalPaid += paid;
     const remaining = Math.max(0, amt - paid);
-    let nextStatus = it.status || "approved";
-    if (paid > 0 && paid + 1e-6 < amt) nextStatus = "partially_paid";
-    else if (paid + 1e-6 >= amt && amt > 0) nextStatus = "paid";
-    if (nextStatus !== it.status || remaining !== Number(it.paid_amount || 0)) {
-      await supabase
-        .from("finance_payment_request_items")
-        .update({ remaining_amount: remaining, status: nextStatus })
-        .eq("id", it.id);
+    // Only progress approved-family items; never overwrite a rejected status.
+    if (["approved", "partially_paid", "paid", "sync_failed"].includes(String(it.status))) {
+      approvedCount += 1;
+      let nextStatus = it.status || "approved";
+      if (paid > 0 && paid + 1e-6 < amt) nextStatus = "partially_paid";
+      else if (paid + 1e-6 >= amt && amt > 0) nextStatus = "paid";
+      if (nextStatus !== it.status) {
+        await supabase
+          .from("finance_payment_request_items")
+          .update({ remaining_amount: remaining, status: nextStatus })
+          .eq("id", it.id);
+      } else {
+        await supabase
+          .from("finance_payment_request_items")
+          .update({ remaining_amount: remaining })
+          .eq("id", it.id);
+      }
+      if (nextStatus !== "paid") approvedAllPaid = false;
     }
-    if (nextStatus !== "paid") allPaid = false;
     if (paid > 0) anyPaid = true;
   }
+
+  // Header request-level approval lifecycle (NOT payment completion).
+  // The DB trigger already wrote confirmed_amount / total_paid_amount /
+  // remaining_amount / payment_status — we only adjust the approval
+  // status bucket so the UI keeps showing paid / partially_paid once
+  // money starts flowing against approved items.
   const { data: header } = await supabase
     .from("finance_payment_requests")
-    .select("total_amount, status")
+    .select("status")
     .eq("id", payment_request_id)
     .maybeSingle();
-  const total = Number(header?.total_amount || 0);
-  const remaining = Math.max(0, total - totalPaid);
-  // Approval/request lifecycle status — only promote to paid/partially_paid
-  // if we were already past approval. We must NEVER demote an approved
-  // request back to draft/pending_approval just because allocations exist.
   let headerStatus = header?.status || "approved";
-  if (allPaid && list.length > 0) headerStatus = "paid";
+  if (approvedCount > 0 && approvedAllPaid) headerStatus = "paid";
   else if (anyPaid) headerStatus = "partially_paid";
-  // Payment-completion bucket (separate field) — derived from money flow.
-  let paymentStatus: "unpaid" | "partial_payment" | "full_payment" = "unpaid";
-  if (totalPaid <= 0) paymentStatus = "unpaid";
-  else if (total > 0 && totalPaid + 1e-6 >= total) paymentStatus = "full_payment";
-  else paymentStatus = "partial_payment";
   await supabase
     .from("finance_payment_requests")
-    .update({
-      total_paid_amount: totalPaid,
-      remaining_amount: remaining,
-      status: headerStatus,
-      payment_status: paymentStatus,
-    })
+    .update({ status: headerStatus })
     .eq("id", payment_request_id);
 }
+
 
 export async function createPaymentAllocation(input: CreatePaymentAllocationInput): Promise<{ id: string; ok: boolean; error?: string }> {
   // Load item + request
