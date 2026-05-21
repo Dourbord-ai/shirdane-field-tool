@@ -124,27 +124,13 @@ export default function PaymentRequestsTab() {
     if (typeFilter) q = q.eq("legacy_request_type_code", Number(typeFilter));
     if (statusFilter) q = q.eq("status", statusFilter);
 
-    // -------- Server-side numeric payment-state predicates --------------
-    // We translate the business rules directly into Supabase filters so the
-    // database does the heavy lifting and pagination/sorting work correctly.
-    // NOTE: PostgREST treats NULL as "unknown" — `.gt('x', 0)` will exclude
-    // rows where x IS NULL, which is exactly what we want for "paid/partial/
-    // unpaid" (they all require confirmed_amount > 0).
-    if (paymentFilter === "paid") {
-      q = q.gt("confirmed_amount", 0).lte("remaining_amount", 0);
-    } else if (paymentFilter === "partial") {
-      q = q.gt("confirmed_amount", 0).gt("total_paid_amount", 0).gt("remaining_amount", 0);
-    } else if (paymentFilter === "unpaid") {
-      // total_paid_amount may be NULL for never-touched rows → treat as 0.
-      // PostgREST has no "eq null" helper for "= 0"; we use .or() to match
-      // either explicit zero OR NULL, then require positive remaining.
-      q = q
-        .gt("confirmed_amount", 0)
-        .gt("remaining_amount", 0)
-        .or("total_paid_amount.is.null,total_paid_amount.eq.0");
-    } else if (paymentFilter === "pending") {
-      // No confirmed amount yet → cannot classify as paid/partial/unpaid.
-      q = q.or("confirmed_amount.is.null,confirmed_amount.eq.0");
+    // -------- Server-side payment-completion predicate ------------------
+    // After the lifecycle refactor we filter on the dedicated
+    // `payment_status` column. The DB trigger keeps it accurate, so this
+    // is a single-column equality check — much simpler and faster than the
+    // old numeric-derived predicates.
+    if (paymentFilter) {
+      q = q.eq("payment_status", paymentFilter);
     }
 
     const { data } = await q;
