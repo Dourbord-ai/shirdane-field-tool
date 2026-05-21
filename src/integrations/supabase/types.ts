@@ -4679,6 +4679,10 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: undefined
       }
+      fn_finance_recalc_payment_request_item: {
+        Args: { p_item_id: string }
+        Returns: undefined
+      }
       fn_finance_request_approved_payable: {
         Args: { p_request_id: string }
         Returns: number
