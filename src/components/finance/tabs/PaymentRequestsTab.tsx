@@ -951,17 +951,26 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   }, []);
 
   useEffect(() => {
+    // Convert the Jalali range picked by the user into a Gregorian timestamp
+    // window. `from` becomes start-of-day (00:00:00 +03:30) and `to` becomes
+    // inclusive end-of-day (23:59:59.999 +03:30) so the query covers the
+    // entire selected Jalali day(s). Both can be null when the user has not
+    // picked that bound yet.
+    const { from: fromGregorian, to: toGregorian } = jalaliRangeToGregorianRange(fromDate, toDate);
+
     let q = supabase
       .from("finance_bank_transactions")
-      .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number")
+      .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number,transaction_datetime")
       .eq("is_deleted", false)
       .eq("transaction_type", "withdraw")
       .eq("assignment_status", "unassigned")
       .order("transaction_datetime", { ascending: false })
       .limit(100);
     if (bankFilter) q = q.eq("bank_id", bankFilter);
-    if (fromDate) q = q.gte("transaction_jalali_date", fromDate);
-    if (toDate) q = q.lte("transaction_jalali_date", toDate);
+    // Filter on the real Gregorian timestamp column, NOT the legacy Jalali
+    // text column (which is empty for all rows).
+    if (fromGregorian) q = q.gte("transaction_datetime", fromGregorian);
+    if (toGregorian) q = q.lte("transaction_datetime", toGregorian);
     if (amountFilter) {
       const a = parseMoney(amountFilter);
       if (a) q = q.eq("withdraw_amount", a);
