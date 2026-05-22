@@ -647,8 +647,16 @@ export default function LivestockListBuilder() {
 
     setInlineSubmitting(true);
     try {
+      // common.dateStr is the Jalali string the user picked. The DB column
+      // event_date is now a real `timestamp`, so convert to Gregorian here
+      // before sending. We still keep the Jalali display value in metadata
+      // (via common.dateStr / common.time references elsewhere) for UI.
       const dateStr = common.dateStr;
-      const eventDate = common.time ? `${dateStr} ${common.time}` : dateStr;
+      const eventDate = jalaliStrToGregorianTs(dateStr, common.time);
+      if (!eventDate) {
+        setInlineSubmitting(false);
+        return toast.error("تاریخ نامعتبر است");
+      }
       const payload: any[] = [];
 
       for (const r of targets) {
