@@ -46,7 +46,25 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
-import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+import { JalaliDate, formatJalali, todayJalali, jalaliToGregorian } from "@/lib/jalali";
+// Shared helper: converts a JalaliDate + "HH:MM" into the Gregorian
+// "YYYY-MM-DD HH:MM" string that the now-typed `event_date timestamp`
+// column in Postgres expects. Every batch insert below must use this.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
+
+// Local helper for the inline-batch flow where the date arrives as a
+// pre-formatted Jalali string (e.g. "1404/02/15") rather than a JalaliDate
+// object. Parses the string, converts to Gregorian, and appends time.
+function jalaliStrToGregorianTs(jStr: string, time?: string | null): string | null {
+  // Accept both "/" and "-" separators just like other helpers in the app.
+  const m = jStr?.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (!m) return null;
+  const g = jalaliToGregorian(Number(m[1]), Number(m[2]), Number(m[3]));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const datePart = `${g.year}-${pad(g.month)}-${pad(g.day)}`;
+  const t = (time ?? "").trim();
+  return t ? `${datePart} ${t}` : datePart;
+}
 import { cn } from "@/lib/utils";
 import { FERTILITY_STATUS_LABELS, PRESENCE_STATUS_LABELS } from "@/lib/livestock";
 // Lifecycle classification helper — provides "وضعیت چرخه دام" derived from
