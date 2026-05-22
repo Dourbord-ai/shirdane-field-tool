@@ -104,11 +104,16 @@ export default function FertilityOperations() {
 
       // 2) Insert event
       const op = ops.find((o) => o.id === Number(opId));
+      // Convert the Jalali date the user picked to a Gregorian timestamp
+      // string before saving — the DB column is now `timestamp` and will
+      // reject "1404/02/15"-style values.
+      const eventDateGregorian = shamsiToGregorianTs(dateShamsi, time);
+      if (!eventDateGregorian) throw new Error("تاریخ نامعتبر است");
       const payload = {
         livestock_id: Number(cowId),
         fertility_operation_id: Number(opId),
         event_type: op?.operation_name || "fertility",
-        event_date: dateShamsi,
+        event_date: eventDateGregorian,
         event_time: time || null,
         result_code: resultCode || null,
         fertility_status_id: statusId ? Number(statusId) : null,
