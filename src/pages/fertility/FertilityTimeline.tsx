@@ -127,7 +127,10 @@ export default function FertilityTimeline() {
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {e.event_date || "—"} {e.event_time ? `• ${e.event_time}` : ""}
+                    {/* event_date is now a Gregorian timestamp in DB; render it
+                        as Jalali (with time when available) for the user. */}
+                    {e.event_date ? formatShamsi(e.event_date, true) : "—"}
+                    {e.event_time ? ` • ${e.event_time}` : ""}
                   </span>
                 </div>
                 {e.result_code && <p className="text-xs text-muted-foreground mt-1">کد نتیجه: {e.result_code}</p>}
