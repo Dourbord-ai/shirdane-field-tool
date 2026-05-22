@@ -1071,7 +1071,7 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
               <div className="text-sm font-bold">تایید تخصیص</div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div><span className="text-muted-foreground">بانک: </span>{bankName(selected.bank_id)}</div>
-                <div><span className="text-muted-foreground">تاریخ: </span>{selected.transaction_jalali_date || "—"}</div>
+                <div><span className="text-muted-foreground">تاریخ: </span>{selected.transaction_jalali_date || formatJalaliDateTime(selected.transaction_datetime) || "—"}</div>
                 <div><span className="text-muted-foreground">مبلغ تراکنش: </span>{formatMoney(selected.withdraw_amount)}</div>
                 <div><span className="text-muted-foreground">مانده ردیف: </span>{formatMoney(remaining)}</div>
               </div>
