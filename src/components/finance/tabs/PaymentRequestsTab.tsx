@@ -1055,7 +1055,10 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
                   <div className="min-w-0">
                     <div className="text-sm font-bold">{bankName(tx.bank_id)}</div>
                     <div className="text-[11px] text-muted-foreground truncate">{tx.description || "—"}</div>
-                    <div className="text-[10px] text-muted-foreground">سند: {tx.document_number || "—"} · {tx.transaction_jalali_date || ""}</div>
+                    {/* Prefer legacy Jalali text column when present, otherwise
+                        convert the real Gregorian timestamp to a Jalali date+time
+                        string so users always see a Persian date. */}
+                    <div className="text-[10px] text-muted-foreground">سند: {tx.document_number || "—"} · {tx.transaction_jalali_date || formatJalaliDateTime(tx.transaction_datetime) || ""}</div>
                   </div>
                   <MoneyCell value={tx.withdraw_amount} className="text-sm" negative />
                 </div>
