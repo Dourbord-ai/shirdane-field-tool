@@ -10,9 +10,13 @@ import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
-// Jalali calendar UI that returns a Jalali "YYYY/MM/DD" string — used here
-// because the filter targets the legacy `transaction_jalali_date` text column.
+// Jalali calendar UI returns "YYYY/MM/DD" Jalali strings. We convert these
+// to Gregorian timestamp boundaries (start-of-day / end-of-day in Tehran)
+// before filtering, because the DB stores Gregorian `transaction_datetime`.
+// The legacy `transaction_jalali_date` text column is unused (100% NULL),
+// so filtering against it was effectively hiding every result.
 import ShamsiDatePicker from "@/components/ShamsiDatePicker";
+import { jalaliRangeToGregorianRange } from "@/lib/dateUtils";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
   PAYMENT_AMOUNT_TYPES,
