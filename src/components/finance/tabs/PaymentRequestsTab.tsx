@@ -929,6 +929,9 @@ interface BankLite { id: string; title: string | null; bank_name: string | null 
 interface TxRow {
   id: string; bank_id: string; transaction_jalali_date: string | null;
   withdraw_amount: number; description: string | null; document_number: string | null;
+  // Gregorian timestamp — used for display fallback when the legacy Jalali
+  // text column is null (which it is for every row).
+  transaction_datetime: string | null;
 }
 
 function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFull; requestId: string; onClose: () => void; onDone: () => void }) {
