@@ -7,6 +7,10 @@ import SearchableSelect from "@/components/SearchableSelect";
 import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
 import { PREGNANCY_STATE_BADGE, MILKING_STATE_BADGE } from "@/lib/fertilityRefs";
 import { deriveEventPeople } from "@/lib/fertility";
+// formatShamsi converts the Gregorian timestamp now returned by Supabase
+// (event_date is a real `timestamp` column) into a Persian-digit Jalali
+// string so users still see Shamsi dates in the timeline list.
+import { formatShamsi } from "@/lib/dateDisplay";
 
 interface FertilityEvent {
   id: string;
