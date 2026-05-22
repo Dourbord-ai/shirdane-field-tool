@@ -122,7 +122,16 @@ export default function EditFertilityEventDialog({
     const selectedUser = users.find((u) => u.id === operatorId);
     setSubmitting(true);
 
-    const updates: any = {
+    // The input holds a Jalali string; convert it to a Gregorian timestamp
+    // before persisting because event_date is now a `timestamp` column.
+    const eventDateGregorian = eventDate.trim()
+      ? shamsiInputToGregorianTs(eventDate)
+      : null;
+    if (eventDate.trim() && !eventDateGregorian) {
+      setSubmitting(false);
+      toast.error("فرمت تاریخ نامعتبر است. مثال: 1404/02/15 14:30");
+      return;
+    }
       event_date: eventDate || null,
       notes: notes || null,
       result: result || null,
