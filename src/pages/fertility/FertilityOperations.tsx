@@ -15,6 +15,20 @@ import { toast } from "sonner";
 import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
 import { getSession } from "@/lib/auth";
 import { checkFertilityOperation } from "@/lib/fertilityValidation";
+// jalaliToGregorian + a tiny pad2 let us convert the Jalali date the user
+// picks in the UI into the Gregorian "YYYY-MM-DD HH:MM" string required by
+// the now-typed `event_date timestamp` column in Postgres.
+import { jalaliToGregorian } from "@/lib/jalali";
+const pad2 = (n: number) => String(n).padStart(2, "0");
+// Convert "YYYY/MM/DD" Jalali (+ optional "HH:MM") → "YYYY-MM-DD HH:MM" Gregorian.
+function shamsiToGregorianTs(dateShamsi: string, time?: string | null): string | null {
+  const m = dateShamsi?.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (!m) return null;
+  const g = jalaliToGregorian(Number(m[1]), Number(m[2]), Number(m[3]));
+  const datePart = `${g.year}-${pad2(g.month)}-${pad2(g.day)}`;
+  const t = (time ?? "").trim();
+  return t ? `${datePart} ${t}` : datePart;
+}
 
 interface EroticTypeOpt { id: number; title: string }
 
@@ -90,11 +104,16 @@ export default function FertilityOperations() {
 
       // 2) Insert event
       const op = ops.find((o) => o.id === Number(opId));
+      // Convert the Jalali date the user picked to a Gregorian timestamp
+      // string before saving — the DB column is now `timestamp` and will
+      // reject "1404/02/15"-style values.
+      const eventDateGregorian = shamsiToGregorianTs(dateShamsi, time);
+      if (!eventDateGregorian) throw new Error("تاریخ نامعتبر است");
       const payload = {
         livestock_id: Number(cowId),
         fertility_operation_id: Number(opId),
         event_type: op?.operation_name || "fertility",
-        event_date: dateShamsi,
+        event_date: eventDateGregorian,
         event_time: time || null,
         result_code: resultCode || null,
         fertility_status_id: statusId ? Number(statusId) : null,

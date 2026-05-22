@@ -23,6 +23,41 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getSession } from "@/lib/auth";
 import { FertilityEvent, fertilityEventLabel } from "@/lib/fertility";
+// We convert between the Gregorian timestamp stored in the DB and the
+// Jalali string the user types/sees. Keeping these helpers local so we
+// don't touch unrelated date utilities elsewhere in the app.
+import { gregorianToJalali, jalaliToGregorian } from "@/lib/jalali";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+// Render a Gregorian timestamp from the DB as "YYYY/MM/DD HH:MM" Jalali
+// for editing. ASCII digits so the value is editable in a plain <Input>.
+function gregorianTsToShamsiInput(value: string | null): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value; // fall back to raw text
+  const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  const datePart = `${j.year}/${pad2(j.month)}/${pad2(j.day)}`;
+  const hh = d.getHours();
+  const mm = d.getMinutes();
+  // Only append a time component when the original timestamp actually had one.
+  if (hh === 0 && mm === 0 && d.getSeconds() === 0) return datePart;
+  return `${datePart} ${pad2(hh)}:${pad2(mm)}`;
+}
+
+// Parse what the user typed ("1404/02/15" or "1404/02/15 14:30") and produce
+// a Gregorian "YYYY-MM-DD" / "YYYY-MM-DD HH:MM" string accepted by the
+// now-typed `event_date timestamp` column.
+function shamsiInputToGregorianTs(input: string): string | null {
+  const s = input.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:[\sT]+(\d{1,2}):(\d{1,2}))?/);
+  if (!m) return null;
+  const g = jalaliToGregorian(Number(m[1]), Number(m[2]), Number(m[3]));
+  const datePart = `${g.year}-${pad2(g.month)}-${pad2(g.day)}`;
+  if (m[4] && m[5]) return `${datePart} ${pad2(Number(m[4]))}:${pad2(Number(m[5]))}`;
+  return datePart;
+}
 
 type Props = {
   event: FertilityEvent | null;
@@ -53,7 +88,7 @@ export default function EditFertilityEventDialog({
 
   useEffect(() => {
     if (!open || !event) return;
-    setEventDate(event.event_date ?? "");
+    setEventDate(gregorianTsToShamsiInput(event.event_date ?? null));
     setNotes(event.notes ?? "");
     setResult(event.result ?? "");
     setStatusCode(event.status_code != null ? String(event.status_code) : "");
@@ -87,8 +122,19 @@ export default function EditFertilityEventDialog({
     const selectedUser = users.find((u) => u.id === operatorId);
     setSubmitting(true);
 
+    // The input holds a Jalali string; convert it to a Gregorian timestamp
+    // before persisting because event_date is now a `timestamp` column.
+    const eventDateGregorian = eventDate.trim()
+      ? shamsiInputToGregorianTs(eventDate)
+      : null;
+    if (eventDate.trim() && !eventDateGregorian) {
+      setSubmitting(false);
+      toast.error("فرمت تاریخ نامعتبر است. مثال: 1404/02/15 14:30");
+      return;
+    }
+
     const updates: any = {
-      event_date: eventDate || null,
+      event_date: eventDateGregorian,
       notes: notes || null,
       result: result || null,
       status_code: statusCode ? Number(statusCode) : null,
