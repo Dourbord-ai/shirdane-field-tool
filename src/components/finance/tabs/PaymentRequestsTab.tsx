@@ -10,9 +10,13 @@ import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
-// Jalali calendar UI that returns a Jalali "YYYY/MM/DD" string — used here
-// because the filter targets the legacy `transaction_jalali_date` text column.
+// Jalali calendar UI returns "YYYY/MM/DD" Jalali strings. We convert these
+// to Gregorian timestamp boundaries (start-of-day / end-of-day in Tehran)
+// before filtering, because the DB stores Gregorian `transaction_datetime`.
+// The legacy `transaction_jalali_date` text column is unused (100% NULL),
+// so filtering against it was effectively hiding every result.
 import ShamsiDatePicker from "@/components/ShamsiDatePicker";
+import { jalaliRangeToGregorianRange } from "@/lib/dateUtils";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
   PAYMENT_AMOUNT_TYPES,
@@ -925,6 +929,9 @@ interface BankLite { id: string; title: string | null; bank_name: string | null 
 interface TxRow {
   id: string; bank_id: string; transaction_jalali_date: string | null;
   withdraw_amount: number; description: string | null; document_number: string | null;
+  // Gregorian timestamp — used for display fallback when the legacy Jalali
+  // text column is null (which it is for every row).
+  transaction_datetime: string | null;
 }
 
 function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFull; requestId: string; onClose: () => void; onDone: () => void }) {
@@ -947,17 +954,26 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   }, []);
 
   useEffect(() => {
+    // Convert the Jalali range picked by the user into a Gregorian timestamp
+    // window. `from` becomes start-of-day (00:00:00 +03:30) and `to` becomes
+    // inclusive end-of-day (23:59:59.999 +03:30) so the query covers the
+    // entire selected Jalali day(s). Both can be null when the user has not
+    // picked that bound yet.
+    const { from: fromGregorian, to: toGregorian } = jalaliRangeToGregorianRange(fromDate, toDate);
+
     let q = supabase
       .from("finance_bank_transactions")
-      .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number")
+      .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number,transaction_datetime")
       .eq("is_deleted", false)
       .eq("transaction_type", "withdraw")
       .eq("assignment_status", "unassigned")
       .order("transaction_datetime", { ascending: false })
       .limit(100);
     if (bankFilter) q = q.eq("bank_id", bankFilter);
-    if (fromDate) q = q.gte("transaction_jalali_date", fromDate);
-    if (toDate) q = q.lte("transaction_jalali_date", toDate);
+    // Filter on the real Gregorian timestamp column, NOT the legacy Jalali
+    // text column (which is empty for all rows).
+    if (fromGregorian) q = q.gte("transaction_datetime", fromGregorian);
+    if (toGregorian) q = q.lte("transaction_datetime", toGregorian);
     if (amountFilter) {
       const a = parseMoney(amountFilter);
       if (a) q = q.eq("withdraw_amount", a);
@@ -1039,7 +1055,10 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
                   <div className="min-w-0">
                     <div className="text-sm font-bold">{bankName(tx.bank_id)}</div>
                     <div className="text-[11px] text-muted-foreground truncate">{tx.description || "—"}</div>
-                    <div className="text-[10px] text-muted-foreground">سند: {tx.document_number || "—"} · {tx.transaction_jalali_date || ""}</div>
+                    {/* Prefer legacy Jalali text column when present, otherwise
+                        convert the real Gregorian timestamp to a Jalali date+time
+                        string so users always see a Persian date. */}
+                    <div className="text-[10px] text-muted-foreground">سند: {tx.document_number || "—"} · {tx.transaction_jalali_date || formatJalaliDateTime(tx.transaction_datetime) || ""}</div>
                   </div>
                   <MoneyCell value={tx.withdraw_amount} className="text-sm" negative />
                 </div>
@@ -1052,7 +1071,7 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
               <div className="text-sm font-bold">تایید تخصیص</div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div><span className="text-muted-foreground">بانک: </span>{bankName(selected.bank_id)}</div>
-                <div><span className="text-muted-foreground">تاریخ: </span>{selected.transaction_jalali_date || "—"}</div>
+                <div><span className="text-muted-foreground">تاریخ: </span>{selected.transaction_jalali_date || formatJalaliDateTime(selected.transaction_datetime) || "—"}</div>
                 <div><span className="text-muted-foreground">مبلغ تراکنش: </span>{formatMoney(selected.withdraw_amount)}</div>
                 <div><span className="text-muted-foreground">مانده ردیف: </span>{formatMoney(remaining)}</div>
               </div>
