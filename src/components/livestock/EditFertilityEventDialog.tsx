@@ -132,7 +132,9 @@ export default function EditFertilityEventDialog({
       toast.error("فرمت تاریخ نامعتبر است. مثال: 1404/02/15 14:30");
       return;
     }
-      event_date: eventDate || null,
+
+    const updates: any = {
+      event_date: eventDateGregorian,
       notes: notes || null,
       result: result || null,
       status_code: statusCode ? Number(statusCode) : null,
