@@ -1612,7 +1612,8 @@ function GroupActionDialog({
   async function performInsert() {
     setSubmitting(true);
     const dateStr = formatJalali(date!);
-    const eventDate = time ? `${dateStr} ${time}` : dateStr;
+    // event_date column is now `timestamp`; convert Jalali pick → Gregorian.
+    const eventDate = toGregorianForDb(date!, time);
     const operator = users.find((u) => String(u.id) === operatorId);
     const operatorName = operator?.full_name ?? operator?.username ?? null;
 
