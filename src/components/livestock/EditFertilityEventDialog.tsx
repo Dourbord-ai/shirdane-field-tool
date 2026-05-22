@@ -88,7 +88,7 @@ export default function EditFertilityEventDialog({
 
   useEffect(() => {
     if (!open || !event) return;
-    setEventDate(event.event_date ?? "");
+    setEventDate(gregorianTsToShamsiInput(event.event_date ?? null));
     setNotes(event.notes ?? "");
     setResult(event.result ?? "");
     setStatusCode(event.status_code != null ? String(event.status_code) : "");
