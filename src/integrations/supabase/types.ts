@@ -5012,6 +5012,20 @@ export type Database = {
       }
     }
     Functions: {
+      _log_factor_posting_attempt: {
+        Args: {
+          p_attempt_number: number
+          p_context?: Json
+          p_factor_id: string
+          p_idempotency_key?: string
+          p_message: string
+          p_raw_error?: string
+          p_step: string
+          p_success: boolean
+          p_voucher_id?: string
+        }
+        Returns: string
+      }
       ensure_app_users_for_hr_users: {
         Args: { _default_password_hash?: string }
         Returns: {
@@ -5034,6 +5048,10 @@ export type Database = {
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean
+      }
+      post_approved_factor: {
+        Args: { p_factor_id: string; p_triggered_by?: string }
+        Returns: Json
       }
       rebuild_cow_fertility_cache: {
         Args: { p_cow_id: number }
