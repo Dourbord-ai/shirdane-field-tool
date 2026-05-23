@@ -913,8 +913,19 @@ export default function NewInvoice() {
     const finalDiscount = isMilk ? milkDiscount : discount;
     const finalShipping = isMilk ? milkShipping : shipping;
 
+    // Jalali "YYYY/MM/DD" string — still used by the *other* tables
+    // (rentals start_date/end_date etc.) in Groups D/E that have NOT been
+    // migrated yet, so we keep this helper for them.
     const formatDate = (d: JalaliDate | null) =>
       d ? `${d.year}/${d.month}/${d.day}` : null;
+
+    // Group C: `factors.invoice_date` and `factors.delivery_date` are now
+    // PostgreSQL `timestamptz`. We must NOT insert a Jalali string into them
+    // anymore. Convert the Jalali UI picker → Gregorian ISO timestamp anchored
+    // at Tehran wall-clock midnight before sending to Supabase. The picker UI
+    // itself stays Jalali — only the wire format changes.
+    const formatFactorTimestamp = (d: JalaliDate | null) =>
+      d ? jalaliToGregorianTimestamp(`${d.year}/${d.month}/${d.day}`, "00:00") : null;
 
     // 1) Insert factor header
     const { data: factor, error: factorError } = await supabase
