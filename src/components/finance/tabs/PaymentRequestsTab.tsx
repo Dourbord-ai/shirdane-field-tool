@@ -409,6 +409,10 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
         legacy_request_type_code: code,
         status: "pending_approval",
       };
+      // Only fields that actually exist on finance_payment_request_items.
+      // Beneficiary/snapshot columns don't exist in the table yet, so we
+      // omit them from the RPC payload to avoid 42703 errors. The server
+      // RPC sets paid_amount=0 and remaining_amount=amount on insert.
       const itemsPayload = items.map((i) => ({
         party_id: i.party_id,
         amount: i.amount,
@@ -416,12 +420,6 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
         amount_type: i.amount_type,
         description: i.description,
         status: "pending_approval",
-        beneficiary_id: i.beneficiary_id ?? null,
-        dl_ref: i.dl_ref ?? null,
-        dl_code: i.dl_code ?? null,
-        beneficiary_name: i.beneficiary_name ?? null,
-        beneficiary_type: i.beneficiary_type ?? null,
-        beneficiary_balance_snapshot: i.beneficiary_balance_snapshot ?? null,
       }));
 
       // Temporary logging to make payload inspection trivial in DevTools.
