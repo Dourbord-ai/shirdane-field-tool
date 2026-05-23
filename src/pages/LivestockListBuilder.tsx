@@ -21,6 +21,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
+// formatShamsi accepts either a Gregorian ISO string (what Postgres now
+// returns for timestamptz/date columns after Group D migration) OR a legacy
+// text-stored string, and renders a Jalali/Persian date. Keeping a single
+// helper guarantees Jalali display continues to work uniformly even though
+// the underlying column types changed.
+import { formatShamsi } from "@/lib/dateDisplay";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
@@ -204,16 +210,21 @@ const ALL_COLUMNS: ColumnDef[] = [
   // Calculated lifecycle classification (e.g. "گاو دوشا", "تلیسه آبستن").
   // Pulled from the shared helper so the label matches every other surface.
   { key: "lifecycle",  label: "وضعیت چرخه دام",    accessor: (r) => calculateLifecycleState(r as any).label },
-  { key: "erotic",     label: "آخرین فحلی",        accessor: (r) => r.last_erotic_date || "—" },
-  { key: "inoc",       label: "آخرین تلقیح",       accessor: (r) => r.last_inoculation_date || "—" },
-  { key: "pregTest",   label: "آخرین تست آبستنی",  accessor: (r) => r.last_pregnancy_date || "—" },
-  { key: "birth",      label: "آخرین زایش",        accessor: (r) => r.last_birth_date || "—" },
-  { key: "abortion",   label: "آخرین سقط",         accessor: (r) => r.last_abortion_date || "—" },
-  { key: "dryDate",    label: "آخرین خشک کردن",    accessor: (r) => r.last_dry_date || "—" },
+  // Group D: these cow date/timestamp fields are now native PostgreSQL
+  // `date` / `timestamptz` values that the Supabase client serialises as
+  // ISO strings (e.g. "2026-04-12T00:00:00+00:00"). We must render them via
+  // formatShamsi so the user keeps seeing Persian/Jalali dates instead of
+  // raw ISO timestamps. Empty / null values still collapse to "—".
+  { key: "erotic",     label: "آخرین فحلی",        accessor: (r) => formatShamsi(r.last_erotic_date, false, "—") },
+  { key: "inoc",       label: "آخرین تلقیح",       accessor: (r) => formatShamsi(r.last_inoculation_date, false, "—") },
+  { key: "pregTest",   label: "آخرین تست آبستنی",  accessor: (r) => formatShamsi(r.last_pregnancy_date, false, "—") },
+  { key: "birth",      label: "آخرین زایش",        accessor: (r) => formatShamsi(r.last_birth_date, false, "—") },
+  { key: "abortion",   label: "آخرین سقط",         accessor: (r) => formatShamsi(r.last_abortion_date, false, "—") },
+  { key: "dryDate",    label: "آخرین خشک کردن",    accessor: (r) => formatShamsi(r.last_dry_date, false, "—") },
   { key: "location",   label: "بهاربند",           accessor: (r, c) => c.locations.get(r.last_location_id ?? -1) || "—" },
   { key: "type",       label: "نوع دام",            accessor: (r, c) => c.types.get(r.last_type_id ?? -1) || "—" },
   // optional/extra columns
-  { key: "dob",        label: "تاریخ تولد",         accessor: (r) => r.date_of_birth || "—" },
+  { key: "dob",        label: "تاریخ تولد",         accessor: (r) => formatShamsi(r.date_of_birth, false, "—") },
   { key: "births",     label: "تعداد زایش",         accessor: (r) => r.number_of_births ?? "—" },
   { key: "period",     label: "دوره",               accessor: (r) => r.last_period ?? "—" },
   { key: "status",     label: "وضعیت سلامت",        accessor: (r, c) => c.statuses.get(r.last_status_id ?? -1) || "—" },
