@@ -1014,7 +1014,11 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   const [allocAmount, setAllocAmount] = useState<number>(0);
   const [busy, setBusy] = useState(false);
 
-  const remaining = Math.max(0, Number(item.amount || 0) - Number(item.paid_amount || 0));
+  // Approved payable for THIS item = confirmed_amount when set by the
+  // DB trigger, otherwise fall back to the requested `amount`. The
+  // remaining unpaid amount is the cap we never let the user exceed.
+  const payable = Math.max(0, Number(item.confirmed_amount || 0) || Number(item.amount || 0));
+  const remaining = Math.max(0, payable - Number(item.paid_amount || 0));
 
   useEffect(() => {
     void supabase.from("finance_banks").select("id,title,bank_name").eq("is_deleted", false).then(({ data }) => setBanks((data as BankLite[]) || []));
