@@ -4633,25 +4633,26 @@ export type Database = {
       analytics_fertility_legacy_chart: {
         Row: {
           bodynumber: number | null
-          chart_days: number | null
           chart_status: string | null
+          d_birth: string | null
+          d_dob: string | null
+          d_dry: string | null
+          d_erotic: string | null
+          d_inoc: string | null
           date_of_birth: string | null
           dry_days: number | null
           earnumber: number | null
           is_dry: boolean | null
           is_heifer: boolean | null
           is_pregnancy: boolean | null
+          is_pregnancy_reporting: boolean | null
           last_abortion_date: string | null
           last_birth_date: string | null
-          last_birth_date_g: string | null
           last_birth_to_pregnancy_days: number | null
           last_dry_date: string | null
-          last_dry_date_g: string | null
           last_erotic_date: string | null
-          last_erotic_date_g: string | null
           last_fertility_status: number | null
           last_inoculation_date: string | null
-          last_inoculation_date_g: string | null
           last_location_name: string | null
           last_period: number | null
           last_pregnancy_date: string | null
@@ -4660,7 +4661,6 @@ export type Database = {
           number_of_births: number | null
           prediction_of_birth_date: string | null
           prediction_of_birth_date_days: number | null
-          prediction_of_birth_date_g: string | null
           pregnancy_days: number | null
           status_color: string | null
         }
