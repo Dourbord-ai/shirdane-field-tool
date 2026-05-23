@@ -249,7 +249,7 @@ function StatementTable({
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm text-right" dir="rtl">
           <thead className="bg-muted/50 text-xs">
             <tr>
               <th className="p-2 text-right">تاریخ</th>
@@ -391,7 +391,7 @@ function DiffGroup({
         <p className="text-xs text-muted-foreground mt-0.5">{message}</p>
       </div>
       <div className="overflow-x-auto rounded border bg-card">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs text-right" dir="rtl">
           <thead className="bg-muted/40">
             <tr>
               <th className="p-2 text-right">تاریخ</th>
