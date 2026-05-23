@@ -1032,26 +1032,59 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
     // picked that bound yet.
     const { from: fromGregorian, to: toGregorian } = jalaliRangeToGregorianRange(fromDate, toDate);
 
-    let q = supabase
-      .from("finance_bank_transactions")
-      .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number,transaction_datetime")
-      .eq("is_deleted", false)
-      .eq("transaction_type", "withdraw")
-      .eq("assignment_status", "unassigned")
-      .order("transaction_datetime", { ascending: false })
-      .limit(100);
-    if (bankFilter) q = q.eq("bank_id", bankFilter);
-    // Filter on the real Gregorian timestamp column, NOT the legacy Jalali
-    // text column (which is empty for all rows).
-    if (fromGregorian) q = q.gte("transaction_datetime", fromGregorian);
-    if (toGregorian) q = q.lte("transaction_datetime", toGregorian);
-    if (amountFilter) {
-      const a = parseMoney(amountFilter);
-      if (a) q = q.eq("withdraw_amount", a);
-    }
-    if (descFilter) q = q.ilike("description", `%${descFilter}%`);
-    if (docFilter) q = q.ilike("document_number", `%${docFilter}%`);
-    void q.then(({ data }) => setTxs((data as TxRow[]) || []));
+    // Defense-in-depth: even though `assignment_status='unassigned'` is set
+    // by the lib + DB trigger when a transaction gets linked, we ALSO
+    // explicitly exclude any transaction already present in an ACTIVE
+    // payment allocation or receive identification. This way, if
+    // `assignment_status` ever drifts out of sync with the source-of-truth
+    // tables, the user can still never accidentally pick a reused
+    // transaction. The DB unique indexes + BEFORE trigger remain the final
+    // line of defense against race conditions.
+    void (async () => {
+      const [{ data: usedAllocs }, { data: usedIds }] = await Promise.all([
+        supabase
+          .from("finance_payment_allocations")
+          .select("bank_transaction_id")
+          .eq("is_deleted", false)
+          .not("status", "in", "(cancelled,rejected)"),
+        supabase
+          .from("finance_receive_identifications")
+          .select("bank_transaction_id")
+          .eq("is_deleted", false)
+          .not("status", "in", "(cancelled,rejected)"),
+      ]);
+      const usedSet = new Set<string>();
+      ((usedAllocs as { bank_transaction_id: string | null }[]) || []).forEach((r) => {
+        if (r.bank_transaction_id) usedSet.add(r.bank_transaction_id);
+      });
+      ((usedIds as { bank_transaction_id: string | null }[]) || []).forEach((r) => {
+        if (r.bank_transaction_id) usedSet.add(r.bank_transaction_id);
+      });
+
+      let q = supabase
+        .from("finance_bank_transactions")
+        .select("id,bank_id,transaction_jalali_date,withdraw_amount,description,document_number,transaction_datetime")
+        .eq("is_deleted", false)
+        .eq("transaction_type", "withdraw")
+        .eq("assignment_status", "unassigned")
+        .order("transaction_datetime", { ascending: false })
+        .limit(100);
+      if (bankFilter) q = q.eq("bank_id", bankFilter);
+      // Filter on the real Gregorian timestamp column, NOT the legacy Jalali
+      // text column (which is empty for all rows).
+      if (fromGregorian) q = q.gte("transaction_datetime", fromGregorian);
+      if (toGregorian) q = q.lte("transaction_datetime", toGregorian);
+      if (amountFilter) {
+        const a = parseMoney(amountFilter);
+        if (a) q = q.eq("withdraw_amount", a);
+      }
+      if (descFilter) q = q.ilike("description", `%${descFilter}%`);
+      if (docFilter) q = q.ilike("document_number", `%${docFilter}%`);
+      const { data } = await q;
+      // Final client-side scrub: hide any tx that's already used elsewhere.
+      const rows = ((data as TxRow[]) || []).filter((t) => !usedSet.has(t.id));
+      setTxs(rows);
+    })();
   }, [bankFilter, fromDate, toDate, amountFilter, descFilter, docFilter]);
 
   function selectTx(tx: TxRow) {
