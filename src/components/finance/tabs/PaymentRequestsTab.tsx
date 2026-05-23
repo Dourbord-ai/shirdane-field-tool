@@ -375,6 +375,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     // The new flow REQUIRES a Sepidar beneficiary on every row.
     if (items.some((i) => !i.beneficiary_id || !i.amount))
       return toast.error("ذینفع سپیدار و مبلغ هر آیتم الزامی است");
+    // Hard guard: every item must carry a resolved local finance_parties UUID
+    // (party_id). Without it the RPC inserts NULL and downstream voucher /
+    // Sepidar posting breaks. This usually means the picked Sepidar beneficiary
+    // has no matching local party row yet (sync pending).
+    const missingPartyIdx = items.findIndex((i) => !i.party_id);
+    if (missingPartyIdx >= 0)
+      return toast.error(
+        `ردیف ${missingPartyIdx + 1}: طرف‌حساب محلی برای ذینفع سپیدار پیدا نشد. ابتدا همگام‌سازی کنید.`,
+      );
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
     // Validate creditor balance for amount_type_code = 1 using the snapshot
