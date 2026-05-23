@@ -1063,9 +1063,22 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   async function submit() {
     if (busy) return;
     if (!selected) return;
-    if (!allocAmount || allocAmount <= 0) return toast.error("مبلغ تخصیص نامعتبر است");
-    if (allocAmount > remaining + 1e-6) return toast.error("بیش از مانده ردیف");
-    if (allocAmount > Number(selected.withdraw_amount || 0) + 1e-6) return toast.error("بیش از مبلغ تراکنش");
+    // Frontend guards — these are duplicated server-side in
+    // `createPaymentAllocation` and inside `fn_finance_payment_allocations_guard`
+    // so race conditions / bypass attempts are still rejected.
+    if (!allocAmount || allocAmount <= 0) {
+      return toast.error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد.");
+    }
+    if (remaining <= 0) {
+      return toast.error("این ردیف مانده قابل پرداختی ندارد.");
+    }
+    if (allocAmount > remaining + 1e-6) {
+      // Exact wording requested by product spec.
+      return toast.error("مبلغ تراکنش از مانده قابل پرداخت این درخواست بیشتر است.");
+    }
+    if (allocAmount > Number(selected.withdraw_amount || 0) + 1e-6) {
+      return toast.error("مبلغ تخصیص از مبلغ تراکنش بانکی بیشتر است.");
+    }
     setBusy(true);
     try {
       const r = await createPaymentAllocation({
