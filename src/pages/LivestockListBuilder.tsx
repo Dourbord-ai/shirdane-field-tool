@@ -1632,7 +1632,11 @@ function GroupActionDialog({
       const payload = valid.map((r) => ({
         cow_id: r.id,
         event_type: "vaccination",
-        event_date: dateStr,
+        // Group B migration: livestock_events.event_date is now `timestamptz`,
+        // not text. Send the already-computed Gregorian timestamp (from
+        // toGregorianForDb at line 1616) instead of the Jalali display string,
+        // otherwise Postgres rejects the insert. UI input/display stays Jalali.
+        event_date: eventDate,
         to_value: vaccineName,
         description: JSON.stringify(meta),
       }));
