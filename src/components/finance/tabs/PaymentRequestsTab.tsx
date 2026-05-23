@@ -651,6 +651,9 @@ interface PRItemFull {
   id: string;
   party_id: string | null;
   amount: number;
+  // Approved-payable amount kept in sync by the DB trigger. When > 0 it
+  // overrides `amount` for the purpose of computing the remaining payable.
+  confirmed_amount: number | null;
   paid_amount: number | null;
   remaining_amount: number | null;
   amount_type_code: number;
@@ -1011,7 +1014,11 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   const [allocAmount, setAllocAmount] = useState<number>(0);
   const [busy, setBusy] = useState(false);
 
-  const remaining = Math.max(0, Number(item.amount || 0) - Number(item.paid_amount || 0));
+  // Approved payable for THIS item = confirmed_amount when set by the
+  // DB trigger, otherwise fall back to the requested `amount`. The
+  // remaining unpaid amount is the cap we never let the user exceed.
+  const payable = Math.max(0, Number(item.confirmed_amount || 0) || Number(item.amount || 0));
+  const remaining = Math.max(0, payable - Number(item.paid_amount || 0));
 
   useEffect(() => {
     void supabase.from("finance_banks").select("id,title,bank_name").eq("is_deleted", false).then(({ data }) => setBanks((data as BankLite[]) || []));
@@ -1056,9 +1063,22 @@ function AllocationDialog({ item, requestId, onClose, onDone }: { item: PRItemFu
   async function submit() {
     if (busy) return;
     if (!selected) return;
-    if (!allocAmount || allocAmount <= 0) return toast.error("مبلغ تخصیص نامعتبر است");
-    if (allocAmount > remaining + 1e-6) return toast.error("بیش از مانده ردیف");
-    if (allocAmount > Number(selected.withdraw_amount || 0) + 1e-6) return toast.error("بیش از مبلغ تراکنش");
+    // Frontend guards — these are duplicated server-side in
+    // `createPaymentAllocation` and inside `fn_finance_payment_allocations_guard`
+    // so race conditions / bypass attempts are still rejected.
+    if (!allocAmount || allocAmount <= 0) {
+      return toast.error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد.");
+    }
+    if (remaining <= 0) {
+      return toast.error("این ردیف مانده قابل پرداختی ندارد.");
+    }
+    if (allocAmount > remaining + 1e-6) {
+      // Exact wording requested by product spec.
+      return toast.error("مبلغ تراکنش از مانده قابل پرداخت این درخواست بیشتر است.");
+    }
+    if (allocAmount > Number(selected.withdraw_amount || 0) + 1e-6) {
+      return toast.error("مبلغ تخصیص از مبلغ تراکنش بانکی بیشتر است.");
+    }
     setBusy(true);
     try {
       const r = await createPaymentAllocation({
