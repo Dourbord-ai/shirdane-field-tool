@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, toPersianDigits } from "@/lib/jalali";
+import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
@@ -933,9 +934,9 @@ export default function NewInvoice() {
       .insert({
         product_type: data.productType,
         invoice_type: data.invoiceType,
-        invoice_date: formatDate(data.date),
+        invoice_date: formatFactorTimestamp(data.date),
         invoice_number: data.invoiceNumber || null,
-        delivery_date: formatDate(data.deliveryDate),
+        delivery_date: formatFactorTimestamp(data.deliveryDate),
         tax: data.tax || "ندارد",
         buyer_type: isMilk
           ? (data.isBuyerCompany ? "company" : "person")

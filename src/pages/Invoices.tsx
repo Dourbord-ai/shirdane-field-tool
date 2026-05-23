@@ -131,7 +131,10 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
 }
 
 function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, livestockItems, onClose }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; livestockItems: LivestockItemRow[]; onClose: () => void }) {
-  const dateStr = factor.invoice_date ? toPersianDigits(factor.invoice_date) : "—";
+  // Group C: factor.invoice_date is now a Gregorian timestamptz coming from
+  // PostgreSQL. Render it through formatShamsi so the user still sees a
+  // Jalali/Persian date — never pipe a raw timestamp through toPersianDigits.
+  const dateStr = factor.invoice_date ? formatShamsi(factor.invoice_date) : "—";
 
   return (
     <div className="animate-fade-in">
@@ -158,7 +161,7 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
 
           <DetailRow label="شماره فاکتور" value={toPersianDigits(factor.invoice_number || "—")} />
           <DetailRow label="تاریخ" value={dateStr} />
-          {factor.delivery_date && <DetailRow label="تاریخ تحویل" value={toPersianDigits(factor.delivery_date)} />}
+          {factor.delivery_date && <DetailRow label="تاریخ تحویل" value={formatShamsi(factor.delivery_date)} />}
           <DetailRow
             label="فروشنده/خریدار"
             value={
