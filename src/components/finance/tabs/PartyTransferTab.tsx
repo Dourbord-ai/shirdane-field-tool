@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { PartySelector } from "@/components/finance/selectors";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { createVoucher, sepidarSyncPlaceholder, parseMoney, partyName } from "@/lib/finance";
 import { toast } from "sonner";
-import { CheckCircle2, Plus, X, ArrowRight, FileCheck2 } from "lucide-react";
+import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-react";
 // Unified Jalali UI / Gregorian-ISO value date picker.
 import DatePicker from "@/components/DatePicker";
 
