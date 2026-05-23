@@ -1265,8 +1265,82 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_posting_attempts: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          factor_id: string
+          id: string
+          idempotency_key: string | null
+          request_payload: Json | null
+          response_payload: Json | null
+          success: boolean | null
+          voucher_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          factor_id: string
+          id?: string
+          idempotency_key?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          success?: boolean | null
+          voucher_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          factor_id?: string
+          id?: string
+          idempotency_key?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          success?: boolean | null
+          voucher_id?: string | null
+        }
+        Relationships: []
+      }
+      factor_state_transitions: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          factor_id: string
+          from_state: string | null
+          id: string
+          metadata: Json | null
+          reason: string | null
+          to_state: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          factor_id: string
+          from_state?: string | null
+          id?: string
+          metadata?: Json | null
+          reason?: string | null
+          to_state: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          factor_id?: string
+          from_state?: string | null
+          id?: string
+          metadata?: Json | null
+          reason?: string | null
+          to_state?: string
+        }
+        Relationships: []
+      }
       factors: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           buyer_type: string | null
           buyer_user_id: number | null
           checkout_type_id: number | null
@@ -1278,19 +1352,33 @@ export type Database = {
           discount: number | null
           factor_type_id: number | null
           id: string
+          idempotency_key: string | null
           image: string | null
           invoice_date: string | null
           invoice_number: string | null
           invoice_type: string
+          last_posting_attempted_at: string | null
+          last_posting_error: string | null
+          lifecycle_state: string | null
+          next_retry_at: string | null
           off_percent: number | null
           other_center_address: string | null
           other_center_description: string | null
           other_center_name: string | null
           other_center_phone: string | null
           payable_amount: number | null
+          posting_attempt_count: number | null
+          posting_locked_at: string | null
+          posting_locked_by: string | null
           product_type: string
           product_type_id: number | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          reversal_voucher_id: string | null
           seller_buyer_type: number | null
+          sepidar_voucher_id: string | null
+          sepidar_voucher_number: string | null
           settlement_date: string | null
           settlement_number: string | null
           settlement_type: string | null
@@ -1302,8 +1390,11 @@ export type Database = {
           total_amount: number | null
           updated_at: string
           vat_percent: number | null
+          voucher_id: string | null
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           buyer_type?: string | null
           buyer_user_id?: number | null
           checkout_type_id?: number | null
@@ -1315,19 +1406,33 @@ export type Database = {
           discount?: number | null
           factor_type_id?: number | null
           id?: string
+          idempotency_key?: string | null
           image?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
           invoice_type: string
+          last_posting_attempted_at?: string | null
+          last_posting_error?: string | null
+          lifecycle_state?: string | null
+          next_retry_at?: string | null
           off_percent?: number | null
           other_center_address?: string | null
           other_center_description?: string | null
           other_center_name?: string | null
           other_center_phone?: string | null
           payable_amount?: number | null
+          posting_attempt_count?: number | null
+          posting_locked_at?: string | null
+          posting_locked_by?: string | null
           product_type: string
           product_type_id?: number | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          reversal_voucher_id?: string | null
           seller_buyer_type?: number | null
+          sepidar_voucher_id?: string | null
+          sepidar_voucher_number?: string | null
           settlement_date?: string | null
           settlement_number?: string | null
           settlement_type?: string | null
@@ -1339,8 +1444,11 @@ export type Database = {
           total_amount?: number | null
           updated_at?: string
           vat_percent?: number | null
+          voucher_id?: string | null
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           buyer_type?: string | null
           buyer_user_id?: number | null
           checkout_type_id?: number | null
@@ -1352,19 +1460,33 @@ export type Database = {
           discount?: number | null
           factor_type_id?: number | null
           id?: string
+          idempotency_key?: string | null
           image?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
           invoice_type?: string
+          last_posting_attempted_at?: string | null
+          last_posting_error?: string | null
+          lifecycle_state?: string | null
+          next_retry_at?: string | null
           off_percent?: number | null
           other_center_address?: string | null
           other_center_description?: string | null
           other_center_name?: string | null
           other_center_phone?: string | null
           payable_amount?: number | null
+          posting_attempt_count?: number | null
+          posting_locked_at?: string | null
+          posting_locked_by?: string | null
           product_type?: string
           product_type_id?: number | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          reversal_voucher_id?: string | null
           seller_buyer_type?: number | null
+          sepidar_voucher_id?: string | null
+          sepidar_voucher_number?: string | null
           settlement_date?: string | null
           settlement_number?: string | null
           settlement_type?: string | null
@@ -1376,8 +1498,24 @@ export type Database = {
           total_amount?: number | null
           updated_at?: string
           vat_percent?: number | null
+          voucher_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_factors_reversal_voucher_id"
+            columns: ["reversal_voucher_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_factors_voucher_id"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feed_items: {
         Row: {
@@ -1594,6 +1732,63 @@ export type Database = {
           name?: string
           pregnancy_state?: string
           sort_order?: number
+        }
+        Relationships: []
+      }
+      finance_account_mappings: {
+        Row: {
+          account_id: string | null
+          amount_source: string | null
+          created_at: string
+          dl_source: string | null
+          dl_static_ref: string | null
+          factor_type_id: string | null
+          id: string
+          is_active: boolean
+          leg_code: string
+          priority: number
+          product_type: string | null
+          scope: string
+          sign: string | null
+          tf_source: string | null
+          tf_static_ref: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          amount_source?: string | null
+          created_at?: string
+          dl_source?: string | null
+          dl_static_ref?: string | null
+          factor_type_id?: string | null
+          id?: string
+          is_active?: boolean
+          leg_code: string
+          priority?: number
+          product_type?: string | null
+          scope: string
+          sign?: string | null
+          tf_source?: string | null
+          tf_static_ref?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          amount_source?: string | null
+          created_at?: string
+          dl_source?: string | null
+          dl_static_ref?: string | null
+          factor_type_id?: string | null
+          id?: string
+          is_active?: boolean
+          leg_code?: string
+          priority?: number
+          product_type?: string | null
+          scope?: string
+          sign?: string | null
+          tf_source?: string | null
+          tf_static_ref?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2881,8 +3076,10 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          idempotency_key: string | null
           is_deleted: boolean | null
           legacy_id: number | null
+          reversal_of: string | null
           sepidar_daily_number: number | null
           sepidar_error_message: string | null
           sepidar_extra_data_id: number | null
@@ -2910,8 +3107,10 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          idempotency_key?: string | null
           is_deleted?: boolean | null
           legacy_id?: number | null
+          reversal_of?: string | null
           sepidar_daily_number?: number | null
           sepidar_error_message?: string | null
           sepidar_extra_data_id?: number | null
@@ -2939,8 +3138,10 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          idempotency_key?: string | null
           is_deleted?: boolean | null
           legacy_id?: number | null
+          reversal_of?: string | null
           sepidar_daily_number?: number | null
           sepidar_error_message?: string | null
           sepidar_extra_data_id?: number | null
@@ -2961,7 +3162,15 @@ export type Database = {
           voucher_number?: number | null
           voucher_type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_finance_vouchers_reversal_of"
+            columns: ["reversal_of"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       hr_attendance: {
         Row: {
