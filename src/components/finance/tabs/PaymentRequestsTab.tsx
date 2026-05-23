@@ -375,6 +375,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     // The new flow REQUIRES a Sepidar beneficiary on every row.
     if (items.some((i) => !i.beneficiary_id || !i.amount))
       return toast.error("ذینفع سپیدار و مبلغ هر آیتم الزامی است");
+    // Hard guard: every item must carry a resolved local finance_parties UUID
+    // (party_id). Without it the RPC inserts NULL and downstream voucher /
+    // Sepidar posting breaks. This usually means the picked Sepidar beneficiary
+    // has no matching local party row yet (sync pending).
+    const missingPartyIdx = items.findIndex((i) => !i.party_id);
+    if (missingPartyIdx >= 0)
+      return toast.error(
+        `ردیف ${missingPartyIdx + 1}: طرف‌حساب محلی برای ذینفع سپیدار پیدا نشد. ابتدا همگام‌سازی کنید.`,
+      );
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
     // Validate creditor balance for amount_type_code = 1 using the snapshot
@@ -506,7 +515,11 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                       fallbackLabel={it.beneficiary_name}
                       onChange={(id, b?: SepidarBeneficiary) => {
                         if (!id || !b) {
+                          // Clearing the selection must also wipe party_id so
+                          // a stale UUID from a previous pick can't leak into
+                          // the RPC payload.
                           updateItem(idx, {
+                            party_id: null,
                             beneficiary_id: null,
                             dl_ref: null,
                             dl_code: null,
@@ -516,6 +529,10 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                           });
                           return;
                         }
+                        // Snapshot Sepidar-side fields immediately for the UI.
+                        // party_id is reset here and then populated below once
+                        // we resolve the matching local finance_parties row —
+                        // this prevents a previous row's UUID from sticking.
                         updateItem(idx, {
                           beneficiary_id: id,
                           dl_ref: b.dl_ref != null ? String(b.dl_ref) : null,
@@ -523,7 +540,36 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                           beneficiary_name: b.beneficiary_name,
                           beneficiary_type: b.beneficiary_type,
                           beneficiary_balance_snapshot: b.balance,
+                          party_id: null,
                         });
+                        // Resolve the local finance_parties UUID by Sepidar
+                        // party id. The RPC stores this UUID into
+                        // finance_payment_request_items.party_id, which the
+                        // voucher generator / Sepidar posting depend on.
+                        const sepId = Number(b.beneficiary_id);
+                        if (!sepId || Number.isNaN(sepId)) {
+                          toast.error("ذینفع انتخاب‌شده شناسه سپیدار معتبر ندارد");
+                          return;
+                        }
+                        void (async () => {
+                          const { data, error } = await supabase
+                            .from("finance_parties")
+                            .select("id")
+                            .eq("sepidar_party_id", sepId)
+                            .eq("is_deleted", false)
+                            .maybeSingle();
+                          if (error) {
+                            toastFinanceError(toast, error);
+                            return;
+                          }
+                          if (!data?.id) {
+                            toast.error(
+                              "ذینفع سپیدار در فهرست طرف‌حساب‌های محلی پیدا نشد. ابتدا طرف‌حساب را همگام‌سازی کنید.",
+                            );
+                            return;
+                          }
+                          updateItem(idx, { party_id: data.id });
+                        })();
                       }}
                     />
                     <div className="grid grid-cols-2 gap-2">
