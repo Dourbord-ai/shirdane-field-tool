@@ -1199,6 +1199,78 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_accounting_map: {
+        Row: {
+          account_code: string
+          account_label: string | null
+          created_at: string
+          created_by: string | null
+          dl_source: string | null
+          effective_from: string | null
+          effective_to: string | null
+          factor_type: string
+          id: string
+          is_active: boolean
+          line_role: Database["public"]["Enums"]["line_role"]
+          notes: string | null
+          priority: number
+          product_type: string
+          scenario_key: string
+          side: string
+          static_dl_ref: number | null
+          static_tf_ref: number | null
+          tf_source: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          account_code: string
+          account_label?: string | null
+          created_at?: string
+          created_by?: string | null
+          dl_source?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          factor_type: string
+          id?: string
+          is_active?: boolean
+          line_role: Database["public"]["Enums"]["line_role"]
+          notes?: string | null
+          priority?: number
+          product_type: string
+          scenario_key?: string
+          side: string
+          static_dl_ref?: number | null
+          static_tf_ref?: number | null
+          tf_source?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          account_code?: string
+          account_label?: string | null
+          created_at?: string
+          created_by?: string | null
+          dl_source?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          factor_type?: string
+          id?: string
+          is_active?: boolean
+          line_role?: Database["public"]["Enums"]["line_role"]
+          notes?: string | null
+          priority?: number
+          product_type?: string
+          scenario_key?: string
+          side?: string
+          static_dl_ref?: number | null
+          static_tf_ref?: number | null
+          tf_source?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       factor_attachments: {
         Row: {
           created_at: string
@@ -5001,7 +5073,17 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      line_role:
+        | "inventory"
+        | "ap"
+        | "ar"
+        | "revenue"
+        | "cogs"
+        | "freight"
+        | "discount"
+        | "tax"
+        | "rounding"
+        | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5128,6 +5210,19 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      line_role: [
+        "inventory",
+        "ap",
+        "ar",
+        "revenue",
+        "cogs",
+        "freight",
+        "discount",
+        "tax",
+        "rounding",
+        "other",
+      ],
+    },
   },
 } as const
