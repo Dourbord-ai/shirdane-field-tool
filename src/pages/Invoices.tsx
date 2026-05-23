@@ -140,7 +140,126 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
   );
 }
 
-function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, livestockItems, onClose }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; livestockItems: LivestockItemRow[]; onClose: () => void }) {
+// -----------------------------------------------------------------------------
+// PostingPanel: minimal MVP UI for the accounting voucher posting pipeline.
+// -----------------------------------------------------------------------------
+// We deliberately keep this UI very small (status badge + one action button +
+// last-error text) per the MVP scope: no mapping editor, no reversal UI, no
+// adoption flow, no advanced dashboard. The button just invokes the
+// `factor-post-voucher` edge function which:
+//   - resolves active factor_accounting_map rows
+//   - refuses to proceed if rows are missing/inactive/TBD (clear Persian err)
+//   - creates finance_voucher + items, validates debit=credit
+//   - tries to post to Sepidar via the same edge function pattern as
+//     receive/payment flows, persists the Sepidar voucher number on success
+//
+// The button is shown for any lifecycle_state in {approved, voucher_failed,
+// sepidar_failed}. Posted factors show a green "ثبت شده" badge instead.
+function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [resultMsg, setResultMsg] = useState<string | null>(null);
+  const [resultOk, setResultOk] = useState<boolean | null>(null);
+
+  const state = factor.lifecycle_state ?? "";
+  const isPosted = state === "posted" && !!factor.sepidar_voucher_number;
+  const canPost = ["approved", "voucher_failed", "sepidar_failed"].includes(state);
+  // If the factor was never moved into the posting pipeline (lifecycle_state
+  // is NULL or any other value like 'draft'), we render a passive info hint
+  // — there is no MVP UI for "approve" because that flow is owned elsewhere.
+  const showNothing = !isPosted && !canPost;
+
+  const handlePost = async () => {
+    setBusy(true); setResultMsg(null); setResultOk(null);
+    try {
+      // We use supabase.functions.invoke so the user's JWT is forwarded
+      // automatically — the edge function uses it to fill triggered_by.
+      const { data, error } = await supabase.functions.invoke("factor-post-voucher", {
+        body: { factor_id: factor.id },
+      });
+      if (error) {
+        setResultOk(false);
+        setResultMsg(error.message || "خطا در ارتباط با سرور.");
+      } else {
+        const r = (data ?? {}) as { success?: boolean; message?: string };
+        setResultOk(Boolean(r.success));
+        setResultMsg(r.message ?? (r.success ? "انجام شد." : "ناموفق."));
+      }
+    } catch (e) {
+      setResultOk(false);
+      setResultMsg((e as Error).message || "خطای نامشخص.");
+    } finally {
+      setBusy(false);
+      // Trigger parent refetch so the badge + error text reflect the new
+      // lifecycle_state without requiring a page reload.
+      onChanged();
+    }
+  };
+
+  if (showNothing) return null;
+
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">وضعیت ثبت سند مالی</span>
+        {isPosted ? (
+          <span className="px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-bold">
+            ثبت شده • سپیدار {toPersianDigits(factor.sepidar_voucher_number || "")}
+          </span>
+        ) : state === "voucher_failed" ? (
+          <span className="px-2.5 py-1 rounded-lg bg-destructive/15 text-destructive text-xs font-bold">
+            خطای ساخت سند
+          </span>
+        ) : state === "sepidar_failed" ? (
+          <span className="px-2.5 py-1 rounded-lg bg-destructive/15 text-destructive text-xs font-bold">
+            خطای ثبت در سپیدار
+          </span>
+        ) : (
+          <span className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground text-xs font-bold">
+            آماده ثبت
+          </span>
+        )}
+      </div>
+
+      {/* Last persisted error from the DB — separate from the just-attempted
+          response so the operator can always see why the previous attempt
+          failed even after closing/reopening the detail panel. */}
+      {factor.last_posting_error && !resultMsg && (
+        <p className="text-xs text-destructive bg-destructive/5 rounded-lg p-2">
+          {factor.last_posting_error}
+        </p>
+      )}
+
+      {/* Live result from the click that just happened. */}
+      {resultMsg && (
+        <p className={cn(
+          "text-xs rounded-lg p-2",
+          resultOk ? "text-primary bg-primary/5" : "text-destructive bg-destructive/5"
+        )}>
+          {resultMsg}
+        </p>
+      )}
+
+      {factor.posting_attempt_count != null && factor.posting_attempt_count > 0 && (
+        <p className="text-xs text-muted-foreground">
+          تعداد تلاش: {toPersianDigits(String(factor.posting_attempt_count))}
+        </p>
+      )}
+
+      {canPost && (
+        <Button
+          onClick={handlePost}
+          disabled={busy}
+          className="rounded-xl gap-2 bg-gradient-primary text-primary-foreground glow-primary w-full"
+        >
+          {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+          {state === "approved" ? "ثبت سند مالی" : "تلاش مجدد"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, livestockItems, onClose, onChanged }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; livestockItems: LivestockItemRow[]; onClose: () => void; onChanged: () => void }) {
   // Group C: factor.invoice_date is now a Gregorian timestamptz coming from
   // PostgreSQL. Render it through formatShamsi so the user still sees a
   // Jalali/Persian date — never pipe a raw timestamp through toPersianDigits.
