@@ -651,6 +651,9 @@ interface PRItemFull {
   id: string;
   party_id: string | null;
   amount: number;
+  // Approved-payable amount kept in sync by the DB trigger. When > 0 it
+  // overrides `amount` for the purpose of computing the remaining payable.
+  confirmed_amount: number | null;
   paid_amount: number | null;
   remaining_amount: number | null;
   amount_type_code: number;
