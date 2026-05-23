@@ -41,6 +41,17 @@ export default function PartyTransferTab() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openForm, setOpenForm] = useState(false);
 
+  // -----------------------------------------------------------------------
+  // Filter state — mirror of BankTransferTab. Date inputs flow Gregorian
+  // ISO ("YYYY-MM-DD") out of the Jalali <DatePicker /> so we can compare
+  // against the ISO-prefix of `transfer_datetime` (timestamptz). Amount
+  // inputs are free-text Persian digits parsed by `parseMoney`.
+  // -----------------------------------------------------------------------
+  const [fromDate, setFromDate] = useState<string | null>(null);
+  const [toDate, setToDate] = useState<string | null>(null);
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+
   useEffect(() => { void load(); }, []);
 
   async function load() {
