@@ -344,7 +344,11 @@ function CowChangeFormDialog({
     const payload: any = {
       cow_id: cowId,
       [cfg.refColumn]: Number(refId),
-      event_date: formatJalali(date),
+      // Convert the user's Jalali selection to a Gregorian timestamptz string
+      // anchored at Tehran wall-clock midnight. This is what the migrated
+      // timestamptz column expects — sending a raw Jalali "1404/02/22" string
+      // would now raise a Postgres type error.
+      event_date: jalaliToGregorianTimestamp(formatJalali(date), "00:00"),
       description: description || null,
       is_deleted: false,
     };
