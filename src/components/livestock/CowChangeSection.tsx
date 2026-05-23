@@ -23,6 +23,15 @@ import { Textarea } from "@/components/ui/textarea";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// dateUtils centralises Jalali ⇄ Gregorian conversions at the form ⇄ DB boundary.
+// After Group A migration, cow_locations/cow_statuses/cow_types.event_date columns
+// are real Postgres timestamptz values — we must convert the Jalali UI input to a
+// Gregorian ISO timestamp before insert/update, and convert the Gregorian value
+// we read back into a Jalali string when prefilling the edit form.
+import {
+  jalaliToGregorianTimestamp,
+  gregorianDateToJalali,
+} from "@/lib/dateUtils";
 
 function parseJalaliString(s: string | null): JalaliDate | null {
   if (!s) return null;
@@ -314,7 +323,10 @@ function CowChangeFormDialog({
     if (!open) return;
     if (editing) {
       setRefId(editing.ref_id ? String(editing.ref_id) : "");
-      setDate(parseJalaliString(editing.event_date) ?? todayJalali());
+      // editing.event_date is now a Gregorian ISO timestamp (post Group A
+      // migration). Convert it back to a Jalali "YYYY/MM/DD" string first,
+      // then parse into the JalaliDate object the date-picker expects.
+      setDate(parseJalaliString(gregorianDateToJalali(editing.event_date)) ?? todayJalali());
       setDescription(editing.description ?? "");
     } else {
       setRefId("");
@@ -332,7 +344,11 @@ function CowChangeFormDialog({
     const payload: any = {
       cow_id: cowId,
       [cfg.refColumn]: Number(refId),
-      event_date: formatJalali(date),
+      // Convert the user's Jalali selection to a Gregorian timestamptz string
+      // anchored at Tehran wall-clock midnight. This is what the migrated
+      // timestamptz column expects — sending a raw Jalali "1404/02/22" string
+      // would now raise a Postgres type error.
+      event_date: jalaliToGregorianTimestamp(formatJalali(date), "00:00"),
       description: description || null,
       is_deleted: false,
     };
