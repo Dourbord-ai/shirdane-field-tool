@@ -166,16 +166,49 @@ export function TransactionSelector({
   const [selected, setSelected] = useState<Tx | null>(null);
 
   useEffect(() => {
-    let q = supabase
-      .from("finance_bank_transactions")
-      .select("id,bank_id,transaction_datetime,transaction_type,deposit_amount,withdraw_amount,description,reference_number,assignment_status")
-      .eq("is_deleted", false)
-      .order("transaction_datetime", { ascending: false })
-      .limit(500);
-    if (filter?.transaction_type) q = q.eq("transaction_type", filter.transaction_type);
-    if (filter?.bank_id) q = q.eq("bank_id", filter.bank_id);
-    q = q.eq("assignment_status", filter?.assignment_status || "unassigned");
-    q.then(({ data }) => setTxs((data as Tx[]) || []));
+    // Defense-in-depth: we always exclude any transaction that already has
+    // an ACTIVE payment allocation or receive identification, in addition
+    // to relying on `finance_bank_transactions.assignment_status`. The DB
+    // unique partial indexes + the BEFORE INSERT/UPDATE triggers on both
+    // tables are the authoritative protection against reuse; this client
+    // filter only ensures the UI never offers a transaction that would be
+    // rejected anyway.
+    void (async () => {
+      const [{ data: usedAllocs }, { data: usedIds }] = await Promise.all([
+        supabase
+          .from("finance_payment_allocations")
+          .select("bank_transaction_id")
+          .eq("is_deleted", false)
+          .not("status", "in", "(cancelled,rejected)"),
+        supabase
+          .from("finance_receive_identifications")
+          .select("bank_transaction_id")
+          .eq("is_deleted", false)
+          .not("status", "in", "(cancelled,rejected)"),
+      ]);
+      const usedSet = new Set<string>();
+      ((usedAllocs as { bank_transaction_id: string | null }[]) || []).forEach((r) => {
+        if (r.bank_transaction_id) usedSet.add(r.bank_transaction_id);
+      });
+      ((usedIds as { bank_transaction_id: string | null }[]) || []).forEach((r) => {
+        if (r.bank_transaction_id) usedSet.add(r.bank_transaction_id);
+      });
+
+      let q = supabase
+        .from("finance_bank_transactions")
+        .select("id,bank_id,transaction_datetime,transaction_type,deposit_amount,withdraw_amount,description,reference_number,assignment_status")
+        .eq("is_deleted", false)
+        .order("transaction_datetime", { ascending: false })
+        .limit(500);
+      if (filter?.transaction_type) q = q.eq("transaction_type", filter.transaction_type);
+      if (filter?.bank_id) q = q.eq("bank_id", filter.bank_id);
+      q = q.eq("assignment_status", filter?.assignment_status || "unassigned");
+      const { data } = await q;
+      // Final client-side scrub so reused transactions never appear in the
+      // picker even if `assignment_status` ever drifts out of sync.
+      const rows = ((data as Tx[]) || []).filter((t) => !usedSet.has(t.id));
+      setTxs(rows);
+    })();
 
     supabase
       .from("finance_banks")
