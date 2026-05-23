@@ -23,6 +23,15 @@ import { Textarea } from "@/components/ui/textarea";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, formatJalali, todayJalali } from "@/lib/jalali";
+// dateUtils centralises Jalali ⇄ Gregorian conversions at the form ⇄ DB boundary.
+// After Group A migration, cow_locations/cow_statuses/cow_types.event_date columns
+// are real Postgres timestamptz values — we must convert the Jalali UI input to a
+// Gregorian ISO timestamp before insert/update, and convert the Gregorian value
+// we read back into a Jalali string when prefilling the edit form.
+import {
+  jalaliToGregorianTimestamp,
+  gregorianDateToJalali,
+} from "@/lib/dateUtils";
 
 function parseJalaliString(s: string | null): JalaliDate | null {
   if (!s) return null;
