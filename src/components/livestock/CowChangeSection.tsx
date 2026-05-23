@@ -323,7 +323,10 @@ function CowChangeFormDialog({
     if (!open) return;
     if (editing) {
       setRefId(editing.ref_id ? String(editing.ref_id) : "");
-      setDate(parseJalaliString(editing.event_date) ?? todayJalali());
+      // editing.event_date is now a Gregorian ISO timestamp (post Group A
+      // migration). Convert it back to a Jalali "YYYY/MM/DD" string first,
+      // then parse into the JalaliDate object the date-picker expects.
+      setDate(parseJalaliString(gregorianDateToJalali(editing.event_date)) ?? todayJalali());
       setDescription(editing.description ?? "");
     } else {
       setRefId("");
