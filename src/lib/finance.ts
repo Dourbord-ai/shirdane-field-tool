@@ -747,19 +747,28 @@ async function refreshPaymentRequestPaidTotals(payment_request_id: string): Prom
 
 
 export async function createPaymentAllocation(input: CreatePaymentAllocationInput): Promise<{ id: string; ok: boolean; error?: string }> {
-  // Load item + request
+  // Load item + request. We pull `confirmed_amount` so the payable cap
+  // matches the DB trigger (`fn_finance_payment_allocations_guard`) which
+  // uses COALESCE(NULLIF(confirmed_amount,0), amount, 0).
   const { data: item } = await supabase
     .from("finance_payment_request_items")
-    .select("id, payment_request_id, party_id, amount, paid_amount, amount_type_code, status")
+    .select("id, payment_request_id, party_id, amount, confirmed_amount, paid_amount, amount_type_code, status")
     .eq("id", input.payment_request_item_id)
     .maybeSingle();
   if (!item) throw new Error("ردیف درخواست یافت نشد");
   if (!["approved", "partially_paid", "sync_failed"].includes(String(item.status))) {
     throw new Error("ردیف درخواست در وضعیت قابل پرداخت نیست (نیاز به تایید مدیریت)");
   }
-  const itemRemaining = Number(item.amount || 0) - Number(item.paid_amount || 0);
-  if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد");
-  if (input.amount - 1e-6 > itemRemaining) throw new Error("مبلغ تخصیص از مانده ردیف بیشتر است");
+  // Approved payable for THIS item = confirmed_amount when > 0, else the
+  // originally requested amount. Never the raw `amount` alone, otherwise a
+  // partially-rejected item could be over-allocated.
+  const itemPayable = Number(item.confirmed_amount || 0) || Number(item.amount || 0);
+  const itemRemaining = Math.max(0, itemPayable - Number(item.paid_amount || 0));
+  if (input.amount <= 0) throw new Error("مبلغ تخصیص باید بزرگ‌تر از صفر باشد.");
+  if (itemRemaining <= 0) throw new Error("این ردیف مانده قابل پرداختی ندارد.");
+  if (input.amount - 1e-6 > itemRemaining) {
+    throw new Error("مبلغ تراکنش از مانده قابل پرداخت این درخواست بیشتر است.");
+  }
 
   // -------------------------------------------------------------------
   // Request-level overpayment guard. Approved payable amount = sum of
@@ -778,7 +787,7 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
     throw new Error("هیچ آیتم تأیید شده‌ای برای این درخواست وجود ندارد.");
   }
   if (alreadyPaid + Number(input.amount) > approvedAmount + 1e-6) {
-    throw new Error("مبلغ پرداختی نمی‌تواند بیشتر از مبلغ آیتم‌های تأیید شده باشد.");
+    throw new Error("مبلغ تراکنش از مانده قابل پرداخت این درخواست بیشتر است.");
   }
 
 
