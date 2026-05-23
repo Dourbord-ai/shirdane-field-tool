@@ -4714,6 +4714,10 @@ export type Database = {
         Args: { p_details: Json; p_factor: Json }
         Returns: Json
       }
+      submit_payment_request: {
+        Args: { p_items: Json; p_request: Json }
+        Returns: string
+      }
       sync_hr_profiles_from_hr_users: {
         Args: never
         Returns: {
