@@ -1229,6 +1229,63 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_engine_config: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      factor_engine_config_versions: {
+        Row: {
+          notes: string | null
+          payload: Json
+          published_at: string
+          published_by: string | null
+          version: number
+        }
+        Insert: {
+          notes?: string | null
+          payload: Json
+          published_at?: string
+          published_by?: string | null
+          version: number
+        }
+        Update: {
+          notes?: string | null
+          payload?: Json
+          published_at?: string
+          published_by?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
       factor_item_type: {
         Row: {
           category: string
@@ -4872,6 +4929,12 @@ export type Database = {
           prediction_of_birth_date_days: number | null
           pregnancy_days: number | null
           status_color: string | null
+        }
+        Relationships: []
+      }
+      v_factor_engine_config_active: {
+        Row: {
+          payload: Json | null
         }
         Relationships: []
       }
