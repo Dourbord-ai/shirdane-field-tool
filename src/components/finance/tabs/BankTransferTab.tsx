@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,12 @@ import { TransactionSelector, PartySelector } from "@/components/finance/selecto
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { createVoucher, sepidarSyncPlaceholder, parseMoney, formatMoney, type VoucherItemInput } from "@/lib/finance";
 import { toast } from "sonner";
-import { CheckCircle2, Plus, X, ArrowRight, FileCheck2 } from "lucide-react";
+import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-react";
+// Unified Jalali-UI / Gregorian-ISO value picker. We use this for the
+// filter inputs so the user always sees a Persian calendar while the
+// underlying date comparisons happen on Gregorian ISO strings — matching
+// what `transfer_datetime` (timestamptz) actually stores in the DB.
+import DatePicker from "@/components/DatePicker";
 
 interface SelectedTx {
   id: string; bank_id: string | null; deposit_amount: number | null;
@@ -43,6 +48,18 @@ export default function BankTransferTab() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openForm, setOpenForm] = useState(false);
+
+  // -----------------------------------------------------------------------
+  // Filter state.
+  // Date filters are Gregorian ISO ("YYYY-MM-DD") flowing out of the Jalali
+  // <DatePicker /> so we can compare directly against the ISO prefix of
+  // `transfer_datetime` (timestamptz). Amount filters are free-text Persian
+  // digits parsed via `parseMoney`.
+  // -----------------------------------------------------------------------
+  const [fromDate, setFromDate] = useState<string | null>(null);
+  const [toDate, setToDate] = useState<string | null>(null);
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
 
   useEffect(() => { void load(); }, []);
 
@@ -80,13 +97,86 @@ export default function BankTransferTab() {
     return b?.title || b?.bank_name || id.slice(0, 8);
   };
 
+  // -----------------------------------------------------------------------
+  // Combined filter pipeline. Date filters compare against the ISO date
+  // portion of `transfer_datetime` (i.e. "YYYY-MM-DD"), which keeps the
+  // comparison Gregorian even though the user picked Jalali in the UI.
+  // Amount filters apply to BOTH from_amount and to_amount because a row
+  // can legitimately have asymmetric values (fees / FX). We accept the row
+  // if EITHER side falls inside the [min, max] window.
+  // All filters compose with AND so the user can stack them freely.
+  // -----------------------------------------------------------------------
+  const filtered = useMemo(() => {
+    const min = minAmount ? parseMoney(minAmount) : null;
+    const max = maxAmount ? parseMoney(maxAmount) : null;
+    return rows.filter((r) => {
+      // Date range — null fields are excluded as soon as ANY date filter is set.
+      if (fromDate || toDate) {
+        const iso = r.transfer_datetime ? r.transfer_datetime.slice(0, 10) : null;
+        if (!iso) return false;
+        if (fromDate && iso < fromDate) return false;
+        if (toDate && iso > toDate) return false;
+      }
+      // Amount range — compare against the larger of from/to side, which is
+      // the value the user actually sees on the row for "this much moved".
+      if (min != null || max != null) {
+        const candidate = Math.max(Number(r.from_amount || 0), Number(r.to_amount || 0));
+        if (min != null && candidate < min) return false;
+        if (max != null && candidate > max) return false;
+      }
+      return true;
+    });
+  }, [rows, fromDate, toDate, minAmount, maxAmount]);
+
+  const hasFilter = !!(fromDate || toDate || minAmount || maxAmount);
+  function clearFilters() {
+    setFromDate(null); setToDate(null); setMinAmount(""); setMaxAmount("");
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" dir="rtl">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold">انتقال بین بانکی</h2>
         <Button onClick={() => setOpenForm(true)}>
           <Plus className="w-4 h-4 ml-1" /> ثبت انتقال بین بانکی
         </Button>
+      </div>
+
+      {/* -------------------------------------------------------------
+          Filter bar — date range + amount range. We keep the bar
+          rendered even when the list is loading so the user can pre-set
+          their filters; the memoised pipeline applies as soon as data
+          arrives.
+          ------------------------------------------------------------- */}
+      <div className="rounded-xl border bg-card p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-muted-foreground">
+            <Filter className="w-3.5 h-3.5" /> فیلترها
+          </span>
+          {hasFilter && (
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={clearFilters}>
+              پاک کردن فیلترها
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="space-y-1">
+            <Label className="text-[11px]">از تاریخ</Label>
+            <DatePicker value={fromDate} onChange={setFromDate} placeholder="تاریخ شروع" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px]">تا تاریخ</Label>
+            <DatePicker value={toDate} onChange={setToDate} placeholder="تاریخ پایان" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px]">حداقل مبلغ</Label>
+            <Input dir="ltr" inputMode="numeric" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="0" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px]">حداکثر مبلغ</Label>
+            <Input dir="ltr" inputMode="numeric" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="∞" />
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -99,50 +189,59 @@ export default function BankTransferTab() {
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
           هنوز انتقالی ثبت نشده — برای شروع روی «ثبت انتقال بین بانکی» بزنید.
         </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border bg-card">
-          <table className="w-full text-sm text-right">
-            <thead className="bg-muted/40 text-xs">
-              <tr>
-                <th className="p-2 font-bold">کد</th>
-                <th className="p-2 font-bold">بانک مبدا</th>
-                <th className="p-2 font-bold">بانک مقصد</th>
-                <th className="p-2 font-bold">مبلغ مبدا</th>
-                <th className="p-2 font-bold">مبلغ مقصد</th>
-                <th className="p-2 font-bold">تاریخ انتقال</th>
-                <th className="p-2 font-bold">وضعیت</th>
-                <th className="p-2 font-bold">سند</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-muted/30">
-                  <td className="p-2 font-mono text-xs">{r.legacy_id ?? r.id.slice(0, 8)}</td>
-                  <td className="p-2">{bankLabel(r.from_bank_id)}</td>
-                  <td className="p-2">
-                    <span className="inline-flex items-center gap-1">
-                      <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                      {bankLabel(r.to_bank_id)}
-                    </span>
-                  </td>
-                  <td className="p-2"><MoneyCell value={r.from_amount} /></td>
-                  <td className="p-2"><MoneyCell value={r.to_amount} positive /></td>
-                  <td className="p-2"><JalaliDateCell value={r.transfer_datetime} /></td>
-                  <td className="p-2"><FinanceStatusBadge status={r.status} /></td>
-                  <td className="p-2">
-                    {r.voucher_id ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-bold">
-                        <FileCheck2 className="w-3.5 h-3.5" /> صادر شده
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          هیچ ردیفی با فیلترهای فعلی پیدا نشد.
         </div>
+      ) : (
+        <>
+          <div className="text-[11px] text-muted-foreground">
+            نمایش {filtered.length} از {rows.length} ردیف
+          </div>
+          <div className="overflow-x-auto rounded-xl border bg-card">
+            <table className="w-full text-sm text-right" dir="rtl">
+              <thead className="bg-muted/40 text-xs">
+                <tr>
+                  <th className="p-2 font-bold">کد</th>
+                  <th className="p-2 font-bold">بانک مبدا</th>
+                  <th className="p-2 font-bold">بانک مقصد</th>
+                  <th className="p-2 font-bold">مبلغ مبدا</th>
+                  <th className="p-2 font-bold">مبلغ مقصد</th>
+                  <th className="p-2 font-bold">تاریخ انتقال</th>
+                  <th className="p-2 font-bold">وضعیت</th>
+                  <th className="p-2 font-bold">سند</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-t hover:bg-muted/30">
+                    <td className="p-2 font-mono text-xs">{r.legacy_id ?? r.id.slice(0, 8)}</td>
+                    <td className="p-2">{bankLabel(r.from_bank_id)}</td>
+                    <td className="p-2">
+                      <span className="inline-flex items-center gap-1">
+                        <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                        {bankLabel(r.to_bank_id)}
+                      </span>
+                    </td>
+                    <td className="p-2"><MoneyCell value={r.from_amount} /></td>
+                    <td className="p-2"><MoneyCell value={r.to_amount} positive /></td>
+                    <td className="p-2"><JalaliDateCell value={r.transfer_datetime} /></td>
+                    <td className="p-2"><FinanceStatusBadge status={r.status} /></td>
+                    <td className="p-2">
+                      {r.voucher_id ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-bold">
+                          <FileCheck2 className="w-3.5 h-3.5" /> صادر شده
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {openForm && (
