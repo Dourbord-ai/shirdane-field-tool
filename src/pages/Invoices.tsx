@@ -31,6 +31,16 @@ interface FactorRow {
   settlement_number: string | null;
   description: string | null;
   created_at: string;
+  // ---- M3r-MVP posting pipeline fields -------------------------------------
+  // Already exist as columns on `public.factors` — we just surface them on the
+  // row so the detail panel can render the posting status + retry button.
+  // They are intentionally optional/null until a factor reaches the posting
+  // pipeline; no change to the factor *registration* UI is made.
+  lifecycle_state: string | null;
+  voucher_id: string | null;
+  sepidar_voucher_number: string | null;
+  last_posting_error: string | null;
+  posting_attempt_count: number | null;
 }
 
 interface SpermBuyRow {
