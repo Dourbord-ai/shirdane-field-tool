@@ -484,6 +484,10 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
               <p className="text-sm text-foreground bg-secondary/50 rounded-lg p-3">{factor.description}</p>
             </div>
           )}
+
+          {/* MVP posting controls — renders nothing for factors that have not
+              yet entered the accounting pipeline (lifecycle_state NULL/draft). */}
+          <PostingPanel factor={factor} onChanged={onChanged} />
         </div>
       </div>
     </div>
