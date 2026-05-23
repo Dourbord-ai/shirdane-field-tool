@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate, toPersianDigits } from "@/lib/jalali";
+import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
@@ -913,8 +914,19 @@ export default function NewInvoice() {
     const finalDiscount = isMilk ? milkDiscount : discount;
     const finalShipping = isMilk ? milkShipping : shipping;
 
+    // Jalali "YYYY/MM/DD" string — still used by the *other* tables
+    // (rentals start_date/end_date etc.) in Groups D/E that have NOT been
+    // migrated yet, so we keep this helper for them.
     const formatDate = (d: JalaliDate | null) =>
       d ? `${d.year}/${d.month}/${d.day}` : null;
+
+    // Group C: `factors.invoice_date` and `factors.delivery_date` are now
+    // PostgreSQL `timestamptz`. We must NOT insert a Jalali string into them
+    // anymore. Convert the Jalali UI picker → Gregorian ISO timestamp anchored
+    // at Tehran wall-clock midnight before sending to Supabase. The picker UI
+    // itself stays Jalali — only the wire format changes.
+    const formatFactorTimestamp = (d: JalaliDate | null) =>
+      d ? jalaliToGregorianTimestamp(`${d.year}/${d.month}/${d.day}`, "00:00") : null;
 
     // 1) Insert factor header
     const { data: factor, error: factorError } = await supabase
@@ -922,9 +934,9 @@ export default function NewInvoice() {
       .insert({
         product_type: data.productType,
         invoice_type: data.invoiceType,
-        invoice_date: formatDate(data.date),
+        invoice_date: formatFactorTimestamp(data.date),
         invoice_number: data.invoiceNumber || null,
-        delivery_date: formatDate(data.deliveryDate),
+        delivery_date: formatFactorTimestamp(data.deliveryDate),
         tax: data.tax || "ندارد",
         buyer_type: isMilk
           ? (data.isBuyerCompany ? "company" : "person")
