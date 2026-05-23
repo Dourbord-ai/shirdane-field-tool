@@ -505,18 +505,21 @@ export default function Invoices() {
   const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
   const [selectedLivestockItems, setSelectedLivestockItems] = useState<LivestockItemRow[]>([]);
 
-  useEffect(() => {
-    const fetchFactors = async () => {
-      const { data, error } = await supabase
-        .from("factors")
-        .select("*")
-        .order("created_at", { ascending: false });
+  // Extracted so PostingPanel can call it to refresh after a post attempt —
+  // this is how the badge + error text update without a full page reload.
+  const fetchFactors = async () => {
+    const { data, error } = await supabase
+      .from("factors")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      if (!error && data) {
-        setFactors(data as FactorRow[]);
-      }
-      setLoading(false);
-    };
+    if (!error && data) {
+      setFactors(data as FactorRow[]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchFactors();
   }, []);
 
