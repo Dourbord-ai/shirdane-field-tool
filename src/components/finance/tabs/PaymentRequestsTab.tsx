@@ -368,14 +368,17 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     if (saving) return;
     if (!typeCode) return toast.error("نوع درخواست را انتخاب کنید");
     if (!title) return toast.error("عنوان لیست را وارد کنید");
+    // Hard guard: cannot create a request with zero items. Prevents the
+    // orphan-parent bug where the request row was inserted but the items
+    // insert silently failed or was skipped.
+    if (!items.length) return toast.error("حداقل یک ردیف باید اضافه شود");
     // The new flow REQUIRES a Sepidar beneficiary on every row.
     if (items.some((i) => !i.beneficiary_id || !i.amount))
       return toast.error("ذینفع سپیدار و مبلغ هر آیتم الزامی است");
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
     // Validate creditor balance for amount_type_code = 1 using the snapshot
-    // captured at selection time (Sepidar convention: positive credit balance
-    // means we owe the party — `available = abs(balance)` when balance >= 0).
+    // captured at selection time.
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
       if (it.amount_type_code === 1) {
@@ -392,31 +395,48 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     try {
       const code = Number(typeCode);
       const typeKey = getPaymentRequestTypeKey(code);
-      const { data: pr, error } = await supabase.from("finance_payment_requests").insert({
-        title, description, request_type: typeKey, legacy_request_type_code: code, status: "pending_approval", total_amount: total, total_paid_amount: 0, remaining_amount: total,
-      }).select("id").single();
-      if (error || !pr) throw error || new Error("insert failed");
-      await supabase.from("finance_payment_request_items").insert(
-        items.map((i) => ({
-          payment_request_id: pr.id,
-          // Legacy local party (kept null in the new Sepidar-first flow).
-          party_id: i.party_id,
-          amount: i.amount,
-          amount_type_code: i.amount_type_code,
-          amount_type: i.amount_type,
-          description: i.description,
-          status: "pending_approval",
-          legacy_request_type_code: code,
-          // --- Sepidar snapshot fields persisted with the row ---
-          beneficiary_id: i.beneficiary_id ?? null,
-          dl_ref: i.dl_ref ?? null,
-          dl_code: i.dl_code ?? null,
-          beneficiary_name: i.beneficiary_name ?? null,
-          beneficiary_type: i.beneficiary_type ?? null,
-          beneficiary_balance_snapshot: i.beneficiary_balance_snapshot ?? null,
-          beneficiary_snapshot_at: i.beneficiary_id ? new Date().toISOString() : null,
-        })),
+
+      // Build JSONB payloads for the atomic RPC. The RPC inserts the parent
+      // row AND the item rows in a single transaction — if items fail, the
+      // parent is rolled back. This replaces the previous two-step client
+      // insert pattern that could leave orphan requests with zero items
+      // whenever the second `insert` raised silently (the original code
+      // never captured the error from the items insert at all).
+      const requestPayload = {
+        title,
+        description,
+        request_type: typeKey,
+        legacy_request_type_code: code,
+        status: "pending_approval",
+      };
+      const itemsPayload = items.map((i) => ({
+        party_id: i.party_id,
+        amount: i.amount,
+        amount_type_code: i.amount_type_code,
+        amount_type: i.amount_type,
+        description: i.description,
+        status: "pending_approval",
+        beneficiary_id: i.beneficiary_id ?? null,
+        dl_ref: i.dl_ref ?? null,
+        dl_code: i.dl_code ?? null,
+        beneficiary_name: i.beneficiary_name ?? null,
+        beneficiary_type: i.beneficiary_type ?? null,
+        beneficiary_balance_snapshot: i.beneficiary_balance_snapshot ?? null,
+      }));
+
+      // Temporary logging to make payload inspection trivial in DevTools.
+      // eslint-disable-next-line no-console
+      console.log("[payment-request] submit", { requestPayload, items: itemsPayload });
+
+      // Cast through `never` because the generated types don't yet include
+      // this RPC; types will be regenerated on next sync.
+      const { data: newId, error } = await supabase.rpc(
+        "submit_payment_request" as never,
+        { p_request: requestPayload, p_items: itemsPayload } as never,
       );
+      if (error) throw error;
+      if (!newId) throw new Error("ثبت درخواست ناموفق بود");
+
       toast.success("درخواست ثبت شد");
       onDone();
     } catch (e: unknown) {
