@@ -328,7 +328,17 @@ interface InvoiceData {
   invoiceNumber: string;
   tax: string;
   sellerType: string;
+  // `company` is now a *display snapshot* only — the canonical link to the
+  // counterparty lives in `financePartyId` and is written to
+  // `factors.finance_party_id` on submit. We keep `company` populated with
+  // the chosen party's display name so existing list/detail UI that still
+  // reads the legacy `factors.company` text column keeps working for
+  // pre-M5 rows.
   company: string;
+  // M5: unified counterparty UUID from public.finance_parties. Empty string
+  // means the user hasn't picked one yet (or the flow doesn't require a
+  // counterparty, e.g. milk-retail / examinations).
+  financePartyId: string;
   settlement: string;
   discount: string;
   shipping: string;
@@ -346,6 +356,8 @@ const initial: InvoiceData = {
   tax: "",
   sellerType: "",
   company: "",
+  // M5: blank until the operator picks a party from the unified selector.
+  financePartyId: "",
   settlement: "",
   discount: "",
   shipping: "",
