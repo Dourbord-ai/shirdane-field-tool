@@ -641,6 +641,9 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
 
           {/* MVP posting controls — renders nothing for factors that have not
               yet entered the accounting pipeline (lifecycle_state NULL/draft). */}
+          {/* Approval (Approve/Reject) runs first for draft rows; PostingPanel
+              takes over once the factor reaches the 'approved' bucket. */}
+          <ApprovalPanel factor={factor} onChanged={onChanged} />
           <PostingPanel factor={factor} onChanged={onChanged} />
         </div>
       </div>
