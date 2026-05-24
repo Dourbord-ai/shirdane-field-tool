@@ -518,13 +518,45 @@ export default function Invoices() {
   // Extracted so PostingPanel can call it to refresh after a post attempt —
   // this is how the badge + error text update without a full page reload.
   const fetchFactors = async () => {
+    // M5: join `finance_parties` to surface a single composed display
+    // name per factor. We use an inner-object alias (`party:...`) on the
+    // FK so PostgREST returns the joined columns nested under `party`;
+    // we then flatten to `party_name` before storing in state. A LEFT
+    // join is implicit because `finance_party_id` is nullable.
     const { data, error } = await supabase
       .from("factors")
-      .select("*")
+      .select(
+        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
+      )
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setFactors(data as FactorRow[]);
+      const rows: FactorRow[] = (data as Array<Record<string, unknown>>).map((row) => {
+        // The joined record can be either an object (single FK target)
+        // or null (no FK / FK target soft-deleted). We defensively
+        // handle both shapes.
+        const party = (row.party ?? null) as
+          | {
+              company_name: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              sepidar_full_name: string | null;
+            }
+          | null;
+        const personName = party
+          ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
+          : "";
+        const party_name =
+          party?.sepidar_full_name ||
+          party?.company_name ||
+          personName ||
+          null;
+        // Strip the nested `party` blob before casting so the row shape
+        // matches FactorRow cleanly.
+        const { party: _omit, ...rest } = row as { party?: unknown };
+        return { ...(rest as unknown as FactorRow), party_name };
+      });
+      setFactors(rows);
     }
     setLoading(false);
   };
