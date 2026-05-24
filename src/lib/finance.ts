@@ -355,7 +355,21 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
 
   let response: SepidarPartyResponse;
   try {
-    response = await callSepidarBridgeAddParty({ id: partyId, full_name: fullName });
+    // Forward the full identity payload so the SP can populate Sepidar
+    // properly (national codes, contact info, address, …).
+    response = await callSepidarBridgeAddParty({
+      id: partyId,
+      full_name: fullName,
+      ownership_type: (party as never as { ownership_type?: string | null }).ownership_type ?? null,
+      national_code: party.national_code ?? null,
+      national_id: party.national_id ?? null,
+      economic_code: (party as never as { economic_code?: string | null }).economic_code ?? null,
+      mobile: party.mobile ?? null,
+      telephone: party.telephone ?? null,
+      address: party.address ?? null,
+      postal_code: party.postal_code ?? null,
+      description: party.description ?? null,
+    });
   } catch (e: unknown) {
     response = {
       sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
