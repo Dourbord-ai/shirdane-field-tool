@@ -1413,7 +1413,23 @@ export default function NewInvoice() {
 
       {showMilkCompany && (
         <div className="animate-fade-in">
-          <SearchableSelect label="لیست شرکت‌ها" options={milkCompanyList} value={data.milkCompany} onChange={(v) => set("milkCompany", v)} placeholder="انتخاب شرکت..." />
+          {/* M5: unified counterparty selector. When the milk buyer is a
+              company we now select it from finance_parties (same source as
+              payments/receives), not from the hard-coded milkCompanyList.
+              `milkCompany` keeps the display label as a snapshot for
+              backward-compat reading, while `financePartyId` is the
+              canonical FK that gets written to factors. */}
+          <SearchableSelect
+            label="طرف حساب (خریدار)"
+            options={financePartyOptions}
+            value={data.financePartyId}
+            onChange={(v) => {
+              set("financePartyId", v);
+              const found = financePartyOptions.find((o) => o.value === v);
+              set("milkCompany", found?.label || "");
+            }}
+            placeholder="انتخاب طرف حساب..."
+          />
         </div>
       )}
 
