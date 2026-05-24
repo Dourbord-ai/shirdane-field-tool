@@ -1,6 +1,7 @@
 // Finance module shared utilities
 import { supabase } from "@/integrations/supabase/client";
 import { gregorianToJalali, formatJalali, toPersianDigits } from "@/lib/jalali";
+import { getReadableFinanceError } from "@/lib/financeErrors";
 
 // ---------- Money ----------
 export function formatMoney(n: number | string | null | undefined): string {
@@ -246,21 +247,81 @@ export interface SepidarPartyResponse {
   error_message: string | null;
 }
 
-// Placeholder bridge — does NOT call SQL Server. Simulates success-shape only.
-// Replace with real Sepidar Bridge call later.
+// Real bridge call: invokes the `sepidar-create-beneficiary` Edge Function
+// which executes `bridge.CreateBeneficiary` on ShirdaneBridge (SQL Server
+// 2008 compatible). Do NOT call `sepidar-beneficiaries` here — that one is
+// read-only and serves a different flow.
 async function callSepidarBridgeAddParty(
-  party: { id: string; full_name: string },
+  party: {
+    id: string;
+    full_name: string;
+    ownership_type?: string | null;
+    national_code?: string | null;
+    national_id?: string | null;
+    economic_code?: string | null;
+    mobile?: string | null;
+    telephone?: string | null;
+    address?: string | null;
+    postal_code?: string | null;
+    description?: string | null;
+  },
 ): Promise<SepidarPartyResponse> {
-  // Simulate latency for UX
-  await new Promise((r) => setTimeout(r, 600));
+  // Forward only fields the SP needs. Everything else stays local-only.
+  const { data, error } = await supabase.functions.invoke(
+    "sepidar-create-beneficiary",
+    {
+      body: {
+        partyId: party.id,
+        fullName: party.full_name,
+        ownershipType: party.ownership_type ?? null,
+        nationalCode: party.national_code ?? null,
+        nationalId: party.national_id ?? null,
+        economicCode: party.economic_code ?? null,
+        mobile: party.mobile ?? null,
+        telephone: party.telephone ?? null,
+        address: party.address ?? null,
+        postalCode: party.postal_code ?? null,
+        description: party.description ?? null,
+      },
+    },
+  );
+
+  // Transport-level failure (function unreachable, 5xx, etc.).
+  if (error) {
+    return {
+      sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
+      sepidar_account_id: null, sepidar_full_name: null,
+      sepidar_sync_status: "failed",
+      error_message: getReadableFinanceError(error),
+    };
+  }
+
+  // Application-level failure (SP raised an error, missing ids, …).
+  const resp = (data ?? {}) as {
+    success?: boolean; message?: string;
+    sepidar_party_id?: number | null;
+    sepidar_dl_id?: number | null;
+    sepidar_dl_code?: number | null;
+    sepidar_account_id?: number | null;
+    sepidar_full_name?: string | null;
+  };
+  if (!resp.success || resp.sepidar_party_id == null) {
+    return {
+      sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
+      sepidar_account_id: null, sepidar_full_name: null,
+      sepidar_sync_status: "failed",
+      error_message: resp.message || "خطای نامشخص در ایجاد ذینفع سپیدار",
+    };
+  }
+
   return {
-    sepidar_party_id: null,
-    sepidar_dl_id: null,
-    sepidar_dl_code: null,
-    sepidar_account_id: null,
-    sepidar_full_name: party.full_name,
-    sepidar_sync_status: "failed",
-    error_message: "پل سپیدار هنوز متصل نشده است (placeholder)",
+    sepidar_party_id: resp.sepidar_party_id ?? null,
+    sepidar_dl_id: resp.sepidar_dl_id ?? null,
+    sepidar_dl_code: resp.sepidar_dl_code ?? null,
+    sepidar_account_id: resp.sepidar_account_id ?? null,
+    sepidar_full_name: resp.sepidar_full_name ?? null,
+    sepidar_sync_status: "synced",
+    error_message: null,
   };
 }
 
@@ -294,7 +355,21 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
 
   let response: SepidarPartyResponse;
   try {
-    response = await callSepidarBridgeAddParty({ id: partyId, full_name: fullName });
+    // Forward the full identity payload so the SP can populate Sepidar
+    // properly (national codes, contact info, address, …).
+    response = await callSepidarBridgeAddParty({
+      id: partyId,
+      full_name: fullName,
+      ownership_type: (party as never as { ownership_type?: string | null }).ownership_type ?? null,
+      national_code: party.national_code ?? null,
+      national_id: party.national_id ?? null,
+      economic_code: (party as never as { economic_code?: string | null }).economic_code ?? null,
+      mobile: party.mobile ?? null,
+      telephone: party.telephone ?? null,
+      address: party.address ?? null,
+      postal_code: party.postal_code ?? null,
+      description: party.description ?? null,
+    });
   } catch (e: unknown) {
     response = {
       sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,

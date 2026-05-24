@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.sepidar-post-voucher]
 verify_jwt = false
+
+[functions.sepidar-create-beneficiary]
+verify_jwt = false
