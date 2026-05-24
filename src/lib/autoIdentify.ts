@@ -127,33 +127,30 @@ async function findTrustedParty(
 
   // Step 2: look for historical confirmations of the same identifier. We
   // walk through `finance_bank_tx_identifiers` (the table we just created)
-  // joined to confirmed receives on the same bank transaction.
-  const { data } = await supabase
+  // to collect the bank-transaction ids, then ask the receive-identification
+  // table which parties were approved on those transactions. Two round
+  // trips, but each one is index-covered and trivially small.
+  const { data: identRows } = await supabase
     .from("finance_bank_tx_identifiers")
-    .select(
-      // We pick only the columns we need to keep the round-trip small.
-      // The embed pulls the receive's `party_id` and `status` so we can
-      // filter out any non-confirmed history client-side.
-      "bank_transaction_id, finance_receive_identifications:finance_receive_identifications!finance_receive_identifications_bank_transaction_id_fkey(party_id,status,is_deleted)",
-    )
+    .select("bank_transaction_id")
     .eq("match_type", ident.type)
     .eq("normalized_value", ident.normalized);
 
-  if (!data || data.length === 0) return null;
+  const txIds = (identRows ?? [])
+    .map((r) => r.bank_transaction_id)
+    .filter((x): x is string => Boolean(x));
+  if (txIds.length === 0) return null;
 
-  // Collect distinct party ids that have at least one APPROVED (and not
-  // deleted) receive identification on the matched transactions.
+  const { data: receiveRows } = await supabase
+    .from("finance_receive_identifications")
+    .select("party_id, status, is_deleted")
+    .in("bank_transaction_id", txIds)
+    .eq("status", "approved")
+    .eq("is_deleted", false);
+
   const partySet = new Set<string>();
-  for (const row of data as Array<{
-    finance_receive_identifications?: Array<{ party_id: string | null; status: string | null; is_deleted: boolean | null }>;
-  }>) {
-    const links = row.finance_receive_identifications ?? [];
-    for (const r of links) {
-      if (!r?.party_id) continue;
-      if (r.is_deleted) continue;
-      if (r.status !== "approved") continue;
-      partySet.add(r.party_id);
-    }
+  for (const r of (receiveRows ?? []) as Array<{ party_id: string | null }>) {
+    if (r.party_id) partySet.add(r.party_id);
   }
 
   // STRICT rule: only auto-confirm when exactly one party is implicated.
