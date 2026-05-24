@@ -996,6 +996,18 @@ export default function NewInvoice() {
       .insert({
         product_type: data.productType,
         invoice_type: data.invoiceType,
+        // Canonical numeric direction marker used by the server-side
+        // `list_factors_filtered` RPC and by the posting engine. We derive
+        // it from invoice_type so every non-livestock factor created via
+        // this generic flow (feed, medicine, sperm, milk, etc.) gets a
+        // correct direction marker without a schema migration. Livestock
+        // uses its own .NET service which already sets factor_type_id.
+        factor_type_id:
+          data.invoiceType === "buy"
+            ? 1
+            : data.invoiceType === "sell" || data.invoiceType === "retail_sell"
+            ? 2
+            : null,
         invoice_date: formatFactorTimestamp(data.date),
         invoice_number: data.invoiceNumber || null,
         delivery_date: formatFactorTimestamp(data.deliveryDate),
