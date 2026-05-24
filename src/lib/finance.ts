@@ -244,6 +244,12 @@ export interface SepidarPartyResponse {
   sepidar_account_id: number | null;
   sepidar_full_name: string | null;
   sepidar_sync_status: "synced" | "failed";
+  // status_code distinguishes a fresh create from a duplicate-link.
+  // 'created' = SP inserted a new Sepidar party.
+  // 'exists'  = SP found a match by national code / id and returned the
+  //             existing Sepidar IDs (treated as success — no error).
+  // null      = legacy SP that doesn't emit status_code yet.
+  status_code?: "created" | "exists" | null;
   error_message: string | null;
 }
 
@@ -292,6 +298,7 @@ async function callSepidarBridgeAddParty(
       sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
       sepidar_account_id: null, sepidar_full_name: null,
       sepidar_sync_status: "failed",
+      status_code: null,
       error_message: getReadableFinanceError(error),
     };
   }
@@ -299,6 +306,7 @@ async function callSepidarBridgeAddParty(
   // Application-level failure (SP raised an error, missing ids, …).
   const resp = (data ?? {}) as {
     success?: boolean; message?: string;
+    status_code?: "created" | "exists" | null;
     sepidar_party_id?: number | null;
     sepidar_dl_id?: number | null;
     sepidar_dl_code?: number | null;
@@ -310,10 +318,14 @@ async function callSepidarBridgeAddParty(
       sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
       sepidar_account_id: null, sepidar_full_name: null,
       sepidar_sync_status: "failed",
+      status_code: null,
       error_message: resp.message || "خطای نامشخص در ایجاد ذینفع سپیدار",
     };
   }
 
+  // Both 'created' and 'exists' are success. 'exists' means the SP matched
+  // by national code / national id and returned the existing Sepidar IDs
+  // so we link the local row to the pre-existing Sepidar party.
   return {
     sepidar_party_id: resp.sepidar_party_id ?? null,
     sepidar_dl_id: resp.sepidar_dl_id ?? null,
@@ -321,6 +333,7 @@ async function callSepidarBridgeAddParty(
     sepidar_account_id: resp.sepidar_account_id ?? null,
     sepidar_full_name: resp.sepidar_full_name ?? null,
     sepidar_sync_status: "synced",
+    status_code: resp.status_code ?? "created",
     error_message: null,
   };
 }
@@ -375,15 +388,22 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
       sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
       sepidar_account_id: null, sepidar_full_name: null,
       sepidar_sync_status: "failed",
+      status_code: null,
       error_message: e instanceof Error ? e.message : "خطای نامشخص",
     };
   }
 
-  // Log the call
+  // Log the call. We keep operation_type stable for legacy compatibility
+  // but tag the response_payload with status_code so we can tell apart:
+  //   - 'created' → SP inserted a new Sepidar party
+  //   - 'exists'  → SP matched by national code and linked existing IDs
   await supabase.from("finance_sepidar_sync_logs").insert({
     party_id: partyId,
     entity_type: "party",
-    operation_type: "SpAddSepidarBankParty",
+    operation_type:
+      response.status_code === "exists"
+        ? "SpAddSepidarBankParty:link-existing"
+        : "SpAddSepidarBankParty",
     request_payload: requestPayload as never,
     response_payload: response as never,
     status: response.sepidar_sync_status === "synced" ? "success" : "failed",
