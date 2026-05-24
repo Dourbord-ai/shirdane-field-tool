@@ -398,6 +398,17 @@ export default function NewInvoice() {
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
   const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
 
+  // M5: unified counterparty options drawn from public.finance_parties.
+  // Every factor that has a counterparty (purchase or sale, any product
+  // type) selects from this single list. We deliberately *replace* the
+  // old per-product-type shopping-center dropdowns (feedshoppingcenter,
+  // medicineshoppingcenter, buy_cattle_shoppingcenter, etc.) so the data
+  // model is consistent with payments/receives and Sepidar posting can
+  // resolve PartyId from one canonical source.
+  const [financePartyOptions, setFinancePartyOptions] = useState<
+    { label: string; value: string }[]
+  >([]);
+
   useEffect(() => {
     const fetchSperms = async () => {
       // Only active sperms are offered in invoice forms; toggle in /settings.
