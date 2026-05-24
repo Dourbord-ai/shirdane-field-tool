@@ -520,7 +520,17 @@ export async function approveReceiveIdentification(receiveIdId: string): Promise
     .eq("id", receiveIdId)
     .maybeSingle();
   if (error || !ri) throw error || new Error("درخواست یافت نشد");
-  if (ri.status !== "pending_approval" && ri.status !== "sync_failed") {
+  // Allow: pending_approval (manual approval), sync_failed (manual retry),
+  // and approved-but-unposted (auto-identified rows created via the
+  // auto_create_receive_identification RPC that still need Sepidar posting).
+  const alreadySynced = ri.sepidar_sync_status === "synced";
+  const approvedUnposted =
+    ri.status === "approved" && !alreadySynced;
+  if (
+    ri.status !== "pending_approval" &&
+    ri.status !== "sync_failed" &&
+    !approvedUnposted
+  ) {
     throw new Error("این درخواست در وضعیت قابل تایید نیست");
   }
   if (!ri.party_id || !ri.bank_id || !ri.bank_transaction_id) {
