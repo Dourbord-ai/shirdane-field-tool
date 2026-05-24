@@ -325,6 +325,35 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       )}
 
+      {/* Auto-identification chip filters — server-side filtered txs are
+          partitioned into 5 derived states (see deriveAutoState). Counts
+          reflect the unfiltered set so the user sees the impact of each
+          chip before clicking it. */}
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
+            ["", "همه", txs.length],
+            ["auto_identified", "شناسایی خودکار", autoCounts.auto_identified],
+            ["manual", "شناسایی دستی", autoCounts.manual],
+            ["needs_review", "نیازمند بازبینی", autoCounts.needs_review],
+            ["no_identifier", "بدون شناسه", autoCounts.no_identifier],
+            ["sepidar_failed", "خطای سپیدار", autoCounts.sepidar_failed],
+          ] as Array<[string, string, number]>
+        ).map(([key, label, count]) => (
+          <button
+            key={key || "all"}
+            onClick={() => setFilterAutoState(key as "" | AutoState)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+              filterAutoState === key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card hover:bg-muted/50"
+            }`}
+          >
+            {label} <span className="opacity-70">({count})</span>
+          </button>
+        ))}
+      </div>
+
 
       {loading ? (
         <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
