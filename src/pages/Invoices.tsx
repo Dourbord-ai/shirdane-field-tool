@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronDown, FileText, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -10,6 +10,20 @@ import { toPersianDigits } from "@/lib/jalali";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+// Server-side filter UI + URL serialization helpers. All filtering happens
+// inside the `list_factors_filtered` Postgres function so we don't paginate
+// the entire table client-side anymore.
+import FactorFilters, {
+  type FactorFiltersValue,
+  EMPTY_FILTERS,
+  filtersToSearchParams,
+  searchParamsToFilters,
+  hasActiveFilters,
+} from "@/components/invoices/FactorFilters";
+// Converts a Jalali "YYYY/MM/DD" string from the filter picker into a Tehran
+// wall-clock ISO timestamp so we can compare it against the timestamptz
+// `factors.invoice_date` column on the server.
+import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 
 interface FactorRow {
   id: string;
