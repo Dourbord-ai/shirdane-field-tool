@@ -909,9 +909,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       inserted++;
 
       // STEP 3a — Receive auto-identification (customer deposits).
-      let receiveOutcome:
-        | { state: AutoIdentifySummary extends unknown ? string : never }
-        | undefined;
+      let receiveOutcome: { state: string } | undefined;
       try {
         const outcome = await autoIdentifyTransaction(
           insertedRow.id as string,
