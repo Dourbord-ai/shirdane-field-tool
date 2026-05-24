@@ -1001,10 +1001,18 @@ export default function NewInvoice() {
           ? "person"
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : (data.productType === "other" || data.productType === "services" || data.productType === "rental") ? otherCompanyOptions : companyList;
-          const found = allCompanies.find((c) => c.value === data.company);
+          // M5: `factors.company` is a display-only snapshot kept for the
+          // pre-M5 legacy list/detail UIs. The canonical counterparty is
+          // `finance_party_id` below. We snapshot the label from the
+          // chosen finance party so the snapshot is always consistent
+          // with the FK target.
+          const found = financePartyOptions.find((c) => c.value === data.financePartyId);
           return found ? found.label : data.company || null;
         })(),
+        // M5: canonical counterparty FK. Empty-string / undefined → NULL
+        // so flows that don't require a party (e.g. milk-retail without
+        // company buyer) still insert cleanly.
+        finance_party_id: data.financePartyId || null,
         discount: finalDiscount,
         shipping: finalShipping,
         tax_amount: finalTax,
