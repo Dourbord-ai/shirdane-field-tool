@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronDown, FileText, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -10,6 +10,20 @@ import { toPersianDigits } from "@/lib/jalali";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+// Server-side filter UI + URL serialization helpers. All filtering happens
+// inside the `list_factors_filtered` Postgres function so we don't paginate
+// the entire table client-side anymore.
+import FactorFilters, {
+  type FactorFiltersValue,
+  EMPTY_FILTERS,
+  filtersToSearchParams,
+  searchParamsToFilters,
+  hasActiveFilters,
+} from "@/components/invoices/FactorFilters";
+// Converts a Jalali "YYYY/MM/DD" string from the filter picker into a Tehran
+// wall-clock ISO timestamp so we can compare it against the timestamptz
+// `factors.invoice_date` column on the server.
+import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 
 interface FactorRow {
   id: string;
@@ -51,6 +65,13 @@ interface FactorRow {
   // join is performed in the supabase select below and reduced to a flat
   // string in fetchFactors so the rest of the UI stays simple.
   party_name: string | null;
+  // RPC-derived bucketed status (draft / approved / cancelled / posted /
+  // voucher_failed / sepidar_failed). Optional because legacy queries that
+  // bypass the RPC may not populate it.
+  derived_status?: string | null;
+  // factor_type_id is the canonical direction marker (1=purchase, 2=sale).
+  // Used to render a direction badge in addition to the legacy invoice_type.
+  factor_type_id?: number | null;
 }
 
 interface SpermBuyRow {
@@ -506,10 +527,49 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
   );
 }
 
+// -----------------------------------------------------------------------------
+// Status badge helpers — keep label + color colocated so the list and the
+// active-filter-chip row stay visually consistent.
+// -----------------------------------------------------------------------------
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  draft:          { label: "پیش‌نویس",          cls: "bg-muted text-muted-foreground" },
+  approved:       { label: "تأیید شده",          cls: "bg-primary/15 text-primary" },
+  cancelled:      { label: "لغو شده",            cls: "bg-muted text-muted-foreground line-through" },
+  posted:         { label: "ثبت شده در سپیدار",  cls: "bg-primary/20 text-primary" },
+  voucher_failed: { label: "خطای ساخت سند",      cls: "bg-destructive/15 text-destructive" },
+  sepidar_failed: { label: "خطای ثبت سپیدار",    cls: "bg-destructive/15 text-destructive" },
+};
+
+// Default page size for the server-side filtered list. The RPC clamps to 500.
+const PAGE_SIZE = 50;
+
 export default function Invoices() {
   const navigate = useNavigate();
+  // -------------------------------------------------------------------------
+  // URL <-> filter state. `useSearchParams` is the single source of truth for
+  // the filter values so reload / share-link / back-button "just work".
+  // -------------------------------------------------------------------------
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Initial state derived from the URL on first render. We then keep a local
+  // mirror because the filter component is fully controlled.
+  const [filters, setFilters] = useState<FactorFiltersValue>(() =>
+    searchParamsToFilters(searchParams),
+  );
+  // `appliedFilters` is what we actually queried with. Separating it from
+  // `filters` (the form's draft state) lets users tweak the form without
+  // refetching until they hit "اعمال فیلتر".
+  const [appliedFilters, setAppliedFilters] = useState<FactorFiltersValue>(filters);
+
   const [factors, setFactors] = useState<FactorRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Party options for the filter selector. Loaded once at mount; we keep the
+  // payload small by only selecting the fields needed for the display label.
+  const [partyOptions, setPartyOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [partyLoading, setPartyLoading] = useState(true);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<SpermBuyRow[]>([]);
   const [selectedMilkItems, setSelectedMilkItems] = useState<MilkRow[]>([]);
@@ -517,55 +577,168 @@ export default function Invoices() {
   const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
   const [selectedLivestockItems, setSelectedLivestockItems] = useState<LivestockItemRow[]>([]);
 
-  // Extracted so PostingPanel can call it to refresh after a post attempt —
-  // this is how the badge + error text update without a full page reload.
-  const fetchFactors = async () => {
-    // M5: join `finance_parties` to surface a single composed display
-    // name per factor. We use an inner-object alias (`party:...`) on the
-    // FK so PostgREST returns the joined columns nested under `party`;
-    // we then flatten to `party_name` before storing in state. A LEFT
-    // join is implicit because `finance_party_id` is nullable.
-    const { data, error } = await supabase
-      .from("factors")
-      .select(
-        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
-      )
-      .order("created_at", { ascending: false });
+  // -------------------------------------------------------------------------
+  // Load finance_parties for the counterparty selector. We compose the same
+  // display name the RPC uses so the dropdown matches the list column.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("finance_parties")
+        .select("id, company_name, first_name, last_name, sepidar_full_name, is_deleted")
+        .eq("is_deleted", false)
+        .order("sepidar_full_name", { ascending: true, nullsFirst: false })
+        .limit(2000);
+      if (cancelled) return;
+      if (!error && data) {
+        const opts = data.map((p) => {
+          const person = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+          const label = p.sepidar_full_name || p.company_name || person || "بدون نام";
+          return { label, value: p.id as string };
+        });
+        setPartyOptions(opts);
+      }
+      setPartyLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-    if (!error && data) {
-      const rows: FactorRow[] = (data as Array<Record<string, unknown>>).map((row) => {
-        // The joined record can be either an object (single FK target)
-        // or null (no FK / FK target soft-deleted). We defensively
-        // handle both shapes.
-        const party = (row.party ?? null) as
-          | {
-              company_name: string | null;
-              first_name: string | null;
-              last_name: string | null;
-              sepidar_full_name: string | null;
-            }
-          | null;
-        const personName = party
-          ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
-          : "";
-        const party_name =
-          party?.sepidar_full_name ||
-          party?.company_name ||
-          personName ||
-          null;
-        // Strip the nested `party` blob before casting so the row shape
-        // matches FactorRow cleanly.
-        const { party: _omit, ...rest } = row as { party?: unknown };
-        return { ...(rest as unknown as FactorRow), party_name };
-      });
-      setFactors(rows);
+  // -------------------------------------------------------------------------
+  // Server-side fetch — wraps the new `list_factors_filtered` RPC. We convert
+  // the Jalali UI dates to Tehran-anchored timestamptz here so the SQL gets
+  // a clean range comparison.
+  // -------------------------------------------------------------------------
+  const fetchFactors = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    const f = appliedFilters;
+    // The picker hands us "YYYY/MM/DD" strings; convert to timestamptz at the
+    // exclusive upper bound by adding a day to `to` (RPC uses `< p_to_date`).
+    const fromTs = f.fromDate ? jalaliToGregorianTimestamp(f.fromDate, "00:00") : null;
+    const toTs = f.toDate ? jalaliToGregorianTimestamp(f.toDate, "23:59") : null;
+    // Cast through `never` because the generated types don't yet include
+    // this RPC; types will be regenerated on next sync.
+    const { data, error } = await supabase.rpc(
+      "list_factors_filtered" as never,
+      {
+        p_from_date: fromTs,
+        p_to_date: toTs,
+        p_invoice_number: f.invoiceNumber || null,
+        p_finance_party_id: f.financePartyId || null,
+        p_direction: f.direction || null,
+        p_product_types: f.productTypes.length ? f.productTypes : null,
+        p_statuses: f.statuses.length ? f.statuses : null,
+        p_limit: PAGE_SIZE,
+        p_offset: 0,
+      } as never,
+    );
+    if (error) {
+      setErrorMsg(error.message || "خطا در بارگذاری فاکتورها");
+      setFactors([]);
+      setTotalCount(0);
+    } else {
+      const rows = (data || []) as Array<FactorRow & { total_count: number }>;
+      // Cast RPC rows to the page's FactorRow shape. The RPC doesn't return a
+      // few rarely-used legacy columns (delivery_date, tax, buyer_type, etc.);
+      // we leave those undefined which the detail panel handles gracefully.
+      setFactors(rows.map((r) => ({ ...r })));
+      setTotalCount(rows.length > 0 ? Number(rows[0].total_count || rows.length) : 0);
     }
     setLoading(false);
-  };
+  }, [appliedFilters]);
 
   useEffect(() => {
     fetchFactors();
-  }, []);
+  }, [fetchFactors]);
+
+  // -------------------------------------------------------------------------
+  // Apply handler: commit the draft `filters` to both URL state and the
+  // `appliedFilters` query trigger.
+  // -------------------------------------------------------------------------
+  const handleApply = useCallback(() => {
+    setAppliedFilters(filters);
+    setSearchParams(filtersToSearchParams(filters), { replace: true });
+  }, [filters, setSearchParams]);
+
+  // Remove a single active filter chip. Mirrors the behaviour of `handleApply`
+  // for a single dimension so chips feel instant.
+  const removeFilterDim = useCallback(
+    (patch: Partial<FactorFiltersValue>) => {
+      const next = { ...filters, ...patch };
+      setFilters(next);
+      setAppliedFilters(next);
+      setSearchParams(filtersToSearchParams(next), { replace: true });
+    },
+    [filters, setSearchParams],
+  );
+
+  // -------------------------------------------------------------------------
+  // Active-filter chips — small dismissible pills shown above the list when
+  // at least one filter is set. Computed from `appliedFilters` (not the draft)
+  // so the chips reflect what's actually being queried.
+  // -------------------------------------------------------------------------
+  const activeChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+    const f = appliedFilters;
+    if (f.fromDate) {
+      chips.push({
+        key: "from",
+        label: `از ${toPersianDigits(f.fromDate)}`,
+        clear: () => removeFilterDim({ fromDate: "" }),
+      });
+    }
+    if (f.toDate) {
+      chips.push({
+        key: "to",
+        label: `تا ${toPersianDigits(f.toDate)}`,
+        clear: () => removeFilterDim({ toDate: "" }),
+      });
+    }
+    if (f.invoiceNumber) {
+      chips.push({
+        key: "num",
+        label: `شماره: ${toPersianDigits(f.invoiceNumber)}`,
+        clear: () => removeFilterDim({ invoiceNumber: "" }),
+      });
+    }
+    if (f.financePartyId) {
+      const party = partyOptions.find((p) => p.value === f.financePartyId);
+      chips.push({
+        key: "party",
+        label: `طرف حساب: ${party?.label || "—"}`,
+        clear: () => removeFilterDim({ financePartyId: "" }),
+      });
+    }
+    if (f.direction) {
+      chips.push({
+        key: "dir",
+        label: f.direction === "purchase" ? "خرید" : "فروش",
+        clear: () => removeFilterDim({ direction: "" }),
+      });
+    }
+    f.productTypes.forEach((pt) => {
+      chips.push({
+        key: `cat:${pt}`,
+        label: productLabels[pt] || pt,
+        clear: () =>
+          removeFilterDim({
+            productTypes: f.productTypes.filter((x) => x !== pt),
+          }),
+      });
+    });
+    f.statuses.forEach((st) => {
+      chips.push({
+        key: `status:${st}`,
+        label: STATUS_META[st]?.label || st,
+        clear: () =>
+          removeFilterDim({ statuses: f.statuses.filter((x) => x !== st) }),
+      });
+    });
+    return chips;
+  }, [appliedFilters, partyOptions, removeFilterDim]);
 
   const handleSelect = async (id: string) => {
     if (selectedId === id) {
@@ -583,6 +756,38 @@ export default function Invoices() {
     setSelectedFeedItems([]);
     setSelectedMedicineItems([]);
     setSelectedLivestockItems([]);
+
+    // The RPC row only includes the fields the list/filter needs. The detail
+    // panel renders many more legacy columns (delivery_date, tax, buyer_type,
+    // settlement_*, description, etc.) so we lazily fetch the full row + the
+    // joined party display name when a row is expanded, then merge it back
+    // into `factors` so InvoiceDetail has the complete shape.
+    const { data: full } = await supabase
+      .from("factors")
+      .select(
+        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
+      )
+      .eq("id", id)
+      .maybeSingle();
+    if (full) {
+      const raw = full as Record<string, unknown>;
+      const party = (raw.party ?? null) as
+        | {
+            company_name: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            sepidar_full_name: string | null;
+          }
+        | null;
+      const personName = party
+        ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
+        : "";
+      const party_name =
+        party?.sepidar_full_name || party?.company_name || personName || null;
+      const { party: _omit, ...rest } = raw as { party?: unknown };
+      const merged = { ...(rest as unknown as FactorRow), party_name };
+      setFactors((prev) => prev.map((p) => (p.id === id ? { ...p, ...merged } : p)));
+    }
 
     const factor = factors.find((f) => f.id === id);
     if (factor?.product_type === "sperm") {
@@ -608,22 +813,13 @@ export default function Invoices() {
   };
 
   const selectedFactor = factors.find((f) => f.id === selectedId);
-
-  if (loading) {
-    return (
-      <div className="py-20 flex justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const activeFiltersExist = hasActiveFilters(appliedFilters);
 
   return (
     <div className="py-6 space-y-4 animate-fade-in">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-heading text-foreground">فاکتورها</h1>
-        {/* Always-visible CTA — primary entry point for ثبت فاکتور خرید و فروش.
-            Previously only rendered in the empty state, which hid it once any
-            factor existed. Surfacing it in the header keeps it discoverable. */}
+        {/* Always-visible CTA — primary entry point for ثبت فاکتور خرید و فروش. */}
         <Button
           onClick={() => navigate("/invoices/new")}
           className="rounded-xl gap-2 bg-gradient-primary text-primary-foreground glow-primary"
@@ -633,72 +829,161 @@ export default function Invoices() {
         </Button>
       </div>
 
-      {selectedFactor && (
-        <InvoiceDetail factor={selectedFactor} items={selectedItems} milkItems={selectedMilkItems} feedItems={selectedFeedItems} medicineItems={selectedMedicineItems} livestockItems={selectedLivestockItems} onChanged={fetchFactors} onClose={() => { setSelectedId(null); setSelectedItems([]); setSelectedMilkItems([]); setSelectedFeedItems([]); setSelectedMedicineItems([]); setSelectedLivestockItems([]); }} />
-      )}
+      {/* Advanced filter panel — inline on lg+, drawer on mobile. */}
+      <FactorFilters
+        value={filters}
+        onChange={setFilters}
+        onApply={handleApply}
+        partyOptions={partyOptions}
+        partyLoading={partyLoading}
+      />
 
-      {factors.length === 0 ? (
-        <div className="text-center py-16 space-y-3">
-          <div className="w-16 h-16 mx-auto rounded-full bg-muted flex items-center justify-center">
-            <FileText className="w-7 h-7 text-muted-foreground" />
-          </div>
-          <p className="text-body text-muted-foreground">هنوز فاکتوری ثبت نشده</p>
-          <Button
-            onClick={() => navigate("/invoices/new")}
-            variant="outline"
-            className="rounded-xl gap-2 transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)] hover:border-primary/20"
-          >
-            <Plus className="w-4 h-4" />
-            ثبت فاکتور جدید
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {factors.map((f) => (
+      {/* Active filter chips row — only when at least one filter is applied. */}
+      {activeFiltersExist && activeChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">فیلترهای فعال:</span>
+          {activeChips.map((chip) => (
             <button
-              key={f.id}
-              onClick={() => handleSelect(f.id)}
-              className={cn(
-                "w-full text-right rounded-xl border bg-card p-4 space-y-2 transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.2)] hover:border-primary/20",
-                selectedId === f.id ? "border-primary/30 shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.15)]" : "border-border"
-              )}
+              key={chip.key}
+              onClick={chip.clear}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-bold">
-                    {productLabels[f.product_type] || f.product_type}
-                  </span>
-                  <span className="inline-block px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium">
-                    {invoiceTypeLabels[f.invoice_type] || f.invoice_type}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    {/* Always render via the universal Shamsi helper so an ISO date
-                        like "2025-05-12" is converted to "۱۴۰۴/۰۲/۲۲" instead of
-                        being shown as Gregorian numerals. The helper also handles
-                        the case where invoice_date is already a Shamsi string. */}
-                    {formatShamsi(f.invoice_date)}
-                  </span>
-                  <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", selectedId === f.id && "rotate-180")} />
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">شماره: {toPersianDigits(f.invoice_number || "—")}</span>
-                <span className="text-body font-bold text-primary">
-                  {toPersianDigits((f.payable_amount || 0).toLocaleString("en-US"))} ریال
-                </span>
-              </div>
-              {/* M5: surface the canonical counterparty (finance_parties)
-                  with a fallback to the legacy `company` text snapshot
-                  for pre-M5 rows whose finance_party_id is NULL. */}
-              <div className="text-xs text-muted-foreground">
-                طرف حساب: {f.party_name || f.company || "—"}
-              </div>
+              {chip.label}
+              <X className="w-3 h-3" />
             </button>
           ))}
         </div>
       )}
+
+      {selectedFactor && (
+        <InvoiceDetail
+          factor={selectedFactor}
+          items={selectedItems}
+          milkItems={selectedMilkItems}
+          feedItems={selectedFeedItems}
+          medicineItems={selectedMedicineItems}
+          livestockItems={selectedLivestockItems}
+          onChanged={fetchFactors}
+          onClose={() => {
+            setSelectedId(null);
+            setSelectedItems([]);
+            setSelectedMilkItems([]);
+            setSelectedFeedItems([]);
+            setSelectedMedicineItems([]);
+            setSelectedLivestockItems([]);
+          }}
+        />
+      )}
+
+      {/* Result count + loading + error states */}
+      {errorMsg && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          {errorMsg}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="py-20 flex justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : factors.length === 0 ? (
+        <div className="text-center py-16 space-y-3">
+          <div className="w-16 h-16 mx-auto rounded-full bg-muted flex items-center justify-center">
+            <FileText className="w-7 h-7 text-muted-foreground" />
+          </div>
+          <p className="text-body text-muted-foreground">
+            {activeFiltersExist
+              ? "فاکتوری با این فیلترها یافت نشد"
+              : "هنوز فاکتوری ثبت نشده"}
+          </p>
+          {!activeFiltersExist && (
+            <Button
+              onClick={() => navigate("/invoices/new")}
+              variant="outline"
+              className="rounded-xl gap-2 transition-all duration-200 hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)] hover:border-primary/20"
+            >
+              <Plus className="w-4 h-4" />
+              ثبت فاکتور جدید
+            </Button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="text-xs text-muted-foreground">
+            نمایش {toPersianDigits(String(factors.length))} از{" "}
+            {toPersianDigits(String(totalCount))} فاکتور
+            {totalCount > PAGE_SIZE && " (برای دیدن بقیه، فیلترها را محدودتر کنید)"}
+          </div>
+          <div className="space-y-3">
+            {factors.map((f) => {
+              // Map RPC `derived_status` (preferred) to badge metadata; fall
+              // back to lifecycle_state for any non-RPC code paths.
+              const statusKey = f.derived_status || f.lifecycle_state || "draft";
+              const status = STATUS_META[statusKey] || STATUS_META.draft;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => handleSelect(f.id)}
+                  className={cn(
+                    "w-full text-right rounded-xl border bg-card p-4 space-y-2 transition-all duration-200 hover:shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.2)] hover:border-primary/20",
+                    selectedId === f.id ? "border-primary/30 shadow-[0_4px_20px_-4px_hsl(142_50%_36%/0.15)]" : "border-border",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-block px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-bold">
+                        {productLabels[f.product_type] || f.product_type}
+                      </span>
+                      <span className="inline-block px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium">
+                        {/* Prefer canonical factor_type_id direction label;
+                            fall back to legacy invoice_type for old rows. */}
+                        {f.factor_type_id === 1
+                          ? "خرید"
+                          : f.factor_type_id === 2
+                          ? "فروش"
+                          : invoiceTypeLabels[f.invoice_type] || f.invoice_type}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-block px-2 py-0.5 rounded-md text-xs font-medium",
+                          status.cls,
+                        )}
+                      >
+                        {status.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        {formatShamsi(f.invoice_date)}
+                      </span>
+                      <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", selectedId === f.id && "rotate-180")} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">شماره: {toPersianDigits(f.invoice_number || "—")}</span>
+                    <span className="text-body font-bold text-primary">
+                      {toPersianDigits((f.payable_amount || 0).toLocaleString("en-US"))} ریال
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    طرف حساب: {f.party_name || f.company || "—"}
+                  </div>
+                  {/* Show last posting error inline on failed rows so the
+                      operator doesn't need to open the detail panel to triage
+                      a Sepidar/voucher failure. */}
+                  {f.last_posting_error &&
+                    (statusKey === "voucher_failed" || statusKey === "sepidar_failed") && (
+                      <div className="text-xs text-destructive bg-destructive/5 rounded-lg p-2">
+                        {f.last_posting_error}
+                      </div>
+                    )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
