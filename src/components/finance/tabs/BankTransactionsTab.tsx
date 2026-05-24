@@ -390,6 +390,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       {/* Full description on hover via native tooltip; click to expand inline.
                           Keeps the row compact by default but never hides text from the user. */}
                       <ExpandableDescription text={t.description} />
+                      <RowBadges
+                        idents={identByTx[t.id]}
+                        ri={receiveByTx[t.id]}
+                        partyName={receiveByTx[t.id]?.party_id ? partyNames[receiveByTx[t.id]!.party_id!] || null : null}
+                        autoState={deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])}
+                      />
                     </td>
 
                     <td className="p-2 font-mono text-xs">{t.reference_number || t.tracking_number || "—"}</td>
