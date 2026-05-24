@@ -298,6 +298,7 @@ async function callSepidarBridgeAddParty(
       sepidar_party_id: null, sepidar_dl_id: null, sepidar_dl_code: null,
       sepidar_account_id: null, sepidar_full_name: null,
       sepidar_sync_status: "failed",
+      status_code: null,
       error_message: getReadableFinanceError(error),
     };
   }
