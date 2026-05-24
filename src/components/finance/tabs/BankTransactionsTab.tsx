@@ -962,9 +962,18 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const inv = parsed.filter((r) => r.status === "invalid").length;
     setSummary({ total, valid, duplicate: dup, invalid: inv, inserted });
     setAutoSummary(autoSum);
-    // Richer toast that surfaces auto-identification results at a glance.
+    // Richer toast that surfaces auto-identification + inter-bank
+    // auto-matching results at a glance. We only append the bank-transfer
+    // segment when the pipeline actually produced something, so users who
+    // haven't enabled the feature flag don't see noisy zeros.
+    const bxSegment =
+      bxSum.matched + bxSum.needs_review > 0
+        ? ` · انتقال بانکی خودکار: ${bxSum.matched}${
+            bxSum.needs_review ? ` (نیاز به بازبینی: ${bxSum.needs_review})` : ""
+          }${bxSum.failed ? ` (خطا: ${bxSum.failed})` : ""}`
+        : "";
     toast.success(
-      `${inserted} ردیف ثبت شد · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}`,
+      `${inserted} ردیف ثبت شد · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}${bxSegment}`,
     );
     onDone();
   }
