@@ -8,6 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
 import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
+// Phase 4 wiring: run the auto-identification pipeline right after each
+// imported row lands in the DB. The helper is intentionally side-effect
+// driven (writes audit log + identifier rows itself) so the import code
+// only needs to feed it the persisted bank_transaction_id.
+import {
+  autoIdentifyTransaction,
+  emptyAutoIdentifySummary,
+  bumpSummary,
+  type AutoIdentifySummary,
+} from "@/lib/autoIdentify";
 import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
@@ -511,6 +521,9 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<{ total: number; valid: number; duplicate: number; invalid: number; inserted: number } | null>(null);
+  // Phase 6: counters returned by the auto-identify pipeline so the
+  // import dialog can display per-state chips after the final save step.
+  const [autoSummary, setAutoSummary] = useState<AutoIdentifySummary | null>(null);
 
   useEffect(() => {
     void supabase
@@ -633,7 +646,13 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     }
 
     // STEP 2 — Insert parsed rows, each carrying the archived path.
+    // We also use `.select("id")` so we can hand the persisted UUID to the
+    // auto-identification pipeline in STEP 3 below. Doing them in the same
+    // loop keeps the dialog progress feedback simple (one toast at the end).
     let inserted = 0;
+    // Accumulator for the auto-identify summary chips. We seed it with
+    // zeros and bump per row — this avoids reflowing the list later.
+    const autoSum = emptyAutoIdentifySummary();
     for (const r of validRows) {
       const payload = {
         bank_id: bankId,
@@ -652,8 +671,31 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         imported_file_path: storagePath,
         raw_data: r.raw as unknown as Record<string, unknown>,
       };
-      const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
-      if (!error) inserted++;
+      const { data: insertedRow, error } = await supabase
+        .from("finance_bank_transactions")
+        .insert([payload])
+        .select("id")
+        .maybeSingle();
+      if (error || !insertedRow) continue;
+      inserted++;
+
+      // STEP 3 — Run the auto-identification pipeline. We `await` per row
+      // (rather than firing in parallel) so a flaky external API can't
+      // saturate the user's browser, and so the audit log entries appear
+      // in import order. The helper handles ALL its own logging + error
+      // swallowing — a failure here must NEVER abort the import loop.
+      try {
+        const outcome = await autoIdentifyTransaction(
+          insertedRow.id as string,
+          r.transaction_type,
+          r.identifiers,
+        );
+        bumpSummary(autoSum, outcome);
+      } catch {
+        // Counted as needs_review so the user can investigate without
+        // losing track of the row.
+        bumpSummary(autoSum, { state: "needs_review", message: "pipeline crashed" });
+      }
     }
     if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
@@ -662,7 +704,11 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const dup = parsed.filter((r) => r.status === "duplicate").length;
     const inv = parsed.filter((r) => r.status === "invalid").length;
     setSummary({ total, valid, duplicate: dup, invalid: inv, inserted });
-    toast.success(`${inserted} ردیف ثبت شد`);
+    setAutoSummary(autoSum);
+    // Richer toast that surfaces auto-identification results at a glance.
+    toast.success(
+      `${inserted} ردیف ثبت شد · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}`,
+    );
     onDone();
   }
 
@@ -782,6 +828,32 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
                 <span className="text-rose-700">خطادار: {parsed.filter((r) => r.status === "invalid").length}</span>
                 {summary && <span className="font-bold">ثبت‌شده: {summary.inserted}</span>}
               </div>
+              {/* Phase 6 — auto-identification summary chips. Only rendered
+                  after `importAll` finishes so the user sees them as part of
+                  the post-import recap, alongside the legacy validity chips. */}
+              {autoSummary && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 px-2 py-0.5">
+                    شناسایی خودکار: {autoSummary.auto_identified}
+                  </span>
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
+                    نیازمند بازبینی: {autoSummary.needs_review}
+                  </span>
+                  <span className="rounded-full border border-muted bg-muted/30 text-muted-foreground px-2 py-0.5">
+                    بدون شناسه: {autoSummary.no_identifier}
+                  </span>
+                  {autoSummary.sepidar_posted > 0 && (
+                    <span className="rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5">
+                      ارسال به سپیدار: {autoSummary.sepidar_posted}
+                    </span>
+                  )}
+                  {autoSummary.sepidar_failed > 0 && (
+                    <span className="rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5">
+                      خطای سپیدار: {autoSummary.sepidar_failed}
+                    </span>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
