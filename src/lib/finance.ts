@@ -1,6 +1,7 @@
 // Finance module shared utilities
 import { supabase } from "@/integrations/supabase/client";
 import { gregorianToJalali, formatJalali, toPersianDigits } from "@/lib/jalali";
+import { getReadableFinanceError } from "@/lib/financeErrors";
 
 // ---------- Money ----------
 export function formatMoney(n: number | string | null | undefined): string {
