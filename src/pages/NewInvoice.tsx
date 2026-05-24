@@ -547,22 +547,36 @@ export default function NewInvoice() {
     fetchCows();
 
     // M5: load the unified counterparty list once per mount. We pull only
-    // active (not soft-deleted) parties and sort by name so the operator
-    // sees a stable Persian-alphabetical list. The value is the UUID PK
-    // because that's what factors.finance_party_id stores.
+    // active (not soft-deleted) parties. `finance_parties` has no single
+    // `name` column — instead we compose a display label from the most
+    // specific identifier available (Sepidar full name → company name →
+    // first+last name → fallback). The value is the UUID PK because
+    // that's what factors.finance_party_id stores.
     (async () => {
       const { data: parties } = await supabase
         .from("finance_parties")
-        .select("id, name")
-        .eq("is_deleted", false)
-        .order("name", { ascending: true });
+        .select(
+          "id, company_name, first_name, last_name, sepidar_full_name",
+        )
+        .eq("is_deleted", false);
       if (parties) {
-        setFinancePartyOptions(
-          parties.map((p) => ({
-            label: p.name || "(بدون نام)",
-            value: p.id as string,
-          })),
-        );
+        const opts = parties.map((p) => {
+          const personName = [p.first_name, p.last_name]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+          const label =
+            p.sepidar_full_name ||
+            p.company_name ||
+            personName ||
+            "(بدون نام)";
+          return { label, value: p.id as string };
+        });
+        // Sort Persian-alphabetically once on the client; the table has
+        // no good single sort key server-side because the display name
+        // is computed.
+        opts.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+        setFinancePartyOptions(opts);
       }
     })();
   }, []);
