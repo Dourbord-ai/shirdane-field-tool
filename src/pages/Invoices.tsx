@@ -687,6 +687,12 @@ export default function Invoices() {
                   {toPersianDigits((f.payable_amount || 0).toLocaleString("en-US"))} ریال
                 </span>
               </div>
+              {/* M5: surface the canonical counterparty (finance_parties)
+                  with a fallback to the legacy `company` text snapshot
+                  for pre-M5 rows whose finance_party_id is NULL. */}
+              <div className="text-xs text-muted-foreground">
+                طرف حساب: {f.party_name || f.company || "—"}
+              </div>
             </button>
           ))}
         </div>
