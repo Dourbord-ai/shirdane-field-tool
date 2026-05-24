@@ -1480,6 +1480,7 @@ export type Database = {
           description: string | null
           discount: number | null
           factor_type_id: number | null
+          finance_party_id: string | null
           id: string
           idempotency_key: string | null
           image: string | null
@@ -1534,6 +1535,7 @@ export type Database = {
           description?: string | null
           discount?: number | null
           factor_type_id?: number | null
+          finance_party_id?: string | null
           id?: string
           idempotency_key?: string | null
           image?: string | null
@@ -1588,6 +1590,7 @@ export type Database = {
           description?: string | null
           discount?: number | null
           factor_type_id?: number | null
+          finance_party_id?: string | null
           id?: string
           idempotency_key?: string | null
           image?: string | null
@@ -1630,6 +1633,13 @@ export type Database = {
           voucher_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "factors_finance_party_id_fkey"
+            columns: ["finance_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fk_factors_reversal_voucher_id"
             columns: ["reversal_voucher_id"]
