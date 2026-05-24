@@ -619,17 +619,22 @@ export default function Invoices() {
     // exclusive upper bound by adding a day to `to` (RPC uses `< p_to_date`).
     const fromTs = f.fromDate ? jalaliToGregorianTimestamp(f.fromDate, "00:00") : null;
     const toTs = f.toDate ? jalaliToGregorianTimestamp(f.toDate, "23:59") : null;
-    const { data, error } = await supabase.rpc("list_factors_filtered", {
-      p_from_date: fromTs,
-      p_to_date: toTs,
-      p_invoice_number: f.invoiceNumber || null,
-      p_finance_party_id: f.financePartyId || null,
-      p_direction: f.direction || null,
-      p_product_types: f.productTypes.length ? f.productTypes : null,
-      p_statuses: f.statuses.length ? f.statuses : null,
-      p_limit: PAGE_SIZE,
-      p_offset: 0,
-    });
+    // Cast through `never` because the generated types don't yet include
+    // this RPC; types will be regenerated on next sync.
+    const { data, error } = await supabase.rpc(
+      "list_factors_filtered" as never,
+      {
+        p_from_date: fromTs,
+        p_to_date: toTs,
+        p_invoice_number: f.invoiceNumber || null,
+        p_finance_party_id: f.financePartyId || null,
+        p_direction: f.direction || null,
+        p_product_types: f.productTypes.length ? f.productTypes : null,
+        p_statuses: f.statuses.length ? f.statuses : null,
+        p_limit: PAGE_SIZE,
+        p_offset: 0,
+      } as never,
+    );
     if (error) {
       setErrorMsg(error.message || "خطا در بارگذاری فاکتورها");
       setFactors([]);
