@@ -286,7 +286,10 @@ export async function autoMatchBankTransfer(
 
     const sync = await syncVoucherToSepidar(voucher.id);
 
-    if (sync.sepidar_sync_status === "synced") {
+    // `syncVoucherToSepidar` returns `{ status, error_message }` — the
+    // edge function is the source of truth and already persisted
+    // sepidar_sync_status on the voucher row.
+    if (sync.status === "synced") {
       await logStep(tx.id, "auto_bank_transfer_posted", true, {
         candidates: { transfer_id: transferId, voucher_id: voucher.id },
       });
