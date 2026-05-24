@@ -71,7 +71,12 @@ const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
     { label: "قبض مراکز خرید شیر", value: "milk_receipt" },
     { label: "فروش خورده", value: "retail_sell" },
   ],
-  feed: [{ label: "خرید", value: "buy" }],
+  // Feed supports both خرید (purchase from supplier) and فروش (e.g. selling
+  // surplus feed to another farm). The factor schema, feed_items table, and
+  // posting/state-transition pipeline are direction-agnostic, so we just add
+  // the sell option here — the existing render/insert paths handle both.
+  // Sepidar posting for feed is still deferred (see plan §4d).
+  feed: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   medicine: [{ label: "خرید", value: "buy" }],
   livestock: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   other: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
