@@ -21,6 +21,22 @@ export interface BankImportTemplate {
   description?: string | null;
 }
 
+export interface ExtractedIdentifier {
+  // 1 = card (16 digits), 2 = IBAN/Sheba (IR + 24 digits), 3 = account number.
+  // We reuse the numeric `match_type` contract that the existing
+  // `bankpartyaccountinfos` cache and the `verify-account` edge function
+  // already speak — that way the import pipeline doesn't have to translate
+  // values back and forth when looking up cached owner info.
+  type: 1 | 2 | 3;
+  // Original substring from the bank description, kept verbatim so that
+  // human reviewers can audit exactly what the parser pulled out.
+  raw: string;
+  // Canonical form used for cache lookups & duplicate detection.
+  // Persian/Arabic digits → ASCII, separators stripped, IBAN stored
+  // WITHOUT the leading "IR" prefix to match how the edge function caches.
+  normalized: string;
+}
+
 export interface ParsedRow {
   index: number;
   date: string; // jalali display
@@ -35,6 +51,11 @@ export interface ParsedRow {
   status: "valid" | "invalid" | "duplicate";
   status_reason?: string;
   raw: unknown[];
+  // Identifiers (card / IBAN / account) extracted from the description.
+  // Empty when nothing recognisable was found. Phase 1 only — actual
+  // verification & matching happens AFTER the row is inserted, inside
+  // `src/lib/autoIdentify.ts`.
+  identifiers: ExtractedIdentifier[];
 }
 
 // ---------------- helpers ----------------
