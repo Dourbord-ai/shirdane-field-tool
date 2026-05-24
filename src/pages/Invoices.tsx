@@ -397,14 +397,14 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
         </p>
       )}
 
-      {canPost && (
+      {canPost && canUserPost && (
         <Button
           onClick={handlePost}
           disabled={busy}
           className="rounded-xl gap-2 bg-gradient-primary text-primary-foreground glow-primary w-full"
         >
           {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-          {state === "approved" ? "ثبت سند مالی" : "تلاش مجدد"}
+          {state === "approved" ? "ثبت سند مالی در سپیدار" : "تلاش مجدد ثبت سپیدار"}
         </Button>
       )}
     </div>
