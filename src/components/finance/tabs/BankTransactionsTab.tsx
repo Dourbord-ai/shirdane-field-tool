@@ -54,6 +54,43 @@ interface Tx {
 
 interface BankRef { id: string; title: string | null; bank_name: string | null }
 
+// Per-transaction identifier extracted from the description during import.
+// Used to render the "card / IBAN / account" + verified-owner chips on each row.
+interface IdentRow {
+  match_type: number;            // 1=account, 2=card, 3=IBAN (per bankpartyaccountinfos convention)
+  raw_value: string | null;
+  normalized_value: string | null;
+  verified_owner_name: string | null;
+  verified_bank_name: string | null;
+}
+
+// Light-weight projection of the receive identification linked to a tx —
+// only the fields we need to drive badges & the auto-state filter.
+interface ReceiveMeta {
+  id: string;
+  party_id: string | null;
+  status: string | null;
+  auto_identified: boolean | null;
+  identification_source: string | null;
+  sepidar_sync_status: string | null;
+  voucher_id: string | null;
+}
+
+// Auto-identification state derived for filter chips & badge rendering.
+type AutoState = "auto_identified" | "manual" | "needs_review" | "no_identifier" | "sepidar_failed";
+
+// Pure helper so the table row, the mobile card, and the chip filter all
+// agree on the per-transaction state.
+function deriveAutoState(t: Tx, idents: IdentRow[] | undefined, ri: ReceiveMeta | undefined): AutoState {
+  // Sepidar failure trumps everything else — operator needs to see it first.
+  if (ri?.sepidar_sync_status === "failed") return "sepidar_failed";
+  if (ri) return ri.auto_identified ? "auto_identified" : "manual";
+  if (idents && idents.length > 0) return "needs_review";
+  return "no_identifier";
+}
+
+const MATCH_TYPE_LABEL: Record<number, string> = { 1: "حساب", 2: "کارت", 3: "شبا" };
+
 export default function BankTransactionsTab({ initialBankId }: { initialBankId?: string }) {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [banks, setBanks] = useState<Record<string, BankRef>>({});
@@ -84,6 +121,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     });
   }, []);
 
+  // Per-row enrichment maps populated alongside `txs` so badges & chip
+  // filters can render without N+1 queries inside the render loop.
+  const [identByTx, setIdentByTx] = useState<Record<string, IdentRow[]>>({});
+  const [receiveByTx, setReceiveByTx] = useState<Record<string, ReceiveMeta>>({});
+  const [partyNames, setPartyNames] = useState<Record<string, string>>({});
+  // Chip filter — empty string = "show all"; otherwise narrows to a single
+  // auto-identification state. Applied client-side because the state is
+  // a join across three tables and we already have the rows in memory.
+  const [filterAutoState, setFilterAutoState] = useState<"" | AutoState>("");
+
   // Re-fetch when server-side filters change. Date range goes here too so
   // we don't pull 500 rows and then trim — Postgres does the work.
   useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
@@ -103,7 +150,62 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
     const { data } = await q;
-    setTxs((data as Tx[]) || []);
+    const rows = (data as Tx[]) || [];
+    setTxs(rows);
+
+    // -----------------------------------------------------------------------
+    // Side-load the per-tx enrichment used by badges & chip filters. Three
+    // parallel `.in()` queries keep this O(1) round-trips regardless of how
+    // many rows came back from the main fetch.
+    // -----------------------------------------------------------------------
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) {
+      setIdentByTx({}); setReceiveByTx({}); setPartyNames({});
+    } else {
+      const [identsRes, receivesRes] = await Promise.all([
+        supabase
+          .from("finance_bank_tx_identifiers")
+          .select("bank_transaction_id, match_type, raw_value, normalized_value, verified_owner_name, verified_bank_name")
+          .in("bank_transaction_id", ids),
+        supabase
+          .from("finance_receive_identifications")
+          .select("id, bank_transaction_id, party_id, status, auto_identified, identification_source, sepidar_sync_status, voucher_id")
+          .in("bank_transaction_id", ids)
+          .eq("is_deleted", false),
+      ]);
+      const im: Record<string, IdentRow[]> = {};
+      for (const r of (identsRes.data || []) as Array<IdentRow & { bank_transaction_id: string }>) {
+        (im[r.bank_transaction_id] ||= []).push(r);
+      }
+      setIdentByTx(im);
+      const rm: Record<string, ReceiveMeta> = {};
+      const partyIds = new Set<string>();
+      for (const r of (receivesRes.data || []) as Array<ReceiveMeta & { bank_transaction_id: string }>) {
+        // A tx should only have ONE active receive identification (DB guard
+        // enforces this), but if duplicates ever slip through we keep the
+        // first — order doesn't matter for badge rendering.
+        if (!rm[r.bank_transaction_id]) rm[r.bank_transaction_id] = r;
+        if (r.party_id) partyIds.add(r.party_id);
+      }
+      setReceiveByTx(rm);
+      if (partyIds.size > 0) {
+        const { data: pdata } = await supabase
+          .from("finance_parties")
+          .select("id, company_name, sepidar_full_name, first_name, last_name")
+          .in("id", Array.from(partyIds));
+        const pm: Record<string, string> = {};
+        for (const p of (pdata || []) as Array<{ id: string; company_name: string | null; sepidar_full_name: string | null; first_name: string | null; last_name: string | null }>) {
+          pm[p.id] =
+            p.sepidar_full_name ||
+            p.company_name ||
+            [p.first_name, p.last_name].filter(Boolean).join(" ").trim() ||
+            "—";
+        }
+        setPartyNames(pm);
+      } else {
+        setPartyNames({});
+      }
+    }
     setLoading(false);
   }
 
@@ -123,9 +225,25 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         if (min !== null && v < min) return false;
         if (max !== null && v > max) return false;
       }
+      // Auto-identification chip filter — derived state, applied last so
+      // it composes cleanly with the existing description / amount filters.
+      if (filterAutoState) {
+        const st = deriveAutoState(t, identByTx[t.id], receiveByTx[t.id]);
+        if (st !== filterAutoState) return false;
+      }
       return true;
     });
-  }, [txs, filterDescr, filterMinAmount, filterMaxAmount]);
+  }, [txs, filterDescr, filterMinAmount, filterMaxAmount, filterAutoState, identByTx, receiveByTx]);
+
+  // Live counts for the chip bar — driven by the unfiltered (server-side
+  // filtered) set so the user can see how many rows each chip would reveal.
+  const autoCounts = useMemo(() => {
+    const c: Record<AutoState, number> = {
+      auto_identified: 0, manual: 0, needs_review: 0, no_identifier: 0, sepidar_failed: 0,
+    };
+    for (const t of txs) c[deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])]++;
+    return c;
+  }, [txs, identByTx, receiveByTx]);
 
 
   async function softDelete(t: Tx) {
@@ -207,6 +325,35 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       )}
 
+      {/* Auto-identification chip filters — server-side filtered txs are
+          partitioned into 5 derived states (see deriveAutoState). Counts
+          reflect the unfiltered set so the user sees the impact of each
+          chip before clicking it. */}
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
+            ["", "همه", txs.length],
+            ["auto_identified", "شناسایی خودکار", autoCounts.auto_identified],
+            ["manual", "شناسایی دستی", autoCounts.manual],
+            ["needs_review", "نیازمند بازبینی", autoCounts.needs_review],
+            ["no_identifier", "بدون شناسه", autoCounts.no_identifier],
+            ["sepidar_failed", "خطای سپیدار", autoCounts.sepidar_failed],
+          ] as Array<[string, string, number]>
+        ).map(([key, label, count]) => (
+          <button
+            key={key || "all"}
+            onClick={() => setFilterAutoState(key as "" | AutoState)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+              filterAutoState === key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card hover:bg-muted/50"
+            }`}
+          >
+            {label} <span className="opacity-70">({count})</span>
+          </button>
+        ))}
+      </div>
+
 
       {loading ? (
         <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
@@ -243,6 +390,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       {/* Full description on hover via native tooltip; click to expand inline.
                           Keeps the row compact by default but never hides text from the user. */}
                       <ExpandableDescription text={t.description} />
+                      <RowBadges
+                        idents={identByTx[t.id]}
+                        ri={receiveByTx[t.id]}
+                        partyName={receiveByTx[t.id]?.party_id ? partyNames[receiveByTx[t.id]!.party_id!] || null : null}
+                        autoState={deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])}
+                      />
                     </td>
 
                     <td className="p-2 font-mono text-xs">{t.reference_number || t.tracking_number || "—"}</td>
@@ -305,6 +458,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                 {t.description && (
                   <div className="mt-2"><ExpandableDescription text={t.description} /></div>
                 )}
+                <RowBadges
+                  idents={identByTx[t.id]}
+                  ri={receiveByTx[t.id]}
+                  partyName={receiveByTx[t.id]?.party_id ? partyNames[receiveByTx[t.id]!.party_id!] || null : null}
+                  autoState={deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])}
+                />
+
 
                 <div className="mt-2 flex gap-1 flex-wrap">
                   {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
@@ -392,6 +552,64 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
  *   3. Inline "نمایش کامل شرح" / "بستن" toggle when the text exceeds the clamp,
  *      revealing the full description in-place without a modal.
  */
+/**
+ * RowBadges
+ * Compact, RTL-friendly badge cluster that summarises every signal the
+ * auto-identification pipeline produced for a single bank transaction:
+ *   • One chip per extracted identifier (card / IBAN / account).
+ *   • Verified owner name (from bankpartyaccountinfos / verify-account).
+ *   • Matched party (from the linked receive identification, if any).
+ *   • Auto-identification state (auto / manual / needs review / no id).
+ *   • Sepidar posting status when a voucher exists.
+ * Kept deliberately minimal — uses semantic tokens only, no hard-coded colors.
+ */
+function RowBadges({
+  idents, ri, partyName, autoState,
+}: {
+  idents: IdentRow[] | undefined;
+  ri: ReceiveMeta | undefined;
+  partyName: string | null;
+  autoState: AutoState;
+}) {
+  const chip = "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold";
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {idents?.map((ident, i) => (
+        <span key={i} className={`${chip} bg-muted/50 text-foreground`} title={ident.raw_value || ""}>
+          {MATCH_TYPE_LABEL[ident.match_type] || "شناسه"}: {ident.normalized_value?.slice(-6) || "—"}
+          {ident.verified_owner_name && (
+            <span className="opacity-70">· {ident.verified_owner_name}</span>
+          )}
+        </span>
+      ))}
+      {partyName && (
+        <span className={`${chip} border-primary/40 text-primary`}>ذینفع: {partyName}</span>
+      )}
+      {autoState === "auto_identified" && (
+        <span className={`${chip} border-emerald-500/40 text-emerald-600 dark:text-emerald-400`}>شناسایی خودکار</span>
+      )}
+      {autoState === "manual" && ri && (
+        <span className={`${chip} border-sky-500/40 text-sky-600 dark:text-sky-400`}>شناسایی دستی</span>
+      )}
+      {autoState === "needs_review" && (
+        <span className={`${chip} border-amber-500/40 text-amber-600 dark:text-amber-400`}>نیازمند بازبینی</span>
+      )}
+      {autoState === "no_identifier" && (
+        <span className={`${chip} border-muted text-muted-foreground`}>بدون شناسه</span>
+      )}
+      {ri?.sepidar_sync_status === "synced" && (
+        <span className={`${chip} border-emerald-500/40 text-emerald-600 dark:text-emerald-400`}>سپیدار: ثبت‌شده</span>
+      )}
+      {ri?.sepidar_sync_status === "failed" && (
+        <span className={`${chip} border-destructive/40 text-destructive`}>سپیدار: خطا</span>
+      )}
+      {ri?.sepidar_sync_status === "pending" && ri && (
+        <span className={`${chip} border-muted text-muted-foreground`}>سپیدار: در انتظار</span>
+      )}
+    </div>
+  );
+}
+
 function ExpandableDescription({ text }: { text: string | null }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return <span className="text-muted-foreground">—</span>;
