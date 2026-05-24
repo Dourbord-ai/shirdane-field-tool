@@ -25,7 +25,6 @@ import {
   autoMatchBankTransfer,
   emptyAutoBankTransferSummary,
   bumpBankTransferSummary,
-  type AutoBankTransferSummary,
 } from "@/lib/autoBankTransfer";
 import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
