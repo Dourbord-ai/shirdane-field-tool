@@ -1631,22 +1631,25 @@ export default function NewInvoice() {
 
       {showCompany && (
         <div className="animate-fade-in">
+          {/* M5: unified counterparty selector for every non-milk product
+              type (feed, medicine, livestock, sperm, other, services,
+              rental). The previous per-product-type shopping-center
+              dropdowns (feedshoppingcenter, medicineshoppingcenter,
+              buy_cattle_shoppingcenter, other_shoppingcenter, hard-coded
+              companyList) are removed in favor of `finance_parties`, the
+              same source used by payments/receives and by Sepidar
+              posting. We keep `data.company` populated with the display
+              label as a backward-compat snapshot for legacy readers. */}
           <SearchableSelect
-            label="لیست شرکت‌ها"
-            options={
-              data.productType === "feed"
-                ? feedCompanyOptions
-                : data.productType === "medicine"
-                ? medicineCompanyOptions
-                : data.productType === "livestock"
-                ? livestockCompanyOptions
-                : (data.productType === "other" || data.productType === "services" || data.productType === "rental")
-                ? otherCompanyOptions
-                : companyList
-            }
-            value={data.company}
-            onChange={(v) => set("company", v)}
-            placeholder="انتخاب شرکت..."
+            label="طرف حساب (سپیدار)"
+            options={financePartyOptions}
+            value={data.financePartyId}
+            onChange={(v) => {
+              set("financePartyId", v);
+              const found = financePartyOptions.find((o) => o.value === v);
+              set("company", found?.label || "");
+            }}
+            placeholder="انتخاب طرف حساب..."
           />
         </div>
       )}
