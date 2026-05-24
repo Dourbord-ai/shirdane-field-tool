@@ -67,12 +67,10 @@ const PRODUCT_CHIPS: Array<{ label: string; value: string }> = [
   { label: "دارو", value: "medicine" },
   { label: "اسپرم", value: "sperm" },
   { label: "شیر", value: "milk" },
-  // Manure (کود دامی) is split into two distinct categories so that
-  // Sepidar account mapping can later assign different revenue/expense
-  // accounts to purchase vs sale. Each value is direction-locked in
-  // `invoiceTypesMap` (NewInvoice.tsx) — manure_buy → buy, manure_sell → sell.
-  { label: "خرید کود دامی", value: "manure_buy" },
-  { label: "فروش کود دامی", value: "manure_sell" },
+  // Manure (کود دامی) — single category, direction lives in invoice_type
+  // (buy/sell), same as خوراک. Use the direction filter alongside this chip
+  // to narrow to purchases or sales.
+  { label: "کود دامی", value: "manure" },
   { label: "خدمات", value: "services" },
   { label: "کرایه", value: "rental" },
   { label: "سایر", value: "other" },

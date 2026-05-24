@@ -60,13 +60,11 @@ const productTypes = [
   { label: "خوراک", value: "feed" },
   { label: "دارو", value: "medicine" },
   { label: "دام", value: "livestock" },
-  // Manure (کود دامی) — two separate categories whose label already encodes
-  // the direction. They reuse the same generic factor row schema as
-  // other/services (no specialized item table needed); Sepidar account
-  // mapping will branch on product_type later so purchase and sale can hit
-  // different ledger accounts.
-  { label: "خرید کود دامی", value: "manure_buy" },
-  { label: "فروش کود دامی", value: "manure_sell" },
+  // Manure (کود دامی) — a single product_type that supports both buy/sell,
+  // mirroring the خوراک pattern. Direction is captured in invoice_type so
+  // Sepidar account mapping can later branch on (product_type, invoice_type)
+  // to assign distinct revenue/expense accounts for purchase vs sale.
+  { label: "کود دامی", value: "manure" },
   { label: "سایر", value: "other" },
   { label: "خدمات", value: "services" },
   { label: "کرایه", value: "rental" },
@@ -86,11 +84,11 @@ const invoiceTypesMap: Record<string, { label: string; value: string }[]> = {
   feed: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   medicine: [{ label: "خرید", value: "buy" }],
   livestock: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
-  // Manure categories are direction-locked: the product_type itself names
-  // the direction, so we only expose the matching invoice_type to prevent
-  // operators from accidentally creating a "فروش کود دامی → خرید" factor.
-  manure_buy: [{ label: "خرید", value: "buy" }],
-  manure_sell: [{ label: "فروش", value: "sell" }],
+  // Manure supports both directions exactly like feed; the user picks
+  // خرید vs فروش after selecting کود دامی. The generic factor row schema
+  // and posting pipeline are direction-agnostic, so both flow through the
+  // same render/insert paths.
+  manure: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   other: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   services: [{ label: "خرید", value: "buy" }, { label: "فروش", value: "sell" }],
   rental: [{ label: "پرداخت", value: "payment" }],
