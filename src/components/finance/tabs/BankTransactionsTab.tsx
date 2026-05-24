@@ -828,6 +828,32 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
                 <span className="text-rose-700">خطادار: {parsed.filter((r) => r.status === "invalid").length}</span>
                 {summary && <span className="font-bold">ثبت‌شده: {summary.inserted}</span>}
               </div>
+              {/* Phase 6 — auto-identification summary chips. Only rendered
+                  after `importAll` finishes so the user sees them as part of
+                  the post-import recap, alongside the legacy validity chips. */}
+              {autoSummary && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 px-2 py-0.5">
+                    شناسایی خودکار: {autoSummary.auto_identified}
+                  </span>
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
+                    نیازمند بازبینی: {autoSummary.needs_review}
+                  </span>
+                  <span className="rounded-full border border-muted bg-muted/30 text-muted-foreground px-2 py-0.5">
+                    بدون شناسه: {autoSummary.no_identifier}
+                  </span>
+                  {autoSummary.sepidar_posted > 0 && (
+                    <span className="rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5">
+                      ارسال به سپیدار: {autoSummary.sepidar_posted}
+                    </span>
+                  )}
+                  {autoSummary.sepidar_failed > 0 && (
+                    <span className="rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5">
+                      خطای سپیدار: {autoSummary.sepidar_failed}
+                    </span>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
