@@ -22,6 +22,11 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { ExtractedIdentifier } from "@/lib/bankImport";
+// Reuse the EXACT manual approval/posting path. Do NOT duplicate this flow:
+// approveReceiveIdentification internally runs createVoucher →
+// syncVoucherToSepidar → sepidar-post-voucher, and persists voucher_id +
+// sepidar_sync_status / sepidar_error_message / sepidar_sync_attempts.
+import { approveReceiveIdentification } from "@/lib/finance";
 
 // ----------------------------------------------------------------------------
 // Outcome shape returned to the import UI so it can show counters & filters.
