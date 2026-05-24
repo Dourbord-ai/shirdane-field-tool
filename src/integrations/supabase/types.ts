@@ -2175,6 +2175,8 @@ export type Database = {
         Row: {
           approved_at: string | null
           approved_by: string | null
+          auto_match_source: string | null
+          auto_matched: boolean
           created_at: string
           created_by: string | null
           description: string | null
@@ -2198,6 +2200,8 @@ export type Database = {
         Insert: {
           approved_at?: string | null
           approved_by?: string | null
+          auto_match_source?: string | null
+          auto_matched?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -2221,6 +2225,8 @@ export type Database = {
         Update: {
           approved_at?: string | null
           approved_by?: string | null
+          auto_match_source?: string | null
+          auto_matched?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -5182,6 +5188,14 @@ export type Database = {
           p_step: string
           p_success: boolean
           p_voucher_id?: string
+        }
+        Returns: string
+      }
+      auto_create_bank_transfer: {
+        Args: {
+          p_deposit_tx_id: string
+          p_match_source?: string
+          p_withdraw_tx_id: string
         }
         Returns: string
       }
