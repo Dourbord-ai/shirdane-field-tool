@@ -123,6 +123,17 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
   // Re-fetch when server-side filters change. Date range goes here too so
   // we don't pull 500 rows and then trim — Postgres does the work.
+  // Per-row enrichment maps populated alongside `txs` so badges & chip
+  // filters can render without N+1 queries inside the render loop.
+  const [identByTx, setIdentByTx] = useState<Record<string, IdentRow[]>>({});
+  const [receiveByTx, setReceiveByTx] = useState<Record<string, ReceiveMeta>>({});
+  const [partyNames, setPartyNames] = useState<Record<string, string>>({});
+  // Chip filter — empty string = "show all"; otherwise narrows to a single
+  // auto-identification state. Applied client-side because the state is
+  // a join across three tables and we already have the rows in memory.
+  const [filterAutoState, setFilterAutoState] = useState<"" | AutoState>("");
+  // Re-fetch when server-side filters change. Date range goes here too so
+  // we don't pull 500 rows and then trim — Postgres does the work.
   useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
 
   async function load() {
