@@ -10,6 +10,10 @@ import { toPersianDigits } from "@/lib/jalali";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+// hasPermission is DEV_ACCESS_MODE-aware so today every authenticated user
+// can see the action buttons; once roles are enabled we just need to pass
+// the right permission key here (see comments on the panels below).
+import { hasPermission } from "@/lib/auth";
 // Server-side filter UI + URL serialization helpers. All filtering happens
 // inside the `list_factors_filtered` Postgres function so we don't paginate
 // the entire table client-side anymore.
@@ -172,20 +176,135 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
 }
 
 // -----------------------------------------------------------------------------
+// =============================================================================
+// Action visibility rules — single source of truth for which factor types are
+// allowed to post to Sepidar today. Keep this tiny + colocated so it's obvious
+// when adding a new product type.
+//
+// Current truth (audited 2026-05-24 against factor_accounting_map):
+//   - Only `product_type = 'livestock'` has accounting map rows wired into the
+//     `post_approved_factor` engine. So that is the only type for which we
+//     surface the "Post to Sepidar" button via the MVP voucher pipeline.
+//   - Feed *sales* must NEVER show Sepidar posting yet (explicit M5 rule).
+//   - Feed *purchase* historically used the legacy `sync_queue` worker path,
+//     not the voucher engine. We intentionally do NOT resurface that button
+//     here until that pipeline is reconnected — showing it would just fail
+//     with "no accounting map" because the engine doesn't know feed yet.
+// =============================================================================
+const POSTING_SUPPORTED_PRODUCT_TYPES = new Set<string>(["livestock"]);
+
+function isFeedSale(f: FactorRow): boolean {
+  return (
+    f.product_type === "feed" &&
+    (f.factor_type_id === 2 || f.invoice_type === "sell" || f.invoice_type === "retail_sell")
+  );
+}
+
+function supportsSepidarPosting(f: FactorRow): boolean {
+  // Feed sales rule wins over everything else.
+  if (isFeedSale(f)) return false;
+  return POSTING_SUPPORTED_PRODUCT_TYPES.has(f.product_type);
+}
+
+// -----------------------------------------------------------------------------
+// ApprovalPanel: Approve / Reject controls for draft (or NULL lifecycle) rows.
+// -----------------------------------------------------------------------------
+// All 2k+ legacy factors live with `lifecycle_state IS NULL`, which the RPC
+// reports as derived_status='draft'. Without this panel the user could never
+// move a factor into the `approved` state and therefore never see the Post
+// button. We write directly to `public.factors` (open RLS today) and only
+// touch the lifecycle / approval timestamp columns — no accounting fields.
+function ApprovalPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () => void }) {
+  const [busy, setBusy] = useState<null | "approve" | "reject">(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const state = factor.derived_status || factor.lifecycle_state || "draft";
+  // Show Approve/Reject only while the factor is still in the editable bucket.
+  // Anything past 'approved' is owned by the PostingPanel below.
+  const isDraft = state === "draft";
+  // TODO: swap these for real permission keys when DEV_ACCESS_MODE is removed
+  // (e.g. "factor.approve", "factor.reject"). hasPermission already returns
+  // true under DEV_ACCESS_MODE so today every user sees the buttons.
+  const canApprove = hasPermission("factor.approve");
+  const canReject = hasPermission("factor.reject");
+
+  if (!isDraft) return null;
+  if (!canApprove && !canReject) return null;
+
+  const run = async (action: "approve" | "reject") => {
+    setBusy(action);
+    setMsg(null);
+    try {
+      // Only touch lifecycle + approval-audit columns. We deliberately avoid
+      // mutating anything that could affect accounting totals.
+      const patch =
+        action === "approve"
+          ? { lifecycle_state: "approved", approved_at: new Date().toISOString() }
+          : { lifecycle_state: "cancelled", rejected_at: new Date().toISOString() };
+      const { error } = await supabase.from("factors").update(patch).eq("id", factor.id);
+      if (error) throw error;
+      setMsg({ ok: true, text: action === "approve" ? "فاکتور تأیید شد." : "فاکتور رد شد." });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message || "خطا در ثبت تغییر وضعیت." });
+    } finally {
+      setBusy(null);
+      onChanged();
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">وضعیت تأیید فاکتور</span>
+        <span className="px-2.5 py-1 rounded-lg bg-muted text-muted-foreground text-xs font-bold">
+          در انتظار تأیید
+        </span>
+      </div>
+      {msg && (
+        <p
+          className={cn(
+            "text-xs rounded-lg p-2",
+            msg.ok ? "text-primary bg-primary/5" : "text-destructive bg-destructive/5",
+          )}
+        >
+          {msg.text}
+        </p>
+      )}
+      <div className="flex gap-2">
+        {canApprove && (
+          <Button
+            onClick={() => run("approve")}
+            disabled={busy !== null}
+            className="rounded-xl gap-2 bg-gradient-primary text-primary-foreground glow-primary flex-1"
+          >
+            {busy === "approve" && <Loader2 className="w-4 h-4 animate-spin" />}
+            تأیید فاکتور
+          </Button>
+        )}
+        {canReject && (
+          <Button
+            onClick={() => run("reject")}
+            disabled={busy !== null}
+            variant="outline"
+            className="rounded-xl gap-2 flex-1 border-destructive/40 text-destructive hover:bg-destructive/10"
+          >
+            {busy === "reject" && <Loader2 className="w-4 h-4 animate-spin" />}
+            رد / لغو
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // PostingPanel: minimal MVP UI for the accounting voucher posting pipeline.
 // -----------------------------------------------------------------------------
-// We deliberately keep this UI very small (status badge + one action button +
-// last-error text) per the MVP scope: no mapping editor, no reversal UI, no
-// adoption flow, no advanced dashboard. The button just invokes the
-// `factor-post-voucher` edge function which:
-//   - resolves active factor_accounting_map rows
-//   - refuses to proceed if rows are missing/inactive/TBD (clear Persian err)
-//   - creates finance_voucher + items, validates debit=credit
-//   - tries to post to Sepidar via the same edge function pattern as
-//     receive/payment flows, persists the Sepidar voucher number on success
-//
-// The button is shown for any lifecycle_state in {approved, voucher_failed,
-// sepidar_failed}. Posted factors show a green "ثبت شده" badge instead.
+// Visibility rules (see ApprovalPanel for the upstream "draft" step):
+//   - hidden entirely for product_types not in POSTING_SUPPORTED_PRODUCT_TYPES
+//     and for feed sales (see supportsSepidarPosting)
+//   - "Post" button on lifecycle_state='approved'
+//   - "Retry" button on voucher_failed / sepidar_failed
+//   - read-only "posted" badge when lifecycle_state='posted'
 function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [resultMsg, setResultMsg] = useState<string | null>(null);
@@ -194,10 +313,12 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   const state = factor.lifecycle_state ?? "";
   const isPosted = state === "posted" && !!factor.sepidar_voucher_number;
   const canPost = ["approved", "voucher_failed", "sepidar_failed"].includes(state);
-  // If the factor was never moved into the posting pipeline (lifecycle_state
-  // is NULL or any other value like 'draft'), we render a passive info hint
-  // — there is no MVP UI for "approve" because that flow is owned elsewhere.
-  const showNothing = !isPosted && !canPost;
+  // Gate the whole panel by product-type support. This is what hides Sepidar
+  // posting for feed sales and for any product type the engine can't handle.
+  const supported = supportsSepidarPosting(factor);
+  // TODO: replace with the real permission key once roles are enabled.
+  const canUserPost = hasPermission("factor.post_sepidar");
+  const showNothing = !supported || (!isPosted && !canPost);
 
   const handlePost = async () => {
     setBusy(true); setResultMsg(null); setResultOk(null);
@@ -276,14 +397,14 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
         </p>
       )}
 
-      {canPost && (
+      {canPost && canUserPost && (
         <Button
           onClick={handlePost}
           disabled={busy}
           className="rounded-xl gap-2 bg-gradient-primary text-primary-foreground glow-primary w-full"
         >
           {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-          {state === "approved" ? "ثبت سند مالی" : "تلاش مجدد"}
+          {state === "approved" ? "ثبت سند مالی در سپیدار" : "تلاش مجدد ثبت سپیدار"}
         </Button>
       )}
     </div>
@@ -520,6 +641,9 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
 
           {/* MVP posting controls — renders nothing for factors that have not
               yet entered the accounting pipeline (lifecycle_state NULL/draft). */}
+          {/* Approval (Approve/Reject) runs first for draft rows; PostingPanel
+              takes over once the factor reaches the 'approved' bucket. */}
+          <ApprovalPanel factor={factor} onChanged={onChanged} />
           <PostingPanel factor={factor} onChanged={onChanged} />
         </div>
       </div>
