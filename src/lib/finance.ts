@@ -244,6 +244,12 @@ export interface SepidarPartyResponse {
   sepidar_account_id: number | null;
   sepidar_full_name: string | null;
   sepidar_sync_status: "synced" | "failed";
+  // status_code distinguishes a fresh create from a duplicate-link.
+  // 'created' = SP inserted a new Sepidar party.
+  // 'exists'  = SP found a match by national code / id and returned the
+  //             existing Sepidar IDs (treated as success — no error).
+  // null      = legacy SP that doesn't emit status_code yet.
+  status_code?: "created" | "exists" | null;
   error_message: string | null;
 }
 
