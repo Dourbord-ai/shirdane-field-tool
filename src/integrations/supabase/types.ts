@@ -124,7 +124,8 @@ export type Database = {
       bankpartyaccountinfos: {
         Row: {
           bankpartyid: number | null
-          id: number | null
+          finance_party_id: string | null
+          id: number
           matchbankname: string | null
           matchcontent: string | null
           matchname: string | null
@@ -133,7 +134,8 @@ export type Database = {
         }
         Insert: {
           bankpartyid?: number | null
-          id?: number | null
+          finance_party_id?: string | null
+          id?: number
           matchbankname?: string | null
           matchcontent?: string | null
           matchname?: string | null
@@ -142,14 +144,23 @@ export type Database = {
         }
         Update: {
           bankpartyid?: number | null
-          id?: number | null
+          finance_party_id?: string | null
+          id?: number
           matchbankname?: string | null
           matchcontent?: string | null
           matchname?: string | null
           matchtype?: string | null
           status?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bankpartyaccountinfos_finance_party_id_fkey"
+            columns: ["finance_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       breeding_alerts: {
         Row: {
@@ -1931,6 +1942,47 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_auto_identification_log: {
+        Row: {
+          bank_transaction_id: string
+          candidates: Json | null
+          chosen_party_id: string | null
+          created_at: string
+          id: string
+          message: string | null
+          step: string
+          success: boolean
+        }
+        Insert: {
+          bank_transaction_id: string
+          candidates?: Json | null
+          chosen_party_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          step: string
+          success: boolean
+        }
+        Update: {
+          bank_transaction_id?: string
+          candidates?: Json | null
+          chosen_party_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          step?: string
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_auto_identification_log_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_bank_import_templates: {
         Row: {
           bank_name_code: number | null
@@ -2227,6 +2279,57 @@ export type Database = {
           },
         ]
       }
+      finance_bank_tx_identifiers: {
+        Row: {
+          bank_transaction_id: string
+          bankpartyaccountinfo_id: number | null
+          created_at: string
+          id: string
+          match_type: number
+          normalized_value: string
+          raw_value: string
+          verified_bank_name: string | null
+          verified_owner_name: string | null
+        }
+        Insert: {
+          bank_transaction_id: string
+          bankpartyaccountinfo_id?: number | null
+          created_at?: string
+          id?: string
+          match_type: number
+          normalized_value: string
+          raw_value: string
+          verified_bank_name?: string | null
+          verified_owner_name?: string | null
+        }
+        Update: {
+          bank_transaction_id?: string
+          bankpartyaccountinfo_id?: number | null
+          created_at?: string
+          id?: string
+          match_type?: number
+          normalized_value?: string
+          raw_value?: string
+          verified_bank_name?: string | null
+          verified_owner_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_bank_tx_identifiers_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_bank_tx_identifiers_bankpartyaccountinfo_id_fkey"
+            columns: ["bankpartyaccountinfo_id"]
+            isOneToOne: false
+            referencedRelation: "bankpartyaccountinfos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_banks: {
         Row: {
           account_holder_name: string | null
@@ -2348,6 +2451,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      finance_feature_flags: {
+        Row: {
+          description: string | null
+          enabled: boolean
+          key: string
+          updated_at: string
+        }
+        Insert: {
+          description?: string | null
+          enabled?: boolean
+          key: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string | null
+          enabled?: boolean
+          key?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       finance_parties: {
         Row: {
@@ -2836,8 +2960,10 @@ export type Database = {
           amount: number | null
           approved_at: string | null
           approved_by: string | null
+          auto_identified: boolean
           bank_id: string | null
           bank_transaction_id: string | null
+          bankpartyaccountinfo_id: number | null
           cancelled_at: string | null
           cancelled_by: string | null
           created_at: string
@@ -2845,8 +2971,12 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          identification_source: string | null
           is_deleted: boolean | null
           legacy_id: number | null
+          match_confidence: number | null
+          matched_by: string | null
+          matched_identifier: string | null
           party_id: string | null
           rejected_at: string | null
           rejected_by: string | null
@@ -2864,8 +2994,10 @@ export type Database = {
           amount?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          auto_identified?: boolean
           bank_id?: string | null
           bank_transaction_id?: string | null
+          bankpartyaccountinfo_id?: number | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           created_at?: string
@@ -2873,8 +3005,12 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          identification_source?: string | null
           is_deleted?: boolean | null
           legacy_id?: number | null
+          match_confidence?: number | null
+          matched_by?: string | null
+          matched_identifier?: string | null
           party_id?: string | null
           rejected_at?: string | null
           rejected_by?: string | null
@@ -2892,8 +3028,10 @@ export type Database = {
           amount?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          auto_identified?: boolean
           bank_id?: string | null
           bank_transaction_id?: string | null
+          bankpartyaccountinfo_id?: number | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           created_at?: string
@@ -2901,8 +3039,12 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          identification_source?: string | null
           is_deleted?: boolean | null
           legacy_id?: number | null
+          match_confidence?: number | null
+          matched_by?: string | null
+          matched_identifier?: string | null
           party_id?: string | null
           rejected_at?: string | null
           rejected_by?: string | null
@@ -2929,6 +3071,13 @@ export type Database = {
             columns: ["bank_transaction_id"]
             isOneToOne: false
             referencedRelation: "finance_bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_receive_identifications_bankpartyaccountinfo_id_fkey"
+            columns: ["bankpartyaccountinfo_id"]
+            isOneToOne: false
+            referencedRelation: "bankpartyaccountinfos"
             referencedColumns: ["id"]
           },
           {
@@ -5033,6 +5182,17 @@ export type Database = {
           p_step: string
           p_success: boolean
           p_voucher_id?: string
+        }
+        Returns: string
+      }
+      auto_create_receive_identification: {
+        Args: {
+          p_bank_transaction_id: string
+          p_bankpartyaccountinfo_id: number
+          p_confidence: number
+          p_matched_by: string
+          p_matched_identifier: string
+          p_party_id: string
         }
         Returns: string
       }
