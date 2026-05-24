@@ -1,189 +1,142 @@
 
-# Factor list filters + Feed Sales factor — Plan
+## Current state (audit)
 
-Sequencing: per your call, this **starts only after Phase 1 M5 backfill + UI swap to `factors.finance_party_id` lands**. Filter UI will read `finance_party_id` from day one, so it must be populated first.
+**Excel import** (`src/components/finance/tabs/BankTransactionsTab.tsx` + `src/lib/bankImport.ts`)
+- `parseRowsWithTemplate` joins `description_column_indexes` into a single `description` string and inserts into `finance_bank_transactions`.
+- No identifier extraction. `card_number`, `match_type`, `match_content`, `match_name`, `match_bank_name` columns already exist on `finance_bank_transactions` but are unused on import.
+- Insert path: builds `payload` then `supabase.from("finance_bank_transactions").insert(payload)` row by row.
 
----
+**Verification** (`supabase/functions/verify-account/index.ts`)
+- Already checks `bankpartyaccountinfos` cache by `(matchtype, matchcontent)` and only calls cardinfo.ir on miss, then upserts the cache. Reusable as-is.
+- `bankpartyaccountinfos`: `(id, bankpartyid, status, matchtype '1|2|3', matchcontent, matchname, matchbankname)`. **`bankpartyid` is currently always NULL** — we need to backfill / start writing the matched `finance_parties.id` (or a legacy_id bridge) when we trust the link.
 
-## 1. Current schema audit (read-only, no changes proposed here)
+**Receive identification** (`finance_receive_identifications`)
+- Trigger `fn_finance_receive_identifications_guard` enforces: tx must be deposit, unassigned/rejected, amount ≤ tx amount, no duplicate identification/allocation on the same tx. **Auto-creation must respect all of this.**
+- Has `sepidar_sync_status / sepidar_error_message / sepidar_sync_attempts` already → no schema change needed for posting state.
+- No columns for auto-identification metadata yet (matched_by / confidence / source).
 
-`public.factors` already supports everything we need — no new columns required for filters:
-
-| concern | existing column |
-|---|---|
-| date range | `invoice_date timestamptz` |
-| factor number | `invoice_number text` |
-| counterparty | `finance_party_id uuid` (M5) + legacy `shopping_center_id`, `buyer_user_id` |
-| direction | `factor_type_id smallint` (1=purchase, 2=sale) **and** `invoice_type text` (`buy`/`sell`/legacy) |
-| category | `product_type text` (livestock, feed, medicine, sperm, milk, services, rental, other, legacy_product_*) |
-| draft/approved/cancelled | `lifecycle_state text` (`approved`, `voucher_failed`, `sepidar_failed`, `posted`, `cancelled`, NULL=draft/legacy) |
-| posted to Sepidar | `sepidar_voucher_id text` not null |
-| failed | `last_posting_error text`, `lifecycle_state='sepidar_failed'` |
-
-Distinct data today: ~2,449 legacy rows (`lifecycle_state` NULL, `product_type='legacy_product_*'`), 1 new `sperm` row. No `feed` rows yet via new pipeline. `NewInvoice.tsx` already writes `product_type='feed'` with `invoice_type='buy'` — only the **sale** direction is missing.
-
-`Invoices.tsx` today: client-side filter only, single text search, paginated client-side. No server filter.
+**Sepidar posting** — `sepidar-allocate-payment-transaction` handles withdrawals; receives currently go through manual posting from the UI. We will reuse the **existing** receive-posting code path (whatever the "post" button calls today) and only trigger it programmatically — no new Sepidar function.
 
 ---
 
-## 2. Server-side filtering — new RPC
-
-New file: `supabase/migrations/<ts>_factors_list_filtered_rpc.sql`
+## Proposed migration
 
 ```sql
-CREATE OR REPLACE FUNCTION public.list_factors_filtered(
-  p_from_date     timestamptz DEFAULT NULL,
-  p_to_date       timestamptz DEFAULT NULL,
-  p_invoice_number text       DEFAULT NULL,   -- ILIKE %x%
-  p_finance_party_id uuid     DEFAULT NULL,
-  p_direction     text        DEFAULT NULL,   -- 'purchase' | 'sale'
-  p_product_types text[]      DEFAULT NULL,   -- ['feed','livestock',...]
-  p_statuses      text[]      DEFAULT NULL,   -- see status mapping
-  p_limit         int         DEFAULT 50,
-  p_offset        int         DEFAULT 0
-) RETURNS TABLE (
-  id uuid, invoice_number text, invoice_date timestamptz,
-  product_type text, factor_type_id smallint,
-  finance_party_id uuid, party_name text,
-  payable_amount numeric, lifecycle_state text,
-  sepidar_voucher_id text, sepidar_voucher_number text,
-  last_posting_error text, derived_status text,
-  total_count bigint
-)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
-  WITH base AS (
-    SELECT f.*, fp.name AS party_name,
-      CASE
-        WHEN f.sepidar_voucher_id IS NOT NULL THEN 'posted'
-        WHEN f.lifecycle_state = 'sepidar_failed' THEN 'sepidar_failed'
-        WHEN f.lifecycle_state = 'voucher_failed' THEN 'voucher_failed'
-        WHEN f.lifecycle_state = 'cancelled'      THEN 'cancelled'
-        WHEN f.lifecycle_state = 'approved'       THEN 'approved'
-        ELSE 'draft'
-      END AS derived_status
-    FROM public.factors f
-    LEFT JOIN public.finance_parties fp ON fp.id = f.finance_party_id
-  ),
-  filtered AS (
-    SELECT * FROM base
-    WHERE (p_from_date IS NULL OR invoice_date >= p_from_date)
-      AND (p_to_date   IS NULL OR invoice_date <  p_to_date)
-      AND (p_invoice_number IS NULL OR invoice_number ILIKE '%'||p_invoice_number||'%')
-      AND (p_finance_party_id IS NULL OR finance_party_id = p_finance_party_id)
-      AND (p_direction IS NULL
-           OR (p_direction='purchase' AND factor_type_id=1)
-           OR (p_direction='sale'     AND factor_type_id=2))
-      AND (p_product_types IS NULL OR product_type = ANY(p_product_types))
-      AND (p_statuses     IS NULL OR derived_status = ANY(p_statuses))
-  )
-  SELECT id, invoice_number, invoice_date, product_type, factor_type_id,
-         finance_party_id, party_name, payable_amount, lifecycle_state,
-         sepidar_voucher_id, sepidar_voucher_number, last_posting_error,
-         derived_status,
-         COUNT(*) OVER() AS total_count
-  FROM filtered
-  ORDER BY invoice_date DESC NULLS LAST, created_at DESC
-  LIMIT p_limit OFFSET p_offset;
+-- 1. Extracted identifiers per bank transaction (multi-value, audit-friendly)
+CREATE TABLE public.finance_bank_tx_identifiers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bank_transaction_id uuid NOT NULL REFERENCES finance_bank_transactions(id) ON DELETE CASCADE,
+  match_type smallint NOT NULL,        -- 1=card, 2=iban, 3=account
+  raw_value text NOT NULL,             -- original extracted substring
+  normalized_value text NOT NULL,      -- digits-only / IR-stripped
+  bankpartyaccountinfo_id bigint REFERENCES bankpartyaccountinfos(id),
+  verified_owner_name text,
+  verified_bank_name text,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (bank_transaction_id, match_type, normalized_value)
+);
+CREATE INDEX ON finance_bank_tx_identifiers(normalized_value, match_type);
+
+-- 2. Auto-identification metadata on receive
+ALTER TABLE finance_receive_identifications
+  ADD COLUMN auto_identified boolean NOT NULL DEFAULT false,
+  ADD COLUMN matched_by text,                 -- 'card' | 'iban' | 'account'
+  ADD COLUMN matched_identifier text,
+  ADD COLUMN bankpartyaccountinfo_id bigint REFERENCES bankpartyaccountinfos(id),
+  ADD COLUMN match_confidence numeric,        -- 0..1
+  ADD COLUMN identification_source text;      -- 'excel_import_auto'|'manual'|...
+
+-- 3. Audit log
+CREATE TABLE public.finance_auto_identification_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bank_transaction_id uuid NOT NULL REFERENCES finance_bank_transactions(id) ON DELETE CASCADE,
+  step text NOT NULL,                  -- extract|cache_hit|verify_api|match|create_receive|post_sepidar
+  success boolean NOT NULL,
+  candidates jsonb,                    -- identifiers / parties considered
+  chosen_party_id uuid,
+  message text,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE finance_auto_identification_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth read auto id log" ON finance_auto_identification_log FOR SELECT USING (auth.role()='authenticated');
+
+-- 4. RPC: auto-create receive identification with full guard reuse
+CREATE FUNCTION public.auto_create_receive_identification(
+  p_bank_transaction_id uuid,
+  p_party_id uuid,
+  p_bankpartyaccountinfo_id bigint,
+  p_matched_by text,
+  p_matched_identifier text,
+  p_confidence numeric
+) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+-- Validates: tx unassigned, deposit, no existing identification/allocation
+-- Inserts finance_receive_identifications with status='approved',
+-- auto_identified=true, identification_source='excel_import_auto'.
+-- Existing fn_finance_receive_identifications_guard runs automatically.
 $$;
-
-REVOKE ALL ON FUNCTION public.list_factors_filtered(timestamptz,timestamptz,text,uuid,text,text[],text[],int,int) FROM public;
-GRANT EXECUTE ON FUNCTION public.list_factors_filtered(timestamptz,timestamptz,text,uuid,text,text[],text[],int,int) TO authenticated, anon;
 ```
 
-Supporting indexes (additive, IF NOT EXISTS):
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_factors_invoice_date     ON public.factors(invoice_date DESC);
-CREATE INDEX IF NOT EXISTS idx_factors_invoice_number   ON public.factors(invoice_number);
-CREATE INDEX IF NOT EXISTS idx_factors_product_type     ON public.factors(product_type);
-CREATE INDEX IF NOT EXISTS idx_factors_lifecycle_state  ON public.factors(lifecycle_state);
-```
-
-No new tables, no enum changes, no RLS change — RPC is SECURITY DEFINER and inherits the same access surface the page already uses against `factors`.
+`bankpartyid` on `bankpartyaccountinfos` will be repurposed to hold the matched `finance_parties.legacy_id` once a user manually confirms a receive — that becomes our "previously trusted link" anchor for future auto-matching. Alternative: add a new `finance_party_id uuid` column. **Decision needed from user.**
 
 ---
 
-## 3. List UI — `src/pages/Invoices.tsx`
+## Frontend / pipeline changes
 
-- Replace the current `supabase.from('factors').select(...)` with `supabase.rpc('list_factors_filtered', {...})`.
-- New `<FactorFilters/>` component (collapsed on mobile behind a "فیلترهای پیشرفته" button; inline on `lg+`):
-  - تاریخ از / تا (`ShamsiDatePicker`)
-  - شماره فاکتور (`Input`)
-  - طرف حساب (`SearchableSelect` from `finance_parties`)
-  - جهت: همه / خرید / فروش (segmented)
-  - دسته: multi-select chips (دام، خوراک، دارو، اسپرم، شیر، خدمات، سایر)
-  - وضعیت: multi-select chips (پیش‌نویس، تأیید شده، لغو شده، ثبت شده در سپیدار، خطای ثبت سپیدار، خطای ساخت سند)
-  - "اعمال فیلتر" + "حذف فیلترها" buttons
-- Active filter **chips row** above the table (each chip clickable to remove that one filter).
-- Filter state **persisted in URL query params** (`useSearchParams`) — shareable + survives reload.
-- Status column shows badge based on `derived_status`; `last_posting_error` revealed in a popover for failed rows; existing "ثبت سند" retry button stays.
+### Phase 1 — extraction (`src/lib/bankImport.ts`)
+- Add `extractIdentifiers(description: string): { type:1|2|3; raw:string; normalized:string }[]`.
+- Regexes (after `toEnDigits` + RTL strip):
+  - card: `\b\d{16}\b` (also `\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}`)
+  - IBAN: `IR\d{24}` (also bare `\d{24}` near keywords "شبا"/"IBAN")
+  - account: configurable per-bank pattern; default `\b\d{6,20}\b` filtered to avoid collisions with card/IBAN/document numbers.
+- Attach extracted list to `ParsedRow`.
 
----
+### Phase 2 — cache-first verification (new helper `src/lib/autoIdentify.ts`)
+- For each parsed row, for each identifier:
+  1. `select * from bankpartyaccountinfos where matchtype=$1 and matchcontent=$2`
+  2. On miss → call `supabase.functions.invoke('verify-account', { body:{ type, number } })` (already upserts cache).
+  3. Skip silently on API error; identifier becomes "unverified".
 
-## 4. Feed Sales factor — create / approve / cancel only (no Sepidar yet)
+### Phase 3 — trusted-party matching
+- For each verified identifier, query:
+  ```
+  finance_receive_identifications
+    JOIN finance_bank_transactions ON ...
+  WHERE status='approved' AND is_deleted=false
+    AND EXISTS (matching identifier with same normalized value)
+  GROUP BY party_id
+  ```
+- Auto-confirm **only if exactly one** distinct `party_id` historically used this normalized identifier AND `bankpartyaccountinfos.matchname` is non-empty.
+- Multiple parties / name mismatch → flag `needs_review`, do not auto-create.
 
-Per your call ("plan only, no posting yet"): add the flow end-to-end **except** wiring it into `factor-post-voucher`. That activation comes later under the same gate as livestock factors.
+### Phase 4 — auto-create receive (after tx insert)
+- Call `rpc('auto_create_receive_identification', …)`. Trigger guards prevent duplicates/over-allocation; if it raises, log to `finance_auto_identification_log` as `success=false` and surface to UI.
+- On success: write rows in `finance_bank_tx_identifiers` and log `success=true`.
 
-### 4a. `src/pages/NewInvoice.tsx`
+### Phase 5 — Sepidar posting
+- After successful auto-create, invoke the **existing** receive-posting code (same function called by the manual "post" button) with the newly created receive id. Existing idempotency (`sepidar_sync_status` + voucher_id) prevents duplicates.
+- Failure → `sepidar_sync_status='failed'`, error stored, receive stays `auto_identified` with retry button.
 
-```ts
-// Currently:
-feed: [{ label: "خرید", value: "buy" }],
-// Change to:
-feed: [
-  { label: "خرید", value: "buy" },
-  { label: "فروش", value: "sell" },
-],
-```
-
-When `productType='feed'` and `invoiceType='sell'`:
-- `factor_type_id = 2`, `invoice_type = 'sell'`, `product_type = 'feed'`
-- Reuse the **existing** feed-purchase form (rows of feed/weight/price) — no new table.
-- Reuse `feed_items` table for line items (same shape as buy).
-- Counterparty selector switches label to "خریدار" (uses `finance_parties` like other sales).
-- Same `factors` insert path as feed-buy; only direction differs.
-
-### 4b. `src/pages/Invoices.tsx` detail dialog
-
-- Existing `feed_items` rendering already works for both buy and sell (it only reads, doesn't care about direction). Add a small "خرید / فروش" badge driven by `factor_type_id`.
-
-### 4c. Approval / cancellation
-
-- Already generic in `lifecycle_state` machine — works for feed sales unchanged.
-
-### 4d. Sepidar posting — explicitly deferred
-
-- `factor-post-voucher` currently only classifies `product_type='livestock'`. Document in `docs/phase1_M4r_factor_bridge_sp_spec.md` that feed sales will reuse `bridge.CreatePaymentRequestVoucher` with `RequestType=1` once feed posting is activated; no edge-function edits this phase.
-- Feed-sale factors will sit at `lifecycle_state='approved'` until the feed-posting activation milestone — same as feed purchase today.
+### Phase 6 — UI (`BankTransactionsTab.tsx` import results screen + list)
+- Import result summary chips: imported / auto-identified / posted-to-sepidar / needs-review / sepidar-failed.
+- Per-row columns: extracted identifier (with type icon), verified owner name, matched party, auto status badge, sepidar badge.
+- Filters: `auto_identified`, `needs_review` (assignment_status='unassigned' + has identifier), `sepidar_failed`, `manually_identified`.
+- Re-use existing `AccountVerifyButton` UI conventions.
 
 ---
 
-## 5. Out of scope (explicit)
-
-- No new tables, enums, or RLS.
-- No edge function changes.
-- No backfill of `finance_party_id` (M5's job — must land first).
-- No Sepidar activation for feed in either direction.
-- No changes to legacy `legacy_product_*` rows — they show up in the list with `derived_status='draft'`.
-
----
-
-## 6. Sequencing
-
-```
-[M5 backfill] → [M5 UI swap to finance_party_id] →
-  ├ step A: migration (RPC + 4 indexes), audit pass
-  ├ step B: Invoices.tsx → RPC + FactorFilters + URL params + chips
-  └ step C: NewInvoice.tsx feed-sell option + detail badge
-```
-
-Each step is independently revertable. No destructive changes at any point.
+## Safety rules (enforced in code + DB)
+- Cache-first: `verify-account` is only called on cache miss (already true server-side; we'll also short-circuit client-side).
+- Auto-confirm requires **exactly one** historical party + matching verified owner name (case-insensitive normalized compare).
+- DB guards (`fn_finance_receive_identifications_guard`) untouched and rely on for duplicate / amount / status validation.
+- Sepidar posting reuses existing idempotent flow; no new voucher path.
+- Every step writes to `finance_auto_identification_log`.
 
 ---
 
-## 7. Risks / open items
+## Open questions before I implement
+1. **`bankpartyid` column**: repurpose existing `bigint` (legacy_id link) or add new `finance_party_id uuid`? Recommend the latter for cleanliness.
+2. **Account number regex**: confirm there's no per-bank template field I should reuse (e.g. account length per `BankImportTemplate`). Current templates have no account-pattern field.
+3. **Sepidar posting trigger**: do you want auto-posting in this pass, or land Phases 1–4 first, gated behind a feature flag, then enable Phase 5? Recommend ship behind `feature_flag.auto_post_receives = false` initially.
+4. **Confidence scoring**: OK with binary (1.0 if single trusted match + verified-name agreement, else 0 → manual review) for v1, with finer scoring later?
 
-- `derived_status` mapping above treats NULL `lifecycle_state` as `draft` — this groups all 2,449 legacy rows under "پیش‌نویس". Confirm acceptable, or add a separate `legacy` bucket.
-- Per-row RLS on `factors`: currently the page reads the table directly with the anon key — RPC keeps the same effective access. If you later harden `factors` RLS, the SECURITY DEFINER RPC must be reviewed.
-
-Awaiting M5 completion before executing step A.
+Once you answer these (or say "use recommendations"), I'll send the migration for approval and then ship the code in one pass.
