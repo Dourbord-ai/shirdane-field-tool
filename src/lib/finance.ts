@@ -393,11 +393,17 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
     };
   }
 
-  // Log the call
+  // Log the call. We keep operation_type stable for legacy compatibility
+  // but tag the response_payload with status_code so we can tell apart:
+  //   - 'created' → SP inserted a new Sepidar party
+  //   - 'exists'  → SP matched by national code and linked existing IDs
   await supabase.from("finance_sepidar_sync_logs").insert({
     party_id: partyId,
     entity_type: "party",
-    operation_type: "SpAddSepidarBankParty",
+    operation_type:
+      response.status_code === "exists"
+        ? "SpAddSepidarBankParty:link-existing"
+        : "SpAddSepidarBankParty",
     request_payload: requestPayload as never,
     response_payload: response as never,
     status: response.sepidar_sync_status === "synced" ? "success" : "failed",
