@@ -18,6 +18,15 @@ import {
   bumpSummary,
   type AutoIdentifySummary,
 } from "@/lib/autoIdentify";
+// Inter-bank transfer auto-matcher. Internally checks the
+// `auto_create_bank_transfers` feature flag, so importing this is cheap —
+// when the flag is OFF the helper returns "no_match" without side effects.
+import {
+  autoMatchBankTransfer,
+  emptyAutoBankTransferSummary,
+  bumpBankTransferSummary,
+  type AutoBankTransferSummary,
+} from "@/lib/autoBankTransfer";
 import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
