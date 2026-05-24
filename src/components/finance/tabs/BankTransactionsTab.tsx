@@ -54,6 +54,43 @@ interface Tx {
 
 interface BankRef { id: string; title: string | null; bank_name: string | null }
 
+// Per-transaction identifier extracted from the description during import.
+// Used to render the "card / IBAN / account" + verified-owner chips on each row.
+interface IdentRow {
+  match_type: number;            // 1=account, 2=card, 3=IBAN (per bankpartyaccountinfos convention)
+  raw_value: string | null;
+  normalized_value: string | null;
+  verified_owner_name: string | null;
+  verified_bank_name: string | null;
+}
+
+// Light-weight projection of the receive identification linked to a tx —
+// only the fields we need to drive badges & the auto-state filter.
+interface ReceiveMeta {
+  id: string;
+  party_id: string | null;
+  status: string | null;
+  auto_identified: boolean | null;
+  identification_source: string | null;
+  sepidar_sync_status: string | null;
+  voucher_id: string | null;
+}
+
+// Auto-identification state derived for filter chips & badge rendering.
+type AutoState = "auto_identified" | "manual" | "needs_review" | "no_identifier" | "sepidar_failed";
+
+// Pure helper so the table row, the mobile card, and the chip filter all
+// agree on the per-transaction state.
+function deriveAutoState(t: Tx, idents: IdentRow[] | undefined, ri: ReceiveMeta | undefined): AutoState {
+  // Sepidar failure trumps everything else — operator needs to see it first.
+  if (ri?.sepidar_sync_status === "failed") return "sepidar_failed";
+  if (ri) return ri.auto_identified ? "auto_identified" : "manual";
+  if (idents && idents.length > 0) return "needs_review";
+  return "no_identifier";
+}
+
+const MATCH_TYPE_LABEL: Record<number, string> = { 1: "حساب", 2: "کارت", 3: "شبا" };
+
 export default function BankTransactionsTab({ initialBankId }: { initialBankId?: string }) {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [banks, setBanks] = useState<Record<string, BankRef>>({});
