@@ -209,7 +209,95 @@ export function parseRowsWithTemplate(rows: unknown[][], template: BankImportTem
       status,
       status_reason: reason,
       raw: r as unknown[],
+      // Phase-1 extraction: scan the combined description text for any
+      // card/IBAN/account number the depositor might have left there.
+      // We pass an empty-array fallback when desc is empty to keep the
+      // pipeline downstream simple (always an array, never undefined).
+      identifiers: desc ? extractIdentifiers(desc) : [],
     });
   }
   return out;
 }
+
+// ---------------- identifier extraction (Phase 1) ----------------
+// Helpers below recognise depositor identifiers embedded inside the free-text
+// `description` column that Iranian bank statements typically include.
+// We intentionally extract OPPORTUNISTICALLY — false positives are filtered
+// later by the verify-account API; missed identifiers just fall through to
+// the existing manual-identification flow.
+
+/**
+ * Scan a transaction description and return every plausible card / IBAN /
+ * account number we can recognise. Order matters: IBAN and card detection
+ * runs first so that an account-number regex doesn't greedily swallow
+ * digits that already belong to a card.
+ */
+export function extractIdentifiers(description: string): ExtractedIdentifier[] {
+  if (!description) return [];
+
+  // Step 1 — normalise the input ONCE so every regex below sees ASCII
+  // digits and a clean RTL-stripped string. We keep the original text
+  // around (via `raw` matches) for audit display.
+  const cleaned = description.replace(RTL_CHARS, "");
+  const ascii = normalizeDigits(cleaned);
+
+  const found: ExtractedIdentifier[] = [];
+  const claimedSpans: Array<[number, number]> = [];
+
+  // Helper: was this character range already claimed by a higher-priority
+  // identifier? Prevents the 6-20 digit account regex from matching the
+  // tail of an already-extracted 16-digit card number.
+  const overlaps = (start: number, end: number) =>
+    claimedSpans.some(([s, e]) => start < e && end > s);
+
+  // ---- IBAN / Sheba (priority 1) ----
+  // Standard Iranian IBAN: "IR" + 24 digits. We also accept bare 26-digit
+  // numbers preceded by a Persian/English hint word, then normalise to the
+  // canonical 24-digit form (cache key) — the leading "IR" is stripped to
+  // match how `verify-account` stores it.
+  const ibanRe = /IR\s*\d{24}/gi;
+  let m: RegExpExecArray | null;
+  while ((m = ibanRe.exec(ascii))) {
+    const raw = m[0];
+    const normalized = raw.replace(/[^0-9]/g, "");
+    found.push({ type: 2, raw, normalized });
+    claimedSpans.push([m.index, m.index + raw.length]);
+  }
+
+  // ---- Card numbers (priority 2) ----
+  // Allow 16 digits with optional dash/space separators in 4-4-4-4 form.
+  const cardRe = /\b(?:\d[ -]?){15}\d\b/g;
+  while ((m = cardRe.exec(ascii))) {
+    if (overlaps(m.index, m.index + m[0].length)) continue;
+    const normalized = m[0].replace(/[^0-9]/g, "");
+    if (normalized.length !== 16) continue;
+    found.push({ type: 1, raw: m[0], normalized });
+    claimedSpans.push([m.index, m.index + m[0].length]);
+  }
+
+  // ---- Bank account numbers (priority 3) ----
+  // Iranian deposit numbers vary by bank (6–20 digits typical). We only
+  // pick runs that are NOT already claimed by card/IBAN, AND skip very
+  // short numbers that are likely document/reference numbers — they would
+  // explode the verify-account cache with noise.
+  const acctRe = /\b\d{8,20}\b/g;
+  while ((m = acctRe.exec(ascii))) {
+    if (overlaps(m.index, m.index + m[0].length)) continue;
+    // 16 digits with no separators are almost certainly cards that the
+    // card regex missed because of weird spacing — skip them defensively.
+    if (m[0].length === 16) continue;
+    found.push({ type: 3, raw: m[0], normalized: m[0] });
+    claimedSpans.push([m.index, m.index + m[0].length]);
+  }
+
+  // De-duplicate by (type, normalized) — the same identifier can appear
+  // multiple times in a description (e.g. echoed in both Latin and Persian).
+  const seen = new Set<string>();
+  return found.filter((f) => {
+    const key = `${f.type}:${f.normalized}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
