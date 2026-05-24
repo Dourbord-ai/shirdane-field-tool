@@ -880,6 +880,9 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     // Accumulator for the auto-identify summary chips. We seed it with
     // zeros and bump per row — this avoids reflowing the list later.
     const autoSum = emptyAutoIdentifySummary();
+    // Separate accumulator for inter-bank transfer auto-matching so the two
+    // pipelines stay reportable independently in the summary toast.
+    const bxSum = emptyAutoBankTransferSummary();
     for (const r of validRows) {
       const payload = {
         bank_id: bankId,
@@ -906,11 +909,10 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       if (error || !insertedRow) continue;
       inserted++;
 
-      // STEP 3 — Run the auto-identification pipeline. We `await` per row
-      // (rather than firing in parallel) so a flaky external API can't
-      // saturate the user's browser, and so the audit log entries appear
-      // in import order. The helper handles ALL its own logging + error
-      // swallowing — a failure here must NEVER abort the import loop.
+      // STEP 3a — Receive auto-identification (customer deposits).
+      let receiveOutcome:
+        | { state: AutoIdentifySummary extends unknown ? string : never }
+        | undefined;
       try {
         const outcome = await autoIdentifyTransaction(
           insertedRow.id as string,
@@ -918,10 +920,38 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           r.identifiers,
         );
         bumpSummary(autoSum, outcome);
+        receiveOutcome = outcome as { state: string };
       } catch {
-        // Counted as needs_review so the user can investigate without
-        // losing track of the row.
         bumpSummary(autoSum, { state: "needs_review", message: "pipeline crashed" });
+      }
+
+      // STEP 3b — Inter-bank transfer auto-matching. We only run this when
+      // the receive pipeline did NOT already claim the deposit as a customer
+      // receive — those two operation types are mutually exclusive on a
+      // single bank transaction (a tx is either a party receive OR a leg of
+      // an inter-bank transfer, never both).
+      const alreadyReceive =
+        receiveOutcome?.state === "auto_identified" ||
+        receiveOutcome?.state === "sepidar_posted" ||
+        receiveOutcome?.state === "sepidar_failed";
+      if (!alreadyReceive && r.transaction_type === "deposit") {
+        try {
+          const bxOutcome = await autoMatchBankTransfer({
+            id: insertedRow.id as string,
+            bank_id: bankId,
+            transaction_type: r.transaction_type,
+            deposit_amount: r.deposit,
+            transaction_datetime: r.transaction_datetime,
+          });
+          bumpBankTransferSummary(bxSum, bxOutcome);
+        } catch {
+          // Same policy as the receive pipeline — never abort the import on
+          // a downstream auto-match crash.
+          bumpBankTransferSummary(bxSum, {
+            state: "auto_bank_transfer_needs_review",
+            message: "pipeline crashed",
+          });
+        }
       }
     }
     if (bankId) await recalculateBankUnassignedBalances(bankId);
