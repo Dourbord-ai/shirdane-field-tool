@@ -126,8 +126,11 @@ async function resolveParty(
   };
 }
 
-// Documented fallback (identical constant used by the receive/payment flow).
-const FALLBACK_PARTY_ACCOUNT_SL_REF = 193;
+// NOTE: No hardcoded fallback for factor posting. Unlike the receive/payment
+// flow, factor vouchers MUST resolve PartyAccountSLRef from a configured
+// source (per-party value, or the explicit factor setting). Falling back to
+// a guessed SL ref can post the voucher to the wrong accounting account.
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
