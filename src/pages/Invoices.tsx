@@ -304,9 +304,11 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
           <DetailRow
             label="فروشنده/خریدار"
             value={
-              factor.buyer_type === "company"
-                ? (factor.company || "شرکت")
-                : "شخص"
+              // M5: prefer the joined finance_parties display name; fall
+              // back to the legacy `company` text snapshot for pre-M5
+              // rows where finance_party_id is NULL.
+              factor.party_name
+              || (factor.buyer_type === "company" ? (factor.company || "شرکت") : (factor.company || "شخص"))
             }
           />
 
