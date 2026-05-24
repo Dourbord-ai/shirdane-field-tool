@@ -322,18 +322,56 @@ export async function autoIdentifyTransaction(
     receive_id: receiveId as string,
   };
 
-  // Phase 5 — gated behind a feature flag so this can ship dark and be
-  // enabled later by simply updating the row in `finance_feature_flags`.
-  if (await isSepidarAutoPostEnabled()) {
-    // Placeholder: invoke whichever edge function the manual "post receive"
-    // button uses today. We DON'T own that contract here — when the flag is
-    // flipped on, replace this block with the real invocation. The flag
-    // defaults to false so this branch is intentionally inert in v1.
-    await logStep(bankTransactionId, "post_sepidar", false, {
-      message: "auto-post enabled but no posting client wired yet",
+  // Phase 5 — gated behind a feature flag (`auto_post_receives_to_sepidar`).
+  // When OFF: we stop here and log `auto_identified_only`. The receive row
+  //   is already 'approved'; the user can post it manually whenever they want.
+  // When ON:  we hand off to the canonical manual path
+  //   `approveReceiveIdentification`, which owns ALL Sepidar-side logic
+  //   (createVoucher → syncVoucherToSepidar → sepidar-post-voucher) and
+  //   uses voucher_id as the idempotency anchor. On failure the receive
+  //   row stays created with status='sync_failed' and the error preserved
+  //   on `sepidar_error_message`, so the user can retry via the existing
+  //   manual button — we never roll back the auto-identification.
+  if (!(await isSepidarAutoPostEnabled())) {
+    await logStep(bankTransactionId, "auto_identified_only", true, {
+      chosen_party_id: chosen.party_id,
+      message: "feature flag off — Sepidar auto-post skipped",
+    });
+    return outcome;
+  }
+
+  try {
+    const result = await approveReceiveIdentification(receiveId as string);
+    if (result.ok) {
+      // Sepidar posting succeeded — receive row is now status='approved'
+      // with sepidar_sync_status='synced' (set inside approveReceive…).
+      await logStep(bankTransactionId, "auto_identified_and_posted", true, {
+        chosen_party_id: chosen.party_id,
+        message: "posted to Sepidar via approveReceiveIdentification",
+      });
+      outcome.state = "sepidar_posted";
+      outcome.message = "ثبت‌شده در سپیدار";
+    } else {
+      // Posting failed but the receive row is preserved (status='sync_failed',
+      // error captured on sepidar_error_message by the canonical path).
+      await logStep(bankTransactionId, "auto_identified_posting_failed", false, {
+        chosen_party_id: chosen.party_id,
+        message: result.error ?? "Sepidar posting failed",
+      });
+      outcome.state = "sepidar_failed";
+      outcome.message = result.error ?? "خطا در ثبت سپیدار";
+    }
+  } catch (e) {
+    // Exceptions from approveReceiveIdentification (e.g. beneficiary not
+    // synced, bank not mapped) — same treatment: keep the auto-identified
+    // row, surface as sepidar_failed so the user can fix and retry manually.
+    const msg = e instanceof Error ? e.message : String(e);
+    await logStep(bankTransactionId, "auto_identified_posting_failed", false, {
+      chosen_party_id: chosen.party_id,
+      message: msg,
     });
     outcome.state = "sepidar_failed";
-    outcome.message = "ارسال خودکار به سپیدار هنوز فعال نشده";
+    outcome.message = msg;
   }
 
   return outcome;
