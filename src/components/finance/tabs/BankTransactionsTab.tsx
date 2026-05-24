@@ -646,7 +646,13 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     }
 
     // STEP 2 — Insert parsed rows, each carrying the archived path.
+    // We also use `.select("id")` so we can hand the persisted UUID to the
+    // auto-identification pipeline in STEP 3 below. Doing them in the same
+    // loop keeps the dialog progress feedback simple (one toast at the end).
     let inserted = 0;
+    // Accumulator for the auto-identify summary chips. We seed it with
+    // zeros and bump per row — this avoids reflowing the list later.
+    const autoSum = emptyAutoIdentifySummary();
     for (const r of validRows) {
       const payload = {
         bank_id: bankId,
@@ -665,8 +671,31 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         imported_file_path: storagePath,
         raw_data: r.raw as unknown as Record<string, unknown>,
       };
-      const { error } = await supabase.from("finance_bank_transactions").insert([payload]);
-      if (!error) inserted++;
+      const { data: insertedRow, error } = await supabase
+        .from("finance_bank_transactions")
+        .insert([payload])
+        .select("id")
+        .maybeSingle();
+      if (error || !insertedRow) continue;
+      inserted++;
+
+      // STEP 3 — Run the auto-identification pipeline. We `await` per row
+      // (rather than firing in parallel) so a flaky external API can't
+      // saturate the user's browser, and so the audit log entries appear
+      // in import order. The helper handles ALL its own logging + error
+      // swallowing — a failure here must NEVER abort the import loop.
+      try {
+        const outcome = await autoIdentifyTransaction(
+          insertedRow.id as string,
+          r.transaction_type,
+          r.identifiers,
+        );
+        bumpSummary(autoSum, outcome);
+      } catch {
+        // Counted as needs_review so the user can investigate without
+        // losing track of the row.
+        bumpSummary(autoSum, { state: "needs_review", message: "pipeline crashed" });
+      }
     }
     if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
@@ -675,7 +704,11 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const dup = parsed.filter((r) => r.status === "duplicate").length;
     const inv = parsed.filter((r) => r.status === "invalid").length;
     setSummary({ total, valid, duplicate: dup, invalid: inv, inserted });
-    toast.success(`${inserted} ردیف ثبت شد`);
+    setAutoSummary(autoSum);
+    // Richer toast that surfaces auto-identification results at a glance.
+    toast.success(
+      `${inserted} ردیف ثبت شد · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}`,
+    );
     onDone();
   }
 
