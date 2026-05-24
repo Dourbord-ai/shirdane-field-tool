@@ -752,6 +752,38 @@ export default function Invoices() {
     setSelectedMedicineItems([]);
     setSelectedLivestockItems([]);
 
+    // The RPC row only includes the fields the list/filter needs. The detail
+    // panel renders many more legacy columns (delivery_date, tax, buyer_type,
+    // settlement_*, description, etc.) so we lazily fetch the full row + the
+    // joined party display name when a row is expanded, then merge it back
+    // into `factors` so InvoiceDetail has the complete shape.
+    const { data: full } = await supabase
+      .from("factors")
+      .select(
+        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
+      )
+      .eq("id", id)
+      .maybeSingle();
+    if (full) {
+      const raw = full as Record<string, unknown>;
+      const party = (raw.party ?? null) as
+        | {
+            company_name: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            sepidar_full_name: string | null;
+          }
+        | null;
+      const personName = party
+        ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
+        : "";
+      const party_name =
+        party?.sepidar_full_name || party?.company_name || personName || null;
+      const { party: _omit, ...rest } = raw as { party?: unknown };
+      const merged = { ...(rest as unknown as FactorRow), party_name };
+      setFactors((prev) => prev.map((p) => (p.id === id ? { ...p, ...merged } : p)));
+    }
+
     const factor = factors.find((f) => f.id === id);
     if (factor?.product_type === "sperm") {
       const { data } = await supabase
