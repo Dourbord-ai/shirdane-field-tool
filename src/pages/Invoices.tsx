@@ -10,6 +10,10 @@ import { toPersianDigits } from "@/lib/jalali";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+// hasPermission is DEV_ACCESS_MODE-aware so today every authenticated user
+// can see the action buttons; once roles are enabled we just need to pass
+// the right permission key here (see comments on the panels below).
+import { hasPermission } from "@/lib/auth";
 // Server-side filter UI + URL serialization helpers. All filtering happens
 // inside the `list_factors_filtered` Postgres function so we don't paginate
 // the entire table client-side anymore.
