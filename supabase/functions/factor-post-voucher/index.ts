@@ -1,33 +1,42 @@
 // =============================================================================
-// Edge Function: factor-post-voucher
+// Edge Function: factor-post-voucher  (REVISED — calls bridge.CreatePaymentRequestVoucher)
 // -----------------------------------------------------------------------------
 // MVP orchestrator that posts an "approved" factor's accounting voucher.
+//
 // Pipeline:
 //   1. Authenticated caller passes { factor_id }.
-//   2. We call the DB RPC `post_approved_factor(factor_id, triggered_by)`.
-//      The RPC resolves active rows from `factor_accounting_map`, refuses to
-//      proceed if mappings are missing/inactive/TBD-, builds the voucher +
-//      items, validates debit=credit, links voucher → factor, and writes one
-//      audit row to `factor_posting_attempts`.
-//   3. If the RPC returns success AND the resulting voucher_id is present, we
-//      attempt to post the voucher to Sepidar by invoking the existing
-//      `sepidar-post-voucher` edge function with the same integration pattern
-//      used by receive/payment flows. On success we copy the Sepidar voucher
-//      id/number back onto `factors` and advance lifecycle_state='posted'.
-//      On Sepidar failure we set lifecycle_state='sepidar_failed' and write an
-//      audit row — the voucher row is preserved so the operator can retry.
-// -----------------------------------------------------------------------------
-// IMPORTANT: While `factor_accounting_map` rows are all inactive/TBD- (current
-// state at M3r time), the RPC short-circuits at step 'resolve_map'. This edge
-// function therefore safely no-ops with a clear Persian error and never
-// touches Sepidar. Once real account codes are seeded and rows activated, the
-// same code path will start producing real vouchers.
+//   2. Idempotency pre-check on the Supabase side:
+//        if factors.sepidar_voucher_id already exists → return the existing
+//        Sepidar voucher and DO NOT call Sepidar again. Same for the linked
+//        finance_vouchers.sepidar_voucher_id (mirror back onto factors).
+//   3. Call DB RPC `post_approved_factor(factor_id, triggered_by)` to build /
+//      reuse the two-line internal voucher.
+//   4. Resolve party (sepidar_party_id, party_account_sl_ref, name) and
+//      creator id. Compose Description / Description1 / Description2 per the
+//      frozen contract.
+//   5. Call the existing SQL Server bridge SP `bridge.CreatePaymentRequestVoucher`
+//      EXACTLY ONCE using the same mssql client pattern as the finance
+//      receive/payment flow. The SP picks the counter account internally
+//      based on RequestType (0 = purchase, 1 = sale).
+//   6. Mirror returned SepidarVoucherId / SepidarVoucherNumber onto BOTH
+//      `finance_vouchers` and `factors` so the next click short-circuits.
+//      Advance factor.lifecycle_state to 'posted' on success or
+//      'sepidar_failed' on failure (voucher row is preserved → retry button
+//      stays visible).
+//
+// IMPORTANT: bridge.CreatePaymentRequestVoucher is NOT idempotent on any app
+// key. The Supabase-side guard above is the only safeguard against duplicate
+// Sepidar vouchers — so it must run before every SP call.
 // =============================================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+// Same mssql client used by sepidar-create-payment-voucher / receive flow.
+// Re-using it keeps the integration style 1:1 with the existing bridge calls.
+import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
 
-// CORS headers — keep inline so the function is self-contained and matches the
-// pattern used by other Sepidar-related edge functions in this project.
+// ---- CORS ------------------------------------------------------------------
+// Kept inline to stay consistent with the other Sepidar-related functions in
+// this project (none of them import from a shared cors helper).
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -35,7 +44,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Tiny helper to always emit JSON with CORS headers — saves repetition below.
+// Tiny helper so every response (success OR error) carries CORS headers.
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -44,12 +53,87 @@ const json = (body: unknown, status = 200) =>
 
 type Body = { factor_id?: string | null };
 
+// --------------------------------------------------------------------------
+// Persian Jalali date helper (no external dep). We need "YYYY/MM/DD" for the
+// Description, NOT for the SP call itself — the SP receives a SQL DATETIME.
+// --------------------------------------------------------------------------
+function toJalali(date: Date): string {
+  // Classic Birashk algorithm. Inputs come from `factors.invoice_date`
+  // (timestamptz stored in UTC). We convert to Tehran wall-clock first so the
+  // displayed Jalali day matches what the operator sees in the UI.
+  const tehran = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tehran" }));
+  let gy = tehran.getFullYear();
+  let gm = tehran.getMonth() + 1;
+  let gd = tehran.getDate();
+  const g_d_m = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28,
+    31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gy2 = (gm > 2) ? (gy + 1) : gy;
+  let days = 355666 + (365 * gy) + Math.floor((gy2 + 3) / 4)
+    - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) + gd;
+  for (let i = 0; i < gm; i++) days += g_d_m[i];
+  let jy = -1595 + (33 * Math.floor(days / 12053));
+  days %= 12053;
+  jy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) { jy += Math.floor((days - 1) / 365); days = (days - 1) % 365; }
+  const jm = (days < 186) ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
+  const jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${jy}/${pad(jm)}/${pad(jd)}`;
+}
+
+// --------------------------------------------------------------------------
+// Resolve the finance_parties row used for the factor.
+// factors has no direct FK to finance_parties, so we follow the legacy link:
+//   - purchase factor (factor_type_id = 1) → shopping_center_id  → finance_parties.legacy_id
+//   - sale factor     (factor_type_id = 2) → buyer_user_id       → finance_parties.legacy_id
+// Returns null if no match (caller surfaces Persian error and aborts).
+// --------------------------------------------------------------------------
+async function resolveParty(
+  sb: ReturnType<typeof createClient>,
+  factor: Record<string, unknown>,
+): Promise<{ sepidar_party_id: number; party_account_sl_ref: number | null; name: string } | null> {
+  const factorType = Number(factor.factor_type_id);
+  const legacyId = factorType === 1
+    ? Number(factor.shopping_center_id)
+    : Number(factor.buyer_user_id);
+  if (!Number.isFinite(legacyId) || legacyId <= 0) return null;
+
+  const { data } = await sb
+    .from("finance_parties")
+    .select("sepidar_party_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name")
+    .eq("legacy_id", legacyId)
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  const sepidarId = Number(row.sepidar_party_id);
+  if (!Number.isFinite(sepidarId) || sepidarId <= 0) return null;
+
+  // Prefer the synced full name from Sepidar; fall back to first+last or
+  // company name so the Description2 line always carries a human label.
+  const name =
+    (row.sepidar_full_name as string | null) ||
+    [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
+    (row.company_name as string | null) ||
+    "ذینفع";
+
+  return {
+    sepidar_party_id: sepidarId,
+    party_account_sl_ref: (row.party_account_sl_ref as number | null) ?? null,
+    name,
+  };
+}
+
+// Documented fallback (identical constant used by the receive/payment flow).
+const FALLBACK_PARTY_ACCOUNT_SL_REF = 193;
+
 Deno.serve(async (req) => {
-  // ---- CORS preflight --------------------------------------------------------
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ success: false, message: "Method not allowed" }, 405);
 
-  // ---- Parse + validate body -------------------------------------------------
+  // ---- Parse + validate body ------------------------------------------------
   let body: Body = {};
   try { body = await req.json(); } catch {
     return json({ success: false, message: "بدنه درخواست نامعتبر است." }, 400);
@@ -57,12 +141,7 @@ Deno.serve(async (req) => {
   const factorId = (body.factor_id ?? "").toString().trim();
   if (!factorId) return json({ success: false, message: "factor_id الزامی است." }, 400);
 
-  // ---- Identify caller via JWT (best-effort — RPC accepts NULL) -------------
-  // We pull the bearer token off the incoming request, ask Supabase who it
-  // belongs to, and forward that user's UUID into the RPC as `triggered_by`
-  // for audit attribution. If anything fails we just pass NULL — the RPC
-  // tolerates it.
-  const authHeader = req.headers.get("Authorization") || "";
+  // ---- Supabase service client (used for RPC + reads + writes) -------------
   const url = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   if (!url || !serviceKey) {
@@ -70,27 +149,83 @@ Deno.serve(async (req) => {
   }
   const sb = createClient(url, serviceKey);
 
+  // ---- Identify caller via JWT (for audit attribution only) ----------------
   let triggeredBy: string | null = null;
+  const authHeader = req.headers.get("Authorization") || "";
   if (authHeader.toLowerCase().startsWith("bearer ")) {
     try {
-      const token = authHeader.slice(7).trim();
-      const { data } = await sb.auth.getUser(token);
+      const { data } = await sb.auth.getUser(authHeader.slice(7).trim());
       triggeredBy = data?.user?.id ?? null;
-    } catch {
-      // Non-fatal — proceed without attribution.
-      triggeredBy = null;
+    } catch { /* non-fatal — proceed without attribution */ }
+  }
+
+  // =========================================================================
+  // STEP A: SUPABASE-SIDE IDEMPOTENCY GUARD (BEFORE building any voucher)
+  // -------------------------------------------------------------------------
+  // If this factor already carries a Sepidar voucher id, return it verbatim
+  // and skip every downstream step. This is the ONLY thing protecting us
+  // from duplicate Sepidar vouchers because bridge.CreatePaymentRequestVoucher
+  // is not idempotent on any app key.
+  // =========================================================================
+  const { data: existingFactor } = await sb
+    .from("factors")
+    .select("id, sepidar_voucher_id, sepidar_voucher_number, voucher_id")
+    .eq("id", factorId)
+    .maybeSingle();
+
+  if (!existingFactor) {
+    return json({ success: false, message: "فاکتور یافت نشد." }, 404);
+  }
+
+  if (existingFactor.sepidar_voucher_id) {
+    // Already posted on a previous attempt — short-circuit, do NOT touch SQL.
+    return json({
+      success: true,
+      step: "already_posted",
+      voucher_id: existingFactor.voucher_id,
+      sepidar_voucher_id: existingFactor.sepidar_voucher_id,
+      sepidar_voucher_number: existingFactor.sepidar_voucher_number,
+      message: "این فاکتور قبلاً در سپیدار ثبت شده است.",
+    });
+  }
+
+  // Secondary guard: voucher row may already carry a sepidar id from a
+  // previous partial run (factor row not yet mirrored). Mirror it back and
+  // skip the SP call.
+  if (existingFactor.voucher_id) {
+    const { data: v } = await sb
+      .from("finance_vouchers")
+      .select("sepidar_voucher_id, sepidar_voucher_number")
+      .eq("id", existingFactor.voucher_id)
+      .maybeSingle();
+    if (v?.sepidar_voucher_id) {
+      await sb.from("factors").update({
+        sepidar_voucher_id: String(v.sepidar_voucher_id),
+        sepidar_voucher_number: v.sepidar_voucher_number ? String(v.sepidar_voucher_number) : null,
+        lifecycle_state: "posted",
+        last_posting_error: null,
+        last_posting_attempted_at: new Date().toISOString(),
+      }).eq("id", factorId);
+      return json({
+        success: true,
+        step: "already_posted",
+        voucher_id: existingFactor.voucher_id,
+        sepidar_voucher_id: v.sepidar_voucher_id,
+        sepidar_voucher_number: v.sepidar_voucher_number,
+        message: "این فاکتور قبلاً در سپیدار ثبت شده است.",
+      });
     }
   }
 
-  // ---- Step 1: call the voucher-building RPC --------------------------------
-  // We rely on the RPC's structured jsonb result to drive the next step.
+  // =========================================================================
+  // STEP B: build (or reuse) the internal finance_vouchers row via RPC.
+  // =========================================================================
   const { data: rpcRes, error: rpcErr } = await sb.rpc("post_approved_factor", {
     p_factor_id: factorId,
     p_triggered_by: triggeredBy,
   });
 
   if (rpcErr) {
-    // Hard failure — RPC threw or DB connection broke.
     return json({
       success: false,
       step: "rpc_call",
@@ -100,78 +235,247 @@ Deno.serve(async (req) => {
   }
 
   const result = (rpcRes ?? {}) as Record<string, unknown>;
-  const ok = Boolean(result.success);
+  const rpcOk = Boolean(result.success);
   const voucherId = (result.voucher_id as string | null) ?? null;
 
-  // If the RPC refused to build the voucher (TBD, no mapping, imbalance, …),
-  // surface the Persian message directly. The RPC has already written an
-  // audit row and updated factor.lifecycle_state to 'voucher_failed'.
-  if (!ok || !voucherId) {
+  // If the RPC refused (TBD mapping, imbalance, …) surface its Persian
+  // message and skip Sepidar. The RPC has already updated lifecycle_state.
+  if (!rpcOk || !voucherId) {
     return json({ ...result, sepidar_attempted: false });
   }
 
-  // ---- Step 2: post the new voucher to Sepidar ------------------------------
-  // Re-use the existing `sepidar-post-voucher` edge function so we share the
-  // exact integration code path used by receive_identification / payment_
-  // allocation / bank_transfer / party_transfer. The downstream function reads
-  // finance_vouchers.voucher_type to choose the bridge SP. For the new
-  // buy_livestock / sell_livestock voucher types it will currently fail with
-  // "نوع سند برای ثبت در سپیدار پشتیبانی نمی‌شود" — that's expected until the
-  // Sepidar SP branch for factor postings is added in a later phase.
-  let sepidarOk = false;
-  let sepidarMessage = "";
-  let sepidarRaw: unknown = null;
+  // =========================================================================
+  // STEP C: load full factor row (we now need fields the RPC didn't return)
+  // =========================================================================
+  const { data: factorRow, error: factorErr } = await sb
+    .from("factors")
+    .select("id, factor_type_id, invoice_date, payable_amount, shopping_center_id, buyer_user_id")
+    .eq("id", factorId)
+    .maybeSingle();
 
-  try {
-    const { data: spData, error: spErr } = await sb.functions.invoke(
-      "sepidar-post-voucher",
-      { body: { voucher_id: voucherId } },
-    );
-    if (spErr) {
-      sepidarMessage = "فراخوانی ثبت سند در سپیدار ناموفق بود.";
-      sepidarRaw = spErr.message;
-    } else {
-      // The downstream function returns { success, message, ... }.
-      const spRes = (spData ?? {}) as Record<string, unknown>;
-      sepidarOk = Boolean(spRes.success);
-      sepidarMessage = (spRes.message as string) || (sepidarOk
-        ? "سند در سپیدار ثبت شد."
-        : "ثبت سند در سپیدار با خطا مواجه شد.");
-      sepidarRaw = spRes;
-    }
-  } catch (e) {
-    sepidarMessage = "ارتباط با تابع ثبت سپیدار برقرار نشد.";
-    sepidarRaw = (e as Error).message;
+  if (factorErr || !factorRow) {
+    return json({ success: false, step: "load_factor", message: "بارگذاری فاکتور با خطا مواجه شد." }, 500);
   }
 
-  // ---- Step 3: persist Sepidar outcome on the factor row --------------------
-  // On Sepidar success the downstream function has already written
-  // sepidar_voucher_id / sepidar_voucher_number onto finance_vouchers. We mirror
-  // those onto factors and advance lifecycle_state='posted'. On failure we
-  // mark lifecycle_state='sepidar_failed' so the retry button stays visible.
+  const factorTypeId = Number(factorRow.factor_type_id);
+  if (factorTypeId !== 1 && factorTypeId !== 2) {
+    return json({
+      success: false,
+      step: "classify",
+      voucher_id: voucherId,
+      message: "نوع فاکتور (خرید/فروش) مشخص نیست.",
+    });
+  }
+  // Contract: 0 for purchase factor, 1 for sale factor.
+  const requestType = factorTypeId === 1 ? 0 : 1;
+  // Persian display name used inside the Description string.
+  const factorName = factorTypeId === 1 ? "خرید دام" : "فروش دام";
+
+  const payable = Number(factorRow.payable_amount);
+  if (!Number.isFinite(payable) || payable <= 0) {
+    return json({
+      success: false,
+      step: "validate_amount",
+      voucher_id: voucherId,
+      message: "مبلغ قابل پرداخت فاکتور نامعتبر است.",
+    });
+  }
+
+  // =========================================================================
+  // STEP D: resolve party + creator
+  // =========================================================================
+  const party = await resolveParty(sb, factorRow as Record<string, unknown>);
+  if (!party) {
+    // Mark as sepidar_failed so retry button stays visible after operator
+    // fixes the party mapping in finance settings.
+    await sb.from("factors").update({
+      lifecycle_state: "sepidar_failed",
+      last_posting_error: "ذینفع متناظر فاکتور در لیست ذینفع‌ها یافت نشد.",
+      last_posting_attempted_at: new Date().toISOString(),
+    }).eq("id", factorId);
+    return json({
+      success: false,
+      step: "resolve_party",
+      voucher_id: voucherId,
+      message: "ذینفع متناظر فاکتور در سپیدار یافت نشد. ابتدا ذینفع را در بخش مالی همگام کنید.",
+    });
+  }
+
+  // PartyAccountSLRef priority: per-party value → global setting → fallback.
+  // Mirrors the resolution used by sepidar-create-payment-voucher.
+  let partyAccountSLRef = party.party_account_sl_ref ?? 0;
+  if (!partyAccountSLRef || partyAccountSLRef <= 0) {
+    const { data: settingsRow } = await sb
+      .from("finance_sepidar_settings")
+      .select("sepidar_party_account_sl_ref")
+      .limit(1).maybeSingle();
+    const sv = (settingsRow as { sepidar_party_account_sl_ref?: number | null } | null)
+      ?.sepidar_party_account_sl_ref;
+    partyAccountSLRef = (sv && Number(sv) > 0) ? Number(sv) : FALLBACK_PARTY_ACCOUNT_SL_REF;
+  }
+
+  // Creator: env-level constant — same pattern as the receive/payment flow.
+  // (app_users has no sepidar_user_id column today; if/when it gets one, swap
+  // this for a per-user lookup keyed on triggeredBy.)
+  const creatorEnv = Number(Deno.env.get("SEPIDAR_CREATOR_ID") || 0);
+  if (!Number.isFinite(creatorEnv) || creatorEnv <= 0) {
+    return json({
+      success: false,
+      step: "resolve_creator",
+      voucher_id: voucherId,
+      message: "شناسه ثبت‌کننده سپیدار (SEPIDAR_CREATOR_ID) تنظیم نشده است.",
+    });
+  }
+
+  // =========================================================================
+  // STEP E: compose Description / Description1 / Description2 per contract.
+  // =========================================================================
+  const invoiceDate = factorRow.invoice_date ? new Date(factorRow.invoice_date as string) : new Date();
+  const persianDate = toJalali(invoiceDate);
+  // Contract format: "بابت فاکتور کد {FactorId} تاریخ {PersianDate} نوع {factorname}"
+  const baseDescription =
+    `بابت فاکتور کد ${factorId} تاریخ ${persianDate} نوع ${factorName}`;
+  // Description2 adds the party with a direction-aware preposition:
+  //   purchase (RequestType=0) → " از " + party  (we bought FROM them)
+  //   sale     (RequestType=1) → " به " + party  (we sold TO them)
+  const description2 =
+    baseDescription + (requestType === 1 ? " به " : " از ") + party.name;
+
+  // =========================================================================
+  // STEP F: call bridge.CreatePaymentRequestVoucher (single SP call).
+  // =========================================================================
+  const cfg = getSepidarSqlConfig();
+  if (!cfg.ok) {
+    // Treat config errors as sepidar_failed so the retry button stays.
+    await sb.from("factors").update({
+      lifecycle_state: "sepidar_failed",
+      last_posting_error: cfg.message,
+      last_posting_attempted_at: new Date().toISOString(),
+    }).eq("id", factorId);
+    return json({ success: false, step: "sepidar_config", voucher_id: voucherId, message: cfg.message });
+  }
+
+  let pool: sql.ConnectionPool | null = null;
+  let sepidarOk = false;
+  let sepidarMessage = "";
+  let sepidarVoucherId: string | null = null;
+  let sepidarVoucherNumber: string | null = null;
+  let rawError: unknown = null;
+
+  try {
+    console.log("[factor-post-voucher] SP call", {
+      factorId, voucherId, partyId: party.sepidar_party_id,
+      partyAccountSLRef, requestType, amount: payable, creator: creatorEnv,
+    });
+
+    pool = await new sql.ConnectionPool(cfg.config).connect();
+    const r = pool.request();
+
+    // Explicit typed bindings — bridge.CreatePaymentRequestVoucher expects:
+    //   @PartyId INT, @PartyAccountSLRef INT, @RequestType TINYINT,
+    //   @Amount DECIMAL(18,2), @VoucherDate DATETIME,
+    //   @Description / @Description1 / @Description2 NVARCHAR(MAX), @Creator INT
+    r.input("PartyId",           sql.Int,            party.sepidar_party_id);
+    r.input("PartyAccountSLRef", sql.Int,            partyAccountSLRef);
+    r.input("RequestType",       sql.TinyInt,        requestType);
+    r.input("Amount",            sql.Decimal(18, 2), payable);
+    // Per contract: VoucherDate goes as SQL DATETIME (not a Jalali string).
+    r.input("VoucherDate",       sql.DateTime,       invoiceDate);
+    r.input("Description",       sql.NVarChar(sql.MAX), baseDescription);
+    r.input("Description1",      sql.NVarChar(sql.MAX), baseDescription);
+    r.input("Description2",      sql.NVarChar(sql.MAX), description2);
+    r.input("Creator",           sql.Int,            creatorEnv);
+
+    const spRes = await r.execute("bridge.CreatePaymentRequestVoucher");
+    const rows = (spRes.recordset as Record<string, unknown>[]) || [];
+    const row = rows[0] || {};
+
+    // The SP follows the project-wide convention: success=1 on OK, success=0
+    // with error_message on failure. Some variants use SepidarVoucherId/Number
+    // and others use snake_case — accept both for safety.
+    const successFlag = Number(
+      (row as Record<string, unknown>).success ?? (row as Record<string, unknown>).Success ?? 1,
+    );
+    if (successFlag === 0) {
+      sepidarMessage = String(
+        (row as Record<string, unknown>).error_message ??
+        (row as Record<string, unknown>).ErrorMessage ??
+        "ثبت سند در سپیدار ناموفق بود.",
+      );
+      rawError = row;
+    } else {
+      const id = (row as Record<string, unknown>).SepidarVoucherId ??
+                 (row as Record<string, unknown>).sepidar_voucher_id ?? null;
+      const num = (row as Record<string, unknown>).SepidarVoucherNumber ??
+                  (row as Record<string, unknown>).sepidar_voucher_number ?? null;
+      if (id == null) {
+        sepidarMessage = "پاسخ سپیدار شامل شناسه سند نبود.";
+        rawError = row;
+      } else {
+        sepidarOk = true;
+        sepidarVoucherId = String(id);
+        sepidarVoucherNumber = num != null ? String(num) : null;
+        sepidarMessage = "سند در سپیدار با موفقیت ثبت شد.";
+      }
+    }
+  } catch (e) {
+    sepidarMessage = "ارتباط با سپیدار با خطا مواجه شد.";
+    rawError = e instanceof Error ? e.message : String(e);
+    console.error("[factor-post-voucher] SP error", rawError);
+  } finally {
+    // Always close the pool — leaking connections eventually exhausts SQL Server.
+    try { if (pool) await pool.close(); } catch (closeErr) { console.warn("pool close", closeErr); }
+  }
+
+  // =========================================================================
+  // STEP G: success / failure mapping → Supabase rows
+  // -------------------------------------------------------------------------
+  // IMPORTANT ORDER: write finance_vouchers FIRST, then factors. If the second
+  // update fails for any reason, the next retry's idempotency guard (Step A
+  // secondary branch) reads finance_vouchers and mirrors it back — no
+  // duplicate Sepidar call.
+  // =========================================================================
   if (sepidarOk) {
-    const { data: v } = await sb.from("finance_vouchers")
-      .select("sepidar_voucher_id, sepidar_voucher_number")
-      .eq("id", voucherId).maybeSingle();
+    await sb.from("finance_vouchers").update({
+      sepidar_voucher_id: sepidarVoucherId,
+      sepidar_voucher_number: sepidarVoucherNumber,
+      sepidar_sync_status: "synced",
+      sepidar_synced_at: new Date().toISOString(),
+      sepidar_error_message: null,
+    }).eq("id", voucherId);
 
     await sb.from("factors").update({
+      sepidar_voucher_id: sepidarVoucherId,
+      sepidar_voucher_number: sepidarVoucherNumber,
       lifecycle_state: "posted",
-      sepidar_voucher_id: v?.sepidar_voucher_id != null ? String(v.sepidar_voucher_id) : null,
-      sepidar_voucher_number: v?.sepidar_voucher_number != null ? String(v.sepidar_voucher_number) : null,
       last_posting_error: null,
       last_posting_attempted_at: new Date().toISOString(),
     }).eq("id", factorId);
 
-    // Audit row — best effort, do not block the response.
+    // Audit row — best effort.
     await sb.from("factor_posting_attempts").insert({
       factor_id: factorId,
       voucher_id: voucherId,
       success: true,
       error_code: "sepidar_posted",
-      request_payload: { step: "sepidar_post", attempt_number: result.attempt_number ?? null } as never,
-      response_payload: { message: sepidarMessage } as never,
+      request_payload: {
+        sp: "bridge.CreatePaymentRequestVoucher",
+        request_type: requestType,
+        party_id: party.sepidar_party_id,
+        party_account_sl_ref: partyAccountSLRef,
+        amount: payable,
+      } as never,
+      response_payload: {
+        sepidar_voucher_id: sepidarVoucherId,
+        sepidar_voucher_number: sepidarVoucherNumber,
+      } as never,
     } as never);
   } else {
+    await sb.from("finance_vouchers").update({
+      sepidar_sync_status: "failed",
+      sepidar_error_message: sepidarMessage,
+    }).eq("id", voucherId);
+
     await sb.from("factors").update({
       lifecycle_state: "sepidar_failed",
       last_posting_error: sepidarMessage,
@@ -183,8 +487,13 @@ Deno.serve(async (req) => {
       voucher_id: voucherId,
       success: false,
       error_code: "sepidar_post",
-      request_payload: { step: "sepidar_post", attempt_number: result.attempt_number ?? null } as never,
-      response_payload: { message: sepidarMessage, raw_error: sepidarRaw } as never,
+      request_payload: {
+        sp: "bridge.CreatePaymentRequestVoucher",
+        request_type: requestType,
+        party_id: party.sepidar_party_id,
+        amount: payable,
+      } as never,
+      response_payload: { message: sepidarMessage, raw_error: rawError } as never,
     } as never);
   }
 
@@ -192,12 +501,13 @@ Deno.serve(async (req) => {
     success: sepidarOk,
     step: sepidarOk ? "posted" : "sepidar_post",
     voucher_id: voucherId,
+    sepidar_voucher_id: sepidarVoucherId,
+    sepidar_voucher_number: sepidarVoucherNumber,
     attempt_number: result.attempt_number ?? null,
     posted_lines: result.posted_lines ?? null,
     message: sepidarOk
       ? "سند مالی ساخته و در سپیدار ثبت شد."
       : `سند مالی ساخته شد ولی ثبت در سپیدار ناموفق بود. ${sepidarMessage}`,
     sepidar_attempted: true,
-    sepidar_raw: sepidarRaw,
   });
 });
