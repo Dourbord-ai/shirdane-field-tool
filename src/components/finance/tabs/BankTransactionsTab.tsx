@@ -8,6 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
 import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
+// Phase 4 wiring: run the auto-identification pipeline right after each
+// imported row lands in the DB. The helper is intentionally side-effect
+// driven (writes audit log + identifier rows itself) so the import code
+// only needs to feed it the persisted bank_transaction_id.
+import {
+  autoIdentifyTransaction,
+  emptyAutoIdentifySummary,
+  bumpSummary,
+  type AutoIdentifySummary,
+} from "@/lib/autoIdentify";
 import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
