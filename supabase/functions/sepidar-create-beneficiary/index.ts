@@ -164,6 +164,13 @@ Deno.serve(async (req) => {
     const sepidar_account_id = asInt(pick(row, "sepidar_account_id", "AccountSLRef", "SLRef"));
     const sepidar_full_name  = (pick(row, "sepidar_full_name", "FullName", "Name") as string) || null;
 
+    // The SP signals dedupe by returning status_code='exists' on the same
+    // recordset (instead of raising a unique-constraint error). We surface
+    // it so the client can log/telemeter the link-vs-create distinction,
+    // but treat both 'created' and 'exists' as a successful sync.
+    const status_code = ((pick(row, "status_code", "StatusCode", "Status") as string) || "created").toLowerCase();
+    const isExisting = status_code === "exists";
+
     // Without at least a party_id the create did not actually happen.
     if (sepidar_party_id == null) {
       return json({
@@ -175,7 +182,10 @@ Deno.serve(async (req) => {
 
     return json({
       success: true,
-      message: "ذینفع با موفقیت در سپیدار ایجاد شد.",
+      status_code: isExisting ? "exists" : "created",
+      message: isExisting
+        ? "ذینفع از قبل در سپیدار وجود داشت و به رکورد محلی متصل شد."
+        : "ذینفع با موفقیت در سپیدار ایجاد شد.",
       sepidar_party_id,
       sepidar_dl_id,
       sepidar_dl_code,
