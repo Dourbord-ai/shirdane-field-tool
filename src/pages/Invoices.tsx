@@ -20,7 +20,13 @@ interface FactorRow {
   delivery_date: string | null;
   tax: string | null;
   buyer_type: string | null;
+  // Legacy text snapshot of the counterparty's display name. Kept as a
+  // fallback for pre-M5 rows where `finance_party_id` is NULL.
   company: string | null;
+  // M5: canonical counterparty FK. NULL for ~204 legacy rows whose
+  // legacy pointer didn't resolve to a finance_parties row during the
+  // step 2b backfill (e.g. factor had no shopping_center_id at all).
+  finance_party_id: string | null;
   discount: number | null;
   shipping: number | null;
   tax_amount: number | null;
@@ -41,6 +47,10 @@ interface FactorRow {
   sepidar_voucher_number: string | null;
   last_posting_error: string | null;
   posting_attempt_count: number | null;
+  // M5: composed display name from the joined finance_parties row. The
+  // join is performed in the supabase select below and reduced to a flat
+  // string in fetchFactors so the rest of the UI stays simple.
+  party_name: string | null;
 }
 
 interface SpermBuyRow {
@@ -294,9 +304,11 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
           <DetailRow
             label="فروشنده/خریدار"
             value={
-              factor.buyer_type === "company"
-                ? (factor.company || "شرکت")
-                : "شخص"
+              // M5: prefer the joined finance_parties display name; fall
+              // back to the legacy `company` text snapshot for pre-M5
+              // rows where finance_party_id is NULL.
+              factor.party_name
+              || (factor.buyer_type === "company" ? (factor.company || "شرکت") : (factor.company || "شخص"))
             }
           />
 
@@ -508,13 +520,45 @@ export default function Invoices() {
   // Extracted so PostingPanel can call it to refresh after a post attempt —
   // this is how the badge + error text update without a full page reload.
   const fetchFactors = async () => {
+    // M5: join `finance_parties` to surface a single composed display
+    // name per factor. We use an inner-object alias (`party:...`) on the
+    // FK so PostgREST returns the joined columns nested under `party`;
+    // we then flatten to `party_name` before storing in state. A LEFT
+    // join is implicit because `finance_party_id` is nullable.
     const { data, error } = await supabase
       .from("factors")
-      .select("*")
+      .select(
+        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
+      )
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setFactors(data as FactorRow[]);
+      const rows: FactorRow[] = (data as Array<Record<string, unknown>>).map((row) => {
+        // The joined record can be either an object (single FK target)
+        // or null (no FK / FK target soft-deleted). We defensively
+        // handle both shapes.
+        const party = (row.party ?? null) as
+          | {
+              company_name: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              sepidar_full_name: string | null;
+            }
+          | null;
+        const personName = party
+          ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
+          : "";
+        const party_name =
+          party?.sepidar_full_name ||
+          party?.company_name ||
+          personName ||
+          null;
+        // Strip the nested `party` blob before casting so the row shape
+        // matches FactorRow cleanly.
+        const { party: _omit, ...rest } = row as { party?: unknown };
+        return { ...(rest as unknown as FactorRow), party_name };
+      });
+      setFactors(rows);
     }
     setLoading(false);
   };
@@ -644,6 +688,12 @@ export default function Invoices() {
                 <span className="text-body font-bold text-primary">
                   {toPersianDigits((f.payable_amount || 0).toLocaleString("en-US"))} ریال
                 </span>
+              </div>
+              {/* M5: surface the canonical counterparty (finance_parties)
+                  with a fallback to the legacy `company` text snapshot
+                  for pre-M5 rows whose finance_party_id is NULL. */}
+              <div className="text-xs text-muted-foreground">
+                طرف حساب: {f.party_name || f.company || "—"}
               </div>
             </button>
           ))}

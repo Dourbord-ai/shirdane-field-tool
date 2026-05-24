@@ -328,7 +328,17 @@ interface InvoiceData {
   invoiceNumber: string;
   tax: string;
   sellerType: string;
+  // `company` is now a *display snapshot* only — the canonical link to the
+  // counterparty lives in `financePartyId` and is written to
+  // `factors.finance_party_id` on submit. We keep `company` populated with
+  // the chosen party's display name so existing list/detail UI that still
+  // reads the legacy `factors.company` text column keeps working for
+  // pre-M5 rows.
   company: string;
+  // M5: unified counterparty UUID from public.finance_parties. Empty string
+  // means the user hasn't picked one yet (or the flow doesn't require a
+  // counterparty, e.g. milk-retail / examinations).
+  financePartyId: string;
   settlement: string;
   discount: string;
   shipping: string;
@@ -346,6 +356,8 @@ const initial: InvoiceData = {
   tax: "",
   sellerType: "",
   company: "",
+  // M5: blank until the operator picks a party from the unified selector.
+  financePartyId: "",
   settlement: "",
   discount: "",
   shipping: "",
@@ -385,6 +397,17 @@ export default function NewInvoice() {
   const [feedOptions, setFeedOptions] = useState<{ label: string; value: string }[]>([]);
   const [medicineOptions, setMedicineOptions] = useState<{ label: string; value: string; typeId: number; typeName: string }[]>([]);
   const [cowOptions, setCowOptions] = useState<{ label: string; value: string; earNumber: string }[]>([]);
+
+  // M5: unified counterparty options drawn from public.finance_parties.
+  // Every factor that has a counterparty (purchase or sale, any product
+  // type) selects from this single list. We deliberately *replace* the
+  // old per-product-type shopping-center dropdowns (feedshoppingcenter,
+  // medicineshoppingcenter, buy_cattle_shoppingcenter, etc.) so the data
+  // model is consistent with payments/receives and Sepidar posting can
+  // resolve PartyId from one canonical source.
+  const [financePartyOptions, setFinancePartyOptions] = useState<
+    { label: string; value: string }[]
+  >([]);
 
   useEffect(() => {
     const fetchSperms = async () => {
@@ -522,6 +545,40 @@ export default function NewInvoice() {
     fetchFeeds();
     fetchMedicines();
     fetchCows();
+
+    // M5: load the unified counterparty list once per mount. We pull only
+    // active (not soft-deleted) parties. `finance_parties` has no single
+    // `name` column — instead we compose a display label from the most
+    // specific identifier available (Sepidar full name → company name →
+    // first+last name → fallback). The value is the UUID PK because
+    // that's what factors.finance_party_id stores.
+    (async () => {
+      const { data: parties } = await supabase
+        .from("finance_parties")
+        .select(
+          "id, company_name, first_name, last_name, sepidar_full_name",
+        )
+        .eq("is_deleted", false);
+      if (parties) {
+        const opts = parties.map((p) => {
+          const personName = [p.first_name, p.last_name]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+          const label =
+            p.sepidar_full_name ||
+            p.company_name ||
+            personName ||
+            "(بدون نام)";
+          return { label, value: p.id as string };
+        });
+        // Sort Persian-alphabetically once on the client; the table has
+        // no good single sort key server-side because the display name
+        // is computed.
+        opts.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+        setFinancePartyOptions(opts);
+      }
+    })();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
@@ -944,10 +1001,18 @@ export default function NewInvoice() {
           ? "person"
           : data.sellerType || null,
         company: isMilk ? data.milkCompany : (() => {
-          const allCompanies = data.productType === "feed" ? feedCompanyOptions : data.productType === "medicine" ? medicineCompanyOptions : data.productType === "livestock" ? livestockCompanyOptions : (data.productType === "other" || data.productType === "services" || data.productType === "rental") ? otherCompanyOptions : companyList;
-          const found = allCompanies.find((c) => c.value === data.company);
+          // M5: `factors.company` is a display-only snapshot kept for the
+          // pre-M5 legacy list/detail UIs. The canonical counterparty is
+          // `finance_party_id` below. We snapshot the label from the
+          // chosen finance party so the snapshot is always consistent
+          // with the FK target.
+          const found = financePartyOptions.find((c) => c.value === data.financePartyId);
           return found ? found.label : data.company || null;
         })(),
+        // M5: canonical counterparty FK. Empty-string / undefined → NULL
+        // so flows that don't require a party (e.g. milk-retail without
+        // company buyer) still insert cleanly.
+        finance_party_id: data.financePartyId || null,
         discount: finalDiscount,
         shipping: finalShipping,
         tax_amount: finalTax,
@@ -1356,7 +1421,23 @@ export default function NewInvoice() {
 
       {showMilkCompany && (
         <div className="animate-fade-in">
-          <SearchableSelect label="لیست شرکت‌ها" options={milkCompanyList} value={data.milkCompany} onChange={(v) => set("milkCompany", v)} placeholder="انتخاب شرکت..." />
+          {/* M5: unified counterparty selector. When the milk buyer is a
+              company we now select it from finance_parties (same source as
+              payments/receives), not from the hard-coded milkCompanyList.
+              `milkCompany` keeps the display label as a snapshot for
+              backward-compat reading, while `financePartyId` is the
+              canonical FK that gets written to factors. */}
+          <SearchableSelect
+            label="طرف حساب (خریدار)"
+            options={financePartyOptions}
+            value={data.financePartyId}
+            onChange={(v) => {
+              set("financePartyId", v);
+              const found = financePartyOptions.find((o) => o.value === v);
+              set("milkCompany", found?.label || "");
+            }}
+            placeholder="انتخاب طرف حساب..."
+          />
         </div>
       )}
 
@@ -1558,22 +1639,25 @@ export default function NewInvoice() {
 
       {showCompany && (
         <div className="animate-fade-in">
+          {/* M5: unified counterparty selector for every non-milk product
+              type (feed, medicine, livestock, sperm, other, services,
+              rental). The previous per-product-type shopping-center
+              dropdowns (feedshoppingcenter, medicineshoppingcenter,
+              buy_cattle_shoppingcenter, other_shoppingcenter, hard-coded
+              companyList) are removed in favor of `finance_parties`, the
+              same source used by payments/receives and by Sepidar
+              posting. We keep `data.company` populated with the display
+              label as a backward-compat snapshot for legacy readers. */}
           <SearchableSelect
-            label="لیست شرکت‌ها"
-            options={
-              data.productType === "feed"
-                ? feedCompanyOptions
-                : data.productType === "medicine"
-                ? medicineCompanyOptions
-                : data.productType === "livestock"
-                ? livestockCompanyOptions
-                : (data.productType === "other" || data.productType === "services" || data.productType === "rental")
-                ? otherCompanyOptions
-                : companyList
-            }
-            value={data.company}
-            onChange={(v) => set("company", v)}
-            placeholder="انتخاب شرکت..."
+            label="طرف حساب (سپیدار)"
+            options={financePartyOptions}
+            value={data.financePartyId}
+            onChange={(v) => {
+              set("financePartyId", v);
+              const found = financePartyOptions.find((o) => o.value === v);
+              set("company", found?.label || "");
+            }}
+            placeholder="انتخاب طرف حساب..."
           />
         </div>
       )}
