@@ -521,6 +521,9 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<{ total: number; valid: number; duplicate: number; invalid: number; inserted: number } | null>(null);
+  // Phase 6: counters returned by the auto-identify pipeline so the
+  // import dialog can display per-state chips after the final save step.
+  const [autoSummary, setAutoSummary] = useState<AutoIdentifySummary | null>(null);
 
   useEffect(() => {
     void supabase
