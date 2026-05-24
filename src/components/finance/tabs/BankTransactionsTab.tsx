@@ -225,9 +225,25 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         if (min !== null && v < min) return false;
         if (max !== null && v > max) return false;
       }
+      // Auto-identification chip filter — derived state, applied last so
+      // it composes cleanly with the existing description / amount filters.
+      if (filterAutoState) {
+        const st = deriveAutoState(t, identByTx[t.id], receiveByTx[t.id]);
+        if (st !== filterAutoState) return false;
+      }
       return true;
     });
-  }, [txs, filterDescr, filterMinAmount, filterMaxAmount]);
+  }, [txs, filterDescr, filterMinAmount, filterMaxAmount, filterAutoState, identByTx, receiveByTx]);
+
+  // Live counts for the chip bar — driven by the unfiltered (server-side
+  // filtered) set so the user can see how many rows each chip would reveal.
+  const autoCounts = useMemo(() => {
+    const c: Record<AutoState, number> = {
+      auto_identified: 0, manual: 0, needs_review: 0, no_identifier: 0, sepidar_failed: 0,
+    };
+    for (const t of txs) c[deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])]++;
+    return c;
+  }, [txs, identByTx, receiveByTx]);
 
 
   async function softDelete(t: Tx) {
