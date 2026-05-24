@@ -121,8 +121,6 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     });
   }, []);
 
-  // Re-fetch when server-side filters change. Date range goes here too so
-  // we don't pull 500 rows and then trim — Postgres does the work.
   // Per-row enrichment maps populated alongside `txs` so badges & chip
   // filters can render without N+1 queries inside the render loop.
   const [identByTx, setIdentByTx] = useState<Record<string, IdentRow[]>>({});
@@ -132,6 +130,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // auto-identification state. Applied client-side because the state is
   // a join across three tables and we already have the rows in memory.
   const [filterAutoState, setFilterAutoState] = useState<"" | AutoState>("");
+
   // Re-fetch when server-side filters change. Date range goes here too so
   // we don't pull 500 rows and then trim — Postgres does the work.
   useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
@@ -151,7 +150,62 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
     const { data } = await q;
-    setTxs((data as Tx[]) || []);
+    const rows = (data as Tx[]) || [];
+    setTxs(rows);
+
+    // -----------------------------------------------------------------------
+    // Side-load the per-tx enrichment used by badges & chip filters. Three
+    // parallel `.in()` queries keep this O(1) round-trips regardless of how
+    // many rows came back from the main fetch.
+    // -----------------------------------------------------------------------
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) {
+      setIdentByTx({}); setReceiveByTx({}); setPartyNames({});
+    } else {
+      const [identsRes, receivesRes] = await Promise.all([
+        supabase
+          .from("finance_bank_tx_identifiers")
+          .select("bank_transaction_id, match_type, raw_value, normalized_value, verified_owner_name, verified_bank_name")
+          .in("bank_transaction_id", ids),
+        supabase
+          .from("finance_receive_identifications")
+          .select("id, bank_transaction_id, party_id, status, auto_identified, identification_source, sepidar_sync_status, voucher_id")
+          .in("bank_transaction_id", ids)
+          .eq("is_deleted", false),
+      ]);
+      const im: Record<string, IdentRow[]> = {};
+      for (const r of (identsRes.data || []) as Array<IdentRow & { bank_transaction_id: string }>) {
+        (im[r.bank_transaction_id] ||= []).push(r);
+      }
+      setIdentByTx(im);
+      const rm: Record<string, ReceiveMeta> = {};
+      const partyIds = new Set<string>();
+      for (const r of (receivesRes.data || []) as Array<ReceiveMeta & { bank_transaction_id: string }>) {
+        // A tx should only have ONE active receive identification (DB guard
+        // enforces this), but if duplicates ever slip through we keep the
+        // first — order doesn't matter for badge rendering.
+        if (!rm[r.bank_transaction_id]) rm[r.bank_transaction_id] = r;
+        if (r.party_id) partyIds.add(r.party_id);
+      }
+      setReceiveByTx(rm);
+      if (partyIds.size > 0) {
+        const { data: pdata } = await supabase
+          .from("finance_parties")
+          .select("id, company_name, sepidar_full_name, first_name, last_name")
+          .in("id", Array.from(partyIds));
+        const pm: Record<string, string> = {};
+        for (const p of (pdata || []) as Array<{ id: string; company_name: string | null; sepidar_full_name: string | null; first_name: string | null; last_name: string | null }>) {
+          pm[p.id] =
+            p.sepidar_full_name ||
+            p.company_name ||
+            [p.first_name, p.last_name].filter(Boolean).join(" ").trim() ||
+            "—";
+        }
+        setPartyNames(pm);
+      } else {
+        setPartyNames({});
+      }
+    }
     setLoading(false);
   }
 
