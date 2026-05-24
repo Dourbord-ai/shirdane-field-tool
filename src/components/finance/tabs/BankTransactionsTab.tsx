@@ -458,6 +458,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                 {t.description && (
                   <div className="mt-2"><ExpandableDescription text={t.description} /></div>
                 )}
+                <RowBadges
+                  idents={identByTx[t.id]}
+                  ri={receiveByTx[t.id]}
+                  partyName={receiveByTx[t.id]?.party_id ? partyNames[receiveByTx[t.id]!.party_id!] || null : null}
+                  autoState={deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])}
+                />
+
 
                 <div className="mt-2 flex gap-1 flex-wrap">
                   {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
