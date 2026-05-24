@@ -137,6 +137,10 @@ const productLabels: Record<string, string> = {
   feed: "خوراک",
   medicine: "دارو",
   livestock: "دام",
+  // Manure (کود دامی): two direction-locked categories so the badge/filter
+  // text reflects buy vs sell without needing to also inspect invoice_type.
+  manure_buy: "خرید کود دامی",
+  manure_sell: "فروش کود دامی",
   other: "سایر",
 };
 
