@@ -545,6 +545,26 @@ export default function NewInvoice() {
     fetchFeeds();
     fetchMedicines();
     fetchCows();
+
+    // M5: load the unified counterparty list once per mount. We pull only
+    // active (not soft-deleted) parties and sort by name so the operator
+    // sees a stable Persian-alphabetical list. The value is the UUID PK
+    // because that's what factors.finance_party_id stores.
+    (async () => {
+      const { data: parties } = await supabase
+        .from("finance_parties")
+        .select("id, name")
+        .eq("is_deleted", false)
+        .order("name", { ascending: true });
+      if (parties) {
+        setFinancePartyOptions(
+          parties.map((p) => ({
+            label: p.name || "(بدون نام)",
+            value: p.id as string,
+          })),
+        );
+      }
+    })();
   }, []);
 
   const set = <K extends keyof InvoiceData>(key: K, val: InvoiceData[K]) =>
