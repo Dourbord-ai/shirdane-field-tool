@@ -539,6 +539,64 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
  *   3. Inline "نمایش کامل شرح" / "بستن" toggle when the text exceeds the clamp,
  *      revealing the full description in-place without a modal.
  */
+/**
+ * RowBadges
+ * Compact, RTL-friendly badge cluster that summarises every signal the
+ * auto-identification pipeline produced for a single bank transaction:
+ *   • One chip per extracted identifier (card / IBAN / account).
+ *   • Verified owner name (from bankpartyaccountinfos / verify-account).
+ *   • Matched party (from the linked receive identification, if any).
+ *   • Auto-identification state (auto / manual / needs review / no id).
+ *   • Sepidar posting status when a voucher exists.
+ * Kept deliberately minimal — uses semantic tokens only, no hard-coded colors.
+ */
+function RowBadges({
+  idents, ri, partyName, autoState,
+}: {
+  idents: IdentRow[] | undefined;
+  ri: ReceiveMeta | undefined;
+  partyName: string | null;
+  autoState: AutoState;
+}) {
+  const chip = "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold";
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {idents?.map((ident, i) => (
+        <span key={i} className={`${chip} bg-muted/50 text-foreground`} title={ident.raw_value || ""}>
+          {MATCH_TYPE_LABEL[ident.match_type] || "شناسه"}: {ident.normalized_value?.slice(-6) || "—"}
+          {ident.verified_owner_name && (
+            <span className="opacity-70">· {ident.verified_owner_name}</span>
+          )}
+        </span>
+      ))}
+      {partyName && (
+        <span className={`${chip} border-primary/40 text-primary`}>ذینفع: {partyName}</span>
+      )}
+      {autoState === "auto_identified" && (
+        <span className={`${chip} border-emerald-500/40 text-emerald-600 dark:text-emerald-400`}>شناسایی خودکار</span>
+      )}
+      {autoState === "manual" && ri && (
+        <span className={`${chip} border-sky-500/40 text-sky-600 dark:text-sky-400`}>شناسایی دستی</span>
+      )}
+      {autoState === "needs_review" && (
+        <span className={`${chip} border-amber-500/40 text-amber-600 dark:text-amber-400`}>نیازمند بازبینی</span>
+      )}
+      {autoState === "no_identifier" && (
+        <span className={`${chip} border-muted text-muted-foreground`}>بدون شناسه</span>
+      )}
+      {ri?.sepidar_sync_status === "synced" && (
+        <span className={`${chip} border-emerald-500/40 text-emerald-600 dark:text-emerald-400`}>سپیدار: ثبت‌شده</span>
+      )}
+      {ri?.sepidar_sync_status === "failed" && (
+        <span className={`${chip} border-destructive/40 text-destructive`}>سپیدار: خطا</span>
+      )}
+      {ri?.sepidar_sync_status === "pending" && ri && (
+        <span className={`${chip} border-muted text-muted-foreground`}>سپیدار: در انتظار</span>
+      )}
+    </div>
+  );
+}
+
 function ExpandableDescription({ text }: { text: string | null }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return <span className="text-muted-foreground">—</span>;
