@@ -304,18 +304,45 @@ Deno.serve(async (req) => {
     });
   }
 
-  // PartyAccountSLRef priority: per-party value → global setting → fallback.
-  // Mirrors the resolution used by sepidar-create-payment-voucher.
-  let partyAccountSLRef = party.party_account_sl_ref ?? 0;
-  if (!partyAccountSLRef || partyAccountSLRef <= 0) {
+  // PartyAccountSLRef resolution — STRICT, no silent fallback.
+  // Priority for factor posting:
+  //   1) finance_parties.party_account_sl_ref (per-party value)
+  //   2) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
+  // If neither is set, we refuse to post — guessing a default SL could route
+  // the voucher to the wrong account.
+  let partyAccountSLRef = Number(party.party_account_sl_ref ?? 0);
+  if (!Number.isFinite(partyAccountSLRef) || partyAccountSLRef <= 0) {
     const { data: settingsRow } = await sb
       .from("finance_sepidar_settings")
       .select("sepidar_party_account_sl_ref")
       .limit(1).maybeSingle();
     const sv = (settingsRow as { sepidar_party_account_sl_ref?: number | null } | null)
       ?.sepidar_party_account_sl_ref;
-    partyAccountSLRef = (sv && Number(sv) > 0) ? Number(sv) : FALLBACK_PARTY_ACCOUNT_SL_REF;
+    partyAccountSLRef = (sv != null && Number(sv) > 0) ? Number(sv) : 0;
   }
+  if (!partyAccountSLRef || partyAccountSLRef <= 0) {
+    const msg = "حساب معین طرف حساب برای ثبت سند سپیدار تنظیم نشده است.";
+    await sb.from("factors").update({
+      lifecycle_state: "sepidar_failed",
+      last_posting_error: msg,
+      last_posting_attempted_at: new Date().toISOString(),
+    }).eq("id", factorId);
+    await sb.from("factor_posting_attempts").insert({
+      factor_id: factorId,
+      voucher_id: voucherId,
+      success: false,
+      error_code: "resolve_party_account_sl_ref",
+      request_payload: { party_id: party.sepidar_party_id } as never,
+      response_payload: { message: msg } as never,
+    } as never);
+    return json({
+      success: false,
+      step: "resolve_party_account_sl_ref",
+      voucher_id: voucherId,
+      message: msg,
+    });
+  }
+
 
   // Creator: env-level constant — same pattern as the receive/payment flow.
   // (app_users has no sepidar_user_id column today; if/when it gets one, swap
