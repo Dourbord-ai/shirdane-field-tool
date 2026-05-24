@@ -20,7 +20,13 @@ interface FactorRow {
   delivery_date: string | null;
   tax: string | null;
   buyer_type: string | null;
+  // Legacy text snapshot of the counterparty's display name. Kept as a
+  // fallback for pre-M5 rows where `finance_party_id` is NULL.
   company: string | null;
+  // M5: canonical counterparty FK. NULL for ~204 legacy rows whose
+  // legacy pointer didn't resolve to a finance_parties row during the
+  // step 2b backfill (e.g. factor had no shopping_center_id at all).
+  finance_party_id: string | null;
   discount: number | null;
   shipping: number | null;
   tax_amount: number | null;
@@ -41,6 +47,10 @@ interface FactorRow {
   sepidar_voucher_number: string | null;
   last_posting_error: string | null;
   posting_attempt_count: number | null;
+  // M5: composed display name from the joined finance_parties row. The
+  // join is performed in the supabase select below and reduced to a flat
+  // string in fetchFactors so the rest of the UI stays simple.
+  party_name: string | null;
 }
 
 interface SpermBuyRow {
