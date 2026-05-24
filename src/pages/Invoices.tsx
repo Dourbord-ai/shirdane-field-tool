@@ -65,6 +65,13 @@ interface FactorRow {
   // join is performed in the supabase select below and reduced to a flat
   // string in fetchFactors so the rest of the UI stays simple.
   party_name: string | null;
+  // RPC-derived bucketed status (draft / approved / cancelled / posted /
+  // voucher_failed / sepidar_failed). Optional because legacy queries that
+  // bypass the RPC may not populate it.
+  derived_status?: string | null;
+  // factor_type_id is the canonical direction marker (1=purchase, 2=sale).
+  // Used to render a direction badge in addition to the legacy invoice_type.
+  factor_type_id?: number | null;
 }
 
 interface SpermBuyRow {
