@@ -5059,6 +5059,38 @@ export type Database = {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean
       }
+      list_factors_filtered: {
+        Args: {
+          p_direction?: string
+          p_finance_party_id?: string
+          p_from_date?: string
+          p_invoice_number?: string
+          p_limit?: number
+          p_offset?: number
+          p_product_types?: string[]
+          p_statuses?: string[]
+          p_to_date?: string
+        }
+        Returns: {
+          company: string
+          derived_status: string
+          factor_type_id: number
+          finance_party_id: string
+          id: string
+          invoice_date: string
+          invoice_number: string
+          invoice_type: string
+          last_posting_error: string
+          lifecycle_state: string
+          party_name: string
+          payable_amount: number
+          posting_attempt_count: number
+          product_type: string
+          sepidar_voucher_number: string
+          total_count: number
+          voucher_id: string
+        }[]
+      }
       post_approved_factor: {
         Args: { p_factor_id: string; p_triggered_by?: string }
         Returns: Json
