@@ -150,15 +150,20 @@ async function processOneFeeTx(
 }> {
   const absWithdraw = Math.abs(Number(tx.withdraw_amount) || Number(tx.amount) || 0);
 
-  // --- Step 1: mark as bank_fee on the tx row -----------------------------
-  // We only update rows that are still unassigned to avoid trampling rows
-  // that another operator just picked up.
+  // --- Step 1: mark as bank_fee_candidate on the tx row ------------------
+  // Per spec, allowed assignment_status values are ONLY:
+  //   unassigned, assigning, assigned, rejected, cancelled, partially_assigned
+  // (no "needs_review"). The row stays 'unassigned' with the
+  // 'bank_fee_candidate' marker while we work. It flips to
+  // 'assigned' + 'bank_fee' only after the full pipeline succeeds, and
+  // remains 'unassigned' + 'bank_fee_candidate' on any failure so the
+  // operator can safely retry.
   const markPayload = {
-    assignment_status: "needs_review",
-    assigned_operation_type: "bank_fee",
+    assignment_status: "unassigned",
+    assigned_operation_type: "bank_fee_candidate",
   };
   // eslint-disable-next-line no-console
-  console.log(TAG, "tx.mark", { txId: tx.id, amount: absWithdraw, markPayload });
+  console.log(TAG, "tx.mark.candidate", { txId: tx.id, amount: absWithdraw, markPayload });
   const { error: markErr } = await supabase
     .from("finance_bank_transactions")
     .update(markPayload)
@@ -168,7 +173,7 @@ async function processOneFeeTx(
     await audit(tx.id, "fee.mark.failed", false, markErr.message, { amount: absWithdraw });
     return { ok: false, prId: null, voucherId: null, sepidarVoucherId: null, message: markErr.message, failedStep: "mark" };
   }
-  await audit(tx.id, "fee.mark", true, "marked as bank_fee", { amount: absWithdraw });
+  await audit(tx.id, "fee.mark.candidate", true, "marked as bank_fee_candidate", { amount: absWithdraw });
 
   // --- Step 2: create the payment request via the atomic RPC --------------
   // amount_type_code = 3 (علی‌الحساب) — bank fees aren't paid against a
