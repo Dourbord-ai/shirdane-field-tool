@@ -285,18 +285,22 @@ async function processOneFeeTx(
     return { ok: true, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "sepidar_post" };
   }
 
-  // --- Step 6: finalize transaction → assigned ----------------------------
+  // --- Step 6: finalize transaction → assigned + bank_fee ------------------
+  // Per spec, only NOW (after PR + approve + voucher + Sepidar all succeeded)
+  // do we promote the row to assignment_status='assigned' and flip the
+  // marker from 'bank_fee_candidate' to 'bank_fee'.
   try {
     await supabase
       .from("finance_bank_transactions")
       .update({
         assignment_status: "assigned",
+        assigned_operation_type: "bank_fee",
         assigned_operation_id: prId,
       } as never)
       .eq("id", tx.id);
-    await audit(tx.id, "fee.tx.finalize", true, "transaction assigned");
+    await audit(tx.id, "fee.tx.finalize", true, "transaction assigned as bank_fee");
   } catch (e) {
-    // Non-fatal — the PR + voucher are already done.
+    // Non-fatal — the PR + voucher are already done in Sepidar.
     const msg = e instanceof Error ? e.message : String(e);
     await audit(tx.id, "fee.tx.finalize.failed", false, msg);
   }
