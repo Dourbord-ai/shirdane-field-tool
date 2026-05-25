@@ -170,25 +170,62 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (ids.length === 0) {
       setIdentByTx({}); setReceiveByTx({}); setPartyNames({});
     } else {
-      const [identsRes, receivesRes] = await Promise.all([
-        supabase
+      // -----------------------------------------------------------------------
+      // Chunk the `.in()` lookups. PostgREST accepts large IN-lists, but the
+      // URL-encoded query string can blow past Nginx's URI length cap (~8KB)
+      // and return 414 Request-URI Too Large. Each UUID + separator costs
+      // ~40 bytes, so 50 IDs/chunk (~2KB) leaves comfortable headroom.
+      // -----------------------------------------------------------------------
+      const CHUNK_SIZE = 50;
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        chunks.push(ids.slice(i, i + CHUNK_SIZE));
+      }
+      console.log("fetchBankTxIdentifiers", {
+        operationName: "fetchBankTxIdentifiers",
+        totalIds: ids.length,
+        chunkCount: chunks.length,
+        chunkSize: CHUNK_SIZE,
+      });
+
+      // Fire all chunks in parallel — N round-trips overlap on the wire and
+      // avoid the 414 entirely. We do this for BOTH identifiers and receives
+      // since they share the same `ids` list and both used to `.in()` it.
+      const identPromises = chunks.map((chunk, chunkIndex) => {
+        console.log("fetchBankTxIdentifiers chunk", {
+          operationName: "fetchBankTxIdentifiers",
+          chunkIndex,
+          chunkSize: chunk.length,
+        });
+        return supabase
           .from("finance_bank_tx_identifiers")
           .select("bank_transaction_id, match_type, raw_value, normalized_value, verified_owner_name, verified_bank_name")
-          .in("bank_transaction_id", ids),
+          .in("bank_transaction_id", chunk);
+      });
+      const receivePromises = chunks.map((chunk) =>
         supabase
           .from("finance_receive_identifications")
           .select("id, bank_transaction_id, party_id, status, auto_identified, identification_source, sepidar_sync_status, voucher_id")
-          .in("bank_transaction_id", ids)
+          .in("bank_transaction_id", chunk)
           .eq("is_deleted", false),
+      );
+      const [identsResults, receivesResults] = await Promise.all([
+        Promise.all(identPromises),
+        Promise.all(receivePromises),
       ]);
+
+      // Flatten chunked results, then group by bank_transaction_id as before.
+      const identsData = identsResults.flatMap((r) => r.data || []);
+      const receivesData = receivesResults.flatMap((r) => r.data || []);
+
       const im: Record<string, IdentRow[]> = {};
-      for (const r of (identsRes.data || []) as Array<IdentRow & { bank_transaction_id: string }>) {
+      for (const r of identsData as Array<IdentRow & { bank_transaction_id: string }>) {
         (im[r.bank_transaction_id] ||= []).push(r);
       }
       setIdentByTx(im);
       const rm: Record<string, ReceiveMeta> = {};
       const partyIds = new Set<string>();
-      for (const r of (receivesRes.data || []) as Array<ReceiveMeta & { bank_transaction_id: string }>) {
+      for (const r of receivesData as Array<ReceiveMeta & { bank_transaction_id: string }>) {
         // A tx should only have ONE active receive identification (DB guard
         // enforces this), but if duplicates ever slip through we keep the
         // first — order doesn't matter for badge rendering.
