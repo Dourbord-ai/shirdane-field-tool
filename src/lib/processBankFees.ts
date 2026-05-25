@@ -268,7 +268,8 @@ async function processOneFeeTx(
       .select("sepidar_voucher_id")
       .eq("id", voucherId)
       .maybeSingle();
-    sepidarVoucherId = (vRow?.sepidar_voucher_id as string | null) ?? null;
+    const sepRaw = vRow?.sepidar_voucher_id as unknown;
+    sepidarVoucherId = sepRaw == null ? null : String(sepRaw);
     await audit(tx.id, "fee.sepidar.post", true, "voucher posted to Sepidar", { voucherId, sepidarVoucherId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطای ناشناخته در ارسال به سپیدار";
