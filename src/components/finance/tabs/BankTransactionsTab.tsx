@@ -375,6 +375,63 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               آخرین وضعیت: {autoProgress.lastMessage}
             </div>
           )}
+          {/* --------------------------------------------------------------
+              Collapsible diagnostic panel — surfaces the same data printed
+              to the console by financeAutoProcessDebug.ts. Always rendered
+              (debug flag only controls console verbosity); the panel just
+              shows whatever the orchestrator reported in `autoProgress`.
+              Use window.enableFinanceAutoProcessDebug() in DevTools for
+              the full console trace.
+          -------------------------------------------------------------- */}
+          <details className="mt-2 rounded-md border border-border bg-background/50 p-2">
+            <summary className="cursor-pointer text-[11px] font-bold text-muted-foreground">
+              جزئیات تشخیصی (debug) — برای لاگ کامل کنسول:
+              <code className="mx-1 rounded bg-muted px-1">window.enableFinanceAutoProcessDebug()</code>
+            </summary>
+            <div className="mt-2 space-y-1 text-[11px]">
+              <div>آخرین تراکنش پردازش‌شده: <code>{autoProgress.lastTxId ?? "—"}</code></div>
+              <div>آخرین خطا: <span className="text-destructive">{autoProgress.lastError ?? "—"}</span></div>
+              <div>آخرین دلیل رد شدن: {autoProgress.lastSkipReason ?? "—"}</div>
+              <div>ناموفق ({autoProgress.failedTransactions.length}):</div>
+              {autoProgress.failedTransactions.length > 0 && (
+                <ul className="max-h-32 overflow-auto rounded border border-destructive/30 bg-destructive/5 p-1">
+                  {autoProgress.failedTransactions.slice(-20).map((f) => (
+                    <li key={f.id} className="truncate">
+                      <code>{f.id}</code> — {f.step}: {f.errorMessage ?? f.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div>رد شده ({autoProgress.skippedTransactions.length}):</div>
+              {autoProgress.skippedTransactions.length > 0 && (
+                <ul className="max-h-32 overflow-auto rounded border border-amber-500/30 bg-amber-500/5 p-1">
+                  {autoProgress.skippedTransactions.slice(-20).map((s) => (
+                    <li key={s.id} className="truncate">
+                      <code>{s.id}</code> — {s.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div>تطبیق داده‌شده ({autoProgress.matchedTransactions.length}):</div>
+              {autoProgress.matchedTransactions.length > 0 && (
+                <ul className="max-h-32 overflow-auto rounded border border-emerald-500/30 bg-emerald-500/5 p-1">
+                  {autoProgress.matchedTransactions.slice(-20).map((m) => (
+                    <li key={m.id} className="truncate">
+                      <code>{m.id}</code> — {m.path}
+                      {m.party_id ? ` · party=${m.party_id.slice(0, 8)}…` : ""}
+                      {m.paired_tx_id ? ` · paired=${m.paired_tx_id.slice(0, 8)}…` : ""}
+                      {m.voucher_id ? ` · voucher=${m.voucher_id.slice(0, 8)}…` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {autoProgress.durationMs != null && (
+                <div className="pt-1 text-muted-foreground">
+                  مدت اجرا: {autoProgress.durationMs} ms
+                </div>
+              )}
+            </div>
+          </details>
         </div>
       )}
 
