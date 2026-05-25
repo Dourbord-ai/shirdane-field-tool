@@ -1095,9 +1095,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     // STEP 3). They count as "alreadyInDb", NOT "failed".
     let conflictSkipped = 0;
     const failed: { index: number; reason: string }[] = [];
-    const insertedPairs: { row: typeof newRowsToInsert[number]; id: string }[] = [];
-    const autoSum = emptyAutoIdentifySummary();
-    const bxSum = emptyAutoBankTransferSummary();
+    // No post-insert pipeline state — auto-processing is a separate, manual flow now.
 
     console.log("[bank-import] starting batched insert via RPC", {
       totalRows: parsed.length,
