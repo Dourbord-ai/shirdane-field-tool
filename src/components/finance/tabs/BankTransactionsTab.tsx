@@ -329,9 +329,62 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <Button variant="outline" onClick={() => toast.info("دریافت از API هنوز پیاده‌سازی نشده — placeholder")}>
             <Download className="w-4 h-4 ml-1" /> دریافت از API
           </Button>
+          {/* Manual trigger for the auto-processing pipeline. Disabled while a
+              run is in-flight to prevent double execution. */}
+          <Button variant="secondary" onClick={runAutoProcess} disabled={autoRunning}>
+            <Link2 className="w-4 h-4 ml-1" />
+            {autoRunning ? "در حال پردازش…" : "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده"}
+          </Button>
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
+
+      {/* Live progress panel for the manual auto-processing run. Shown while
+          a run is active AND for a moment after completion so the operator
+          can read the final counts. Hidden when no run has been started. */}
+      {(autoRunning || autoProgress.total > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">پیشرفت شناسایی خودکار</span>
+            <span className="text-muted-foreground">
+              {autoProgress.processed} از {autoProgress.total} (باقیمانده: {autoProgress.remaining})
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 px-2 py-0.5">
+              واریز شناسایی‌شده: {autoProgress.beneficiary_identified}
+            </span>
+            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
+              کارمزد بانکی: {autoProgress.bank_fees_classified}
+            </span>
+            <span className="rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-700 px-2 py-0.5">
+              انتقال بین‌بانکی: {autoProgress.bank_transfers_matched}
+            </span>
+            <span className="rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5">
+              ارسال به سپیدار: {autoProgress.sepidar_posted}
+            </span>
+            <span className="rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5">
+              ناموفق: {autoProgress.failed}
+            </span>
+            <span className="rounded-full border border-muted bg-muted/30 text-muted-foreground px-2 py-0.5">
+              کل تخصیص‌نشده: {autoProgress.total}
+            </span>
+          </div>
+          {autoProgress.lastMessage && (
+            <div className="text-[11px] text-muted-foreground truncate">
+              آخرین وضعیت: {autoProgress.lastMessage}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filters — first row: bank / type / assignment / description search */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <BankSelector value={filterBank} onChange={setFilterBank} placeholder="همه بانک‌ها" />
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+          <option value="">نوع تراکنش</option>
+          <option value="deposit">واریز</option>
+          <option value="withdraw">برداشت</option>
 
       {/* Filters — first row: bank / type / assignment / description search */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
