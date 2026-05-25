@@ -520,7 +520,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                             <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
                           </Button>
                         )}
-                        {t.assignment_status === "unassigned" && t.transaction_type === "withdraw" && (
+                        {/* Show "ثبت پرداخت" for unassigned withdraws AND for
+                            bank-fee candidates flagged as needs_review, so the
+                            operator can complete the manual payment-request
+                            flow from this row without leaving the screen. */}
+                        {((t.assignment_status === "unassigned" && t.transaction_type === "withdraw") ||
+                          (t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate")) && (
                           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های پرداخت")}>
                             <ArrowUpFromLine className="w-3 h-3 ml-1" /> ثبت پرداخت
                           </Button>
