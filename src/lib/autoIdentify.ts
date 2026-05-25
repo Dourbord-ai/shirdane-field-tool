@@ -253,6 +253,10 @@ export async function autoIdentifyTransaction(
   // Pass `null` for withdraw transactions — only deposits are eligible.
   txType: "deposit" | "withdraw" | null,
   identifiers: ExtractedIdentifier[],
+  // Optional context plumbed from the caller so verify-account can use the
+  // correct bank code instead of the hardcoded "016" fallback, and so the
+  // diagnostic logs can correlate identifier → bank → payload.
+  ctx?: { bankId?: string | null; bankCode?: string | null },
 ): Promise<AutoIdentifyOutcome> {
   // Sanity early-outs before we touch the network. Anything that isn't a
   // deposit with at least one identifier can't be auto-identified by design
