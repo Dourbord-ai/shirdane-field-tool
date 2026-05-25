@@ -16,10 +16,12 @@ const corsHeaders = {
 interface VerifyBody {
   type: "1" | "2" | "3"; // 1=card, 2=sheba, 3=deposit
   number: string;
+  // Optional 3-digit Iranian bank code (e.g. "016"=Keshavarzi). Required
+  // for type=3 (deposit_sheba) so cardinfo knows the bank's deposit
+  // numbering scheme. Falls back to "016" when omitted (legacy callers).
+  bankCode?: string;
   // When true, the function returns a `debug` object in the response so
-  // callers (developer console / test panel) can see exactly what the
-  // upstream service returned. This is opt-in to avoid leaking raw
-  // upstream payloads in normal production traffic.
+  // callers can see exactly what the upstream service returned.
   debug?: boolean;
 }
 
@@ -74,15 +76,17 @@ function validate(type: string, n: string): string | null {
   return null;
 }
 
-function buildUrl(type: string, n: string): string {
+function buildUrl(type: string, n: string, bankCode?: string): string {
   const base = "https://cardinfo.ir/inquiry/apiv1";
   if (type === "1") return `${base}?api=card_info&card=${n}`;
   if (type === "2") {
     const sheba = n.startsWith("IR") ? n : `IR${n}`;
     return `${base}?api=sheba_info&sheba=${sheba}`;
   }
-  // type === "3" - hardcoded bank=016 (Keshavarzi)
-  return `${base}?api=deposit_sheba&deposit=${n}&bank=016`;
+  // type === "3": use provided bankCode, fall back to "016" (Keshavarzi)
+  // for backwards-compatibility with legacy callers.
+  const bank = (bankCode || "016").padStart(3, "0");
+  return `${base}?api=deposit_sheba&deposit=${n}&bank=${bank}`;
 }
 
 // extractName() tries multiple known response shapes; we track which
@@ -118,9 +122,10 @@ Deno.serve(async (req) => {
     const body = (await req.json()) as VerifyBody;
     const rawType = String(body.type ?? "");
     const rawNumber = String(body.number ?? "");
+    const bankCode = body.bankCode ? String(body.bankCode) : undefined;
     const debugMode = body.debug === true;
 
-    log("incoming:", { type: rawType, number: rawNumber, debugMode });
+    log("incoming:", { type: rawType, number: rawNumber, bankCode, debugMode });
 
     const type = rawType;
     const number = normalize(type, rawNumber);
@@ -181,7 +186,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const url = buildUrl(type, number);
+    const url = buildUrl(type, number, bankCode);
     log("calling upstream:", url);
 
     const apiRes = await fetch(url, {

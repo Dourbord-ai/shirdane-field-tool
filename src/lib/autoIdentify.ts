@@ -91,19 +91,63 @@ async function lookupCache(ident: ExtractedIdentifier) {
  * Fall back to the verify-account edge function when the cache is empty.
  * The edge function will populate the cache as a side-effect, so the next
  * import won't pay this cost again.
+ *
+ * Verbose-logs the exact request payload + the full debug response body so
+ * we can diagnose 400/404/parse failures from the browser console.
  */
-async function callVerifyAccount(ident: ExtractedIdentifier) {
+async function callVerifyAccount(
+  ident: ExtractedIdentifier,
+  ctx?: { txId?: string; bankId?: string | null; bankCode?: string | null },
+) {
+  // Build the exact payload we will send. `debug: true` makes the edge
+  // function return its full `debug` block so we can inspect upstream URL,
+  // status, raw body, and parser branch.
+  const payload: Record<string, unknown> = {
+    type: String(ident.type),
+    number: ident.normalized,
+    debug: true,
+  };
+  if (ctx?.bankCode) payload.bankCode = ctx.bankCode;
+
+  // ALWAYS log payload (not gated by debug flag) — this is the field the
+  // user explicitly asked for in the next round of diagnosis.
+  // eslint-disable-next-line no-console
+  console.log("[AutoProcess] verify-account.request", {
+    txId: ctx?.txId,
+    bankId: ctx?.bankId,
+    resolvedBankCode: ctx?.bankCode ?? null,
+    candidate: {
+      type: ident.type,
+      raw: ident.raw,
+      normalized: ident.normalized,
+      normalizedLength: ident.normalized.length,
+    },
+    payload,
+  });
+
   try {
     const { data, error } = await supabase.functions.invoke("verify-account", {
-      // The edge function expects `type` as a string ("1" | "2" | "3") and
-      // `number` in raw form — it does its own digit normalisation.
-      body: { type: String(ident.type), number: ident.normalized },
+      body: payload,
     });
-    if (error || !data?.ok) return null;
+    // Surface the full edge-function response (including the `debug` block)
+    // even on success, so operators can spot misclassifications.
+    // eslint-disable-next-line no-console
+    console.log("[AutoProcess] verify-account.response", {
+      txId: ctx?.txId,
+      ok: (data as { ok?: boolean } | null)?.ok ?? null,
+      error: error ?? null,
+      data,
+    });
+    if (error || !(data as { ok?: boolean } | null)?.ok) return null;
     // Re-read from the cache so we get the row's PK (the edge function
     // doesn't return it in the response payload).
     return await lookupCache(ident);
-  } catch {
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[AutoProcess] verify-account.throw", {
+      txId: ctx?.txId,
+      error: e instanceof Error ? e.message : String(e),
+    });
     return null;
   }
 }
@@ -209,6 +253,10 @@ export async function autoIdentifyTransaction(
   // Pass `null` for withdraw transactions — only deposits are eligible.
   txType: "deposit" | "withdraw" | null,
   identifiers: ExtractedIdentifier[],
+  // Optional context plumbed from the caller so verify-account can use the
+  // correct bank code instead of the hardcoded "016" fallback, and so the
+  // diagnostic logs can correlate identifier → bank → payload.
+  ctx?: { bankId?: string | null; bankCode?: string | null },
 ): Promise<AutoIdentifyOutcome> {
   // Sanity early-outs before we touch the network. Anything that isn't a
   // deposit with at least one identifier can't be auto-identified by design
@@ -238,7 +286,11 @@ export async function autoIdentifyTransaction(
     if (cache) {
       await logStep(bankTransactionId, "cache_hit", true, { candidates: ident });
     } else {
-      cache = await callVerifyAccount(ident);
+      cache = await callVerifyAccount(ident, {
+        txId: bankTransactionId,
+        bankId: ctx?.bankId ?? null,
+        bankCode: ctx?.bankCode ?? null,
+      });
       await logStep(bankTransactionId, "verify_api", Boolean(cache), { candidates: ident });
     }
 
