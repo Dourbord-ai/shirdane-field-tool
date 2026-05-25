@@ -432,6 +432,7 @@ export function logExtractionResult(
 ): void {
   /* eslint-disable no-console */
   console.log(LOG_TAG, "source text", { txId, sourceTexts: result.sourceTexts });
+  console.log(LOG_TAG, "tokens", { txId, tokensByField: result.tokensByField });
   console.log(LOG_TAG, "candidates before filtering", {
     txId,
     totalAcceptedOrRejected: result.accepted.length + result.rejected.length,
