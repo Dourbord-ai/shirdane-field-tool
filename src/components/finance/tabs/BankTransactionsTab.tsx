@@ -113,6 +113,30 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
   const [loading, setLoading] = useState(true);
+  // Manual auto-processing state. `running` drives the dialog visibility and
+  // disables the trigger button so a second click can't double-fire the
+  // orchestrator while one is already in-flight.
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [autoProgress, setAutoProgress] = useState<AutoProcessProgress>(emptyProgress());
+
+  async function runAutoProcess() {
+    if (autoRunning) return;
+    setAutoRunning(true);
+    setAutoProgress(emptyProgress());
+    try {
+      // The orchestrator already swallows per-row crashes internally; this
+      // top-level catch only handles unexpected transport failures.
+      const final = await autoProcessUnassigned((p) => setAutoProgress(p));
+      toast.success(
+        `پردازش خودکار پایان یافت: ${final.processed} از ${final.total} — واریز شناسایی‌شده: ${final.beneficiary_identified} · کارمزد: ${final.bank_fees_classified} · انتقال بین‌بانکی: ${final.bank_transfers_matched} · سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
+      );
+      void load();
+    } catch (e) {
+      toastFinanceError(toast, e);
+    } finally {
+      setAutoRunning(false);
+    }
+  }
 
   useEffect(() => {
     supabase.from("finance_banks").select("id,title,bank_name").then(({ data }) => {
