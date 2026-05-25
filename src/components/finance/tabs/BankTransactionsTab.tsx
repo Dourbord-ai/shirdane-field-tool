@@ -391,6 +391,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <option value="">وضعیت تخصیص</option>
           <option value="unassigned">تخصیص نشده</option>
           <option value="assigning">در حال تخصیص</option>
+          {/* New status surfaced by the auto-processing pipeline. Bank-fee
+              candidates land here so the operator can filter them quickly
+              and complete the manual approve→post flow. */}
+          <option value="needs_review">نیازمند بازبینی (کارمزد و سایر)</option>
           <option value="assigned">تخصیص شده</option>
           <option value="rejected">رد شده</option>
           <option value="cancelled">لغو شده</option>
@@ -516,7 +520,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                             <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
                           </Button>
                         )}
-                        {t.assignment_status === "unassigned" && t.transaction_type === "withdraw" && (
+                        {/* Show "ثبت پرداخت" for unassigned withdraws AND for
+                            bank-fee candidates flagged as needs_review, so the
+                            operator can complete the manual payment-request
+                            flow from this row without leaving the screen. */}
+                        {((t.assignment_status === "unassigned" && t.transaction_type === "withdraw") ||
+                          (t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate")) && (
                           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های پرداخت")}>
                             <ArrowUpFromLine className="w-3 h-3 ml-1" /> ثبت پرداخت
                           </Button>
@@ -533,6 +542,18 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                         )}
                         {t.assignment_status === "assigned" && t.assigned_operation_type === "receive_identification" && (
                           <span className="text-[11px] text-emerald-700">شناسایی شده</span>
+                        )}
+                        {/* Bank-fee candidate badge — surfaced by the
+                            auto-processing pipeline. Operator clicks "ثبت پرداخت"
+                            (already wired for withdraws) to complete the
+                            manual approve→post flow. We intentionally do NOT
+                            render an auto-post button here yet — that path
+                            belongs in the dedicated bank-fee helper that
+                            mirrors PaymentRequestsTab. */}
+                        {t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate" && (
+                          <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
+                            <AlertTriangle className="w-3 h-3" /> کارمزد بانکی — بازبینی دستی
+                          </span>
                         )}
                         <Button size="icon" variant="ghost" title="جزئیات خام" onClick={() => setOpenRaw(t)}><FileText className="w-3.5 h-3.5" /></Button>
                         {t.assignment_status === "unassigned" && (
