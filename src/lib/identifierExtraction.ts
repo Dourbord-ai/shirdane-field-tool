@@ -72,6 +72,35 @@ const ACCOUNT_HINT_WORDS = [
 
 const RTL_CHARS = /[\u202D\u202C\u200E\u200F\u202A\u202B\u202E]/g;
 
+// Token separators: whitespace, newlines, tabs, commas (ASCII + Persian),
+// colon, semicolon, parentheses, brackets, pipes. We intentionally DO NOT
+// split on dash/slash/space-between-digit-groups because card numbers and
+// IBANs are commonly written with those separators inside a single token.
+// Instead we pre-glue digit groups joined by dash/slash/space before
+// tokenisation (see `glueDigitGroups`).
+const TOKEN_SEPARATORS = /[\s،,;:()\[\]|]+/u;
+
+/**
+ * Glue digit groups separated by dash/slash/space so that things like
+ *   "6037-7015-7710-9629"  -> "6037701577109629"
+ *   "IR82 0540 1026 8002 0817 9090 02" -> "IR82054010268002081790902"
+ * survive tokenisation as a SINGLE token. We only collapse separators that
+ * sit strictly between digit characters (or between IR + digits), so prose
+ * like "حساب - 12345" is left alone.
+ */
+function glueDigitGroups(s: string): string {
+  // Repeat to collapse chains like "1-2-3-4".
+  let prev = "";
+  let cur = s;
+  // Allow IR prefix to participate in the left side of a glue.
+  const re = /(\d|IR)([ \t\-\/]+)(\d)/gi;
+  while (cur !== prev) {
+    prev = cur;
+    cur = cur.replace(re, "$1$3");
+  }
+  return cur;
+}
+
 // ----- helpers --------------------------------------------------------------
 
 function cleanText(s: string | null | undefined): string {
