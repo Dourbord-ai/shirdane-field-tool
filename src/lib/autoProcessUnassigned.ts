@@ -17,6 +17,10 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { extractIdentifiers } from "@/lib/bankImport";
+import {
+  extractIdentifiersStrict,
+  logExtractionResult,
+} from "@/lib/identifierExtraction";
 import { autoIdentifyTransaction } from "@/lib/autoIdentify";
 import { autoMatchBankTransfer } from "@/lib/autoBankTransfer";
 import {
@@ -275,38 +279,50 @@ async function tryBeneficiaryDeposit(tx: UnassignedTx) {
       identifierTypes: idents.map((i) => i.type),
     });
   } else {
-    // Pull identifiers from description AND any other free-text columns we
-    // happen to have. The parser dedupes/normalizes internally.
-    const combined = [
-      tx.description ?? "",
-      tx.reference_number ?? "",
-      tx.tracking_number ?? "",
-      tx.document_number ?? "",
-    ]
-      .filter(Boolean)
-      .join(" \n ");
-    idents = extractIdentifiers(combined);
+    // ---- Strict identifier extraction ----
+    // We feed each free-text field separately so the scorer can attribute
+    // every candidate to its source. This is the gate that prevents short
+    // fragments like "600268" from "انتقال از حساب 600268" reaching
+    // verify-account. Anything below MIN_ACCOUNT_DIGITS (8) is rejected
+    // with reason "too_short_account_fragment" and never sent upstream.
+    const fields = {
+      description: tx.description ?? "",
+      reference_number: tx.reference_number ?? "",
+      tracking_number: tx.tracking_number ?? "",
+      document_number: tx.document_number ?? "",
+    };
+    const strict = extractIdentifiersStrict(fields);
+    logExtractionResult(tx.id, fields, strict);
+
+    // Map accepted strict candidates → legacy ExtractedIdentifier shape so
+    // the downstream autoIdentifyTransaction pipeline keeps working unchanged.
+    idents = strict.accepted
+      .filter((c) => c.matchType === 1 || c.matchType === 2 || c.matchType === 3)
+      .map((c) => ({
+        type: c.matchType as 1 | 2 | 3,
+        raw: c.raw,
+        normalized: c.normalized,
+      }));
 
     dlog("ident.extract", {
       txId: tx.id,
-      descriptionPreview: (tx.description ?? "").slice(0, 120),
-      refs: {
-        reference_number: tx.reference_number,
-        tracking_number: tx.tracking_number,
-        document_number: tx.document_number,
-      },
-      candidatesCount: idents.length,
-      candidates: idents.map((i) => ({
-        type: i.type,
-        raw: i.raw,
-        normalized: i.normalized,
-      })),
+      acceptedCount: strict.accepted.length,
+      rejectedCount: strict.rejected.length,
+      candidates: idents,
     });
 
     if (idents.length === 0) {
-      dlog("ident.skip", { txId: tx.id, reason: "no identifier in description" });
+      // Surface a single, unambiguous reason in the debug stream so the
+      // operator can grep for it. The detailed per-candidate rejection
+      // log already lives under the [IdentifierExtract] tag above.
+      dlog("ident.skip", {
+        txId: tx.id,
+        reason: "no reliable identifier found",
+        rejectedReasons: strict.rejected.map((r) => r.reason),
+      });
     }
   }
+
 
   // Resolve the bank's 3-digit code (e.g. "016" for Keshavarzi) so the
   // verify-account edge function can hit cardinfo's deposit_sheba endpoint
