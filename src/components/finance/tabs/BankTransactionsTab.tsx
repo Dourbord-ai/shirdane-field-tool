@@ -10,24 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
 import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
-// Phase 4 wiring: run the auto-identification pipeline right after each
-// imported row lands in the DB. The helper is intentionally side-effect
-// driven (writes audit log + identifier rows itself) so the import code
-// only needs to feed it the persisted bank_transaction_id.
-import {
-  autoIdentifyTransaction,
-  emptyAutoIdentifySummary,
-  bumpSummary,
-  type AutoIdentifySummary,
-} from "@/lib/autoIdentify";
-// Inter-bank transfer auto-matcher. Internally checks the
-// `auto_create_bank_transfers` feature flag, so importing this is cheap —
-// when the flag is OFF the helper returns "no_match" without side effects.
-import {
-  autoMatchBankTransfer,
-  emptyAutoBankTransferSummary,
-  bumpBankTransferSummary,
-} from "@/lib/autoBankTransfer";
+// Manual auto-processing orchestrator. Decoupled from the Excel upload flow:
+// upload only inserts rows; this helper is invoked by the toolbar button
+// "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده" and walks every still-unassigned
+// transaction through the 3 deterministic classifier paths (bank fee /
+// inter-bank transfer / known-beneficiary deposit).
+import { autoProcessUnassigned, emptyProgress, type AutoProcessProgress } from "@/lib/autoProcessUnassigned";
+// Auto-identify summary type is still consumed by the import-dialog UI for
+// historical compatibility (it now renders null after the upload-flow split).
+import { type AutoIdentifySummary } from "@/lib/autoIdentify";
 import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
@@ -122,6 +113,30 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
   const [loading, setLoading] = useState(true);
+  // Manual auto-processing state. `running` drives the dialog visibility and
+  // disables the trigger button so a second click can't double-fire the
+  // orchestrator while one is already in-flight.
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [autoProgress, setAutoProgress] = useState<AutoProcessProgress>(emptyProgress());
+
+  async function runAutoProcess() {
+    if (autoRunning) return;
+    setAutoRunning(true);
+    setAutoProgress(emptyProgress());
+    try {
+      // The orchestrator already swallows per-row crashes internally; this
+      // top-level catch only handles unexpected transport failures.
+      const final = await autoProcessUnassigned((p) => setAutoProgress(p));
+      toast.success(
+        `پردازش خودکار پایان یافت: ${final.processed} از ${final.total} — واریز شناسایی‌شده: ${final.beneficiary_identified} · کارمزد: ${final.bank_fees_classified} · انتقال بین‌بانکی: ${final.bank_transfers_matched} · سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
+      );
+      void load();
+    } catch (e) {
+      toastFinanceError(toast, e);
+    } finally {
+      setAutoRunning(false);
+    }
+  }
 
   useEffect(() => {
     supabase.from("finance_banks").select("id,title,bank_name").then(({ data }) => {
@@ -314,9 +329,55 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <Button variant="outline" onClick={() => toast.info("دریافت از API هنوز پیاده‌سازی نشده — placeholder")}>
             <Download className="w-4 h-4 ml-1" /> دریافت از API
           </Button>
+          {/* Manual trigger for the auto-processing pipeline. Disabled while a
+              run is in-flight to prevent double execution. */}
+          <Button variant="secondary" onClick={runAutoProcess} disabled={autoRunning}>
+            <Link2 className="w-4 h-4 ml-1" />
+            {autoRunning ? "در حال پردازش…" : "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده"}
+          </Button>
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
+
+      {/* Live progress panel for the manual auto-processing run. Shown while
+          a run is active AND for a moment after completion so the operator
+          can read the final counts. Hidden when no run has been started. */}
+      {(autoRunning || autoProgress.total > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">پیشرفت شناسایی خودکار</span>
+            <span className="text-muted-foreground">
+              {autoProgress.processed} از {autoProgress.total} (باقیمانده: {autoProgress.remaining})
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 px-2 py-0.5">
+              واریز شناسایی‌شده: {autoProgress.beneficiary_identified}
+            </span>
+            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
+              کارمزد بانکی: {autoProgress.bank_fees_classified}
+            </span>
+            <span className="rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-700 px-2 py-0.5">
+              انتقال بین‌بانکی: {autoProgress.bank_transfers_matched}
+            </span>
+            <span className="rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5">
+              ارسال به سپیدار: {autoProgress.sepidar_posted}
+            </span>
+            <span className="rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5">
+              ناموفق: {autoProgress.failed}
+            </span>
+            <span className="rounded-full border border-muted bg-muted/30 text-muted-foreground px-2 py-0.5">
+              کل تخصیص‌نشده: {autoProgress.total}
+            </span>
+          </div>
+          {autoProgress.lastMessage && (
+            <div className="text-[11px] text-muted-foreground truncate">
+              آخرین وضعیت: {autoProgress.lastMessage}
+            </div>
+          )}
+        </div>
+      )}
+
 
       {/* Filters — first row: bank / type / assignment / description search */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1095,9 +1156,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     // STEP 3). They count as "alreadyInDb", NOT "failed".
     let conflictSkipped = 0;
     const failed: { index: number; reason: string }[] = [];
-    const insertedPairs: { row: typeof newRowsToInsert[number]; id: string }[] = [];
-    const autoSum = emptyAutoIdentifySummary();
-    const bxSum = emptyAutoBankTransferSummary();
+    // No post-insert pipeline state — auto-processing is a separate, manual flow now.
 
     console.log("[bank-import] starting batched insert via RPC", {
       totalRows: parsed.length,
@@ -1169,7 +1228,6 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
             continue;
           }
           inserted++;
-          insertedPairs.push({ row: source, id });
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -1186,45 +1244,22 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     console.log("[bank-import] insert phase complete", {
       inserted,
       failed: failed.length,
-      pipelineCandidates: insertedPairs.length,
+      alreadyInDb,
     });
 
-    // STEP 4 — Run auto-identify + inter-bank transfer pipelines AFTER all
-    // DB inserts. Each call is independently try/catch'd so a single
-    // pipeline crash never aborts the import. Running pipelines outside
-    // the insert loop is what prevents the original 502: the insert phase
-    // now finishes quickly even when downstream edge functions are slow.
-    for (const { row: r, id } of insertedPairs) {
-      let receiveOutcome: { state: string } | undefined;
-      try {
-        const outcome = await autoIdentifyTransaction(id, r.transaction_type, r.identifiers);
-        bumpSummary(autoSum, outcome);
-        receiveOutcome = outcome as { state: string };
-      } catch {
-        bumpSummary(autoSum, { state: "needs_review", message: "pipeline crashed" });
-      }
-      const alreadyReceive =
-        receiveOutcome?.state === "auto_identified" ||
-        receiveOutcome?.state === "sepidar_posted" ||
-        receiveOutcome?.state === "sepidar_failed";
-      if (!alreadyReceive && r.transaction_type === "deposit") {
-        try {
-          const bxOutcome = await autoMatchBankTransfer({
-            id,
-            bank_id: bankId,
-            transaction_type: r.transaction_type,
-            deposit_amount: r.deposit,
-            transaction_datetime: r.transaction_datetime,
-          });
-          bumpBankTransferSummary(bxSum, bxOutcome);
-        } catch {
-          bumpBankTransferSummary(bxSum, {
-            state: "auto_bank_transfer_needs_review",
-            message: "pipeline crashed",
-          });
-        }
-      }
-    }
+    // ──────────────────────────────────────────────────────────────────
+    // ARCHITECTURE: Excel upload is now PURE — parse, dedupe, insert.
+    // Auto-identification, inter-bank matching, fee classification and
+    // Sepidar posting are explicitly NOT run here anymore. The operator
+    // triggers them via the "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده"
+    // button on the main bank-transactions screen.
+    //
+    // Rationale: Upload success must never depend on slow / failure-prone
+    // downstream pipelines (verify-account API, Sepidar SOAP). Separating
+    // the flows lets the operator re-run auto-processing as often as
+    // needed without re-importing the file.
+    // ──────────────────────────────────────────────────────────────────
+
     if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
     const total = parsed.length;
@@ -1232,24 +1267,12 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const dup = parsed.filter((r) => r.status === "duplicate").length;
     const inv = parsed.filter((r) => r.status === "invalid").length;
     setSummary({ total, valid, duplicate: dup, invalid: inv, inserted, alreadyInDb, failed });
-    setAutoSummary(autoSum);
-    // Refresh preview-table statuses so rows we just demoted to "duplicate"
-    // at upload time render with the amber styling and Persian reason.
+    setAutoSummary(null);
     setParsed([...parsed]);
-    // Richer toast that surfaces auto-identification + inter-bank
-    // auto-matching results at a glance. We only append the bank-transfer
-    // segment when the pipeline actually produced something, so users who
-    // haven't enabled the feature flag don't see noisy zeros.
-    const bxSegment =
-      bxSum.matched + bxSum.needs_review > 0
-        ? ` · انتقال بانکی خودکار: ${bxSum.matched}${
-            bxSum.needs_review ? ` (نیاز به بازبینی: ${bxSum.needs_review})` : ""
-          }${bxSum.failed ? ` (خطا: ${bxSum.failed})` : ""}`
-        : "";
     const skipSegment = alreadyInDb > 0 ? ` · موجود در پایگاه: ${alreadyInDb}` : "";
     const failSegment = failed.length > 0 ? ` · ناموفق: ${failed.length}` : "";
     toast.success(
-      `${inserted} ردیف جدید ثبت شد${skipSegment}${failSegment} · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}${bxSegment}`,
+      `${inserted} ردیف جدید ثبت شد${skipSegment}${failSegment} — برای شناسایی خودکار از دکمه «تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده» استفاده کنید.`,
     );
     onDone();
   }
