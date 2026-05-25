@@ -148,15 +148,108 @@ async function processOneFeeTx(
   failedStep?: string;
 }> {
   const absWithdraw = Math.abs(Number(tx.withdraw_amount) || Number(tx.amount) || 0);
+  const description = `کارمزد بانکی — تراکنش ${tx.id.slice(0, 8)}`;
 
-  // --- Step 1: mark as bank_fee_candidate on the tx row ------------------
-  // Per spec, allowed assignment_status values are ONLY:
-  //   unassigned, assigning, assigned, rejected, cancelled, partially_assigned
-  // (no "needs_review"). The row stays 'unassigned' with the
-  // 'bank_fee_candidate' marker while we work. It flips to
-  // 'assigned' + 'bank_fee' only after the full pipeline succeeds, and
-  // remains 'unassigned' + 'bank_fee_candidate' on any failure so the
-  // operator can safely retry.
+  // -----------------------------------------------------------------------
+  // Step 0: idempotency probe.
+  // Re-read the tx so we can see any prior partial run (assigned_operation_id
+  // already set from a previous failed attempt). This lets us reuse the
+  // existing PR/voucher instead of creating duplicates.
+  // -----------------------------------------------------------------------
+  const { data: existingTx } = await supabase
+    .from("finance_bank_transactions")
+    .select("id, assignment_status, assigned_operation_type, assigned_operation_id")
+    .eq("id", tx.id)
+    .maybeSingle();
+
+  let prId: string | null =
+    (existingTx?.assigned_operation_type === "bank_fee_candidate" ||
+      existingTx?.assigned_operation_type === "bank_fee")
+      ? ((existingTx?.assigned_operation_id as string | null) ?? null)
+      : null;
+
+  // If we found an existing PR id, fetch the voucher that points to it.
+  let voucherId: string | null = null;
+  let existingSepidarVoucherId: string | null = null;
+  if (prId) {
+    const { data: vRow } = await supabase
+      .from("finance_vouchers")
+      .select("id, sepidar_voucher_id")
+      .eq("source_operation_id", prId)
+      .eq("source_operation_type", "payment_request")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (vRow?.id) {
+      voucherId = vRow.id as string;
+      const sepRaw = vRow.sepidar_voucher_id as unknown;
+      existingSepidarVoucherId = sepRaw == null ? null : String(sepRaw);
+      // eslint-disable-next-line no-console
+      console.log(TAG, "sepidar.retry_existing", { txId: tx.id, prId, voucherId, existingSepidarVoucherId });
+      await audit(tx.id, "fee.idempotency.reuse", true, "reusing existing PR + voucher", { prId, voucherId });
+    }
+  }
+
+  // If sepidar voucher already posted, nothing left to do — finalize tx and return.
+  if (existingSepidarVoucherId) {
+    // eslint-disable-next-line no-console
+    console.log(TAG, "duplicate.prevented", { txId: tx.id, prId, voucherId, sepidarVoucherId: existingSepidarVoucherId });
+    await audit(tx.id, "fee.duplicate.prevented", true, "already fully posted — finalizing tx", { prId, voucherId });
+    await supabase
+      .from("finance_bank_transactions")
+      .update({
+        assignment_status: "assigned",
+        assigned_operation_type: "bank_fee",
+        assigned_operation_id: prId,
+      } as never)
+      .eq("id", tx.id);
+    return { ok: true, prId, voucherId, sepidarVoucherId: existingSepidarVoucherId, message: "قبلاً ثبت شده" };
+  }
+
+  // -----------------------------------------------------------------------
+  // Step 0b: load bank + party sepidar mappings — required for voucher_items.
+  // -----------------------------------------------------------------------
+  if (!tx.bank_id) {
+    const msg = "تراکنش بانکی فاقد bank_id است.";
+    await audit(tx.id, "fee.bank.missing", false, msg);
+    return { ok: false, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "bank_lookup" };
+  }
+  const { data: bankRow, error: bankErr } = await supabase
+    .from("finance_banks")
+    .select("id, sepidar_account_id, sepidar_dl_id")
+    .eq("id", tx.bank_id)
+    .maybeSingle();
+  if (bankErr || !bankRow) {
+    const msg = bankErr?.message || "مپینگ سپیدار برای بانک یافت نشد.";
+    await audit(tx.id, "fee.bank.lookup.failed", false, msg, { bankId: tx.bank_id });
+    return { ok: false, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "bank_lookup" };
+  }
+  const bankSepidarAccountId = (bankRow.sepidar_account_id as number | null) ?? null;
+  const bankSepidarDlId = (bankRow.sepidar_dl_id as number | null) ?? null;
+  if (!bankSepidarAccountId || !bankSepidarDlId) {
+    const msg = "حساب بانک فاقد sepidar_account_id یا sepidar_dl_id است.";
+    await audit(tx.id, "fee.bank.mapping.missing", false, msg, { bankId: tx.bank_id });
+    return { ok: false, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "bank_lookup" };
+  }
+
+  const { data: partyRow, error: partyErr } = await supabase
+    .from("finance_parties")
+    .select("id, sepidar_account_id, sepidar_dl_id, sepidar_party_id")
+    .eq("id", feePartyId)
+    .maybeSingle();
+  if (partyErr || !partyRow) {
+    const msg = partyErr?.message || "طرف‌حساب کارمزد یافت نشد.";
+    await audit(tx.id, "fee.party.lookup.failed", false, msg, { feePartyId });
+    return { ok: false, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "party_lookup" };
+  }
+  const partySepidarAccountId = (partyRow.sepidar_account_id as number | null) ?? 193;
+  const partySepidarDlId = (partyRow.sepidar_dl_id as number | null) ?? null;
+  const partySepidarPartyId = (partyRow.sepidar_party_id as number | null) ?? null;
+
+  // -----------------------------------------------------------------------
+  // Step 1: mark as bank_fee_candidate on the tx row (idempotent).
+  // Row stays 'unassigned' + 'bank_fee_candidate' until full success.
+  // -----------------------------------------------------------------------
   const markPayload = {
     assignment_status: "unassigned",
     assigned_operation_type: "bank_fee_candidate",
@@ -170,130 +263,184 @@ async function processOneFeeTx(
     .eq("assignment_status", "unassigned");
   if (markErr) {
     await audit(tx.id, "fee.mark.failed", false, markErr.message, { amount: absWithdraw });
-    return { ok: false, prId: null, voucherId: null, sepidarVoucherId: null, message: markErr.message, failedStep: "mark" };
+    return { ok: false, prId, voucherId, sepidarVoucherId: null, message: markErr.message, failedStep: "mark" };
   }
   await audit(tx.id, "fee.mark.candidate", true, "marked as bank_fee_candidate", { amount: absWithdraw });
 
-  // --- Step 2: create the payment request matching the existing legacy
-  // bank-fee pattern exactly (verified against successful historical rows):
-  //   finance_payment_requests: request_type='unknown', status='approved',
-  //     total_amount = confirmed_amount = fee amount.
-  //   finance_payment_request_items: party_id = default bank-fee party,
-  //     amount = confirmed_amount = fee amount, amount_type='creditor',
-  //     amount_type_code = 2, status='approved'.
-  // We insert directly (bypassing submit_payment_request RPC) because that
-  // RPC forces status='pending_approval' and a different request_type.
-  const requestPayload = {
-    title: `کارمزد بانکی ${new Date(tx.transaction_datetime ?? Date.now()).toLocaleDateString("fa-IR")}`,
-    description: tx.description?.slice(0, 200) ?? null,
-    request_type: "unknown",
-    status: "approved",
-    total_amount: absWithdraw,
-    confirmed_amount: absWithdraw,
-  };
-  // eslint-disable-next-line no-console
-  console.log(TAG, "pr.insert.header.payload", { txId: tx.id, requestPayload });
-
-  let prId: string | null = null;
-  try {
-    const { data, error } = await supabase
-      .from("finance_payment_requests")
-      .insert(requestPayload as never)
-      .select("id")
-      .single();
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.error(TAG, "pr.insert.header.failed", {
-        txId: tx.id,
-        code: (error as { code?: string }).code,
-        message: error.message,
-        details: (error as { details?: string }).details,
-        hint: (error as { hint?: string }).hint,
+  // -----------------------------------------------------------------------
+  // Step 2: payment request — create only if we don't already have one.
+  // -----------------------------------------------------------------------
+  if (!prId) {
+    const requestPayload = {
+      title: `کارمزد بانکی ${new Date(tx.transaction_datetime ?? Date.now()).toLocaleDateString("fa-IR")}`,
+      description: tx.description?.slice(0, 200) ?? null,
+      request_type: "unknown",
+      status: "approved",
+      total_amount: absWithdraw,
+      confirmed_amount: absWithdraw,
+    };
+    // eslint-disable-next-line no-console
+    console.log(TAG, "pr.insert.header.payload", { txId: tx.id, requestPayload });
+    try {
+      const { data, error } = await supabase
+        .from("finance_payment_requests")
+        .insert(requestPayload as never)
+        .select("id")
+        .single();
+      if (error) throw error;
+      prId = (data?.id as string | null) ?? null;
+      if (!prId) throw new Error("درج درخواست پرداخت بدون شناسه برگشت");
+    } catch (e) {
+      const err = e as { code?: string; message?: string; details?: string; hint?: string };
+      const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
+        || "خطا در ثبت درخواست پرداخت کارمزد";
+      await audit(tx.id, "fee.pr.create.failed", false, msg, {
+        code: err.code, details: err.details, hint: err.hint,
       });
-      throw error;
+      return { ok: false, prId: null, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_create" };
     }
-    prId = (data?.id as string | null) ?? null;
-    if (!prId) throw new Error("درج درخواست پرداخت بدون شناسه برگشت");
-  } catch (e) {
-    const err = e as { code?: string; message?: string; details?: string; hint?: string };
-    const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
-      || "خطا در ثبت درخواست پرداخت کارمزد";
-    await audit(tx.id, "fee.pr.create.failed", false, msg, {
-      code: err.code, details: err.details, hint: err.hint,
-    });
-    return { ok: false, prId: null, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_create" };
+
+    const itemPayload = {
+      payment_request_id: prId,
+      party_id: feePartyId,
+      amount: absWithdraw,
+      confirmed_amount: absWithdraw,
+      amount_type: "creditor",
+      amount_type_code: 2,
+      status: "approved",
+      description,
+    };
+    // eslint-disable-next-line no-console
+    console.log(TAG, "pr.insert.item.payload", { txId: tx.id, itemPayload });
+    try {
+      const { error: itemErr } = await supabase
+        .from("finance_payment_request_items")
+        .insert(itemPayload as never);
+      if (itemErr) throw itemErr;
+    } catch (e) {
+      const err = e as { code?: string; message?: string; details?: string; hint?: string };
+      const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
+        || "خطا در ثبت آیتم درخواست پرداخت کارمزد";
+      await audit(tx.id, "fee.pr.item.failed", false, msg, { prId, code: err.code });
+      return { ok: false, prId, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_create" };
+    }
+    await audit(tx.id, "fee.pr.create", true, "payment request + item created (approved)", { prId });
+
+    // Stamp prId on the tx now so a future retry can find it via idempotency probe.
+    await supabase
+      .from("finance_bank_transactions")
+      .update({ assigned_operation_id: prId } as never)
+      .eq("id", tx.id);
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(TAG, "pr.reuse", { txId: tx.id, prId });
   }
 
-  // Insert the item using the exact legacy bank-fee pattern.
-  const itemPayload = {
-    payment_request_id: prId,
-    party_id: feePartyId,
-    amount: absWithdraw,
-    confirmed_amount: absWithdraw,
-    amount_type: "creditor",
-    amount_type_code: 2,
-    status: "approved",
-    description: `کارمزد بانکی — تراکنش ${tx.id.slice(0, 8)}`,
-  };
+  // -----------------------------------------------------------------------
+  // Step 3: voucher header — create only if we don't already have one.
+  // -----------------------------------------------------------------------
+  if (!voucherId) {
+    try {
+      const { data: v, error: vErr } = await supabase
+        .from("finance_vouchers")
+        .insert({
+          voucher_type: "payment_request",
+          source_operation_type: "payment_request",
+          source_operation_id: prId,
+          voucher_date: tx.transaction_datetime ?? new Date().toISOString(),
+          title: `سند کارمزد بانکی — ${absWithdraw.toLocaleString("fa-IR")} ریال`,
+          description: tx.description?.slice(0, 200) ?? null,
+          status: "draft",
+          sepidar_sync_status: "pending",
+          total_debit: absWithdraw,
+          total_credit: absWithdraw,
+        } as never)
+        .select("id")
+        .single();
+      if (vErr) throw vErr;
+      voucherId = (v?.id as string | null) ?? null;
+      if (!voucherId) throw new Error("درج سند مالی بدون شناسه برگشت");
+      await audit(tx.id, "fee.voucher.create", true, "voucher row inserted", { prId, voucherId });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "خطای ناشناخته در ایجاد سند مالی";
+      await audit(tx.id, "fee.voucher.create.failed", false, msg, { prId });
+      return { ok: false, prId, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "voucher_create" };
+    }
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(TAG, "voucher.reuse", { txId: tx.id, voucherId });
+  }
+
+  // -----------------------------------------------------------------------
+  // Step 4: voucher items — create the debit (party/fee expense) and credit
+  // (bank) rows so Sepidar accepts the voucher. Idempotent via count check.
+  // -----------------------------------------------------------------------
+  const { count: existingItemsCount } = await supabase
+    .from("finance_voucher_items")
+    .select("id", { count: "exact", head: true })
+    .eq("voucher_id", voucherId);
   // eslint-disable-next-line no-console
-  console.log(TAG, "pr.insert.item.payload", { txId: tx.id, itemPayload });
-  try {
-    const { error: itemErr } = await supabase
-      .from("finance_payment_request_items")
-      .insert(itemPayload as never);
-    if (itemErr) {
+  console.log(TAG, "voucher_items.count", { txId: tx.id, voucherId, existingItemsCount });
+
+  if ((existingItemsCount ?? 0) === 0) {
+    const items = [
+      {
+        voucher_id: voucherId,
+        row_number: 1,
+        party_id: feePartyId,
+        account_type: "party",
+        debit: absWithdraw,
+        credit: 0,
+        sepidar_account_id: partySepidarAccountId,
+        sepidar_dl_id: partySepidarDlId,
+        sepidar_party_id: partySepidarPartyId ?? 532,
+        description,
+      },
+      {
+        voucher_id: voucherId,
+        row_number: 2,
+        bank_id: tx.bank_id,
+        account_type: "bank",
+        debit: 0,
+        credit: absWithdraw,
+        sepidar_account_id: bankSepidarAccountId,
+        sepidar_dl_id: bankSepidarDlId,
+        description,
+      },
+    ];
+    // eslint-disable-next-line no-console
+    console.log(TAG, "voucher_items.create", { txId: tx.id, voucherId, items });
+    try {
+      const { error: itemsErr } = await supabase
+        .from("finance_voucher_items")
+        .insert(items as never);
+      if (itemsErr) throw itemsErr;
+      await audit(tx.id, "fee.voucher.items.create", true, "voucher items inserted", { voucherId, count: items.length });
+    } catch (e) {
+      const err = e as { code?: string; message?: string; details?: string; hint?: string };
+      const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
+        || "خطا در ثبت ردیف‌های سند";
       // eslint-disable-next-line no-console
-      console.error(TAG, "pr.insert.item.failed", {
-        txId: tx.id, prId,
-        code: (itemErr as { code?: string }).code,
-        message: itemErr.message,
-        details: (itemErr as { details?: string }).details,
-        hint: (itemErr as { hint?: string }).hint,
-      });
-      throw itemErr;
+      console.error(TAG, "voucher_items.create.failed", { txId: tx.id, voucherId, err });
+      await audit(tx.id, "fee.voucher.items.failed", false, msg, { voucherId });
+      return { ok: false, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "voucher_items" };
     }
-  } catch (e) {
-    const err = e as { code?: string; message?: string; details?: string; hint?: string };
-    const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
-      || "خطا در ثبت آیتم درخواست پرداخت کارمزد";
-    await audit(tx.id, "fee.pr.item.failed", false, msg, {
-      prId, code: err.code, details: err.details, hint: err.hint,
-    });
-    return { ok: false, prId, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_create" };
-  }
-  await audit(tx.id, "fee.pr.create", true, "payment request + item created (approved)", { prId });
-
-  // --- Step 4: create a finance_voucher header pointing at the PR ---------
-  // sepidar-post-voucher resolves branch via voucher_type/source_operation_type.
-  // Setting both to 'payment_request' is the safest combo for the existing
-  // mapping in DEFAULT_SP.
-  let voucherId: string | null = null;
-  try {
-    const { data: v, error: vErr } = await supabase
-      .from("finance_vouchers")
-      .insert({
-        voucher_type: "payment_request",
-        source_operation_type: "payment_request",
-        source_operation_id: prId,
-        voucher_date: tx.transaction_datetime ?? new Date().toISOString(),
-        title: `سند کارمزد بانکی — ${absWithdraw.toLocaleString("fa-IR")} ریال`,
-        description: tx.description?.slice(0, 200) ?? null,
-        status: "draft",
-        sepidar_sync_status: "pending",
-      } as never)
-      .select("id")
-      .single();
-    if (vErr) throw vErr;
-    voucherId = (v?.id as string | null) ?? null;
-    if (!voucherId) throw new Error("درج سند مالی بدون شناسه برگشت");
-    await audit(tx.id, "fee.voucher.create", true, "voucher row inserted", { prId, voucherId });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "خطای ناشناخته در ایجاد سند مالی";
-    await audit(tx.id, "fee.voucher.create.failed", false, msg, { prId });
-    return { ok: false, prId, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "voucher_create" };
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(TAG, "voucher_items.reuse", { txId: tx.id, voucherId, existingItemsCount });
   }
 
-  // --- Step 5: post the voucher to Sepidar --------------------------------
+  // Ensure voucher totals reflect the items (idempotent update).
+  await supabase
+    .from("finance_vouchers")
+    .update({ total_debit: absWithdraw, total_credit: absWithdraw } as never)
+    .eq("id", voucherId);
+  // eslint-disable-next-line no-console
+  console.log(TAG, "voucher.balance.check", { txId: tx.id, voucherId, total_debit: absWithdraw, total_credit: absWithdraw });
+
+  // -----------------------------------------------------------------------
+  // Step 5: post the voucher to Sepidar.
+  // -----------------------------------------------------------------------
   let sepidarVoucherId: string | null = null;
   try {
     const { data, error } = await supabase.functions.invoke("sepidar-post-voucher", {
@@ -305,7 +452,6 @@ async function processOneFeeTx(
       const msg = (data as { message?: string } | null)?.message ?? "ثبت سند در سپیدار ناموفق بود.";
       throw new Error(msg);
     }
-    // Re-read the voucher row to pick up the Sepidar id stamped by the SP.
     const { data: vRow } = await supabase
       .from("finance_vouchers")
       .select("sepidar_voucher_id")
@@ -317,16 +463,12 @@ async function processOneFeeTx(
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطای ناشناخته در ارسال به سپیدار";
     await audit(tx.id, "fee.sepidar.post.failed", false, msg, { prId, voucherId });
-    // PR was still created — partial success. We return ok=true so the
-    // counter increments payment_requests_created, but record the failure
-    // step so the UI shows it under "ناموفق در سپیدار".
     return { ok: true, prId, voucherId, sepidarVoucherId: null, message: msg, failedStep: "sepidar_post" };
   }
 
-  // --- Step 6: finalize transaction → assigned + bank_fee ------------------
-  // Per spec, only NOW (after PR + approve + voucher + Sepidar all succeeded)
-  // do we promote the row to assignment_status='assigned' and flip the
-  // marker from 'bank_fee_candidate' to 'bank_fee'.
+  // -----------------------------------------------------------------------
+  // Step 6: finalize tx — only now flip to assigned + bank_fee.
+  // -----------------------------------------------------------------------
   try {
     await supabase
       .from("finance_bank_transactions")
@@ -338,18 +480,11 @@ async function processOneFeeTx(
       .eq("id", tx.id);
     await audit(tx.id, "fee.tx.finalize", true, "transaction assigned as bank_fee");
   } catch (e) {
-    // Non-fatal — the PR + voucher are already done in Sepidar.
     const msg = e instanceof Error ? e.message : String(e);
     await audit(tx.id, "fee.tx.finalize.failed", false, msg);
   }
 
-  return {
-    ok: true,
-    prId,
-    voucherId,
-    sepidarVoucherId,
-    message: "موفق",
-  };
+  return { ok: true, prId, voucherId, sepidarVoucherId, message: "موفق" };
 }
 
 // ---------------------------------------------------------------------------
