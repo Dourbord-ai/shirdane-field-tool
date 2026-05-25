@@ -163,53 +163,73 @@ interface RawHit {
   normalized: string;
   index: number;
   kind: IdentifierKind;
+  token: string;
 }
 
-function harvestField(text: string): RawHit[] {
+export interface TokenDebugInfo {
+  token: string;
+  index: number;
+  classifiedAs: IdentifierKind | "non-identifier";
+}
+
+/**
+ * Tokenise a field by splitting on common separators (whitespace, commas,
+ * Persian comma، colon, semicolon, parens, brackets, pipe). Card/IBAN
+ * groups joined by dash/slash/space are pre-glued so they survive as a
+ * single token. Each token is then classified independently — short
+ * fragments stay isolated and never merge with neighbouring digits.
+ */
+function tokenize(glued: string): Array<{ token: string; index: number }> {
+  const tokens: Array<{ token: string; index: number }> = [];
+  let i = 0;
+  while (i < glued.length) {
+    const rest = glued.slice(i);
+    // Skip leading separators.
+    const skip = rest.match(/^[\s،,;:()\[\]|]+/u);
+    if (skip) {
+      i += skip[0].length;
+      continue;
+    }
+    // Read until next separator.
+    const end = rest.search(TOKEN_SEPARATORS);
+    const tokenLen = end === -1 ? rest.length : end;
+    if (tokenLen > 0) tokens.push({ token: rest.slice(0, tokenLen), index: i });
+    i += tokenLen || 1;
+  }
+  return tokens;
+}
+
+/**
+ * Classify a single token in isolation. Returns null for tokens that are
+ * not identifier-shaped at all (prose words, 1-3 digit fragments, etc).
+ */
+function classifyToken(token: string): IdentifierKind | null {
+  if (/^IR\d{22}$/i.test(token)) return "sheba"; // IR + 22 digits = 24 total
+  if (/^\d{24}$/.test(token)) return "sheba";    // bare 24-digit IBAN body
+  if (/^\d{16}$/.test(token)) return "card";
+  if (/^\d{10}$/.test(token)) return "national_id";
+  if (/^\d{4,30}$/.test(token)) return "account";
+  return null;
+}
+
+function harvestField(
+  text: string,
+): { hits: RawHit[]; tokens: TokenDebugInfo[]; glued: string } {
+  const glued = glueDigitGroups(text);
+  const rawTokens = tokenize(glued);
+  const tokens: TokenDebugInfo[] = [];
   const hits: RawHit[] = [];
-  const claimed: Array<[number, number]> = [];
-  const claims = (s: number, e: number) =>
-    claimed.some(([a, b]) => s < b && e > a);
 
-  // --- IBAN (highest priority — most specific shape) ---
-  const ibanRe = /IR\s*\d{24}/gi;
-  let m: RegExpExecArray | null;
-  while ((m = ibanRe.exec(text))) {
-    const raw = m[0];
-    hits.push({
-      kind: "sheba",
-      raw,
-      normalized: raw.replace(/[^0-9]/g, ""),
-      index: m.index,
-    });
-    claimed.push([m.index, m.index + raw.length]);
+  for (const { token, index } of rawTokens) {
+    const kind = classifyToken(token);
+    tokens.push({ token, index, classifiedAs: kind ?? "non-identifier" });
+    if (!kind) continue;
+    // Normalised form for storage / verify-account = digits only (drops "IR").
+    const normalized = token.replace(/[^0-9]/g, "");
+    hits.push({ kind, raw: token, normalized, index, token });
   }
 
-  // --- Card (16 digits, optional 4-4-4-4 separators) ---
-  const cardRe = /\b(?:\d[ -]?){15}\d\b/g;
-  while ((m = cardRe.exec(text))) {
-    if (claims(m.index, m.index + m[0].length)) continue;
-    const norm = m[0].replace(/[^0-9]/g, "");
-    if (norm.length !== 16) continue;
-    hits.push({ kind: "card", raw: m[0], normalized: norm, index: m.index });
-    claimed.push([m.index, m.index + m[0].length]);
-  }
-
-  // --- Generic digit runs — every run of 4+ digits becomes a candidate,
-  // classification (account vs. fragment vs. national-id) happens in the
-  // scoring pass so we can emit a meaningful rejection reason.
-  const runRe = /\b\d{4,30}\b/g;
-  while ((m = runRe.exec(text))) {
-    if (claims(m.index, m.index + m[0].length)) continue;
-    const len = m[0].length;
-    const kind: IdentifierKind = len === 10 ? "national_id" : "account";
-    hits.push({ kind, raw: m[0], normalized: m[0], index: m.index });
-    // Don't mark claimed — we still want shorter overlapping rejections
-    // logged for visibility, but we won't re-extract the same span twice.
-    claimed.push([m.index, m.index + m[0].length]);
-  }
-
-  return hits;
+  return { hits, tokens, glued };
 }
 
 // ----- main entry -----------------------------------------------------------
