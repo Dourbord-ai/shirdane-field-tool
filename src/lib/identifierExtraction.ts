@@ -47,6 +47,9 @@ export interface ExtractionResult {
   accepted: AcceptedCandidate[];
   rejected: RejectedCandidate[];
   sourceTexts: Record<string, string>;
+  // Per-field token debug info — every token the tokenizer produced, with
+  // how it was classified. Surfaced via logExtractionResult for audit.
+  tokensByField: Record<string, TokenDebugInfo[]>;
 }
 
 // ----- tunables -------------------------------------------------------------
