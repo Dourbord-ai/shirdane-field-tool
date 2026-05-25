@@ -122,9 +122,10 @@ Deno.serve(async (req) => {
     const body = (await req.json()) as VerifyBody;
     const rawType = String(body.type ?? "");
     const rawNumber = String(body.number ?? "");
+    const bankCode = body.bankCode ? String(body.bankCode) : undefined;
     const debugMode = body.debug === true;
 
-    log("incoming:", { type: rawType, number: rawNumber, debugMode });
+    log("incoming:", { type: rawType, number: rawNumber, bankCode, debugMode });
 
     const type = rawType;
     const number = normalize(type, rawNumber);
