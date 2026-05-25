@@ -1174,8 +1174,25 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
                 <span className="text-emerald-700">معتبر: {parsed.filter((r) => r.status === "valid").length}</span>
                 <span className="text-amber-700">تکراری: {parsed.filter((r) => r.status === "duplicate").length}</span>
                 <span className="text-rose-700">خطادار: {parsed.filter((r) => r.status === "invalid").length}</span>
-                {summary && <span className="font-bold">ثبت‌شده: {summary.inserted}</span>}
+                {summary && <span className="font-bold">ثبت‌شده جدید: {summary.inserted}</span>}
+                {summary && summary.alreadyInDb > 0 && (
+                  <span className="text-amber-700">موجود در پایگاه: {summary.alreadyInDb}</span>
+                )}
+                {summary && summary.failed.length > 0 && (
+                  <span className="text-rose-700">ناموفق: {summary.failed.length}</span>
+                )}
               </div>
+              {/* Per-row failure breakdown — only shown when at least one
+                  insert actually failed at the DB layer so we don't add noise
+                  to clean imports. */}
+              {summary && summary.failed.length > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs space-y-1 max-h-32 overflow-auto">
+                  <div className="font-bold text-destructive">ردیف‌های ناموفق:</div>
+                  {summary.failed.map((f) => (
+                    <div key={f.index} className="font-mono">ردیف {f.index}: {f.reason}</div>
+                  ))}
+                </div>
+              )}
               {/* Phase 6 — auto-identification summary chips. Only rendered
                   after `importAll` finishes so the user sees them as part of
                   the post-import recap, alongside the legacy validity chips. */}
