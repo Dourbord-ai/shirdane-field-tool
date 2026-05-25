@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -864,14 +866,34 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         setParsed([]);
         return;
       }
-      // DB duplicate check — chunked at 50 timestamps per GET request so a
-      // 700+ row file never produces a URL long enough to trip Nginx (each
-      // ISO timestamp encodes to ~30 chars; 50 keeps us well under the ~8KB
-      // request-line limit). Larger chunks previously caused a 502 on the
-      // preview button. This is the DB-side check; the in-file duplicate
-      // check stays separate and lives in parseRowsWithTemplate.
+      // ──────────────────────────────────────────────────────────────────
+      // DB duplicate check — must mirror the partial unique index
+      // `uq_finance_bank_tx_dedupe` which keys on:
+      //   (bank_id, transaction_datetime,
+      //    COALESCE(amount,0),
+      //    COALESCE(reference_number,''),
+      //    COALESCE(tracking_number,''),
+      //    COALESCE(document_number,''))   WHERE is_deleted = false
+      //
+      // We chunk the `.in('transaction_datetime', …)` at 50 entries to stay
+      // under Nginx's ~8KB URL cap (each ISO timestamp encodes to ~30 chars),
+      // then compare locally using the FULL key — never just by datetime,
+      // otherwise legitimate same-second transactions get marked duplicate.
+      // ──────────────────────────────────────────────────────────────────
       const validList = list.filter((r) => r.status === "valid");
       if (validList.length > 0) {
+        // Canonical key builder used both for DB rows and for parsed rows.
+        // ParsedRow has no reference_number/tracking_number fields today so
+        // we pass empty strings — that still matches the DB COALESCE.
+        const keyOf = (k: {
+          transaction_datetime: string | null;
+          amount: number | null;
+          reference_number?: string | null;
+          tracking_number?: string | null;
+          document_number?: string | null;
+        }) =>
+          `${k.transaction_datetime}|${Number(k.amount ?? 0)}|${k.reference_number || ""}|${k.tracking_number || ""}|${k.document_number || ""}`;
+
         const datetimes = Array.from(
           new Set(validList.map((r) => r.transaction_datetime!).filter(Boolean)),
         );
@@ -891,19 +913,37 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           console.log("[previewDuplicateCheck chunk]", { chunkIndex, chunkSize: slice.length });
           const { data: existing, error: dupErr } = await supabase
             .from("finance_bank_transactions")
-            .select("transaction_datetime,amount,document_number,transaction_type")
+            .select("transaction_datetime,amount,reference_number,tracking_number,document_number")
+            // Match the index predicate — soft-deleted rows must NOT count
+            // as duplicates (otherwise resurrecting an import is impossible).
+            .eq("is_deleted", false)
             .eq("bank_id", bankId)
             .in("transaction_datetime", slice);
           if (dupErr) throw dupErr;
-          for (const e of (existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []) {
-            existingKeys.add(`${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`);
+          for (const e of (existing as Array<{
+            transaction_datetime: string | null;
+            amount: number | null;
+            reference_number: string | null;
+            tracking_number: string | null;
+            document_number: string | null;
+          }>) || []) {
+            existingKeys.add(keyOf(e));
           }
         }
         for (const r of validList) {
-          const key = `${r.transaction_datetime}|${r.amount}|${r.document_number || ""}|${r.transaction_type}`;
+          // ParsedRow has no ref/track numbers → pass empty strings so the
+          // key shape lines up with the DB-side COALESCE(...) above.
+          const key = keyOf({
+            transaction_datetime: r.transaction_datetime,
+            amount: r.amount,
+            reference_number: "",
+            tracking_number: "",
+            document_number: r.document_number,
+          });
           if (existingKeys.has(key)) { r.status = "duplicate"; r.status_reason = "تکراری"; }
         }
       }
+
       setParsed(list);
       toast.success(`${list.length} ردیف خوانده شد`);
     } catch (e) {
@@ -943,16 +983,30 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       return;
     }
 
-    // STEP 2 — Pre-filter against existing DB rows. The preview step already
-    // marks duplicates, but we re-check at upload time too so:
-    //   (a) we still get an accurate skipped-count even if the preview's
-    //       chunked query missed something, and
-    //   (b) we never try to bulk-insert 700+ rows where 95% would violate
-    //       the unique constraint and silently get dropped.
-    // Key shape must mirror the DB's unique index: (bank_id,
-    // transaction_datetime, amount, document_number, transaction_type).
-    const keyOf = (r: { transaction_datetime: string | null; amount: number; document_number: string; transaction_type: string | null }) =>
-      `${r.transaction_datetime}|${r.amount}|${r.document_number || ""}|${r.transaction_type}`;
+    // ──────────────────────────────────────────────────────────────────
+    // STEP 2 — Pre-filter against existing DB rows using the FULL dedupe
+    // key that mirrors the partial unique index `uq_finance_bank_tx_dedupe`:
+    //   (bank_id, transaction_datetime,
+    //    COALESCE(amount,0),
+    //    COALESCE(reference_number,''),
+    //    COALESCE(tracking_number,''),
+    //    COALESCE(document_number,''))   WHERE is_deleted = false
+    //
+    // We do this so:
+    //   (a) we get an honest skipped-count even if the preview missed rows,
+    //   (b) we don't waste a batch INSERT on rows we know will conflict.
+    // The RPC in STEP 3 is still the source of truth — this is just a
+    // best-effort pre-filter to keep counts and UX accurate.
+    // ──────────────────────────────────────────────────────────────────
+    const keyOf = (r: {
+      transaction_datetime: string | null;
+      amount: number | null;
+      reference_number?: string | null;
+      tracking_number?: string | null;
+      document_number?: string | null;
+    }) =>
+      `${r.transaction_datetime}|${Number(r.amount ?? 0)}|${r.reference_number || ""}|${r.tracking_number || ""}|${r.document_number || ""}`;
+
     const datetimes = Array.from(
       new Set(validRows.map((r) => r.transaction_datetime!).filter(Boolean)),
     );
@@ -961,16 +1015,32 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     // under Nginx's request-line limit so the import never 502s here.
     const CHUNK = 50;
     try {
+      const totalChunks = Math.ceil(datetimes.length / CHUNK);
+      console.log("[bank-import] dedupe pre-check", {
+        uniqueDatetimes: datetimes.length,
+        chunkCount: totalChunks,
+        chunkSize: CHUNK,
+      });
       for (let i = 0; i < datetimes.length; i += CHUNK) {
         const slice = datetimes.slice(i, i + CHUNK);
         const { data: existing, error: dupErr } = await supabase
           .from("finance_bank_transactions")
-          .select("transaction_datetime,amount,document_number,transaction_type")
+          .select("transaction_datetime,amount,reference_number,tracking_number,document_number")
+          // Must match the partial index predicate — soft-deleted rows are
+          // NOT part of the unique constraint, so we must ignore them here
+          // too, otherwise we'd over-report duplicates.
+          .eq("is_deleted", false)
           .eq("bank_id", bankId)
           .in("transaction_datetime", slice);
         if (dupErr) throw dupErr;
-        for (const e of (existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []) {
-          existingKeys.add(`${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`);
+        for (const e of (existing as Array<{
+          transaction_datetime: string | null;
+          amount: number | null;
+          reference_number: string | null;
+          tracking_number: string | null;
+          document_number: string | null;
+        }>) || []) {
+          existingKeys.add(keyOf(e));
         }
       }
     } catch (e) {
@@ -985,7 +1055,14 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const newRowsToInsert: typeof validRows = [];
     let alreadyInDb = 0;
     for (const r of validRows) {
-      if (existingKeys.has(keyOf(r))) {
+      const k = keyOf({
+        transaction_datetime: r.transaction_datetime,
+        amount: r.amount,
+        reference_number: "",
+        tracking_number: "",
+        document_number: r.document_number,
+      });
+      if (existingKeys.has(k)) {
         alreadyInDb++;
         r.status = "duplicate";
         r.status_reason = "موجود در پایگاه داده";
@@ -994,33 +1071,35 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       }
     }
 
-    // STEP 3 — Insert new rows in small BATCHES (not row-by-row). Row-by-row
-    // inserts caused 502 Bad Gateway on large files: hundreds of sequential
-    // PostgREST round-trips (plus a downstream edge-function call per row)
-    // kept the connection open long enough to hit Nginx/Cloudflare idle
-    // timeouts. Batching to ~100 rows keeps the number of HTTP calls small
-    // while still letting us:
-    //   - recover per-row inserted ids via `.insert(batch).select("id")`
-    //     (PostgREST returns rows in input order, so we can pair them back
-    //     up with the source ParsedRow for the auto-identify pipelines),
-    //   - isolate failures per batch via try/catch (a bad batch only loses
-    //     its own rows, not the entire import),
-    //   - report accurate inserted / failed counts.
+    // ──────────────────────────────────────────────────────────────────
+    // STEP 3 — Bulk insert via the `finance_bank_tx_bulk_insert` RPC.
+    //
+    // Why an RPC instead of a plain `.insert()`?
+    // The dedupe unique index is a PARTIAL EXPRESSION index
+    // (`WHERE is_deleted=false` + `COALESCE(...)` columns). PostgREST's
+    // upsert/onConflict can't target expression indexes reliably, and a
+    // plain `.insert()` would abort the entire batch on the first
+    // conflict. The RPC uses `INSERT ... ON CONFLICT (...) WHERE ... DO
+    // NOTHING RETURNING id`, mapping each returned id back to its input
+    // ordinal so the client can pair rows with new database ids. Rows
+    // omitted from the RETURNING set are conflict-skipped, NOT failed.
+    //
+    // Batch size stays at 100 so a single payload is small enough to keep
+    // Nginx/Cloudflare timeouts happy even on slow networks.
+    // ──────────────────────────────────────────────────────────────────
     const BATCH_SIZE = 100;
     const chunkCount = Math.ceil(newRowsToInsert.length / BATCH_SIZE);
     let inserted = 0;
+    // Rows the RPC accepted no id for — these are runtime conflicts the
+    // pre-check missed (e.g. another user inserted them between STEP 2 and
+    // STEP 3). They count as "alreadyInDb", NOT "failed".
+    let conflictSkipped = 0;
     const failed: { index: number; reason: string }[] = [];
-    // Pairs of (sourceRow, newDbId) collected during insertion. We run the
-    // auto-identify + inter-bank-transfer pipelines AFTER all inserts so
-    // the DB-mutating phase is short and predictable — edge-function calls
-    // never block the insert loop.
     const insertedPairs: { row: typeof newRowsToInsert[number]; id: string }[] = [];
     const autoSum = emptyAutoIdentifySummary();
     const bxSum = emptyAutoBankTransferSummary();
 
-    // Verbose diagnostic log per spec — any future 502 can be triaged from
-    // the browser console without needing to dig through edge logs.
-    console.log("[bank-import] starting batched insert", {
+    console.log("[bank-import] starting batched insert via RPC", {
       totalRows: parsed.length,
       validRows: validRows.length,
       existingInDb: alreadyInDb,
@@ -1041,6 +1120,11 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         amount: r.amount,
         description: r.description || description,
         document_number: r.document_number || null,
+        // reference_number / tracking_number aren't extracted from the
+        // spreadsheet today, but we send them as null so the dedupe key
+        // matches DB-side COALESCE('') exactly.
+        reference_number: null as string | null,
+        tracking_number: null as string | null,
         source_type: selectedTemplate?.file_type === "csv" ? "csv" : "excel",
         assignment_status: "unassigned",
         original_file_name: file.name,
@@ -1049,15 +1133,15 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         raw_data: r.raw as unknown as Record<string, unknown>,
       }));
       try {
-        const { data: insertedRows, error } = await supabase
-          .from("finance_bank_transactions")
-          .insert(payloads)
-          .select("id");
+        // RPC returns one row per input ordinal: { ord, id }. `id` is null
+        // when that input was conflict-skipped by ON CONFLICT DO NOTHING.
+        const { data, error } = await supabase.rpc("finance_bank_tx_bulk_insert", {
+          payloads: payloads as unknown as Json,
+        });
         if (error) {
-          // Whole batch failed — record every row as failed with the DB
-          // error message and continue with the next batch rather than
-          // aborting the whole import.
-          console.error("[bank-import] batch failed", {
+          // Whole batch failed at the RPC level — record every row as
+          // failed and continue with the next batch.
+          console.error("[bank-import] batch RPC failed", {
             batchIndex,
             batchStart: bi,
             batchSize: batch.length,
@@ -1066,33 +1150,38 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           for (const r of batch) failed.push({ index: r.index, reason: error.message });
           continue;
         }
-        const rows = (insertedRows || []) as { id: string }[];
-        if (rows.length !== batch.length) {
-          console.warn("[bank-import] insert returned mismatched length", {
-            batchIndex,
-            expected: batch.length,
-            got: rows.length,
-          });
-        }
-        // Pair returned ids back with source rows by position. Any missing
-        // id is treated as a per-row failure so the summary stays honest.
+        const rows = (data || []) as Array<{ ord: number; id: string | null }>;
+        // Build an ord→id map so we don't rely on Postgres returning rows
+        // in any particular order.
+        const byOrd = new Map<number, string | null>();
+        for (const row of rows) byOrd.set(row.ord, row.id);
         for (let k = 0; k < batch.length; k++) {
-          const row = batch[k];
-          const idRow = rows[k];
-          if (!idRow) {
-            failed.push({ index: row.index, reason: "درج ناموفق" });
+          const source = batch[k];
+          // ord is 1-based (Postgres WITH ORDINALITY).
+          const id = byOrd.get(k + 1) ?? null;
+          if (!id) {
+            // Conflict-skipped — NOT a failure. Mark the parsed row so the
+            // preview table shows it as duplicate and the summary counter
+            // increments correctly.
+            conflictSkipped++;
+            source.status = "duplicate";
+            source.status_reason = "موجود در پایگاه داده";
             continue;
           }
           inserted++;
-          insertedPairs.push({ row, id: idRow.id });
+          insertedPairs.push({ row: source, id });
         }
       } catch (e) {
-        // Network-level / thrown error — same recovery policy as a DB error.
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[bank-import] batch threw", { batchIndex, error: msg });
         for (const r of batch) failed.push({ index: r.index, reason: msg });
       }
     }
+
+    // Roll RPC-side conflict skips into the same bucket as the pre-check
+    // skips so the summary/toast reflect the true "already in DB" count.
+    alreadyInDb += conflictSkipped;
+
 
     console.log("[bank-import] insert phase complete", {
       inserted,

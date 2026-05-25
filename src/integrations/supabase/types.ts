@@ -5217,6 +5217,13 @@ export type Database = {
           hr_user_id: number
         }[]
       }
+      finance_bank_tx_bulk_insert: {
+        Args: { payloads: Json }
+        Returns: {
+          id: string
+          ord: number
+        }[]
+      }
       fn_finance_recalc_payment_request: {
         Args: { p_request_id: string }
         Returns: undefined
