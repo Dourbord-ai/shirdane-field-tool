@@ -391,6 +391,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <option value="">وضعیت تخصیص</option>
           <option value="unassigned">تخصیص نشده</option>
           <option value="assigning">در حال تخصیص</option>
+          {/* New status surfaced by the auto-processing pipeline. Bank-fee
+              candidates land here so the operator can filter them quickly
+              and complete the manual approve→post flow. */}
+          <option value="needs_review">نیازمند بازبینی (کارمزد و سایر)</option>
           <option value="assigned">تخصیص شده</option>
           <option value="rejected">رد شده</option>
           <option value="cancelled">لغو شده</option>
