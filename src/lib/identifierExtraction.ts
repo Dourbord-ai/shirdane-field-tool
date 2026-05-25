@@ -254,6 +254,7 @@ export function extractIdentifiersStrict(
   const accepted: AcceptedCandidate[] = [];
   const rejected: RejectedCandidate[] = [];
   const sourceTexts: Record<string, string> = {};
+  const tokensByField: Record<string, TokenDebugInfo[]> = {};
   // De-duplicate across fields by (kind, normalized) so we don't verify the
   // same card / IBAN / account twice when it appears in description AND
   // reference_number.
@@ -262,9 +263,18 @@ export function extractIdentifiersStrict(
   for (const [fieldName, rawValue] of Object.entries(fields)) {
     const text = cleanText(rawValue);
     sourceTexts[fieldName] = text;
-    if (!text) continue;
+    if (!text) {
+      tokensByField[fieldName] = [];
+      continue;
+    }
 
-    const hits = harvestField(text);
+    // Tokenise first, then classify each token independently. This is the
+    // key safeguard against pulling a short fragment like "600268" out of
+    // "انتقال از حساب 600268 نام واریز کننده ...": the digit run is its own
+    // token, gets classified as a sub-threshold account candidate, and is
+    // rejected without ever reaching verify-account.
+    const { hits, tokens, glued } = harvestField(text);
+    tokensByField[fieldName] = tokens;
 
     for (const hit of hits) {
       const dedupKey = `${hit.kind}:${hit.normalized}`;
