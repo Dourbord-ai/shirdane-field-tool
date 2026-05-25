@@ -363,9 +363,70 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <Link2 className="w-4 h-4 ml-1" />
             {autoRunning ? "در حال پردازش…" : "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده"}
           </Button>
+          {/* Dedicated "شناسایی کارمزد" trigger — coloured with the primary
+              token so it stands out from the neutral toolbar buttons. */}
+          <Button
+            onClick={runFeeIdentification}
+            disabled={feesRunning}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <ArrowUpFromLine className="w-4 h-4 ml-1" />
+            {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
+          </Button>
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
+
+      {/* Dedicated summary panel for the bank-fee sweep — shows the five
+          headline counters requested by the spec. */}
+      {(feesRunning || feesProgress.total > 0 || feesProgress.failures.length > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">گزارش شناسایی کارمزد</span>
+            <span className="text-muted-foreground">
+              {feesProgress.checked} از {feesProgress.total} (باقیمانده: {feesProgress.remaining})
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <div className="text-[10px] text-muted-foreground">کل بررسی‌شده</div>
+              <div className="text-base font-bold">{feesProgress.checked}<span className="text-muted-foreground text-xs"> / {feesProgress.total}</span></div>
+            </div>
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+              <div className="text-[10px] text-amber-700">کاندیدهای کارمزد</div>
+              <div className="text-base font-bold text-amber-700">{feesProgress.fee_candidates}</div>
+            </div>
+            <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2">
+              <div className="text-[10px] text-blue-700">درخواست‌های پرداخت ایجادشده</div>
+              <div className="text-base font-bold text-blue-700">{feesProgress.payment_requests_created}</div>
+            </div>
+            <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
+              <div className="text-[10px] text-primary">ارسال به سپیدار</div>
+              <div className="text-base font-bold text-primary">{feesProgress.sepidar_posted}</div>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2">
+              <div className="text-[10px] text-destructive">ناموفق</div>
+              <div className="text-base font-bold text-destructive">{feesProgress.failed}</div>
+            </div>
+          </div>
+          {feesProgress.lastMessage && (
+            <div className="text-[11px] text-muted-foreground truncate">{feesProgress.lastMessage}</div>
+          )}
+          {feesProgress.failures.length > 0 && (
+            <details className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+              <summary className="cursor-pointer text-[11px] font-bold text-destructive">
+                خطاها ({feesProgress.failures.length})
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-[11px]">
+                {feesProgress.failures.slice(-30).map((f, idx) => (
+                  <li key={idx} className="truncate"><code>{f.txId.slice(0, 8)}</code> — {f.step}: {f.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
 
       {/* Live progress panel for the manual auto-processing run. Shown while
           a run is active AND for a moment after completion so the operator
