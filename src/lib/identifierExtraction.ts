@@ -356,7 +356,7 @@ export function extractIdentifiersStrict(
       // ---- Account / deposit number ----
       const len = hit.normalized.length;
       if (len < minAccountDigits) {
-        const nearAccountWord = hasAccountHintNearby(text, hit.index);
+        const nearAccountWord = hasAccountHintNearby(glued, hit.index);
         rejected.push({
           accepted: false,
           kind: "account",
