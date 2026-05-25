@@ -66,6 +66,11 @@ export interface AutoProcessProgress {
   beneficiary_identified: number;
   bank_fees_classified: number;
   bank_transfers_matched: number;
+  // Number of finance payment-requests created during this run (currently
+  // 0 — the orchestrator does not create payment-requests, but the field
+  // is reserved for the upcoming auto-PR creation step so the summary UI
+  // can already render the label.)
+  payment_requests_created: number;
   sepidar_posted: number;
   failed: number;
   skipped: number;
@@ -88,6 +93,7 @@ export function emptyProgress(): AutoProcessProgress {
     beneficiary_identified: 0,
     bank_fees_classified: 0,
     bank_transfers_matched: 0,
+    payment_requests_created: 0,
     sepidar_posted: 0,
     failed: 0,
     skipped: 0,
