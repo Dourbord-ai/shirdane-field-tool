@@ -864,19 +864,31 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         setParsed([]);
         return;
       }
-      // duplicate check against db — chunked to avoid blowing past Supabase's
-      // URL length limit when the IN(...) clause carries hundreds of values
-      // (a 777-row file used to silently return zero hits because the request
-      // was rejected, which is exactly what masked the bug in the upload step).
+      // DB duplicate check — chunked at 50 timestamps per GET request so a
+      // 700+ row file never produces a URL long enough to trip Nginx (each
+      // ISO timestamp encodes to ~30 chars; 50 keeps us well under the ~8KB
+      // request-line limit). Larger chunks previously caused a 502 on the
+      // preview button. This is the DB-side check; the in-file duplicate
+      // check stays separate and lives in parseRowsWithTemplate.
       const validList = list.filter((r) => r.status === "valid");
       if (validList.length > 0) {
         const datetimes = Array.from(
           new Set(validList.map((r) => r.transaction_datetime!).filter(Boolean)),
         );
         const existingKeys = new Set<string>();
-        const CHUNK = 200;
+        const CHUNK = 50;
+        const chunkCount = Math.ceil(datetimes.length / CHUNK);
+        console.log("[previewDuplicateCheck]", {
+          operationName: "previewDuplicateCheck",
+          totalRows: list.length,
+          uniqueTransactionDatetimes: datetimes.length,
+          chunkCount,
+          chunkSize: CHUNK,
+        });
         for (let i = 0; i < datetimes.length; i += CHUNK) {
           const slice = datetimes.slice(i, i + CHUNK);
+          const chunkIndex = Math.floor(i / CHUNK);
+          console.log("[previewDuplicateCheck chunk]", { chunkIndex, chunkSize: slice.length });
           const { data: existing, error: dupErr } = await supabase
             .from("finance_bank_transactions")
             .select("transaction_datetime,amount,document_number,transaction_type")
@@ -945,7 +957,9 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       new Set(validRows.map((r) => r.transaction_datetime!).filter(Boolean)),
     );
     const existingKeys = new Set<string>();
-    const CHUNK = 200;
+    // Same 50-timestamp cap as the preview check — keeps the GET URL well
+    // under Nginx's request-line limit so the import never 502s here.
+    const CHUNK = 50;
     try {
       for (let i = 0; i < datetimes.length; i += CHUNK) {
         const slice = datetimes.slice(i, i + CHUNK);
