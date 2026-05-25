@@ -343,8 +343,13 @@ async function tryBeneficiaryDeposit(tx: UnassignedTx) {
   const result = await autoIdentifyTransaction(tx.id, tx.transaction_type, idents, {
     bankId: tx.bank_id,
     bankCode: resolvedBankCode,
+    // CRITICAL: when we reuse previously persisted identifiers, the inner
+    // pipeline must NOT try to re-insert them — the unique constraint on
+    // (bank_transaction_id, match_type, normalized_value) would throw and
+    // abort verification. Skip persist, continue with verify + match.
+    skipPersistIdentifiers: reused,
   });
-  dlog("ident.result", { txId: tx.id, ...result });
+  dlog("ident.result", { txId: tx.id, reusedIdentifiers: reused, ...result });
   return result;
 }
 
