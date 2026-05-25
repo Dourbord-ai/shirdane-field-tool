@@ -1198,8 +1198,6 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     // the flows lets the operator re-run auto-processing as often as
     // needed without re-importing the file.
     // ──────────────────────────────────────────────────────────────────
-    void insertedPairs; // intentionally unused now — kept to avoid touching outer scope
-    void autoSum; void bxSum;
 
     if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
