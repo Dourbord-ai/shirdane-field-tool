@@ -76,15 +76,17 @@ function validate(type: string, n: string): string | null {
   return null;
 }
 
-function buildUrl(type: string, n: string): string {
+function buildUrl(type: string, n: string, bankCode?: string): string {
   const base = "https://cardinfo.ir/inquiry/apiv1";
   if (type === "1") return `${base}?api=card_info&card=${n}`;
   if (type === "2") {
     const sheba = n.startsWith("IR") ? n : `IR${n}`;
     return `${base}?api=sheba_info&sheba=${sheba}`;
   }
-  // type === "3" - hardcoded bank=016 (Keshavarzi)
-  return `${base}?api=deposit_sheba&deposit=${n}&bank=016`;
+  // type === "3": use provided bankCode, fall back to "016" (Keshavarzi)
+  // for backwards-compatibility with legacy callers.
+  const bank = (bankCode || "016").padStart(3, "0");
+  return `${base}?api=deposit_sheba&deposit=${n}&bank=${bank}`;
 }
 
 // extractName() tries multiple known response shapes; we track which
