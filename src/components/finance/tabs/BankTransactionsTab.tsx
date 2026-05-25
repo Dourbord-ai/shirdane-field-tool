@@ -894,18 +894,69 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       return;
     }
 
-    // STEP 2 — Insert parsed rows, each carrying the archived path.
-    // We also use `.select("id")` so we can hand the persisted UUID to the
-    // auto-identification pipeline in STEP 3 below. Doing them in the same
-    // loop keeps the dialog progress feedback simple (one toast at the end).
+    // STEP 2 — Pre-filter against existing DB rows. The preview step already
+    // marks duplicates, but we re-check at upload time too so:
+    //   (a) we still get an accurate skipped-count even if the preview's
+    //       chunked query missed something, and
+    //   (b) we never try to bulk-insert 700+ rows where 95% would violate
+    //       the unique constraint and silently get dropped.
+    // Key shape must mirror the DB's unique index: (bank_id,
+    // transaction_datetime, amount, document_number, transaction_type).
+    const keyOf = (r: { transaction_datetime: string | null; amount: number; document_number: string; transaction_type: string | null }) =>
+      `${r.transaction_datetime}|${r.amount}|${r.document_number || ""}|${r.transaction_type}`;
+    const datetimes = Array.from(
+      new Set(validRows.map((r) => r.transaction_datetime!).filter(Boolean)),
+    );
+    const existingKeys = new Set<string>();
+    const CHUNK = 200;
+    try {
+      for (let i = 0; i < datetimes.length; i += CHUNK) {
+        const slice = datetimes.slice(i, i + CHUNK);
+        const { data: existing, error: dupErr } = await supabase
+          .from("finance_bank_transactions")
+          .select("transaction_datetime,amount,document_number,transaction_type")
+          .eq("bank_id", bankId)
+          .in("transaction_datetime", slice);
+        if (dupErr) throw dupErr;
+        for (const e of (existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []) {
+          existingKeys.add(`${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`);
+        }
+      }
+    } catch (e) {
+      setSaving(false);
+      toastFinanceError(toast, e);
+      return;
+    }
+
+    // Split valid rows into two buckets. We keep the original ParsedRow
+    // reference so the auto-identify pipeline can read `identifiers` later
+    // without re-parsing the spreadsheet.
+    const newRowsToInsert: typeof validRows = [];
+    let alreadyInDb = 0;
+    for (const r of validRows) {
+      if (existingKeys.has(keyOf(r))) {
+        alreadyInDb++;
+        r.status = "duplicate";
+        r.status_reason = "موجود در پایگاه داده";
+      } else {
+        newRowsToInsert.push(r);
+      }
+    }
+
+    // STEP 3 — Insert only the new rows. We insert one-by-one (not a single
+    // bulk insert) because:
+    //   - we need per-row `inserted_row.id` for the auto-identify pipeline,
+    //   - a single failure must NOT roll back the whole batch,
+    //   - we want to report accurate per-row failure reasons.
     let inserted = 0;
+    const failed: { index: number; reason: string }[] = [];
     // Accumulator for the auto-identify summary chips. We seed it with
     // zeros and bump per row — this avoids reflowing the list later.
     const autoSum = emptyAutoIdentifySummary();
     // Separate accumulator for inter-bank transfer auto-matching so the two
     // pipelines stay reportable independently in the summary toast.
     const bxSum = emptyAutoBankTransferSummary();
-    for (const r of validRows) {
+    for (const r of newRowsToInsert) {
       const payload = {
         bank_id: bankId,
         transaction_datetime: r.transaction_datetime,
@@ -928,7 +979,12 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         .insert([payload])
         .select("id")
         .maybeSingle();
-      if (error || !insertedRow) continue;
+      if (error || !insertedRow) {
+        // Capture the failure (Persian-friendly fallback) so the recap can
+        // show the user which spreadsheet rows didn't make it and why.
+        failed.push({ index: r.index, reason: error?.message || "درج ناموفق" });
+        continue;
+      }
       inserted++;
 
       // STEP 3a — Receive auto-identification (customer deposits).
@@ -980,8 +1036,11 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const valid = parsed.filter((r) => r.status === "valid").length;
     const dup = parsed.filter((r) => r.status === "duplicate").length;
     const inv = parsed.filter((r) => r.status === "invalid").length;
-    setSummary({ total, valid, duplicate: dup, invalid: inv, inserted });
+    setSummary({ total, valid, duplicate: dup, invalid: inv, inserted, alreadyInDb, failed });
     setAutoSummary(autoSum);
+    // Refresh preview-table statuses so rows we just demoted to "duplicate"
+    // at upload time render with the amber styling and Persian reason.
+    setParsed([...parsed]);
     // Richer toast that surfaces auto-identification + inter-bank
     // auto-matching results at a glance. We only append the bank-transfer
     // segment when the pipeline actually produced something, so users who
@@ -992,11 +1051,14 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
             bxSum.needs_review ? ` (نیاز به بازبینی: ${bxSum.needs_review})` : ""
           }${bxSum.failed ? ` (خطا: ${bxSum.failed})` : ""}`
         : "";
+    const skipSegment = alreadyInDb > 0 ? ` · موجود در پایگاه: ${alreadyInDb}` : "";
+    const failSegment = failed.length > 0 ? ` · ناموفق: ${failed.length}` : "";
     toast.success(
-      `${inserted} ردیف ثبت شد · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}${bxSegment}`,
+      `${inserted} ردیف جدید ثبت شد${skipSegment}${failSegment} · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}${bxSegment}`,
     );
     onDone();
   }
+
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
