@@ -957,7 +957,9 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       new Set(validRows.map((r) => r.transaction_datetime!).filter(Boolean)),
     );
     const existingKeys = new Set<string>();
-    const CHUNK = 200;
+    // Same 50-timestamp cap as the preview check — keeps the GET URL well
+    // under Nginx's request-line limit so the import never 502s here.
+    const CHUNK = 50;
     try {
       for (let i = 0; i < datetimes.length; i += CHUNK) {
         const slice = datetimes.slice(i, i + CHUNK);
