@@ -1,0 +1,1 @@
+INSERT INTO public.finance_sepidar_settings (default_bank_fee_party_id) VALUES ('47cc0dfe-3170-492c-abfc-65c336f16618');
