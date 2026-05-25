@@ -1167,7 +1167,6 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
             continue;
           }
           inserted++;
-          insertedPairs.push({ row: source, id });
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
