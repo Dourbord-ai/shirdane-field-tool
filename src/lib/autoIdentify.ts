@@ -286,7 +286,11 @@ export async function autoIdentifyTransaction(
     if (cache) {
       await logStep(bankTransactionId, "cache_hit", true, { candidates: ident });
     } else {
-      cache = await callVerifyAccount(ident);
+      cache = await callVerifyAccount(ident, {
+        txId: bankTransactionId,
+        bankId: ctx?.bankId ?? null,
+        bankCode: ctx?.bankCode ?? null,
+      });
       await logStep(bankTransactionId, "verify_api", Boolean(cache), { candidates: ident });
     }
 
