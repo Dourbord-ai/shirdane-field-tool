@@ -128,7 +128,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       // top-level catch only handles unexpected transport failures.
       const final = await autoProcessUnassigned((p) => setAutoProgress(p));
       toast.success(
-        `پردازش خودکار پایان یافت: ${final.processed} از ${final.total} — واریز شناسایی‌شده: ${final.beneficiary_identified} · کارمزد: ${final.bank_fees_classified} · انتقال بین‌بانکی: ${final.bank_transfers_matched} · سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
+        `پردازش پایان یافت — بررسی‌شده: ${final.processed}/${final.total} · کاندید کارمزد: ${final.bank_fees_classified} · درخواست پرداخت ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
       );
       void load();
     } catch (e) {
