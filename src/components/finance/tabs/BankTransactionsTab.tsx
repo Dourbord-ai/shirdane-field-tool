@@ -225,7 +225,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setIdentByTx(im);
       const rm: Record<string, ReceiveMeta> = {};
       const partyIds = new Set<string>();
-      for (const r of (receivesRes.data || []) as Array<ReceiveMeta & { bank_transaction_id: string }>) {
+      for (const r of receivesData as Array<ReceiveMeta & { bank_transaction_id: string }>) {
         // A tx should only have ONE active receive identification (DB guard
         // enforces this), but if duplicates ever slip through we keep the
         // first — order doesn't matter for badge rendering.
