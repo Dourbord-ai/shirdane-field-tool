@@ -538,6 +538,18 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                         {t.assignment_status === "assigned" && t.assigned_operation_type === "receive_identification" && (
                           <span className="text-[11px] text-emerald-700">شناسایی شده</span>
                         )}
+                        {/* Bank-fee candidate badge — surfaced by the
+                            auto-processing pipeline. Operator clicks "ثبت پرداخت"
+                            (already wired for withdraws) to complete the
+                            manual approve→post flow. We intentionally do NOT
+                            render an auto-post button here yet — that path
+                            belongs in the dedicated bank-fee helper that
+                            mirrors PaymentRequestsTab. */}
+                        {t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate" && (
+                          <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
+                            <AlertTriangle className="w-3 h-3" /> کارمزد بانکی — بازبینی دستی
+                          </span>
+                        )}
                         <Button size="icon" variant="ghost" title="جزئیات خام" onClick={() => setOpenRaw(t)}><FileText className="w-3.5 h-3.5" /></Button>
                         {t.assignment_status === "unassigned" && (
                           <Button size="icon" variant="ghost" title="حذف نرم" onClick={() => softDelete(t)}><Trash2 className="w-3.5 h-3.5" /></Button>
