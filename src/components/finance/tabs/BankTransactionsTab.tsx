@@ -16,6 +16,9 @@ import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
 // transaction through the 3 deterministic classifier paths (bank fee /
 // inter-bank transfer / known-beneficiary deposit).
 import { autoProcessUnassigned, emptyProgress, type AutoProcessProgress } from "@/lib/autoProcessUnassigned";
+// Dedicated "شناسایی کارمزد" pipeline — withdraws under FEE_THRESHOLD_IRR
+// get a payment-request + auto-approval + Sepidar voucher in one click.
+import { processBankFees, emptyFeesProgress, type BankFeesProgress } from "@/lib/processBankFees";
 // Auto-identify summary type is still consumed by the import-dialog UI for
 // historical compatibility (it now renders null after the upload-flow split).
 import { type AutoIdentifySummary } from "@/lib/autoIdentify";
