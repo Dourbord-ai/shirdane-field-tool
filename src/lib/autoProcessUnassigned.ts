@@ -287,7 +287,42 @@ async function tryBeneficiaryDeposit(tx: UnassignedTx) {
     dlog("ident.skip", { txId: tx.id, reason: "no identifier in description" });
   }
 
-  const result = await autoIdentifyTransaction(tx.id, tx.transaction_type, idents);
+  // Resolve the bank's 3-digit code (e.g. "016" for Keshavarzi) so the
+  // verify-account edge function can hit cardinfo's deposit_sheba endpoint
+  // with the correct bank parameter. Without this it falls back to "016"
+  // which 400s for any non-Keshavarzi deposit.
+  let resolvedBankCode: string | null = null;
+  if (tx.bank_id) {
+    const { data: bankRow, error: bankErr } = await debugSupabaseCall(
+      "bank.code.lookup",
+      { table: "finance_banks", payload: { bank_id: tx.bank_id } },
+      () =>
+        supabase
+          .from("finance_banks")
+          .select("legacy_bank_name_code")
+          .eq("id", tx.bank_id!)
+          .maybeSingle(),
+    );
+    if (bankErr) {
+      derror("bank.code.lookup.error", { txId: tx.id, bank_id: tx.bank_id, error: bankErr });
+    }
+    const code = bankRow?.legacy_bank_name_code;
+    if (code != null) {
+      // legacy_bank_name_code is numeric; pad to 3 digits for cardinfo.
+      resolvedBankCode = String(code).padStart(3, "0");
+    }
+    dlog("bank.code.resolved", {
+      txId: tx.id,
+      bank_id: tx.bank_id,
+      legacy_bank_name_code: code ?? null,
+      resolvedBankCode,
+    });
+  }
+
+  const result = await autoIdentifyTransaction(tx.id, tx.transaction_type, idents, {
+    bankId: tx.bank_id,
+    bankCode: resolvedBankCode,
+  });
   dlog("ident.result", { txId: tx.id, ...result });
   return result;
 }
