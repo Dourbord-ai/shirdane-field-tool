@@ -256,7 +256,7 @@ export async function autoIdentifyTransaction(
   // Optional context plumbed from the caller so verify-account can use the
   // correct bank code instead of the hardcoded "016" fallback, and so the
   // diagnostic logs can correlate identifier → bank → payload.
-  ctx?: { bankId?: string | null; bankCode?: string | null },
+  ctx?: { bankId?: string | null; bankCode?: string | null; skipPersistIdentifiers?: boolean },
 ): Promise<AutoIdentifyOutcome> {
   // Sanity early-outs before we touch the network. Anything that isn't a
   // deposit with at least one identifier can't be auto-identified by design
@@ -296,15 +296,19 @@ export async function autoIdentifyTransaction(
 
     // Persist the identifier row regardless of whether verification worked;
     // this gives us the history needed to auto-identify future imports.
-    await supabase.from("finance_bank_tx_identifiers").insert({
-      bank_transaction_id: bankTransactionId,
-      match_type: ident.type,
-      raw_value: ident.raw,
-      normalized_value: ident.normalized,
-      bankpartyaccountinfo_id: cache?.id ?? null,
-      verified_owner_name: cache?.matchname ?? null,
-      verified_bank_name: cache?.matchbankname ?? null,
-    });
+    // When the caller already loaded existing identifier rows (reuse path),
+    // skip this insert so the unique constraint does not throw.
+    if (!ctx?.skipPersistIdentifiers) {
+      await supabase.from("finance_bank_tx_identifiers").insert({
+        bank_transaction_id: bankTransactionId,
+        match_type: ident.type,
+        raw_value: ident.raw,
+        normalized_value: ident.normalized,
+        bankpartyaccountinfo_id: cache?.id ?? null,
+        verified_owner_name: cache?.matchname ?? null,
+        verified_bank_name: cache?.matchbankname ?? null,
+      });
+    }
 
     if (!cache?.matchname) continue; // unverified → skip auto-match
 

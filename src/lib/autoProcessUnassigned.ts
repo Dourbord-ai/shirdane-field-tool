@@ -233,10 +233,11 @@ async function tryBeneficiaryDeposit(tx: UnassignedTx) {
     return { state: "no_identifier" as const, message: "تراکنش واریز نیست" };
   }
 
-  // Skip if identifier rows already exist — re-extraction would race with
-  // the unique constraint inside autoIdentifyTransaction.
-  const { count, error: countErr } = await debugSupabaseCall(
-    "ident.exist.count",
+  // Check whether identifier rows already exist. If they do we REUSE them
+  // and continue with verify-account + party matching (we do NOT skip the
+  // whole beneficiary pipeline — that was the previous bug).
+  const { data: existingRows, error: existingErr } = await debugSupabaseCall(
+    "ident.exist.fetch",
     {
       table: "finance_bank_tx_identifiers",
       payload: { bank_transaction_id: tx.id },
@@ -244,47 +245,67 @@ async function tryBeneficiaryDeposit(tx: UnassignedTx) {
     () =>
       supabase
         .from("finance_bank_tx_identifiers")
-        .select("id", { count: "exact", head: true })
+        .select("match_type,raw_value,normalized_value")
         .eq("bank_transaction_id", tx.id),
   );
-  if (countErr) {
-    derror("ident.exist.count.error", { txId: tx.id, error: countErr });
-  }
-  if ((count ?? 0) > 0) {
-    dlog("ident.skip", { txId: tx.id, reason: "identifiers already extracted" });
-    return { state: "needs_review" as const, message: "شناسه قبلاً استخراج شده" };
+  if (existingErr) {
+    derror("ident.exist.fetch.error", { txId: tx.id, error: existingErr });
   }
 
-  // Pull identifiers from description AND any other free-text columns we
-  // happen to have. The parser dedupes/normalizes internally.
-  const combined = [
-    tx.description ?? "",
-    tx.reference_number ?? "",
-    tx.tracking_number ?? "",
-    tx.document_number ?? "",
-  ]
-    .filter(Boolean)
-    .join(" \n ");
-  const idents = extractIdentifiers(combined);
+  // Mapped to ExtractedIdentifier shape so we can feed them straight into
+  // autoIdentifyTransaction with skipPersist=true.
+  type ExistingRow = { match_type: number; raw_value: string | null; normalized_value: string };
+  const existing = (existingRows ?? []) as ExistingRow[];
+  let idents: ReturnType<typeof extractIdentifiers> = [];
+  let reused = false;
 
-  dlog("ident.extract", {
-    txId: tx.id,
-    descriptionPreview: (tx.description ?? "").slice(0, 120),
-    refs: {
-      reference_number: tx.reference_number,
-      tracking_number: tx.tracking_number,
-      document_number: tx.document_number,
-    },
-    candidatesCount: idents.length,
-    candidates: idents.map((i) => ({
-      type: i.type,
-      raw: i.raw,
-      normalized: i.normalized,
-    })),
-  });
+  if (existing.length > 0) {
+    reused = true;
+    idents = existing
+      .filter((r) => r.match_type === 1 || r.match_type === 2 || r.match_type === 3)
+      .map((r) => ({
+        type: r.match_type as 1 | 2 | 3,
+        raw: r.raw_value ?? r.normalized_value,
+        normalized: r.normalized_value,
+      }));
+    dlog("ident.reuse", {
+      txId: tx.id,
+      identifierCount: idents.length,
+      identifierValues: idents.map((i) => i.normalized),
+      identifierTypes: idents.map((i) => i.type),
+    });
+  } else {
+    // Pull identifiers from description AND any other free-text columns we
+    // happen to have. The parser dedupes/normalizes internally.
+    const combined = [
+      tx.description ?? "",
+      tx.reference_number ?? "",
+      tx.tracking_number ?? "",
+      tx.document_number ?? "",
+    ]
+      .filter(Boolean)
+      .join(" \n ");
+    idents = extractIdentifiers(combined);
 
-  if (idents.length === 0) {
-    dlog("ident.skip", { txId: tx.id, reason: "no identifier in description" });
+    dlog("ident.extract", {
+      txId: tx.id,
+      descriptionPreview: (tx.description ?? "").slice(0, 120),
+      refs: {
+        reference_number: tx.reference_number,
+        tracking_number: tx.tracking_number,
+        document_number: tx.document_number,
+      },
+      candidatesCount: idents.length,
+      candidates: idents.map((i) => ({
+        type: i.type,
+        raw: i.raw,
+        normalized: i.normalized,
+      })),
+    });
+
+    if (idents.length === 0) {
+      dlog("ident.skip", { txId: tx.id, reason: "no identifier in description" });
+    }
   }
 
   // Resolve the bank's 3-digit code (e.g. "016" for Keshavarzi) so the
@@ -322,8 +343,13 @@ async function tryBeneficiaryDeposit(tx: UnassignedTx) {
   const result = await autoIdentifyTransaction(tx.id, tx.transaction_type, idents, {
     bankId: tx.bank_id,
     bankCode: resolvedBankCode,
+    // CRITICAL: when we reuse previously persisted identifiers, the inner
+    // pipeline must NOT try to re-insert them — the unique constraint on
+    // (bank_transaction_id, match_type, normalized_value) would throw and
+    // abort verification. Skip persist, continue with verify + match.
+    skipPersistIdentifiers: reused,
   });
-  dlog("ident.result", { txId: tx.id, ...result });
+  dlog("ident.result", { txId: tx.id, reusedIdentifiers: reused, ...result });
   return result;
 }
 
