@@ -409,7 +409,7 @@ export function extractIdentifiersStrict(
     }
   }
 
-  return { accepted, rejected, sourceTexts };
+  return { accepted, rejected, sourceTexts, tokensByField };
 }
 
 function kindToMatchType(k: IdentifierKind): 1 | 2 | 3 | null {
