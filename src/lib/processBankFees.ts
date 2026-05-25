@@ -28,7 +28,6 @@
 // ============================================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { approvePaymentRequest } from "@/lib/finance";
 
 // Threshold below which a withdraw is considered a bank fee candidate.
 // Mirrors BANK_FEE_THRESHOLD_IRR in autoProcessUnassigned.ts so both
