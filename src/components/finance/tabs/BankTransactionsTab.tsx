@@ -864,14 +864,34 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         setParsed([]);
         return;
       }
-      // DB duplicate check — chunked at 50 timestamps per GET request so a
-      // 700+ row file never produces a URL long enough to trip Nginx (each
-      // ISO timestamp encodes to ~30 chars; 50 keeps us well under the ~8KB
-      // request-line limit). Larger chunks previously caused a 502 on the
-      // preview button. This is the DB-side check; the in-file duplicate
-      // check stays separate and lives in parseRowsWithTemplate.
+      // ──────────────────────────────────────────────────────────────────
+      // DB duplicate check — must mirror the partial unique index
+      // `uq_finance_bank_tx_dedupe` which keys on:
+      //   (bank_id, transaction_datetime,
+      //    COALESCE(amount,0),
+      //    COALESCE(reference_number,''),
+      //    COALESCE(tracking_number,''),
+      //    COALESCE(document_number,''))   WHERE is_deleted = false
+      //
+      // We chunk the `.in('transaction_datetime', …)` at 50 entries to stay
+      // under Nginx's ~8KB URL cap (each ISO timestamp encodes to ~30 chars),
+      // then compare locally using the FULL key — never just by datetime,
+      // otherwise legitimate same-second transactions get marked duplicate.
+      // ──────────────────────────────────────────────────────────────────
       const validList = list.filter((r) => r.status === "valid");
       if (validList.length > 0) {
+        // Canonical key builder used both for DB rows and for parsed rows.
+        // ParsedRow has no reference_number/tracking_number fields today so
+        // we pass empty strings — that still matches the DB COALESCE.
+        const keyOf = (k: {
+          transaction_datetime: string | null;
+          amount: number | null;
+          reference_number?: string | null;
+          tracking_number?: string | null;
+          document_number?: string | null;
+        }) =>
+          `${k.transaction_datetime}|${Number(k.amount ?? 0)}|${k.reference_number || ""}|${k.tracking_number || ""}|${k.document_number || ""}`;
+
         const datetimes = Array.from(
           new Set(validList.map((r) => r.transaction_datetime!).filter(Boolean)),
         );
@@ -891,19 +911,37 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           console.log("[previewDuplicateCheck chunk]", { chunkIndex, chunkSize: slice.length });
           const { data: existing, error: dupErr } = await supabase
             .from("finance_bank_transactions")
-            .select("transaction_datetime,amount,document_number,transaction_type")
+            .select("transaction_datetime,amount,reference_number,tracking_number,document_number")
+            // Match the index predicate — soft-deleted rows must NOT count
+            // as duplicates (otherwise resurrecting an import is impossible).
+            .eq("is_deleted", false)
             .eq("bank_id", bankId)
             .in("transaction_datetime", slice);
           if (dupErr) throw dupErr;
-          for (const e of (existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []) {
-            existingKeys.add(`${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`);
+          for (const e of (existing as Array<{
+            transaction_datetime: string | null;
+            amount: number | null;
+            reference_number: string | null;
+            tracking_number: string | null;
+            document_number: string | null;
+          }>) || []) {
+            existingKeys.add(keyOf(e));
           }
         }
         for (const r of validList) {
-          const key = `${r.transaction_datetime}|${r.amount}|${r.document_number || ""}|${r.transaction_type}`;
+          // ParsedRow has no ref/track numbers → pass empty strings so the
+          // key shape lines up with the DB-side COALESCE(...) above.
+          const key = keyOf({
+            transaction_datetime: r.transaction_datetime,
+            amount: r.amount,
+            reference_number: "",
+            tracking_number: "",
+            document_number: r.document_number,
+          });
           if (existingKeys.has(key)) { r.status = "duplicate"; r.status_reason = "تکراری"; }
         }
       }
+
       setParsed(list);
       toast.success(`${list.length} ردیف خوانده شد`);
     } catch (e) {
