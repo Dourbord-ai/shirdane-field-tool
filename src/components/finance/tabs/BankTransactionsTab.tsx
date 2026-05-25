@@ -122,6 +122,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [autoRunning, setAutoRunning] = useState(false);
   const [autoProgress, setAutoProgress] = useState<AutoProcessProgress>(emptyProgress());
 
+  // Separate state for the "شناسایی کارمزد" sweep so its progress panel
+  // and counters don't collide with the generic auto-process run above.
+  const [feesRunning, setFeesRunning] = useState(false);
+  const [feesProgress, setFeesProgress] = useState<BankFeesProgress>(emptyFeesProgress());
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
@@ -138,6 +143,26 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       toastFinanceError(toast, e);
     } finally {
       setAutoRunning(false);
+    }
+  }
+
+  // Bank-fee-only sweep — dedicated button. Uses the standalone
+  // processBankFees() orchestrator which classifies, creates PRs,
+  // auto-approves, and posts to Sepidar in one pass.
+  async function runFeeIdentification() {
+    if (feesRunning) return;
+    setFeesRunning(true);
+    setFeesProgress(emptyFeesProgress());
+    try {
+      const final = await processBankFees((p) => setFeesProgress(p));
+      toast.success(
+        `شناسایی کارمزد — کل بررسی‌شده: ${final.checked}/${final.total} · کاندید کارمزد: ${final.fee_candidates} · درخواست‌های پرداخت ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
+      );
+      void load();
+    } catch (e) {
+      toastFinanceError(toast, e);
+    } finally {
+      setFeesRunning(false);
     }
   }
 
