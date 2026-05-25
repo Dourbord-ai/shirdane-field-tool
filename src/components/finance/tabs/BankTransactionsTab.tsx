@@ -378,13 +378,6 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       )}
 
-      {/* Filters — first row: bank / type / assignment / description search */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <BankSelector value={filterBank} onChange={setFilterBank} placeholder="همه بانک‌ها" />
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          <option value="">نوع تراکنش</option>
-          <option value="deposit">واریز</option>
-          <option value="withdraw">برداشت</option>
 
       {/* Filters — first row: bank / type / assignment / description search */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
