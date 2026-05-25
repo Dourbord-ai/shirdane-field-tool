@@ -746,7 +746,21 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
   const [parsed, setParsed] = useState<import("@/lib/bankImport").ParsedRow[]>([]);
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [summary, setSummary] = useState<{ total: number; valid: number; duplicate: number; invalid: number; inserted: number } | null>(null);
+  // `alreadyInDb` = rows that the upload-time re-check found already inserted
+  // in `finance_bank_transactions` (independent from the preview's
+  // in-Excel/in-DB duplicate marker). `failed` = rows whose INSERT actually
+  // failed at the DB level, with a Persian-friendly reason kept for the
+  // post-import recap. Both are needed so the user can reconcile a partial
+  // import against the source spreadsheet.
+  const [summary, setSummary] = useState<{
+    total: number;
+    valid: number;
+    duplicate: number;
+    invalid: number;
+    inserted: number;
+    alreadyInDb: number;
+    failed: { index: number; reason: string }[];
+  } | null>(null);
   // Phase 6: counters returned by the auto-identify pipeline so the
   // import dialog can display per-state chips after the final save step.
   const [autoSummary, setAutoSummary] = useState<AutoIdentifySummary | null>(null);
