@@ -1134,7 +1134,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         // RPC returns one row per input ordinal: { ord, id }. `id` is null
         // when that input was conflict-skipped by ON CONFLICT DO NOTHING.
         const { data, error } = await supabase.rpc("finance_bank_tx_bulk_insert", {
-          payloads: payloads as unknown as Json,
+          payloads: payloads as unknown as never,
         });
         if (error) {
           // Whole batch failed at the RPC level — record every row as
