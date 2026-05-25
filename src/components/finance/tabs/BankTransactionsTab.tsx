@@ -10,24 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 import { BankSelector } from "@/components/finance/selectors";
 import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
-// Phase 4 wiring: run the auto-identification pipeline right after each
-// imported row lands in the DB. The helper is intentionally side-effect
-// driven (writes audit log + identifier rows itself) so the import code
-// only needs to feed it the persisted bank_transaction_id.
-import {
-  autoIdentifyTransaction,
-  emptyAutoIdentifySummary,
-  bumpSummary,
-  type AutoIdentifySummary,
-} from "@/lib/autoIdentify";
-// Inter-bank transfer auto-matcher. Internally checks the
-// `auto_create_bank_transfers` feature flag, so importing this is cheap —
-// when the flag is OFF the helper returns "no_match" without side effects.
-import {
-  autoMatchBankTransfer,
-  emptyAutoBankTransferSummary,
-  bumpBankTransferSummary,
-} from "@/lib/autoBankTransfer";
+// Manual auto-processing orchestrator. Decoupled from the Excel upload flow:
+// upload only inserts rows; this helper is invoked by the toolbar button
+// "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده" and walks every still-unassigned
+// transaction through the 3 deterministic classifier paths (bank fee /
+// inter-bank transfer / known-beneficiary deposit).
+import { autoProcessUnassigned, emptyProgress, type AutoProcessProgress } from "@/lib/autoProcessUnassigned";
+// Auto-identify summary type is still consumed by the import-dialog UI for
+// historical compatibility (it now renders null after the upload-flow split).
+import { type AutoIdentifySummary } from "@/lib/autoIdentify";
 import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
