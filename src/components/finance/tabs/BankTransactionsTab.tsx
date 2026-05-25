@@ -943,21 +943,45 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       }
     }
 
-    // STEP 3 — Insert only the new rows. We insert one-by-one (not a single
-    // bulk insert) because:
-    //   - we need per-row `inserted_row.id` for the auto-identify pipeline,
-    //   - a single failure must NOT roll back the whole batch,
-    //   - we want to report accurate per-row failure reasons.
+    // STEP 3 — Insert new rows in small BATCHES (not row-by-row). Row-by-row
+    // inserts caused 502 Bad Gateway on large files: hundreds of sequential
+    // PostgREST round-trips (plus a downstream edge-function call per row)
+    // kept the connection open long enough to hit Nginx/Cloudflare idle
+    // timeouts. Batching to ~100 rows keeps the number of HTTP calls small
+    // while still letting us:
+    //   - recover per-row inserted ids via `.insert(batch).select("id")`
+    //     (PostgREST returns rows in input order, so we can pair them back
+    //     up with the source ParsedRow for the auto-identify pipelines),
+    //   - isolate failures per batch via try/catch (a bad batch only loses
+    //     its own rows, not the entire import),
+    //   - report accurate inserted / failed counts.
+    const BATCH_SIZE = 100;
+    const chunkCount = Math.ceil(newRowsToInsert.length / BATCH_SIZE);
     let inserted = 0;
     const failed: { index: number; reason: string }[] = [];
-    // Accumulator for the auto-identify summary chips. We seed it with
-    // zeros and bump per row — this avoids reflowing the list later.
+    // Pairs of (sourceRow, newDbId) collected during insertion. We run the
+    // auto-identify + inter-bank-transfer pipelines AFTER all inserts so
+    // the DB-mutating phase is short and predictable — edge-function calls
+    // never block the insert loop.
+    const insertedPairs: { row: typeof newRowsToInsert[number]; id: string }[] = [];
     const autoSum = emptyAutoIdentifySummary();
-    // Separate accumulator for inter-bank transfer auto-matching so the two
-    // pipelines stay reportable independently in the summary toast.
     const bxSum = emptyAutoBankTransferSummary();
-    for (const r of newRowsToInsert) {
-      const payload = {
+
+    // Verbose diagnostic log per spec — any future 502 can be triaged from
+    // the browser console without needing to dig through edge logs.
+    console.log("[bank-import] starting batched insert", {
+      totalRows: parsed.length,
+      validRows: validRows.length,
+      existingInDb: alreadyInDb,
+      newRowsToInsert: newRowsToInsert.length,
+      chunkCount,
+      batchSize: BATCH_SIZE,
+    });
+
+    for (let bi = 0; bi < newRowsToInsert.length; bi += BATCH_SIZE) {
+      const batchIndex = bi / BATCH_SIZE;
+      const batch = newRowsToInsert.slice(bi, bi + BATCH_SIZE);
+      const payloads = batch.map((r) => ({
         bank_id: bankId,
         transaction_datetime: r.transaction_datetime,
         transaction_type: r.transaction_type,
@@ -970,42 +994,75 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         assignment_status: "unassigned",
         original_file_name: file.name,
         imported_file_name: title,
-        // New column added by migration — lets us download the source file later.
         imported_file_path: storagePath,
         raw_data: r.raw as unknown as Record<string, unknown>,
-      };
-      const { data: insertedRow, error } = await supabase
-        .from("finance_bank_transactions")
-        .insert([payload])
-        .select("id")
-        .maybeSingle();
-      if (error || !insertedRow) {
-        // Capture the failure (Persian-friendly fallback) so the recap can
-        // show the user which spreadsheet rows didn't make it and why.
-        failed.push({ index: r.index, reason: error?.message || "درج ناموفق" });
-        continue;
+      }));
+      try {
+        const { data: insertedRows, error } = await supabase
+          .from("finance_bank_transactions")
+          .insert(payloads)
+          .select("id");
+        if (error) {
+          // Whole batch failed — record every row as failed with the DB
+          // error message and continue with the next batch rather than
+          // aborting the whole import.
+          console.error("[bank-import] batch failed", {
+            batchIndex,
+            batchStart: bi,
+            batchSize: batch.length,
+            error: error.message,
+          });
+          for (const r of batch) failed.push({ index: r.index, reason: error.message });
+          continue;
+        }
+        const rows = (insertedRows || []) as { id: string }[];
+        if (rows.length !== batch.length) {
+          console.warn("[bank-import] insert returned mismatched length", {
+            batchIndex,
+            expected: batch.length,
+            got: rows.length,
+          });
+        }
+        // Pair returned ids back with source rows by position. Any missing
+        // id is treated as a per-row failure so the summary stays honest.
+        for (let k = 0; k < batch.length; k++) {
+          const row = batch[k];
+          const idRow = rows[k];
+          if (!idRow) {
+            failed.push({ index: row.index, reason: "درج ناموفق" });
+            continue;
+          }
+          inserted++;
+          insertedPairs.push({ row, id: idRow.id });
+        }
+      } catch (e) {
+        // Network-level / thrown error — same recovery policy as a DB error.
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[bank-import] batch threw", { batchIndex, error: msg });
+        for (const r of batch) failed.push({ index: r.index, reason: msg });
       }
-      inserted++;
+    }
 
-      // STEP 3a — Receive auto-identification (customer deposits).
+    console.log("[bank-import] insert phase complete", {
+      inserted,
+      failed: failed.length,
+      pipelineCandidates: insertedPairs.length,
+    });
+
+    // STEP 4 — Run auto-identify + inter-bank transfer pipelines AFTER all
+    // DB inserts. Each call is independently try/catch'd so a single
+    // pipeline crash never aborts the import. Running pipelines outside
+    // the insert loop is what prevents the original 502: the insert phase
+    // now finishes quickly even when downstream edge functions are slow.
+    for (const { row: r, id } of insertedPairs) {
       let receiveOutcome: { state: string } | undefined;
       try {
-        const outcome = await autoIdentifyTransaction(
-          insertedRow.id as string,
-          r.transaction_type,
-          r.identifiers,
-        );
+        const outcome = await autoIdentifyTransaction(id, r.transaction_type, r.identifiers);
         bumpSummary(autoSum, outcome);
         receiveOutcome = outcome as { state: string };
       } catch {
         bumpSummary(autoSum, { state: "needs_review", message: "pipeline crashed" });
       }
-
-      // STEP 3b — Inter-bank transfer auto-matching. We only run this when
-      // the receive pipeline did NOT already claim the deposit as a customer
-      // receive — those two operation types are mutually exclusive on a
-      // single bank transaction (a tx is either a party receive OR a leg of
-      // an inter-bank transfer, never both).
       const alreadyReceive =
         receiveOutcome?.state === "auto_identified" ||
         receiveOutcome?.state === "sepidar_posted" ||
@@ -1013,7 +1070,7 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
       if (!alreadyReceive && r.transaction_type === "deposit") {
         try {
           const bxOutcome = await autoMatchBankTransfer({
-            id: insertedRow.id as string,
+            id,
             bank_id: bankId,
             transaction_type: r.transaction_type,
             deposit_amount: r.deposit,
@@ -1021,8 +1078,6 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
           });
           bumpBankTransferSummary(bxSum, bxOutcome);
         } catch {
-          // Same policy as the receive pipeline — never abort the import on
-          // a downstream auto-match crash.
           bumpBankTransferSummary(bxSum, {
             state: "auto_bank_transfer_needs_review",
             message: "pipeline crashed",
