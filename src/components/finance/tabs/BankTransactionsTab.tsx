@@ -827,23 +827,32 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
         setParsed([]);
         return;
       }
-      // duplicate check against db
+      // duplicate check against db — chunked to avoid blowing past Supabase's
+      // URL length limit when the IN(...) clause carries hundreds of values
+      // (a 777-row file used to silently return zero hits because the request
+      // was rejected, which is exactly what masked the bug in the upload step).
       const validList = list.filter((r) => r.status === "valid");
       if (validList.length > 0) {
-        const datetimes = validList.map((r) => r.transaction_datetime!).filter(Boolean);
-        const { data: existing } = await supabase
-          .from("finance_bank_transactions")
-          .select("transaction_datetime,amount,document_number,transaction_type")
-          .eq("bank_id", bankId)
-          .in("transaction_datetime", datetimes);
-        const set = new Set(
-          ((existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []).map(
-            (e) => `${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`,
-          ),
+        const datetimes = Array.from(
+          new Set(validList.map((r) => r.transaction_datetime!).filter(Boolean)),
         );
+        const existingKeys = new Set<string>();
+        const CHUNK = 200;
+        for (let i = 0; i < datetimes.length; i += CHUNK) {
+          const slice = datetimes.slice(i, i + CHUNK);
+          const { data: existing, error: dupErr } = await supabase
+            .from("finance_bank_transactions")
+            .select("transaction_datetime,amount,document_number,transaction_type")
+            .eq("bank_id", bankId)
+            .in("transaction_datetime", slice);
+          if (dupErr) throw dupErr;
+          for (const e of (existing as { transaction_datetime: string | null; amount: number | null; document_number: string | null; transaction_type: string | null }[]) || []) {
+            existingKeys.add(`${e.transaction_datetime}|${e.amount}|${e.document_number || ""}|${e.transaction_type}`);
+          }
+        }
         for (const r of validList) {
           const key = `${r.transaction_datetime}|${r.amount}|${r.document_number || ""}|${r.transaction_type}`;
-          if (set.has(key)) { r.status = "duplicate"; r.status_reason = "تکراری"; }
+          if (existingKeys.has(key)) { r.status = "duplicate"; r.status_reason = "تکراری"; }
         }
       }
       setParsed(list);
