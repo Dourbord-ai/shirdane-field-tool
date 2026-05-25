@@ -16,10 +16,12 @@ const corsHeaders = {
 interface VerifyBody {
   type: "1" | "2" | "3"; // 1=card, 2=sheba, 3=deposit
   number: string;
+  // Optional 3-digit Iranian bank code (e.g. "016"=Keshavarzi). Required
+  // for type=3 (deposit_sheba) so cardinfo knows the bank's deposit
+  // numbering scheme. Falls back to "016" when omitted (legacy callers).
+  bankCode?: string;
   // When true, the function returns a `debug` object in the response so
-  // callers (developer console / test panel) can see exactly what the
-  // upstream service returned. This is opt-in to avoid leaking raw
-  // upstream payloads in normal production traffic.
+  // callers can see exactly what the upstream service returned.
   debug?: boolean;
 }
 
