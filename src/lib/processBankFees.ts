@@ -175,55 +175,94 @@ async function processOneFeeTx(
   }
   await audit(tx.id, "fee.mark.candidate", true, "marked as bank_fee_candidate", { amount: absWithdraw });
 
-  // --- Step 2: create the payment request via the atomic RPC --------------
-  // amount_type_code = 3 (علی‌الحساب) — bank fees aren't paid against a
-  // creditor balance, so on-account is the safe default. legacy code = 1
-  // (general payment) keeps Sepidar mapping intact.
+  // --- Step 2: create the payment request matching the existing legacy
+  // bank-fee pattern exactly (verified against successful historical rows):
+  //   finance_payment_requests: request_type='unknown', status='approved',
+  //     total_amount = confirmed_amount = fee amount.
+  //   finance_payment_request_items: party_id = default bank-fee party,
+  //     amount = confirmed_amount = fee amount, amount_type='creditor',
+  //     amount_type_code = 2, status='approved'.
+  // We insert directly (bypassing submit_payment_request RPC) because that
+  // RPC forces status='pending_approval' and a different request_type.
   const requestPayload = {
     title: `کارمزد بانکی ${new Date(tx.transaction_datetime ?? Date.now()).toLocaleDateString("fa-IR")}`,
     description: tx.description?.slice(0, 200) ?? null,
-    request_type: "general",
-    legacy_request_type_code: 1,
-    status: "pending_approval",
+    request_type: "unknown",
+    status: "approved",
+    total_amount: absWithdraw,
+    confirmed_amount: absWithdraw,
   };
-  const itemsPayload = [{
-    party_id: feePartyId,
-    amount: absWithdraw,
-    amount_type_code: 3,
-    amount_type: "on_account",
-    description: `کارمزد بانکی — تراکنش ${tx.id.slice(0, 8)}`,
-    status: "pending_approval",
-  }];
   // eslint-disable-next-line no-console
-  console.log(TAG, "pr.submit", { txId: tx.id, requestPayload, itemsPayload });
+  console.log(TAG, "pr.insert.header.payload", { txId: tx.id, requestPayload });
 
   let prId: string | null = null;
   try {
-    const { data, error } = await supabase.rpc(
-      "submit_payment_request" as never,
-      { p_request: requestPayload, p_items: itemsPayload } as never,
-    );
-    if (error) throw error;
-    prId = (data as unknown as string) || null;
-    if (!prId) throw new Error("RPC بدون شناسه برگشت");
+    const { data, error } = await supabase
+      .from("finance_payment_requests")
+      .insert(requestPayload as never)
+      .select("id")
+      .single();
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error(TAG, "pr.insert.header.failed", {
+        txId: tx.id,
+        code: (error as { code?: string }).code,
+        message: error.message,
+        details: (error as { details?: string }).details,
+        hint: (error as { hint?: string }).hint,
+      });
+      throw error;
+    }
+    prId = (data?.id as string | null) ?? null;
+    if (!prId) throw new Error("درج درخواست پرداخت بدون شناسه برگشت");
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "خطای ناشناخته در ثبت درخواست";
-    await audit(tx.id, "fee.pr.create.failed", false, msg);
+    const err = e as { code?: string; message?: string; details?: string; hint?: string };
+    const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
+      || "خطا در ثبت درخواست پرداخت کارمزد";
+    await audit(tx.id, "fee.pr.create.failed", false, msg, {
+      code: err.code, details: err.details, hint: err.hint,
+    });
     return { ok: false, prId: null, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_create" };
   }
-  await audit(tx.id, "fee.pr.create", true, "payment request created", { prId });
 
-  // --- Step 3: auto-approve the request -----------------------------------
-  // approvePaymentRequest flips header + items to 'approved' and lets the
-  // recalc trigger fill confirmed_amount + remaining_amount.
+  // Insert the item using the exact legacy bank-fee pattern.
+  const itemPayload = {
+    payment_request_id: prId,
+    party_id: feePartyId,
+    amount: absWithdraw,
+    confirmed_amount: absWithdraw,
+    amount_type: "creditor",
+    amount_type_code: 2,
+    status: "approved",
+    description: `کارمزد بانکی — تراکنش ${tx.id.slice(0, 8)}`,
+  };
+  // eslint-disable-next-line no-console
+  console.log(TAG, "pr.insert.item.payload", { txId: tx.id, itemPayload });
   try {
-    await approvePaymentRequest(prId);
-    await audit(tx.id, "fee.pr.approve", true, "payment request approved", { prId });
+    const { error: itemErr } = await supabase
+      .from("finance_payment_request_items")
+      .insert(itemPayload as never);
+    if (itemErr) {
+      // eslint-disable-next-line no-console
+      console.error(TAG, "pr.insert.item.failed", {
+        txId: tx.id, prId,
+        code: (itemErr as { code?: string }).code,
+        message: itemErr.message,
+        details: (itemErr as { details?: string }).details,
+        hint: (itemErr as { hint?: string }).hint,
+      });
+      throw itemErr;
+    }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "خطای ناشناخته در تأیید درخواست";
-    await audit(tx.id, "fee.pr.approve.failed", false, msg, { prId });
-    return { ok: false, prId, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_approve" };
+    const err = e as { code?: string; message?: string; details?: string; hint?: string };
+    const msg = [err.message, err.details, err.hint].filter(Boolean).join(" | ")
+      || "خطا در ثبت آیتم درخواست پرداخت کارمزد";
+    await audit(tx.id, "fee.pr.item.failed", false, msg, {
+      prId, code: err.code, details: err.details, hint: err.hint,
+    });
+    return { ok: false, prId, voucherId: null, sepidarVoucherId: null, message: msg, failedStep: "pr_create" };
   }
+  await audit(tx.id, "fee.pr.create", true, "payment request + item created (approved)", { prId });
 
   // --- Step 4: create a finance_voucher header pointing at the PR ---------
   // sepidar-post-voucher resolves branch via voucher_type/source_operation_type.
