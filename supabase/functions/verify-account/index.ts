@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const url = buildUrl(type, number);
+    const url = buildUrl(type, number, bankCode);
     log("calling upstream:", url);
 
     const apiRes = await fetch(url, {
