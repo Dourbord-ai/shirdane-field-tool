@@ -114,7 +114,7 @@ function preview(value: unknown, max = 400): string {
 export async function debugSupabaseCall<T>(
   operationName: string,
   meta: DebugCallMeta,
-  fn: () => Promise<T>,
+  fn: () => PromiseLike<T>,
 ): Promise<T> {
   const startedAt = performance.now();
   if (isDebugOn()) {
