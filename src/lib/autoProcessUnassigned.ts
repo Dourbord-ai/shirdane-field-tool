@@ -17,6 +17,10 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { extractIdentifiers } from "@/lib/bankImport";
+import {
+  extractIdentifiersStrict,
+  logExtractionResult,
+} from "@/lib/identifierExtraction";
 import { autoIdentifyTransaction } from "@/lib/autoIdentify";
 import { autoMatchBankTransfer } from "@/lib/autoBankTransfer";
 import {
