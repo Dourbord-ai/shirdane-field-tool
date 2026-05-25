@@ -343,33 +343,53 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           a run is active AND for a moment after completion so the operator
           can read the final counts. Hidden when no run has been started. */}
       {(autoRunning || autoProgress.total > 0) && (
-        <div className="rounded-lg border bg-card p-3 space-y-2 text-xs">
+        <div className="rounded-lg border bg-card p-3 space-y-3 text-xs">
           <div className="flex items-center justify-between">
             <span className="font-bold">پیشرفت شناسایی خودکار</span>
             <span className="text-muted-foreground">
               {autoProgress.processed} از {autoProgress.total} (باقیمانده: {autoProgress.remaining})
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+
+          {/* Headline summary requested by the operator: the five numbers
+              that matter most after a run completes. Rendered as bold
+              KPI tiles so they're scannable at a glance. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <div className="text-[10px] text-muted-foreground">کل بررسی‌شده</div>
+              <div className="text-base font-bold">{autoProgress.processed}<span className="text-muted-foreground text-xs"> / {autoProgress.total}</span></div>
+            </div>
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+              <div className="text-[10px] text-amber-700">کاندیدهای کارمزد</div>
+              <div className="text-base font-bold text-amber-700">{autoProgress.bank_fees_classified}</div>
+            </div>
+            <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2">
+              <div className="text-[10px] text-blue-700">درخواست‌های پرداخت ایجادشده</div>
+              <div className="text-base font-bold text-blue-700">{autoProgress.payment_requests_created}</div>
+            </div>
+            <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
+              <div className="text-[10px] text-primary">ارسال به سپیدار</div>
+              <div className="text-base font-bold text-primary">{autoProgress.sepidar_posted}</div>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2">
+              <div className="text-[10px] text-destructive">ناموفق</div>
+              <div className="text-base font-bold text-destructive">{autoProgress.failed}</div>
+            </div>
+          </div>
+
+          {/* Secondary breakdown — kept for context but visually de-emphasized. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 px-2 py-0.5">
               واریز شناسایی‌شده: {autoProgress.beneficiary_identified}
-            </span>
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
-              کارمزد بانکی: {autoProgress.bank_fees_classified}
             </span>
             <span className="rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-700 px-2 py-0.5">
               انتقال بین‌بانکی: {autoProgress.bank_transfers_matched}
             </span>
-            <span className="rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5">
-              ارسال به سپیدار: {autoProgress.sepidar_posted}
-            </span>
-            <span className="rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5">
-              ناموفق: {autoProgress.failed}
-            </span>
             <span className="rounded-full border border-muted bg-muted/30 text-muted-foreground px-2 py-0.5">
-              کل تخصیص‌نشده: {autoProgress.total}
+              رد شده: {autoProgress.skipped}
             </span>
           </div>
+
           {autoProgress.lastMessage && (
             <div className="text-[11px] text-muted-foreground truncate">
               آخرین وضعیت: {autoProgress.lastMessage}
