@@ -1186,45 +1186,24 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     console.log("[bank-import] insert phase complete", {
       inserted,
       failed: failed.length,
-      pipelineCandidates: insertedPairs.length,
+      alreadyInDb,
     });
 
-    // STEP 4 — Run auto-identify + inter-bank transfer pipelines AFTER all
-    // DB inserts. Each call is independently try/catch'd so a single
-    // pipeline crash never aborts the import. Running pipelines outside
-    // the insert loop is what prevents the original 502: the insert phase
-    // now finishes quickly even when downstream edge functions are slow.
-    for (const { row: r, id } of insertedPairs) {
-      let receiveOutcome: { state: string } | undefined;
-      try {
-        const outcome = await autoIdentifyTransaction(id, r.transaction_type, r.identifiers);
-        bumpSummary(autoSum, outcome);
-        receiveOutcome = outcome as { state: string };
-      } catch {
-        bumpSummary(autoSum, { state: "needs_review", message: "pipeline crashed" });
-      }
-      const alreadyReceive =
-        receiveOutcome?.state === "auto_identified" ||
-        receiveOutcome?.state === "sepidar_posted" ||
-        receiveOutcome?.state === "sepidar_failed";
-      if (!alreadyReceive && r.transaction_type === "deposit") {
-        try {
-          const bxOutcome = await autoMatchBankTransfer({
-            id,
-            bank_id: bankId,
-            transaction_type: r.transaction_type,
-            deposit_amount: r.deposit,
-            transaction_datetime: r.transaction_datetime,
-          });
-          bumpBankTransferSummary(bxSum, bxOutcome);
-        } catch {
-          bumpBankTransferSummary(bxSum, {
-            state: "auto_bank_transfer_needs_review",
-            message: "pipeline crashed",
-          });
-        }
-      }
-    }
+    // ──────────────────────────────────────────────────────────────────
+    // ARCHITECTURE: Excel upload is now PURE — parse, dedupe, insert.
+    // Auto-identification, inter-bank matching, fee classification and
+    // Sepidar posting are explicitly NOT run here anymore. The operator
+    // triggers them via the "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده"
+    // button on the main bank-transactions screen.
+    //
+    // Rationale: Upload success must never depend on slow / failure-prone
+    // downstream pipelines (verify-account API, Sepidar SOAP). Separating
+    // the flows lets the operator re-run auto-processing as often as
+    // needed without re-importing the file.
+    // ──────────────────────────────────────────────────────────────────
+    void insertedPairs; // intentionally unused now — kept to avoid touching outer scope
+    void autoSum; void bxSum;
+
     if (bankId) await recalculateBankUnassignedBalances(bankId);
     setSaving(false);
     const total = parsed.length;
@@ -1232,24 +1211,12 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
     const dup = parsed.filter((r) => r.status === "duplicate").length;
     const inv = parsed.filter((r) => r.status === "invalid").length;
     setSummary({ total, valid, duplicate: dup, invalid: inv, inserted, alreadyInDb, failed });
-    setAutoSummary(autoSum);
-    // Refresh preview-table statuses so rows we just demoted to "duplicate"
-    // at upload time render with the amber styling and Persian reason.
+    setAutoSummary(null);
     setParsed([...parsed]);
-    // Richer toast that surfaces auto-identification + inter-bank
-    // auto-matching results at a glance. We only append the bank-transfer
-    // segment when the pipeline actually produced something, so users who
-    // haven't enabled the feature flag don't see noisy zeros.
-    const bxSegment =
-      bxSum.matched + bxSum.needs_review > 0
-        ? ` · انتقال بانکی خودکار: ${bxSum.matched}${
-            bxSum.needs_review ? ` (نیاز به بازبینی: ${bxSum.needs_review})` : ""
-          }${bxSum.failed ? ` (خطا: ${bxSum.failed})` : ""}`
-        : "";
     const skipSegment = alreadyInDb > 0 ? ` · موجود در پایگاه: ${alreadyInDb}` : "";
     const failSegment = failed.length > 0 ? ` · ناموفق: ${failed.length}` : "";
     toast.success(
-      `${inserted} ردیف جدید ثبت شد${skipSegment}${failSegment} · شناسایی خودکار: ${autoSum.auto_identified} · نیازمند بازبینی: ${autoSum.needs_review}${bxSegment}`,
+      `${inserted} ردیف جدید ثبت شد${skipSegment}${failSegment} — برای شناسایی خودکار از دکمه «تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده» استفاده کنید.`,
     );
     onDone();
   }
