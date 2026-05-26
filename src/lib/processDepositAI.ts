@@ -481,12 +481,22 @@ export async function processDepositAI(
       }
     } catch (rowErr) {
       // Per-row catch — one bad row must never abort the whole sweep.
+      // We pick the terminal status based on how far this row got:
+      //   - verifySucceeded=false → the failure happened during claim/verify,
+      //     so 'verify_failed' is the correct terminal state.
+      //   - verifySucceeded=true  → we crashed during party match / RPC /
+      //     approve, so 'posting_failed' is the truthful state (and matches
+      //     the spec's "خطادار" bucket as posting failures).
       const msg = rowErr instanceof Error ? rowErr.message : String(rowErr);
-      log("row.exception", { txId: tx.id, error: msg });
+      log("row.exception", { txId: tx.id, error: msg, verifySucceeded });
       progress.failed += 1;
       progress.failures.push({ txId: tx.id, step: "exception", message: msg });
       try {
-        await setVerifyResult(tx.id, "verify_failed", { error: msg });
+        await setVerifyResult(
+          tx.id,
+          verifySucceeded ? "posting_failed" : "verify_failed",
+          { result: lastVerifyData, error: msg },
+        );
       } catch {
         /* swallow — already in error path */
       }
