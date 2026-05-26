@@ -1724,12 +1724,13 @@ export default function NewInvoice() {
         </div>
       )}
 
-      {/* ===== NON-MILK FLOW ===== */}
-      {showSellerType && (
-        <div className="animate-fade-in">
-          <SearchableSelect label="فروشنده" options={sellerTypeOptions} value={data.sellerType} onChange={(v) => { set("sellerType", v); set("company", ""); }} placeholder="نوع فروشنده..." />
-        </div>
-      )}
+      {/* ===== NON-MILK FLOW =====
+          UX simplification: the "شرکت / شخص" selector is removed. We
+          always default `sellerType` to "company" in `initial`, so the
+          finance-party selector below is shown directly whenever the
+          previous showSellerType gate would have passed. The hidden
+          default keeps every downstream consumer (Sepidar payload,
+          factors.seller_type column, etc.) on its existing code path. */}
 
       {showCompany && (
         <div className="animate-fade-in">
