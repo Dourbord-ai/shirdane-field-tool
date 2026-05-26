@@ -166,6 +166,48 @@ export default function DryOffNew() {
     },
   );
 
+  // Whenever the selected cow changes, look up the latest dry_off + calving
+  // events for that cow and decide whether dry-off registration should be
+  // blocked. This mirrors the same rule used in FertilitySection so both
+  // entry points stay in sync: a cow is "currently dry" when either
+  //   - cows.is_dry === true, OR
+  //   - the latest non-cancelled dry_off event is newer than the latest
+  //     non-cancelled calving event (i.e. no calving has reset the cycle).
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedCow) {
+      setActiveDryBlock(null);
+      return;
+    }
+    if (selectedCow.is_dry) {
+      setActiveDryBlock("این دام در حال حاضر خشک است و امکان ثبت مجدد خشکی وجود ندارد.");
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("livestock_fertility_events" as any)
+        .select("event_type, event_date, is_cancelled")
+        .eq("livestock_id", selectedCow.id)
+        .in("event_type", ["dry_off", "calving"])
+        .order("event_date", { ascending: false })
+        .limit(50);
+      if (cancelled) return;
+      const rows = ((data as any[]) ?? []).filter((r) => !r.is_cancelled);
+      const lastDry = rows.find((r) => r.event_type === "dry_off")?.event_date ?? null;
+      const lastCalv = rows.find((r) => r.event_type === "calving")?.event_date ?? null;
+      const active =
+        !!lastDry && (!lastCalv || new Date(lastDry).getTime() > new Date(lastCalv).getTime());
+      setActiveDryBlock(
+        active
+          ? "برای این دام یک رویداد خشک کردن فعال ثبت شده و هنوز زایش بعدی ثبت نشده است."
+          : null,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCow]);
+
   // -- Submit handler --------------------------------------------------------
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
