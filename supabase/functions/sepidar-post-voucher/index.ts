@@ -69,18 +69,25 @@ function persianizeError(raw: string): string {
 }
 
 // Mark voucher as failed + log. Best-effort, never throws.
+// `rawMessage` is the original (untranslated) SQL Server / driver error text
+// — we persist it inside the sync log payload so operators can diagnose the
+// real Sepidar failure without losing the friendly Persian summary that
+// `sepidar_error_message` stores on the voucher row.
 async function markFailed(
   sb: ReturnType<typeof createClient>,
   voucherId: string,
   message: string,
   attempts: number,
+  rawMessage?: string | null,
 ) {
   try {
     await sb
       .from("finance_vouchers")
       .update({
         sepidar_sync_status: "failed",
-        sepidar_error_message: message,
+        sepidar_error_message: rawMessage && rawMessage !== message
+          ? `${message} | raw: ${rawMessage}`.slice(0, 1000)
+          : message,
         sepidar_sync_attempts: attempts,
       })
       .eq("id", voucherId);
@@ -89,6 +96,7 @@ async function markFailed(
       operation_type: "post_voucher",
       status: "failed",
       error_message: message,
+      response_payload: rawMessage ? ({ rawError: rawMessage } as never) : null,
     } as never);
   } catch (e) {
     console.warn("[sepidar-post-voucher] markFailed log failed", e);
@@ -650,11 +658,72 @@ Deno.serve(async (req) => {
       );
 
       const sepPartyId = partyRow.sepidar_party_id as number | null;
-      const sepPartyAcc = (partyRow.party_account_sl_ref ?? partyRow.sepidar_account_id) as number | null;
       if (sepPartyId == null)
         return { ok: false, message: "نگاشت طرف حساب در سپیدار انجام نشده (sepidar_party_id)." };
-      if (sepPartyAcc == null)
-        return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده (sepidar_account_id)." };
+
+      // -----------------------------------------------------------------
+      // Resolve PartyAccountSLRef based on the item's amount_type_code
+      // (مبنای مبلغ درخواست). Mapping:
+      //   1 = creditor      / بستانکار       -> party-creditor SL
+      //   2 = advance       / پیش‌پرداخت     -> prepayment SL (must be set)
+      //   3 = on_account    / علی‌الحساب     -> on-account SL (must be set)
+      // For creditor we prefer the per-party value, then settings, then
+      // the legacy single sepidar_account_id. For advance / on_account
+      // we ONLY accept the dedicated per-amount-type SL ref and abort
+      // with a precise Persian validation error when it is missing — the
+      // bridge SP rejects vouchers posted against the wrong معین.
+      // -----------------------------------------------------------------
+      const amountTypeCode = Number(
+        (priRow?.amount_type_code as number | null | undefined) ?? 1,
+      );
+      const { data: sepSettingsRow } = await sb
+        .from("finance_sepidar_settings")
+        .select(
+          "default_creditor_payment_account_id, default_prepayment_account_id, default_on_account_payment_account_id",
+        )
+        .limit(1)
+        .maybeSingle();
+      const sepSettings =
+        (sepSettingsRow as Record<string, number | null> | null) ?? {};
+      const partyCreditorSL =
+        (partyRow.party_account_sl_ref ?? partyRow.sepidar_account_id) as number | null;
+      let sepPartyAcc: number | null = null;
+      let slRefSource = "creditor";
+      if (amountTypeCode === 2) {
+        slRefSource = "prepayment";
+        sepPartyAcc = (sepSettings.default_prepayment_account_id ?? null) as number | null;
+        if (sepPartyAcc == null)
+          return {
+            ok: false,
+            message:
+              "حساب معین «پیش‌پرداخت» در تنظیمات سپیدار تعریف نشده است (default_prepayment_account_id).",
+          };
+      } else if (amountTypeCode === 3) {
+        slRefSource = "on_account";
+        sepPartyAcc = (sepSettings.default_on_account_payment_account_id ?? null) as number | null;
+        if (sepPartyAcc == null)
+          return {
+            ok: false,
+            message:
+              "حساب معین «علی‌الحساب» در تنظیمات سپیدار تعریف نشده است (default_on_account_payment_account_id).",
+          };
+      } else {
+        slRefSource = "creditor";
+        sepPartyAcc =
+          (sepSettings.default_creditor_payment_account_id as number | null) ??
+          partyCreditorSL;
+        if (sepPartyAcc == null)
+          return {
+            ok: false,
+            message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده (sepidar_account_id).",
+          };
+      }
+      console.log("[sepidar-post-voucher] partyAccountSLRef resolved", {
+        amountTypeCode,
+        slRefSource,
+        sepPartyAcc,
+        partyCreditorSL,
+      });
 
       // Resolve the related bank for legacy description (برداشت ... از حساب بانکی X).
       // Try alloc.bank_id → priRow.bank_id → prRow.bank_id → related bank_transaction.
@@ -978,7 +1047,7 @@ Deno.serve(async (req) => {
     if (successFlag === 0) {
       const errMsg = String(row.error_message ?? row.ErrorMessage ?? "unknown SP failure");
       console.error("[sepidar-post-voucher] SP returned success=0", errMsg, row);
-      await markFailed(sb, voucherId, errMsg, attempts);
+      await markFailed(sb, voucherId, "ثبت سند در سپیدار ناموفق بود.", attempts, errMsg);
       return json({
         success: false,
         message: "ثبت سند در سپیدار ناموفق بود.",
@@ -1030,7 +1099,7 @@ Deno.serve(async (req) => {
     const raw = e instanceof Error ? e.message : String(e);
     const message = raw === EXTRA_PARTY_TRANSFER_PARAM_ERR ? raw : persianizeError(raw);
     console.error("[sepidar-post-voucher] error", { voucherId, spName, raw });
-    await markFailed(sb, voucherId, message, attempts);
+    await markFailed(sb, voucherId, message, attempts, raw);
     return json({ success: false, message, rawError: raw }, 500);
   } finally {
     try {
