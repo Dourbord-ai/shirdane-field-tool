@@ -515,7 +515,8 @@ const ACTION_GROUPS: { title: string; actions: { key: ActionKey; label: string }
   },
 ];
 
-export default function FertilitySection({ livestockId, latestStatus, onOperationSaved }: Props) {
+export default function FertilitySection({ livestockId, latestStatus, isDry, onOperationSaved }: Props) {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [events, setEvents] = useState<FertilityEvent[]>([]);
   const [loading, setLoading] = useState(true);
