@@ -1034,12 +1034,42 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
             {filtered.length === 0 && (
               <p className="text-center text-muted-foreground py-8">تراکنشی یافت نشد</p>
             )}
           </div>
         </>
+      )}
+
+      {/* Bulk-attach dialog — projects the selected tx rows down to the
+          minimal shape the dialog needs. We re-fetch fresh data inside the
+          dialog before each call so this snapshot is just the starting
+          set; it can't go stale during the run. */}
+      {openBulkAttach && (
+        <BulkAttachPaymentRequestDialog
+          transactions={
+            txs
+              .filter((t) => selectedIds.has(t.id))
+              .map<BulkAttachTx>((t) => ({
+                id: t.id,
+                withdraw_amount: t.withdraw_amount,
+                description: t.description,
+                document_number: t.document_number,
+                assignment_status: t.assignment_status,
+              }))
+          }
+          onClose={() => setOpenBulkAttach(false)}
+          onDone={() => {
+            // Reload the transactions list and drop the selection so
+            // attached rows disappear from the unassigned view and the
+            // user starts from a clean slate.
+            setOpenBulkAttach(false);
+            clearSelection();
+            void load();
+          }}
+        />
       )}
 
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
