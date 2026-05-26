@@ -14,6 +14,7 @@ import LabResults from "./pages/LabResults";
 import Livestock from "./pages/Livestock";
 import LivestockListBuilder from "./pages/LivestockListBuilder";
 import LivestockProfile from "./pages/LivestockProfile";
+import DryOffNew from "./pages/livestock/DryOffNew";
 import MilkRecordQuick from "./pages/MilkRecordQuick";
 import Finance from "./pages/Finance";
 import HumanResources from "./pages/HumanResources";
