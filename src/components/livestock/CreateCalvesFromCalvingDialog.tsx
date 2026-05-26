@@ -337,7 +337,15 @@ export default function CreateCalvesFromCalvingDialog({
                         (#{c.created_cow_id})
                       </span>
                     </div>
-                  ) : (
+                  ) : !isCreatable(c) ? (
+                    // Dead / stillborn calves: show a read-only Persian badge
+                    // and no create form. They cannot become cow records.
+                    <div className="flex items-center gap-2 rounded-md bg-destructive/5 border border-destructive/20 p-2 text-sm text-destructive">
+                      <AlertTriangle className="w-4 h-4" />
+                      فوتی — قابل ثبت به عنوان دام نیست
+                    </div>
+                  ) : null}
+                  {!created && isCreatable(c) ? (
                     <>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
