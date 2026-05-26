@@ -615,6 +615,62 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
   }, [events]);
   const { resolve: resolveUserName } = useLegacyUserNames(operatorIds);
 
+  // ---- Live calf lookup -------------------------------------------------
+  // Walk every calving event, collect the `created_cow_id` field from each
+  // entry of `metadata.calves[]`, and batch-load the current `cows` rows so
+  // CalvesPanel can render up-to-date sex/status chips (and a deep-link to
+  // each calf profile). We keep this in a local useEffect — same pattern as
+  // the events loader above — to avoid pulling react-query into a section
+  // that doesn't already use it.
+  const [calfLiveMap, setCalfLiveMap] = useState<Map<number, CalfLiveInfo>>(
+    () => new Map(),
+  );
+  // Collect calf cow IDs from all calving events' metadata.calves[].created_cow_id.
+  const calfCowIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const e of events) {
+      if (e.event_type !== "calving") continue;
+      const arr = (e.metadata as any)?.calves;
+      if (!Array.isArray(arr)) continue;
+      for (const c of arr) {
+        const id = Number(c?.created_cow_id);
+        if (Number.isFinite(id) && id > 0) ids.add(id);
+      }
+    }
+    return Array.from(ids);
+  }, [events]);
+  // Stable key so the effect only re-fetches when the actual ID set changes,
+  // not on every parent re-render.
+  const calfCowIdsKey = useMemo(() => calfCowIds.slice().sort().join(","), [calfCowIds]);
+  useEffect(() => {
+    let cancelled = false;
+    if (calfCowIds.length === 0) {
+      setCalfLiveMap(new Map());
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from("cows")
+        .select("id, tag_number, earnumber, sex, sextype, existancestatus")
+        .in("id", calfCowIds);
+      if (cancelled) return;
+      if (error) {
+        console.error("[FertilitySection] calf cows load error", error);
+        return;
+      }
+      const map = new Map<number, CalfLiveInfo>();
+      for (const row of (data ?? []) as CalfLiveInfo[]) map.set(row.id, row);
+      setCalfLiveMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calfCowIdsKey]);
+
+  // Removed below — the second `useLegacyUserNames` call kept the existing
+  // behaviour; we now invoke it once above next to the map declaration.
+
 
   function handleAction(key: ActionKey) {
     setActionsOpen(false);
