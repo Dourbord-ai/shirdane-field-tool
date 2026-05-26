@@ -124,6 +124,9 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
     .eq("ai_verify_status", "parsed_by_regex")
     .eq("is_deleted", false)
     .not("ai_verify_payload", "is", null)
+    // Spec rule: rows that already carry an error must NOT be reprocessed —
+    // they belong to a terminal state and a rerun would loop forever.
+    .is("ai_verify_error", null)
     // Hard cap to keep a single click bounded; rerun for the rest.
     .limit(500);
   if (error) {
@@ -139,6 +142,8 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
 // row (so concurrent runs cannot double-process the same transaction).
 // ---------------------------------------------------------------------------
 async function claim(txId: string): Promise<boolean> {
+  // Emit the spec-mandated log marker so dashboards can group claim attempts.
+  log("claim.started", { txId });
   const { data, error } = await supabase
     .from("finance_bank_transactions")
     .update({ ai_verify_status: "processing" })
@@ -150,7 +155,11 @@ async function claim(txId: string): Promise<boolean> {
     log("claim.error", { txId, error: error.message });
     return false;
   }
-  return Boolean(data?.id);
+  const ok = Boolean(data?.id);
+  // Distinct success/skip markers — the spec asks for both so operators can
+  // tell concurrency races (skipped) apart from real successful claims.
+  log(ok ? "claim.success" : "claim.skipped", { txId });
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +310,9 @@ export async function processDepositAI(
       log("verify.success", { txId: tx.id });
       progress.verify_success += 1;
 
-      // 3b) resolve a trusted finance party using the cache + history rule.
+      // Spec-mandated marker: log the start of party matching so operators can
+      // correlate it with cache/history lookups that follow.
+      log("party.match.started", { txId: tx.id, payload });
       const cache = await lookupCache(payload);
       const partyId = await findTrustedPartyId(payload, cache);
 
@@ -319,7 +330,7 @@ export async function processDepositAI(
       log("party.match.success", { txId: tx.id, partyId });
 
       // 3c) create the receive identification through the canonical RPC.
-      log("manual.receive.started", { txId: tx.id, partyId });
+      log("receive.create.started", { txId: tx.id, partyId });
       const matchedBy =
         payload.type === "1" ? "card" : payload.type === "2" ? "iban" : "account";
       const { data: receiveId, error: rpcError } = await supabase.rpc(
@@ -335,7 +346,7 @@ export async function processDepositAI(
       );
 
       if (rpcError || !receiveId) {
-        log("manual.receive.failed", { txId: tx.id, error: rpcError?.message });
+        log("receive.create.failed", { txId: tx.id, error: rpcError?.message });
         progress.failed += 1;
         progress.failures.push({
           txId: tx.id,
@@ -349,15 +360,16 @@ export async function processDepositAI(
         push(`ثبت شناسایی ناموفق — ${tx.id.slice(0, 8)}`);
         continue;
       }
-      log("manual.receive.success", { txId: tx.id, receiveId });
+      log("receive.create.success", { txId: tx.id, receiveId });
 
       // 3d) post through the SAME manual approval helper. This owns the
       //     voucher creation, Sepidar sync and the assignment_status flip
       //     to 'assigned' — we never touch those columns ourselves.
+      log("approve.started", { txId: tx.id, receiveId });
       try {
         const result = await approveReceiveIdentification(receiveId as string);
         if (result.ok) {
-          log("posting.success", { txId: tx.id, receiveId });
+          log("approve.success", { txId: tx.id, receiveId });
           progress.posted += 1;
           await setVerifyResult(tx.id, "posted", {
             result: verifyData,
@@ -365,11 +377,11 @@ export async function processDepositAI(
           });
           push(`ثبت موفق — ${tx.id.slice(0, 8)}`);
         } else {
-          log("posting.failed", { txId: tx.id, error: result.error });
+          log("approve.failed", { txId: tx.id, error: result.error });
           progress.failed += 1;
           progress.failures.push({
             txId: tx.id,
-            step: "posting",
+            step: "approve",
             message: result.error ?? "ثبت سپیدار ناموفق",
           });
           // Do NOT touch assignment_status — the manual helper has already
@@ -383,9 +395,9 @@ export async function processDepositAI(
         }
       } catch (postErr) {
         const msg = postErr instanceof Error ? postErr.message : String(postErr);
-        log("posting.failed", { txId: tx.id, error: msg });
+        log("approve.failed", { txId: tx.id, error: msg });
         progress.failed += 1;
-        progress.failures.push({ txId: tx.id, step: "posting", message: msg });
+        progress.failures.push({ txId: tx.id, step: "approve", message: msg });
         await setVerifyResult(tx.id, "posting_failed", {
           result: verifyData,
           error: msg,
