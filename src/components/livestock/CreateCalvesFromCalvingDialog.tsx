@@ -129,6 +129,55 @@ export default function CreateCalvesFromCalvingDialog({
       const earNum = Number(ear);
       const bodyNum = body ? Number(body) : null;
 
+      // -------------------------------------------------------------------
+      // Resolve auxiliary calf fields from the parent calving event so the
+      // newly created cow row carries lineage + birth context, not just an
+      // ear tag. We only fill columns that actually exist on `public.cows`:
+      //   - date_of_birth      ← calving event_date (the cow's birthday)
+      //   - last_birth_date    ← same (kept consistent with legacy data)
+      //   - mother_id          ← motherCowId (the cow being calved)
+      //   - birth_weight       ← metadata.calves[idx].birth_weight
+      //   - birth_status       ← derived from calf physical_status (dead→2)
+      //   - description        ← metadata.calves[idx].notes
+      // -------------------------------------------------------------------
+      // Calving event date → ISO yyyy-mm-dd for the `date` column.
+      const birthIso = event.event_date
+        ? new Date(event.event_date).toISOString().slice(0, 10)
+        : null;
+
+      // Look up the father's sperm by finding the most recent insemination
+      // event for the same mother that happened BEFORE this calving. The
+      // sperm id is stored on the insemination event's metadata.sperm_id
+      // (see InseminationRegistrationDialog.tsx). We do a best-effort fetch:
+      // if anything fails we just leave father_sperm_id NULL.
+      let fatherSpermId: number | null = null;
+      try {
+        const { data: lastIns } = await supabase
+          .from("livestock_fertility_events" as any)
+          .select("metadata, event_date")
+          .eq("livestock_id", motherCowId)
+          .eq("event_type", "insemination")
+          .lte("event_date", event.event_date ?? new Date().toISOString())
+          .order("event_date", { ascending: false })
+          .limit(1);
+        const meta: any = lastIns?.[0]?.metadata ?? null;
+        const sid = meta?.sperm_id;
+        if (sid != null && !Number.isNaN(Number(sid))) {
+          fatherSpermId = Number(sid);
+        }
+      } catch {
+        // Non-fatal — sire lookup is best-effort.
+      }
+
+      // Map the calf's textual physical_status to the legacy smallint
+      // birth_status column. Anything other than the known set falls back
+      // to NULL so we never write invalid codes.
+      //   0 = alive (سالم) , 2 = dead (تلف) , 3 = stillborn (مرده‌زا)
+      let birthStatus: number | null = null;
+      if (c.physical_status === "dead") birthStatus = 2;
+      else if (c.physical_status === "stillborn") birthStatus = 3;
+      else if (c.physical_status === "alive" || c.physical_status === "healthy") birthStatus = 0;
+
       const insertPayload: any = {
         id: nextId,
         tag_number: ear,
@@ -139,6 +188,17 @@ export default function CreateCalvesFromCalvingDialog({
         existancestatus: isDead ? 2 : 0,
         last_fertility_status: null,
         is_dry: isFemale ? null : null,
+        // Lineage + birth context from the calving event / calf metadata.
+        date_of_birth: birthIso,
+        last_birth_date: event.event_date ?? null,
+        mother_id: motherCowId ?? null,
+        father_sperm_id: fatherSpermId,
+        birth_weight:
+          c.birth_weight != null && !Number.isNaN(Number(c.birth_weight))
+            ? Number(c.birth_weight)
+            : null,
+        birth_status: birthStatus,
+        description: c.notes ?? null,
       };
 
       const { error: insErr } = await supabase.from("cows").insert(insertPayload);
