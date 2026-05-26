@@ -752,10 +752,27 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
           <Activity className="w-4 h-4 text-primary shrink-0" />
           <span className="truncate">وضعیت باروری و رویدادها</span>
         </h2>
-        <Button size="sm" onClick={() => setActionsOpen(true)} className="gap-1 shrink-0">
-          <Plus className="w-4 h-4" />
-          ثبت عملیات باروری
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Quick shortcut for the most common "exit-from-lactation" flow.
+              Disabled (with a Persian title tooltip) when the cow is already
+              dry to prevent duplicate registrations. Female-only is enforced
+              by the parent (FertilitySection mounts for females only). */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1"
+            onClick={() => handleAction("dry_off")}
+            disabled={dryOffBlocked}
+            title={dryOffBlocked ? "این دام قبلاً خشک شده است" : undefined}
+          >
+            <Droplet className="w-4 h-4" />
+            ثبت خشک کردن
+          </Button>
+          <Button size="sm" onClick={() => setActionsOpen(true)} className="gap-1">
+            <Plus className="w-4 h-4" />
+            ثبت عملیات باروری
+          </Button>
+        </div>
       </div>
 
       <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
