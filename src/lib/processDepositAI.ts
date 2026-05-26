@@ -305,6 +305,12 @@ export async function processDepositAI(
   await triggerWebhook();
   push("هوشیار در حال بررسی شرح واریزی‌ها — لطفا کمی صبر کنید");
 
+  // 1b) Crash-recovery sweep: any row left in 'processing' by an earlier
+  // run (closed tab / network drop) gets reset back to 'parsed_by_regex'
+  // so this run can pick it up. Bounded by a 5-minute age check inside
+  // recoverStaleProcessing so concurrent in-flight rows are never stolen.
+  await recoverStaleProcessing();
+
   // 2) fetch candidates that n8n marked ready
   const candidates = await fetchCandidates();
   progress.total = candidates.length;
