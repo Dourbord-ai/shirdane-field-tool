@@ -124,6 +124,9 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
     .eq("ai_verify_status", "parsed_by_regex")
     .eq("is_deleted", false)
     .not("ai_verify_payload", "is", null)
+    // Spec rule: rows that already carry an error must NOT be reprocessed —
+    // they belong to a terminal state and a rerun would loop forever.
+    .is("ai_verify_error", null)
     // Hard cap to keep a single click bounded; rerun for the rest.
     .limit(500);
   if (error) {
