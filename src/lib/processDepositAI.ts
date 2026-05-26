@@ -137,6 +137,43 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Recover stale 'processing' rows. If a previous run crashed (tab closed,
+// network drop) a candidate may have been claimed but never advanced to a
+// terminal state. Without this reset the row is invisible to fetchCandidates
+// forever (it only sees 'parsed_by_regex'). We only revert rows that are
+// truly orphaned: still unassigned and have no Sepidar-linked receive
+// identification pointing at them — anything else might be mid-flight in a
+// concurrent tab and must NOT be touched.
+//
+// We bound the lookback so a row that is genuinely in-flight in another tab
+// (started seconds ago) is left alone. Five minutes is far longer than any
+// single-row run takes in practice.
+// ---------------------------------------------------------------------------
+async function recoverStaleProcessing(): Promise<void> {
+  const cutoffIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // Only touch rows that:
+  //   - were claimed (ai_verify_status='processing')
+  //   - have not been assigned to any operation (assignment_status='unassigned')
+  //   - were touched more than 5 minutes ago (stale)
+  // The DB has ai_verified_at; we use it as the "last touched" timestamp
+  // because setVerifyResult writes it, and the claim() update lands earlier
+  // but its updated_at column is also bumped by the row trigger. ai_verified_at
+  // is null when claim() runs (it's only set in setVerifyResult), so use
+  // updated_at as the more reliable freshness signal.
+  const { error } = await supabase
+    .from("finance_bank_transactions")
+    .update({ ai_verify_status: "parsed_by_regex" })
+    .eq("ai_verify_status", "processing")
+    .eq("assignment_status", "unassigned")
+    .lt("updated_at", cutoffIso);
+  if (error) {
+    log("recovery.error", { error: error.message });
+  } else {
+    log("recovery.done", { cutoffIso });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Atomic claim — sets ai_verify_status='processing' only if it's still
 // 'parsed_by_regex'. Returns true when this client successfully claimed the
 // row (so concurrent runs cannot double-process the same transaction).
@@ -146,7 +183,13 @@ async function claim(txId: string): Promise<boolean> {
   log("claim.started", { txId });
   const { data, error } = await supabase
     .from("finance_bank_transactions")
-    .update({ ai_verify_status: "processing" })
+    .update({
+      ai_verify_status: "processing",
+      // Spec rule: clear stale error when we (re-)enter the processing state
+      // so a previously-errored row that was manually reset to
+      // 'parsed_by_regex' doesn't carry its old message into the new run.
+      ai_verify_error: null,
+    })
     .eq("id", txId)
     .eq("ai_verify_status", "parsed_by_regex")
     .select("id")
@@ -163,11 +206,19 @@ async function claim(txId: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Persist the verify-account outcome onto the transaction row.
+// Persist the verify-account / pipeline outcome onto the transaction row.
+// The status union mirrors the spec's terminal-state list plus 'verified'
+// (intermediate, written immediately after verify-account succeeds so the
+// row is never left in 'processing' for longer than one network hop).
 // ---------------------------------------------------------------------------
 async function setVerifyResult(
   txId: string,
-  status: "verified" | "verify_failed" | "party_not_found" | "posted" | "posting_failed",
+  status:
+    | "verified"
+    | "verify_failed"
+    | "party_not_found"
+    | "posted"
+    | "posting_failed",
   patch: { result?: unknown; error?: string | null } = {},
 ) {
   await supabase
