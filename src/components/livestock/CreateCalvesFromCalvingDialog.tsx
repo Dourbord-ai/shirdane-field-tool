@@ -160,7 +160,8 @@ export default function CreateCalvesFromCalvingDialog({
           .lte("event_date", event.event_date ?? new Date().toISOString())
           .order("event_date", { ascending: false })
           .limit(1);
-        const meta: any = lastIns?.[0]?.metadata ?? null;
+        const rows = (lastIns ?? []) as any[];
+        const meta: any = rows[0]?.metadata ?? null;
         const sid = meta?.sperm_id;
         if (sid != null && !Number.isNaN(Number(sid))) {
           fatherSpermId = Number(sid);
