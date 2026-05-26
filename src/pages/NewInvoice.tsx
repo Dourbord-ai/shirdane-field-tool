@@ -740,29 +740,41 @@ export default function NewInvoice() {
   //   - we're in create mode (this page has no edit mode, so always true)
   // ---------------------------------------------------------------------
   const isSale = data.invoiceType === "sell" || data.invoiceType === "retail_sell";
+
+  // Reusable next-sales-number fetcher. Returns the next integer or null on
+  // error. We extract this so we can call it from two places:
+  //   (a) the initial auto-fill effect below, and
+  //   (b) the duplicate-recovery toast (when the DB unique index rejects
+  //       our number because a concurrent operator just used it).
+  // Final uniqueness is enforced by `factors_sales_invoice_number_unique`
+  // (partial unique index on factors where invoice_type is a sale type);
+  // this helper only provides a "good guess" for UX.
+  const fetchNextSalesInvoiceNumber = async (): Promise<string | null> => {
+    const { data: rows, error } = await supabase
+      .from("factors")
+      .select("invoice_number")
+      .in("invoice_type", ["sell", "retail_sell"])
+      .not("invoice_number", "is", null)
+      .order("id", { ascending: false })
+      .limit(500);
+    if (error) return null;
+    let max = 0;
+    (rows ?? []).forEach((r: { invoice_number: string | null }) => {
+      const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
+      const n = parseInt(raw, 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  };
+
   useEffect(() => {
     if (!isSale) return;
     if (data.invoiceNumber) return; // never regenerate over an existing value
     let cancelled = false;
     (async () => {
-      // Pull the latest 500 sales rows and compute the numeric max in JS.
-      // `invoice_number` is stored as `text` in Postgres so we can't rely
-      // on ORDER BY for numeric comparison; strip non-digits and parse.
-      const { data: rows, error } = await supabase
-        .from("factors")
-        .select("invoice_number")
-        .in("invoice_type", ["sell", "retail_sell"])
-        .not("invoice_number", "is", null)
-        .order("id", { ascending: false })
-        .limit(500);
-      if (cancelled || error) return;
-      let max = 0;
-      (rows ?? []).forEach((r: { invoice_number: string | null }) => {
-        const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
-        const n = parseInt(raw, 10);
-        if (!isNaN(n) && n > max) max = n;
-      });
-      set("invoiceNumber", String(max + 1));
+      const next = await fetchNextSalesInvoiceNumber();
+      if (cancelled || next === null) return;
+      set("invoiceNumber", next);
     })();
     return () => {
       cancelled = true;
