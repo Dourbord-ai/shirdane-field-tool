@@ -429,9 +429,19 @@ export default function DryOffNew() {
             </CardContent>
           </Card>
 
+          {/* Duplicate-prevention banner — shown only when the selected cow
+              is currently in an active dry-off cycle. Mirrors the same
+              gating logic used inside FertilitySection. */}
+          {activeDryBlock && (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 text-destructive px-3 py-2 flex items-start gap-2 text-sm">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>{activeDryBlock}</p>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <Button type="submit" disabled={submitting} className="flex-1">
+            <Button type="submit" disabled={submitting || !!activeDryBlock} className="flex-1">
               {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
               ثبت خشکی
             </Button>
