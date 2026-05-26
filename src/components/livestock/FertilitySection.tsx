@@ -55,6 +55,10 @@ import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
 type Props = {
   livestockId: number;
   latestStatus: number | null;
+  // Whether the cow is currently flagged dry on the cows table. Used to
+  // disable the "ثبت خشک کردن" quick action and operations-sheet item so a
+  // user can't accidentally register a duplicate dry-off.
+  isDry?: boolean | null;
   onOperationSaved?: () => void;
 };
 
