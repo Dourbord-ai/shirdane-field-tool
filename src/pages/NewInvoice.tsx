@@ -740,29 +740,41 @@ export default function NewInvoice() {
   //   - we're in create mode (this page has no edit mode, so always true)
   // ---------------------------------------------------------------------
   const isSale = data.invoiceType === "sell" || data.invoiceType === "retail_sell";
+
+  // Reusable next-sales-number fetcher. Returns the next integer or null on
+  // error. We extract this so we can call it from two places:
+  //   (a) the initial auto-fill effect below, and
+  //   (b) the duplicate-recovery toast (when the DB unique index rejects
+  //       our number because a concurrent operator just used it).
+  // Final uniqueness is enforced by `factors_sales_invoice_number_unique`
+  // (partial unique index on factors where invoice_type is a sale type);
+  // this helper only provides a "good guess" for UX.
+  const fetchNextSalesInvoiceNumber = async (): Promise<string | null> => {
+    const { data: rows, error } = await supabase
+      .from("factors")
+      .select("invoice_number")
+      .in("invoice_type", ["sell", "retail_sell"])
+      .not("invoice_number", "is", null)
+      .order("id", { ascending: false })
+      .limit(500);
+    if (error) return null;
+    let max = 0;
+    (rows ?? []).forEach((r: { invoice_number: string | null }) => {
+      const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
+      const n = parseInt(raw, 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  };
+
   useEffect(() => {
     if (!isSale) return;
     if (data.invoiceNumber) return; // never regenerate over an existing value
     let cancelled = false;
     (async () => {
-      // Pull the latest 500 sales rows and compute the numeric max in JS.
-      // `invoice_number` is stored as `text` in Postgres so we can't rely
-      // on ORDER BY for numeric comparison; strip non-digits and parse.
-      const { data: rows, error } = await supabase
-        .from("factors")
-        .select("invoice_number")
-        .in("invoice_type", ["sell", "retail_sell"])
-        .not("invoice_number", "is", null)
-        .order("id", { ascending: false })
-        .limit(500);
-      if (cancelled || error) return;
-      let max = 0;
-      (rows ?? []).forEach((r: { invoice_number: string | null }) => {
-        const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
-        const n = parseInt(raw, 10);
-        if (!isNaN(n) && n > max) max = n;
-      });
-      set("invoiceNumber", String(max + 1));
+      const next = await fetchNextSalesInvoiceNumber();
+      if (cancelled || next === null) return;
+      set("invoiceNumber", next);
     })();
     return () => {
       cancelled = true;
@@ -997,13 +1009,35 @@ export default function NewInvoice() {
           setSubmitted(true);
           setTimeout(() => navigate("/invoices"), 1200);
         } else {
-          // Server-side validation rejected the data (e.g. duplicate cow id,
-          // cow already in herd, etc.). Show the Persian message verbatim.
-          toast({
-            title: "خطا در ثبت فاکتور",
-            description: apiResp.message || "خطای نامشخص از سمت سرور.",
-            variant: "destructive",
-          });
+          // Concurrency-safety branch for livestock sales: the
+          // `submit_cow_factor` RPC wraps errors as
+          // "خطای پایگاه داده: <SQLERRM>", and the SQLERRM for our partial
+          // unique index contains the constraint name + "duplicate key".
+          // Detect that case, regenerate the next number, and ask the
+          // operator to resubmit.
+          const dupSales =
+            isSale &&
+            /factors_sales_invoice_number_unique|duplicate key/i.test(
+              apiResp.message || ""
+            );
+          if (dupSales) {
+            const next = await fetchNextSalesInvoiceNumber();
+            if (next) set("invoiceNumber", next);
+            toast({
+              title: "شماره فاکتور تکراری است",
+              description:
+                "این شماره فاکتور فروش هم‌اکنون توسط کاربر دیگری ثبت شد. شماره جدید به‌صورت خودکار محاسبه شد؛ لطفاً دوباره «ثبت نهایی» را بزنید.",
+              variant: "destructive",
+            });
+          } else {
+            // Server-side validation rejected the data (e.g. duplicate cow id,
+            // cow already in herd, etc.). Show the Persian message verbatim.
+            toast({
+              title: "خطا در ثبت فاکتور",
+              description: apiResp.message || "خطای نامشخص از سمت سرور.",
+              variant: "destructive",
+            });
+          }
         }
       } catch (err) {
         // Two kinds of errors land here:
@@ -1136,7 +1170,37 @@ export default function NewInvoice() {
 
     if (factorError || !factor) {
       console.error("Factor insert error:", factorError);
-      alert("خطا در ثبت فاکتور: " + (factorError?.message || "Unknown"));
+
+      // Concurrency-safety branch: the DB unique index
+      // `factors_sales_invoice_number_unique` rejects a duplicate sales
+      // invoice number (Postgres SQLSTATE 23505). This happens when two
+      // operators submitted the same auto-generated number at the same
+      // time. We auto-regenerate the next number and ask the user to
+      // re-submit — the bookkeeping side stays correct because nothing
+      // was actually inserted on a 23505.
+      const isDuplicateSalesNumber =
+        !!factorError &&
+        (factorError.code === "23505" ||
+          /factors_sales_invoice_number_unique|duplicate key/i.test(
+            factorError.message || ""
+          ));
+      if (isDuplicateSalesNumber && isSale) {
+        const next = await fetchNextSalesInvoiceNumber();
+        if (next) set("invoiceNumber", next);
+        toast({
+          title: "شماره فاکتور تکراری است",
+          description:
+            "این شماره فاکتور فروش هم‌اکنون توسط کاربر دیگری ثبت شد. شماره جدید به‌صورت خودکار محاسبه شد؛ لطفاً دوباره «ثبت نهایی» را بزنید.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "خطا در ثبت فاکتور",
+        description: factorError?.message || "Unknown",
+        variant: "destructive",
+      });
       return;
     }
 
