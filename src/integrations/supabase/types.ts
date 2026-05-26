@@ -2048,6 +2048,11 @@ export type Database = {
       }
       finance_bank_transactions: {
         Row: {
+          ai_verified_at: string | null
+          ai_verified_result: Json | null
+          ai_verify_error: string | null
+          ai_verify_payload: Json | null
+          ai_verify_status: string | null
           amount: number | null
           assigned_operation_id: string | null
           assigned_operation_type: string | null
@@ -2086,6 +2091,11 @@ export type Database = {
           withdraw_amount: number | null
         }
         Insert: {
+          ai_verified_at?: string | null
+          ai_verified_result?: Json | null
+          ai_verify_error?: string | null
+          ai_verify_payload?: Json | null
+          ai_verify_status?: string | null
           amount?: number | null
           assigned_operation_id?: string | null
           assigned_operation_type?: string | null
@@ -2124,6 +2134,11 @@ export type Database = {
           withdraw_amount?: number | null
         }
         Update: {
+          ai_verified_at?: string | null
+          ai_verified_result?: Json | null
+          ai_verify_error?: string | null
+          ai_verify_payload?: Json | null
+          ai_verify_status?: string | null
           amount?: number | null
           assigned_operation_id?: string | null
           assigned_operation_type?: string | null

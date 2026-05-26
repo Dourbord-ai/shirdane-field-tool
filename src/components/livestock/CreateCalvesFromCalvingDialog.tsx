@@ -83,11 +83,25 @@ export default function CreateCalvesFromCalvingDialog({
     }));
   }
 
+  // A calf is "creatable" only when it has no linked cow yet AND its physical
+  // status is healthy/alive. Dead or stillborn calves must NEVER be inserted
+  // into the cows table from this dialog — they are read-only here.
+  function isCreatable(c: CalfMeta) {
+    if (c.created_cow_id) return false;
+    const s = c.physical_status;
+    return s === "healthy" || s === "alive";
+  }
+
   async function handleCreate(idx: number, force = false) {
     if (!event) return;
     const c = calves[idx];
     if (c.created_cow_id) {
       toast.info("این گوساله قبلاً ثبت شده است");
+      return;
+    }
+    // Hard guard: dead/stillborn calves cannot be turned into cow records.
+    if (!isCreatable(c)) {
+      toast.error("این گوساله قابل ثبت به عنوان دام نیست (فوتی/مرده‌زا)");
       return;
     }
 
@@ -323,7 +337,15 @@ export default function CreateCalvesFromCalvingDialog({
                         (#{c.created_cow_id})
                       </span>
                     </div>
-                  ) : (
+                  ) : !isCreatable(c) ? (
+                    // Dead / stillborn calves: show a read-only Persian badge
+                    // and no create form. They cannot become cow records.
+                    <div className="flex items-center gap-2 rounded-md bg-destructive/5 border border-destructive/20 p-2 text-sm text-destructive">
+                      <AlertTriangle className="w-4 h-4" />
+                      فوتی — قابل ثبت به عنوان دام نیست
+                    </div>
+                  ) : null}
+                  {!created && isCreatable(c) && (
                     <>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
