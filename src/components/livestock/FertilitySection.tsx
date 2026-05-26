@@ -37,7 +37,9 @@ import CreateCalvesFromCalvingDialog from "./CreateCalvesFromCalvingDialog";
 import CancelFertilityEventDialog from "./CancelFertilityEventDialog";
 import EditFertilityEventDialog from "./EditFertilityEventDialog";
 import { Switch } from "@/components/ui/switch";
-import { Baby, Pencil, Ban } from "lucide-react";
+import { Baby, Pencil, Ban, AlertTriangle, ChevronDown, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
+import { existanceLabel, isFemaleCow } from "@/lib/cowPresence";
 // New: derived timeline + summary used by per-tab headers and row enrichment.
 // All math centralised in src/lib/fertility/* so dialogs/cards/tabs share logic.
 import { useFertilitySummary } from "@/hooks/useFertilitySummary";
