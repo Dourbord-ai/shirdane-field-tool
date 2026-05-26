@@ -815,7 +815,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                 const sum = txs
                   .filter((t) => selectedIds.has(t.id))
                   .reduce((s, t) => s + Number(t.withdraw_amount || 0), 0);
-                return parseMoney("0") , sum.toLocaleString("fa-IR");
+                return sum.toLocaleString("fa-IR");
               })()} ریال)
             </span>
           </div>
