@@ -265,7 +265,7 @@ export default function FertilityLegacyChart() {
       }
       if (heiferMode === "heifer" && !r.is_heifer) return false;
       if (heiferMode === "cow" && r.is_heifer) return false;
-      if (dayMin > 0 && (r.chart_days ?? 0) <= dayMin) return false;
+      if (dayMin > 0 && getChartDays(r) <= dayMin) return false;
       if (pregMode === "pregnant" && !r.is_pregnancy) return false;
       if (pregMode === "open" && r.is_pregnancy) return false;
       if (pregMode === "dry" && !r.is_dry) return false;
@@ -284,10 +284,10 @@ export default function FertilityLegacyChart() {
     // Sort comparators — chart x-axis order follows this.
     out.sort((a, b) => {
       switch (sortKey) {
-        case "days_asc": return (a.chart_days ?? 0) - (b.chart_days ?? 0);
+        case "days_asc": return getChartDays(a) - getChartDays(b);
         case "body": return (a.bodynumber ?? 0) - (b.bodynumber ?? 0);
         case "status": return (a.chart_status ?? "").localeCompare(b.chart_status ?? "", "fa");
-        default: return (b.chart_days ?? 0) - (a.chart_days ?? 0);
+        default: return getChartDays(b) - getChartDays(a);
       }
     });
     return out;
@@ -297,11 +297,11 @@ export default function FertilityLegacyChart() {
   const kpis = useMemo(() => {
     const total = filtered.length;
     const heifers = filtered.filter((r) => r.is_heifer).length;
-    const over130 = filtered.filter((r) => (r.chart_days ?? 0) > 130).length;
-    const over220 = filtered.filter((r) => (r.chart_days ?? 0) > 220).length;
-    const over250 = filtered.filter((r) => (r.chart_days ?? 0) > 250).length;
+    const over130 = filtered.filter((r) => getChartDays(r) > 130).length;
+    const over220 = filtered.filter((r) => getChartDays(r) > 220).length;
+    const over250 = filtered.filter((r) => getChartDays(r) > 250).length;
     const avg = total === 0 ? 0
-      : Math.round(filtered.reduce((s, r) => s + (r.chart_days ?? 0), 0) / total);
+      : Math.round(filtered.reduce((s, r) => s + getChartDays(r), 0) / total);
     const pregnant = filtered.filter((r) => r.is_pregnancy).length;
     const dry = filtered.filter((r) => r.is_dry).length;
     return { total, heifers, over130, over220, over250, avg, pregnant, dry };
@@ -322,7 +322,7 @@ export default function FertilityLegacyChart() {
       }
       if (heiferMode === "heifer" && !r.is_heifer) return false;
       if (heiferMode === "cow" && r.is_heifer) return false;
-      if (dayMin > 0 && (r.chart_days ?? 0) <= dayMin) return false;
+      if (dayMin > 0 && getChartDays(r) <= dayMin) return false;
       if (pregMode === "pregnant" && !r.is_pregnancy) return false;
       if (pregMode === "open" && r.is_pregnancy) return false;
       if (pregMode === "dry" && !r.is_dry) return false;
@@ -355,7 +355,7 @@ export default function FertilityLegacyChart() {
 
     // Bar series with per-cow color via itemStyle callback.
     const barData = filtered.map((r) => ({
-      value: r.chart_days ?? 0,
+      value: getChartDays(r),
       itemStyle: {
         // Apply the legacy CRM palette per status id (falls back to the
         // DB-provided status_color when an id isn't mapped).
@@ -366,7 +366,7 @@ export default function FertilityLegacyChart() {
 
     // Triangle markers above heifer bars only.
     const heiferScatter = filtered
-      .map((r, i) => r.is_heifer ? [i, (r.chart_days ?? 0) + 5] : null)
+      .map((r, i) => r.is_heifer ? [i, getChartDays(r) + 5] : null)
       .filter(Boolean) as [number, number][];
 
     return {
