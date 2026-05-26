@@ -72,6 +72,26 @@ const resolveStatusColor = (
   return fallback ?? "#9CA3AF";
 };
 
+// The Supabase view no longer exposes a single pre-computed `chart_days`
+// column — it now ships the raw components (pregnancy_days, dry_days,
+// last_birth_to_pregnancy_days). Derive the bar height client-side using
+// the same legacy CRM priority: روز از آخرین تلقیح > روز خشکی > فاصله زایش
+// تا تلقیح. Without this helper every bar rendered at 0.
+const getChartDays = (r: {
+  pregnancy_days?: number | null;
+  dry_days?: number | null;
+  last_birth_to_pregnancy_days?: number | null;
+}): number => {
+  const v =
+    r.pregnancy_days ??
+    r.dry_days ??
+    r.last_birth_to_pregnancy_days ??
+    0;
+  // Coerce to number defensively in case Supabase returns a string.
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 // Row shape returned by the view. All optional because Supabase may return
 // null for cows with missing fertility data.
 export interface FertilityChartRow {
@@ -245,7 +265,7 @@ export default function FertilityLegacyChart() {
       }
       if (heiferMode === "heifer" && !r.is_heifer) return false;
       if (heiferMode === "cow" && r.is_heifer) return false;
-      if (dayMin > 0 && (r.chart_days ?? 0) <= dayMin) return false;
+      if (dayMin > 0 && getChartDays(r) <= dayMin) return false;
       if (pregMode === "pregnant" && !r.is_pregnancy) return false;
       if (pregMode === "open" && r.is_pregnancy) return false;
       if (pregMode === "dry" && !r.is_dry) return false;
@@ -264,10 +284,10 @@ export default function FertilityLegacyChart() {
     // Sort comparators — chart x-axis order follows this.
     out.sort((a, b) => {
       switch (sortKey) {
-        case "days_asc": return (a.chart_days ?? 0) - (b.chart_days ?? 0);
+        case "days_asc": return getChartDays(a) - getChartDays(b);
         case "body": return (a.bodynumber ?? 0) - (b.bodynumber ?? 0);
         case "status": return (a.chart_status ?? "").localeCompare(b.chart_status ?? "", "fa");
-        default: return (b.chart_days ?? 0) - (a.chart_days ?? 0);
+        default: return getChartDays(b) - getChartDays(a);
       }
     });
     return out;
@@ -277,11 +297,11 @@ export default function FertilityLegacyChart() {
   const kpis = useMemo(() => {
     const total = filtered.length;
     const heifers = filtered.filter((r) => r.is_heifer).length;
-    const over130 = filtered.filter((r) => (r.chart_days ?? 0) > 130).length;
-    const over220 = filtered.filter((r) => (r.chart_days ?? 0) > 220).length;
-    const over250 = filtered.filter((r) => (r.chart_days ?? 0) > 250).length;
+    const over130 = filtered.filter((r) => getChartDays(r) > 130).length;
+    const over220 = filtered.filter((r) => getChartDays(r) > 220).length;
+    const over250 = filtered.filter((r) => getChartDays(r) > 250).length;
     const avg = total === 0 ? 0
-      : Math.round(filtered.reduce((s, r) => s + (r.chart_days ?? 0), 0) / total);
+      : Math.round(filtered.reduce((s, r) => s + getChartDays(r), 0) / total);
     const pregnant = filtered.filter((r) => r.is_pregnancy).length;
     const dry = filtered.filter((r) => r.is_dry).length;
     return { total, heifers, over130, over220, over250, avg, pregnant, dry };
@@ -302,7 +322,7 @@ export default function FertilityLegacyChart() {
       }
       if (heiferMode === "heifer" && !r.is_heifer) return false;
       if (heiferMode === "cow" && r.is_heifer) return false;
-      if (dayMin > 0 && (r.chart_days ?? 0) <= dayMin) return false;
+      if (dayMin > 0 && getChartDays(r) <= dayMin) return false;
       if (pregMode === "pregnant" && !r.is_pregnancy) return false;
       if (pregMode === "open" && r.is_pregnancy) return false;
       if (pregMode === "dry" && !r.is_dry) return false;
@@ -335,7 +355,7 @@ export default function FertilityLegacyChart() {
 
     // Bar series with per-cow color via itemStyle callback.
     const barData = filtered.map((r) => ({
-      value: r.chart_days ?? 0,
+      value: getChartDays(r),
       itemStyle: {
         // Apply the legacy CRM palette per status id (falls back to the
         // DB-provided status_color when an id isn't mapped).
@@ -346,7 +366,7 @@ export default function FertilityLegacyChart() {
 
     // Triangle markers above heifer bars only.
     const heiferScatter = filtered
-      .map((r, i) => r.is_heifer ? [i, (r.chart_days ?? 0) + 5] : null)
+      .map((r, i) => r.is_heifer ? [i, getChartDays(r) + 5] : null)
       .filter(Boolean) as [number, number][];
 
     return {
@@ -375,8 +395,8 @@ export default function FertilityLegacyChart() {
             ${line("میزان آبستنی", r.pregnancy_days)}
             ${line("مدت زایش تا آبستنی", r.last_birth_to_pregnancy_days)}
             ${line("تعداد زایش", r.number_of_births)}
-            ${line("آخرین تلقیح", r.last_inoculation_date_g ? formatShamsi(r.last_inoculation_date_g) : dash)}
-            ${line("پیش بینی زایش", r.prediction_of_birth_date_g ? formatShamsi(r.prediction_of_birth_date_g) : dash)}
+            ${line("آخرین تلقیح", (r as any).d_inoc ? formatShamsi((r as any).d_inoc) : dash)}
+            ${line("پیش بینی زایش", r.prediction_of_birth_date ? formatShamsi(r.prediction_of_birth_date) : dash)}
             ${line("در بهاربند", r.last_location_name)}
             ${line("وضعیت باروری فعلی", r.chart_status)}
             ${line("وضعیت دوشش", r.milking_status)}
