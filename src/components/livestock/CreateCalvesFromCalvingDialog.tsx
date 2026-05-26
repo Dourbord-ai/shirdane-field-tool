@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -56,10 +56,16 @@ export default function CreateCalvesFromCalvingDialog({
   const [confirmDeadIdx, setConfirmDeadIdx] = useState<number | null>(null);
   const [overrides, setOverrides] = useState<Record<number, { ear_number: string; body_number: string }>>({});
 
-  // Reset state when dialog opens
-  useState(() => {
+  // Re-sync local calves state whenever the event prop changes (or the dialog
+  // re-opens with a different calving row). The previous code used
+  // `useState(() => setCalves(...))` which is a misuse of useState — it only
+  // runs once at mount, when `event` is still null, so the dialog kept showing
+  // an empty list even though `event.metadata.calves` had data.
+  useEffect(() => {
     setCalves(initialCalves);
-  });
+    setOverrides({});
+    setConfirmDeadIdx(null);
+  }, [initialCalves, event?.id, open]);
 
   function getOverride(idx: number, c: CalfMeta) {
     return (
