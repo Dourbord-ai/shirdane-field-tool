@@ -210,14 +210,13 @@ export default function DryOffNew() {
 
       // 2) Update the cow row: mark dry, stamp dates, move to dry pen.
       const nowIso = new Date().toISOString();
-      const cowPatch: Record<string, unknown> = {
+      const cowPatch = {
         is_dry: true,
         last_dry_date: nowIso,
+        ...(dryLocation?.id
+          ? { last_location_id: dryLocation.id, last_location_date: nowIso }
+          : {}),
       };
-      if (dryLocation?.id) {
-        cowPatch.last_location_id = dryLocation.id;
-        cowPatch.last_location_date = nowIso;
-      }
       const { error: cowErr } = await supabase
         .from("cows")
         .update(cowPatch)
