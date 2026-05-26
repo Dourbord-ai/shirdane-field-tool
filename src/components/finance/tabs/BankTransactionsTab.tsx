@@ -181,6 +181,32 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     }
   }
 
+  // "شناسایی واریزها" — single-click orchestrator: fires the n8n webhook,
+  // then processes whatever n8n parsed by reusing the canonical manual
+  // receive-identification + approval helpers. The loading toast satisfies
+  // the spec's required Persian message while the sweep runs.
+  async function runDepositAI() {
+    if (depositAIRunning) return;
+    setDepositAIRunning(true);
+    setDepositAIProgress(emptyDepositAIProgress());
+    const loadingToastId = toast.loading(
+      "هوشیار در حال بررسی شرح واریزی‌ها\nلطفا کمی صبر کنید",
+    );
+    try {
+      const final = await processDepositAI((p) => setDepositAIProgress(p));
+      toast.dismiss(loadingToastId);
+      toast.success(
+        `شناسایی واریزها — تعداد بررسی‌شده: ${final.total} · شناسایی‌شده توسط هوشیار: ${final.identified_by_ai} · تایید حساب موفق: ${final.verify_success} · طرف حساب پیدا نشد: ${final.party_not_found} · ثبت موفق: ${final.posted} · خطادار: ${final.failed}`,
+      );
+      void load();
+    } catch (e) {
+      toast.dismiss(loadingToastId);
+      toastFinanceError(toast, e);
+    } finally {
+      setDepositAIRunning(false);
+    }
+  }
+
   useEffect(() => {
     supabase.from("finance_banks").select("id,title,bank_name").then(({ data }) => {
       const m: Record<string, BankRef> = {};
