@@ -1148,7 +1148,37 @@ export default function NewInvoice() {
 
     if (factorError || !factor) {
       console.error("Factor insert error:", factorError);
-      alert("خطا در ثبت فاکتور: " + (factorError?.message || "Unknown"));
+
+      // Concurrency-safety branch: the DB unique index
+      // `factors_sales_invoice_number_unique` rejects a duplicate sales
+      // invoice number (Postgres SQLSTATE 23505). This happens when two
+      // operators submitted the same auto-generated number at the same
+      // time. We auto-regenerate the next number and ask the user to
+      // re-submit — the bookkeeping side stays correct because nothing
+      // was actually inserted on a 23505.
+      const isDuplicateSalesNumber =
+        !!factorError &&
+        (factorError.code === "23505" ||
+          /factors_sales_invoice_number_unique|duplicate key/i.test(
+            factorError.message || ""
+          ));
+      if (isDuplicateSalesNumber && isSale) {
+        const next = await fetchNextSalesInvoiceNumber();
+        if (next) set("invoiceNumber", next);
+        toast({
+          title: "شماره فاکتور تکراری است",
+          description:
+            "این شماره فاکتور فروش هم‌اکنون توسط کاربر دیگری ثبت شد. شماره جدید به‌صورت خودکار محاسبه شد؛ لطفاً دوباره «ثبت نهایی» را بزنید.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "خطا در ثبت فاکتور",
+        description: factorError?.message || "Unknown",
+        variant: "destructive",
+      });
       return;
     }
 
