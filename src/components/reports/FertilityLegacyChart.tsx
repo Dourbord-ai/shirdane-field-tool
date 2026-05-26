@@ -72,6 +72,26 @@ const resolveStatusColor = (
   return fallback ?? "#9CA3AF";
 };
 
+// The Supabase view no longer exposes a single pre-computed `chart_days`
+// column — it now ships the raw components (pregnancy_days, dry_days,
+// last_birth_to_pregnancy_days). Derive the bar height client-side using
+// the same legacy CRM priority: روز از آخرین تلقیح > روز خشکی > فاصله زایش
+// تا تلقیح. Without this helper every bar rendered at 0.
+const getChartDays = (r: {
+  pregnancy_days?: number | null;
+  dry_days?: number | null;
+  last_birth_to_pregnancy_days?: number | null;
+}): number => {
+  const v =
+    r.pregnancy_days ??
+    r.dry_days ??
+    r.last_birth_to_pregnancy_days ??
+    0;
+  // Coerce to number defensively in case Supabase returns a string.
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 // Row shape returned by the view. All optional because Supabase may return
 // null for cows with missing fertility data.
 export interface FertilityChartRow {
