@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Beef, Milk, BarChart3, Wallet, Users,
-  Award, HeartPulse, Settings, ShoppingCart, Receipt, ListFilter,
+  Award, HeartPulse, Settings, ShoppingCart, Receipt, ListFilter, Droplet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ const items = [
   { title: "داشبورد",       icon: LayoutDashboard, to: "/dashboard" },
   { title: "دام‌ها",         icon: Beef,            to: "/livestock" },
   { title: "لیست شخصی دام‌ها", icon: ListFilter,    to: "/livestock/list-builder" },
+  { title: "ثبت خشکی",       icon: Droplet,         to: "/livestock/dry-off/new" },
   { title: "قبوض شیر",       icon: Milk,            to: "/receipts/milk" },
   { title: "قبوض آزمایشگاه", icon: Receipt,         to: "/receipts/lab" },
   { title: "خرید و فروش",    icon: ShoppingCart,    to: "/invoices" },

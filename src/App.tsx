@@ -14,6 +14,7 @@ import LabResults from "./pages/LabResults";
 import Livestock from "./pages/Livestock";
 import LivestockListBuilder from "./pages/LivestockListBuilder";
 import LivestockProfile from "./pages/LivestockProfile";
+import DryOffNew from "./pages/livestock/DryOffNew";
 import MilkRecordQuick from "./pages/MilkRecordQuick";
 import Finance from "./pages/Finance";
 import HumanResources from "./pages/HumanResources";
@@ -58,6 +59,7 @@ const App = () => (
               <Route path="/receipts/lab" element={<LabResults />} />
               <Route path="/livestock" element={<Livestock />} />
               <Route path="/livestock/list-builder" element={<LivestockListBuilder />} />
+              <Route path="/livestock/dry-off/new" element={<DryOffNew />} />
               <Route path="/livestock/:id" element={<LivestockProfile />} />
               <Route path="/milk-record/quick" element={<MilkRecordQuick />} />
               <Route path="/finance" element={<Finance />} />
