@@ -404,6 +404,47 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     void load();
   }
 
+  // --------------------------------------------------------------------
+  // Bulk-attach selection helpers.
+  //
+  // A tx is eligible for bulk-attach only when it's an UNASSIGNED WITHDRAW.
+  // Deposits go through receive-identification, not payment-allocation, and
+  // already-assigned rows would be rejected by the lib + DB guard anyway.
+  // We mirror that filter here so the UI never lets the operator queue a
+  // doomed call.
+  // --------------------------------------------------------------------
+  function isBulkAttachEligible(t: Tx): boolean {
+    return t.transaction_type === "withdraw" && t.assignment_status === "unassigned";
+  }
+  function toggleSelect(id: string, eligible: boolean) {
+    if (!eligible) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+  // Drop selections for rows that are no longer visible OR no longer
+  // eligible after a reload. Prevents stale IDs from leaking into the
+  // bulk-attach call.
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const validIds = new Set(txs.filter(isBulkAttachEligible).map((t) => t.id));
+    let changed = false;
+    const next = new Set<string>();
+    selectedIds.forEach((id) => {
+      if (validIds.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) setSelectedIds(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txs]);
+
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
