@@ -137,6 +137,43 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Recover stale 'processing' rows. If a previous run crashed (tab closed,
+// network drop) a candidate may have been claimed but never advanced to a
+// terminal state. Without this reset the row is invisible to fetchCandidates
+// forever (it only sees 'parsed_by_regex'). We only revert rows that are
+// truly orphaned: still unassigned and have no Sepidar-linked receive
+// identification pointing at them — anything else might be mid-flight in a
+// concurrent tab and must NOT be touched.
+//
+// We bound the lookback so a row that is genuinely in-flight in another tab
+// (started seconds ago) is left alone. Five minutes is far longer than any
+// single-row run takes in practice.
+// ---------------------------------------------------------------------------
+async function recoverStaleProcessing(): Promise<void> {
+  const cutoffIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // Only touch rows that:
+  //   - were claimed (ai_verify_status='processing')
+  //   - have not been assigned to any operation (assignment_status='unassigned')
+  //   - were touched more than 5 minutes ago (stale)
+  // The DB has ai_verified_at; we use it as the "last touched" timestamp
+  // because setVerifyResult writes it, and the claim() update lands earlier
+  // but its updated_at column is also bumped by the row trigger. ai_verified_at
+  // is null when claim() runs (it's only set in setVerifyResult), so use
+  // updated_at as the more reliable freshness signal.
+  const { error } = await supabase
+    .from("finance_bank_transactions")
+    .update({ ai_verify_status: "parsed_by_regex" })
+    .eq("ai_verify_status", "processing")
+    .eq("assignment_status", "unassigned")
+    .lt("updated_at", cutoffIso);
+  if (error) {
+    log("recovery.error", { error: error.message });
+  } else {
+    log("recovery.done", { cutoffIso });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Atomic claim — sets ai_verify_status='processing' only if it's still
 // 'parsed_by_regex'. Returns true when this client successfully claimed the
 // row (so concurrent runs cannot double-process the same transaction).
@@ -146,7 +183,13 @@ async function claim(txId: string): Promise<boolean> {
   log("claim.started", { txId });
   const { data, error } = await supabase
     .from("finance_bank_transactions")
-    .update({ ai_verify_status: "processing" })
+    .update({
+      ai_verify_status: "processing",
+      // Spec rule: clear stale error when we (re-)enter the processing state
+      // so a previously-errored row that was manually reset to
+      // 'parsed_by_regex' doesn't carry its old message into the new run.
+      ai_verify_error: null,
+    })
     .eq("id", txId)
     .eq("ai_verify_status", "parsed_by_regex")
     .select("id")
@@ -163,11 +206,19 @@ async function claim(txId: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Persist the verify-account outcome onto the transaction row.
+// Persist the verify-account / pipeline outcome onto the transaction row.
+// The status union mirrors the spec's terminal-state list plus 'verified'
+// (intermediate, written immediately after verify-account succeeds so the
+// row is never left in 'processing' for longer than one network hop).
 // ---------------------------------------------------------------------------
 async function setVerifyResult(
   txId: string,
-  status: "verified" | "verify_failed" | "party_not_found" | "posted" | "posting_failed",
+  status:
+    | "verified"
+    | "verify_failed"
+    | "party_not_found"
+    | "posted"
+    | "posting_failed",
   patch: { result?: unknown; error?: string | null } = {},
 ) {
   await supabase
@@ -254,6 +305,12 @@ export async function processDepositAI(
   await triggerWebhook();
   push("هوشیار در حال بررسی شرح واریزی‌ها — لطفا کمی صبر کنید");
 
+  // 1b) Crash-recovery sweep: any row left in 'processing' by an earlier
+  // run (closed tab / network drop) gets reset back to 'parsed_by_regex'
+  // so this run can pick it up. Bounded by a 5-minute age check inside
+  // recoverStaleProcessing so concurrent in-flight rows are never stolen.
+  await recoverStaleProcessing();
+
   // 2) fetch candidates that n8n marked ready
   const candidates = await fetchCandidates();
   progress.total = candidates.length;
@@ -266,6 +323,13 @@ export async function processDepositAI(
   for (const tx of candidates) {
     progress.processed += 1;
     const payload = tx.ai_verify_payload;
+
+    // Track where we are within the per-row pipeline so the outer catch
+    // can pick the right terminal status. Before verify-account succeeds,
+    // any thrown exception is a verify-side failure; after it, we are in
+    // the posting half of the pipeline.
+    let verifySucceeded = false;
+    let lastVerifyData: unknown = null;
 
     try {
       // Rerun protection — only process rows still in 'parsed_by_regex'.
@@ -282,11 +346,14 @@ export async function processDepositAI(
       }
 
       // 3a) verify-account — pass ai_verify_payload EXACTLY as the body.
+      // We use supabase.functions.invoke (NOT raw fetch) so the user's JWT
+      // is attached automatically; verify-account requires it.
       log("verify.started", { txId: tx.id, payload });
       const { data: verifyData, error: verifyError } = await supabase.functions.invoke(
         "verify-account",
         { body: payload },
       );
+      lastVerifyData = verifyData;
 
       const verifyOk =
         !verifyError && Boolean((verifyData as { ok?: boolean } | null)?.ok);
@@ -309,6 +376,14 @@ export async function processDepositAI(
 
       log("verify.success", { txId: tx.id });
       progress.verify_success += 1;
+      verifySucceeded = true;
+
+      // Spec literal: persist the intermediate 'verified' state BEFORE we
+      // continue. This guarantees the row never sits in 'processing' if a
+      // later step (party match / RPC) throws — the next run will see
+      // 'verified' and can resume from party matching by manual UI, while
+      // the recovery sweep won't touch it (it only resets 'processing').
+      await setVerifyResult(tx.id, "verified", { result: verifyData, error: null });
 
       // Spec-mandated marker: log the start of party matching so operators can
       // correlate it with cache/history lookups that follow.
@@ -406,12 +481,22 @@ export async function processDepositAI(
       }
     } catch (rowErr) {
       // Per-row catch — one bad row must never abort the whole sweep.
+      // We pick the terminal status based on how far this row got:
+      //   - verifySucceeded=false → the failure happened during claim/verify,
+      //     so 'verify_failed' is the correct terminal state.
+      //   - verifySucceeded=true  → we crashed during party match / RPC /
+      //     approve, so 'posting_failed' is the truthful state (and matches
+      //     the spec's "خطادار" bucket as posting failures).
       const msg = rowErr instanceof Error ? rowErr.message : String(rowErr);
-      log("row.exception", { txId: tx.id, error: msg });
+      log("row.exception", { txId: tx.id, error: msg, verifySucceeded });
       progress.failed += 1;
       progress.failures.push({ txId: tx.id, step: "exception", message: msg });
       try {
-        await setVerifyResult(tx.id, "verify_failed", { error: msg });
+        await setVerifyResult(
+          tx.id,
+          verifySucceeded ? "posting_failed" : "verify_failed",
+          { result: lastVerifyData, error: msg },
+        );
       } catch {
         /* swallow — already in error path */
       }
