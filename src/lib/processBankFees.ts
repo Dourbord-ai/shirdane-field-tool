@@ -64,13 +64,20 @@ const TAG = "[BankFees]";
 // Public progress shape — surfaced into the UI summary panel.
 // ---------------------------------------------------------------------------
 export interface BankFeesProgress {
-  total: number;                 // total unassigned rows fetched
+  total: number;                 // total eligible rows fetched
   checked: number;               // rows we actually evaluated
   fee_candidates: number;        // rows that passed the threshold
   payment_requests_created: number;
   sepidar_posted: number;
   failed: number;
   remaining: number;
+  // Final coverage report fields (per user spec).
+  eligibleTotal: number;
+  processedThisRun: number;
+  successful: number;
+  retried: number;
+  neverTouched: number;
+  remainingEligible: number;
   lastMessage?: string;
   failures: { txId: string; step: string; message: string }[];
   matched: {
@@ -91,6 +98,12 @@ export function emptyFeesProgress(): BankFeesProgress {
     sepidar_posted: 0,
     failed: 0,
     remaining: 0,
+    eligibleTotal: 0,
+    processedThisRun: 0,
+    successful: 0,
+    retried: 0,
+    neverTouched: 0,
+    remainingEligible: 0,
     failures: [],
     matched: [],
   };
