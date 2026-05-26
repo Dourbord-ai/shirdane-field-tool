@@ -368,8 +368,14 @@ const initial: InvoiceData = {
   serviceSubType: "",
   date: null,
   invoiceNumber: "",
-  tax: "",
-  sellerType: "",
+  // UX simplification: default tax to "ندارد" (no). Operator can switch to
+  // "دارد" manually when an invoice actually has VAT. Previously this was
+  // "" which forced an extra selection step in every flow.
+  tax: "no",
+  // UX simplification: default party type to "company" (شرکت) behind the
+  // scenes. The seller/buyer type selector is hidden — every counterparty
+  // now flows through the unified `finance_parties` selector directly.
+  sellerType: "company",
   company: "",
   // M5: blank until the operator picks a party from the unified selector.
   financePartyId: "",
