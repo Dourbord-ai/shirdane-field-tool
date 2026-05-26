@@ -353,6 +353,13 @@ function EventCard({
       {cancelled && e.cancel_reason && (
         <p className="text-[11px] text-destructive">دلیل لغو: {e.cancel_reason}</p>
       )}
+      {/* For every calving event, show the linked calves panel — even when
+          metadata.calves is empty, the panel renders an explicit Persian
+          warning so users immediately see there are no calf records to
+          inspect. The legacy "ایجاد دام" button stays underneath. */}
+      {isCalving && !cancelled && (
+        <CalvesPanel calves={calves} liveMap={calfLiveMap} />
+      )}
       {hasCalves && onCreateCalves && !cancelled && (
         <Button
           type="button"
