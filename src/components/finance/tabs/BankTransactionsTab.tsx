@@ -131,6 +131,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
+  // ---- Bulk-attach selection state ---------------------------------------
+  // We track selected tx IDs in a Set for O(1) toggle + lookup. Only rows
+  // that pass `isBulkAttachEligible` (withdraw + unassigned) can be put in
+  // here; the table guards each addition so the user can never select an
+  // ineligible row even if the underlying data shifts between renders.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [openBulkAttach, setOpenBulkAttach] = useState(false);
   const [loading, setLoading] = useState(true);
   // Manual auto-processing state. `running` drives the dialog visibility and
   // disables the trigger button so a second click can't double-fire the
