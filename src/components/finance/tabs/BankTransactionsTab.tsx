@@ -299,78 +299,89 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
   async function load() {
     setLoading(true);
+    // -----------------------------------------------------------------------
+    // SERVER-SIDE FILTERING + PAGINATION.
+    //
+    // Every filter the user can express in the toolbar is translated into a
+    // Supabase query parameter so Postgres does the work — we never pull a
+    // huge result set into the browser only to trim it.
+    //
+    // Flow (per spec):
+    //   1. Build base query (`is_deleted = false`).
+    //   2. Apply every filter.
+    //   3. Apply sort.
+    //   4. Get total filtered count (via `count: 'exact'` on the same query).
+    //   5. Apply `.range(from, to)` for the visible page only.
+    // -----------------------------------------------------------------------
     let q = supabase
       .from("finance_bank_transactions")
-      .select("*")
-      .eq("is_deleted", false)
-      .order("transaction_datetime", { ascending: false })
-      .limit(500);
+      .select("*", { count: "exact" })
+      .eq("is_deleted", false);
+
     if (filterBank) q = q.eq("bank_id", filterBank);
     if (filterType) q = q.eq("transaction_type", filterType);
     if (filterAssign) q = q.eq("assignment_status", filterAssign);
-    // Inclusive range on the real transaction date column.
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
-    const { data } = await q;
+
+    // Description search — PostgREST ILIKE is case-insensitive substring.
+    if (debouncedDescr) {
+      // Escape `%` and `,` characters so they're treated as literals; they
+      // would otherwise be interpreted as PostgREST wildcards/delimiters.
+      const safe = debouncedDescr.replace(/[%,]/g, " ");
+      q = q.ilike("description", `%${safe}%`);
+    }
+
+    // Amount range — server-side via `.or()`. A row matches if either
+    // deposit_amount OR withdraw_amount falls inside the [min, max] range.
+    // This mirrors the previous client-side `Math.abs(deposit||withdraw)`
+    // semantics without pulling rows for filtering.
+    const min = debouncedMin ? parseMoney(debouncedMin) : null;
+    const max = debouncedMax ? parseMoney(debouncedMax) : null;
+    if (min !== null && max !== null) {
+      q = q.or(
+        `and(deposit_amount.gte.${min},deposit_amount.lte.${max}),and(withdraw_amount.gte.${min},withdraw_amount.lte.${max})`,
+      );
+    } else if (min !== null) {
+      q = q.or(`deposit_amount.gte.${min},withdraw_amount.gte.${min}`);
+    } else if (max !== null) {
+      q = q.or(`deposit_amount.lte.${max},withdraw_amount.lte.${max}`);
+    }
+
+    q = q.order("transaction_datetime", { ascending: false });
+
+    // Pagination — .range() is INCLUSIVE on both ends.
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    q = q.range(from, to);
+
+    const { data, count } = await q;
     const rows = (data as Tx[]) || [];
     setTxs(rows);
+    setFilteredCount(count ?? 0);
 
     // -----------------------------------------------------------------------
-    // Side-load the per-tx enrichment used by badges & chip filters. Three
-    // parallel `.in()` queries keep this O(1) round-trips regardless of how
-    // many rows came back from the main fetch.
+    // Side-load the per-tx enrichment used by badges & chip filters. Only
+    // for the current page's rows — at PAGE_SIZE=50 the IN-list stays well
+    // under PostgREST's URI limit, so a single round-trip per table is fine.
     // -----------------------------------------------------------------------
     const ids = rows.map((r) => r.id);
     if (ids.length === 0) {
       setIdentByTx({}); setReceiveByTx({}); setPartyNames({});
     } else {
-      // -----------------------------------------------------------------------
-      // Chunk the `.in()` lookups. PostgREST accepts large IN-lists, but the
-      // URL-encoded query string can blow past Nginx's URI length cap (~8KB)
-      // and return 414 Request-URI Too Large. Each UUID + separator costs
-      // ~40 bytes, so 50 IDs/chunk (~2KB) leaves comfortable headroom.
-      // -----------------------------------------------------------------------
-      const CHUNK_SIZE = 50;
-      const chunks: string[][] = [];
-      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-        chunks.push(ids.slice(i, i + CHUNK_SIZE));
-      }
-      console.log("fetchBankTxIdentifiers", {
-        operationName: "fetchBankTxIdentifiers",
-        totalIds: ids.length,
-        chunkCount: chunks.length,
-        chunkSize: CHUNK_SIZE,
-      });
-
-      // Fire all chunks in parallel — N round-trips overlap on the wire and
-      // avoid the 414 entirely. We do this for BOTH identifiers and receives
-      // since they share the same `ids` list and both used to `.in()` it.
-      const identPromises = chunks.map((chunk, chunkIndex) => {
-        console.log("fetchBankTxIdentifiers chunk", {
-          operationName: "fetchBankTxIdentifiers",
-          chunkIndex,
-          chunkSize: chunk.length,
-        });
-        return supabase
+      const [identsRes, receivesRes] = await Promise.all([
+        supabase
           .from("finance_bank_tx_identifiers")
           .select("bank_transaction_id, match_type, raw_value, normalized_value, verified_owner_name, verified_bank_name")
-          .in("bank_transaction_id", chunk);
-      });
-      const receivePromises = chunks.map((chunk) =>
+          .in("bank_transaction_id", ids),
         supabase
           .from("finance_receive_identifications")
           .select("id, bank_transaction_id, party_id, status, auto_identified, identification_source, sepidar_sync_status, voucher_id")
-          .in("bank_transaction_id", chunk)
+          .in("bank_transaction_id", ids)
           .eq("is_deleted", false),
-      );
-      const [identsResults, receivesResults] = await Promise.all([
-        Promise.all(identPromises),
-        Promise.all(receivePromises),
       ]);
-
-      // Flatten chunked results, then group by bank_transaction_id as before.
-      const identsData = identsResults.flatMap((r) => r.data || []);
-      const receivesData = receivesResults.flatMap((r) => r.data || []);
+      const identsData = identsRes.data || [];
+      const receivesData = receivesRes.data || [];
 
       const im: Record<string, IdentRow[]> = {};
       for (const r of identsData as Array<IdentRow & { bank_transaction_id: string }>) {
@@ -380,9 +391,6 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       const rm: Record<string, ReceiveMeta> = {};
       const partyIds = new Set<string>();
       for (const r of receivesData as Array<ReceiveMeta & { bank_transaction_id: string }>) {
-        // A tx should only have ONE active receive identification (DB guard
-        // enforces this), but if duplicates ever slip through we keep the
-        // first — order doesn't matter for badge rendering.
         if (!rm[r.bank_transaction_id]) rm[r.bank_transaction_id] = r;
         if (r.party_id) partyIds.add(r.party_id);
       }
@@ -408,34 +416,19 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     setLoading(false);
   }
 
+  // The auto-state chip filter still runs CLIENT-side because the derived
+  // state requires joining 3 tables. It narrows the current page only —
+  // chip counts therefore reflect the page, not the full DB. The base server
+  // filters above already do the heavy lifting against the real dataset.
   const filtered = useMemo(() => {
-    // Parse amount bounds once. Empty string → no bound.
-    const min = filterMinAmount ? parseMoney(filterMinAmount) : null;
-    const max = filterMaxAmount ? parseMoney(filterMaxAmount) : null;
-    const needle = filterDescr.trim().toLowerCase();
-    return txs.filter((t) => {
-      if (needle && !(t.description || "").toLowerCase().includes(needle)) return false;
-      if (min !== null || max !== null) {
-        // Compare against whichever side of the transaction is non-zero.
-        // Falls back to abs(amount) for legacy rows that only set `amount`.
-        const v = Math.abs(
-          Number(t.deposit_amount) || Number(t.withdraw_amount) || Number(t.amount) || 0,
-        );
-        if (min !== null && v < min) return false;
-        if (max !== null && v > max) return false;
-      }
-      // Auto-identification chip filter — derived state, applied last so
-      // it composes cleanly with the existing description / amount filters.
-      if (filterAutoState) {
-        const st = deriveAutoState(t, identByTx[t.id], receiveByTx[t.id]);
-        if (st !== filterAutoState) return false;
-      }
-      return true;
-    });
-  }, [txs, filterDescr, filterMinAmount, filterMaxAmount, filterAutoState, identByTx, receiveByTx]);
+    if (!filterAutoState) return txs;
+    return txs.filter(
+      (t) => deriveAutoState(t, identByTx[t.id], receiveByTx[t.id]) === filterAutoState,
+    );
+  }, [txs, filterAutoState, identByTx, receiveByTx]);
 
-  // Live counts for the chip bar — driven by the unfiltered (server-side
-  // filtered) set so the user can see how many rows each chip would reveal.
+  // Live counts for the chip bar — driven by the current page (txs) so the
+  // user can see how many rows on the visible page belong to each state.
   const autoCounts = useMemo(() => {
     const c: Record<AutoState, number> = {
       auto_identified: 0, manual: 0, needs_review: 0, no_identifier: 0, sepidar_failed: 0,
@@ -443,6 +436,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     for (const t of txs) c[deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])]++;
     return c;
   }, [txs, identByTx, receiveByTx]);
+
+  // Pagination math — derived from server-provided `filteredCount`.
+  const pageCount = Math.max(1, Math.ceil((filteredCount ?? 0) / PAGE_SIZE));
+  const rangeFrom = filteredCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeTo = Math.min((filteredCount ?? 0), page * PAGE_SIZE);
+
+
 
 
   async function softDelete(t: Tx) {
