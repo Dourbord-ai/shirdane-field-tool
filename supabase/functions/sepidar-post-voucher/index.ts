@@ -69,18 +69,25 @@ function persianizeError(raw: string): string {
 }
 
 // Mark voucher as failed + log. Best-effort, never throws.
+// `rawMessage` is the original (untranslated) SQL Server / driver error text
+// — we persist it inside the sync log payload so operators can diagnose the
+// real Sepidar failure without losing the friendly Persian summary that
+// `sepidar_error_message` stores on the voucher row.
 async function markFailed(
   sb: ReturnType<typeof createClient>,
   voucherId: string,
   message: string,
   attempts: number,
+  rawMessage?: string | null,
 ) {
   try {
     await sb
       .from("finance_vouchers")
       .update({
         sepidar_sync_status: "failed",
-        sepidar_error_message: message,
+        sepidar_error_message: rawMessage && rawMessage !== message
+          ? `${message} | raw: ${rawMessage}`.slice(0, 1000)
+          : message,
         sepidar_sync_attempts: attempts,
       })
       .eq("id", voucherId);
@@ -89,6 +96,7 @@ async function markFailed(
       operation_type: "post_voucher",
       status: "failed",
       error_message: message,
+      response_payload: rawMessage ? ({ rawError: rawMessage } as never) : null,
     } as never);
   } catch (e) {
     console.warn("[sepidar-post-voucher] markFailed log failed", e);
