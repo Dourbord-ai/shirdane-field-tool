@@ -811,14 +811,26 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       )}
 
-      {/* Auto-identification chip filters — server-side filtered txs are
-          partitioned into 5 derived states (see deriveAutoState). Counts
-          reflect the unfiltered set so the user sees the impact of each
-          chip before clicking it. */}
+      {/* ---- Count summary ---------------------------------------------
+          Three numbers, exactly as required by the spec:
+            • کل تراکنش‌ها     = grand total in the DB (no filters)
+            • نتیجه فیلتر فعلی  = total matching current server filters
+            • نمایش             = visible row range on this page
+          Numbers come straight from the server-side count queries, so they
+          stay correct regardless of how many pages of data exist. ----- */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>کل تراکنش‌ها: <span className="font-bold text-foreground tabular-nums">{(totalCount ?? 0).toLocaleString("fa-IR")}</span></span>
+        <span>نتیجه فیلتر فعلی: <span className="font-bold text-foreground tabular-nums">{(filteredCount ?? 0).toLocaleString("fa-IR")}</span></span>
+        <span>نمایش: <span className="font-bold text-foreground tabular-nums">{rangeFrom.toLocaleString("fa-IR")} تا {rangeTo.toLocaleString("fa-IR")}</span></span>
+      </div>
+
+      {/* Auto-identification chip filters — applied client-side over the
+          current page only. The "همه" count shows the filtered server total
+          so it always matches the count summary above. */}
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            ["", "همه", txs.length],
+            ["", "همه", filteredCount ?? 0],
             ["auto_identified", "شناسایی خودکار", autoCounts.auto_identified],
             ["manual", "شناسایی دستی", autoCounts.manual],
             ["needs_review", "نیازمند بازبینی", autoCounts.needs_review],
@@ -829,6 +841,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <button
             key={key || "all"}
             onClick={() => setFilterAutoState(key as "" | AutoState)}
+
             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
               filterAutoState === key
                 ? "bg-primary text-primary-foreground border-primary"
