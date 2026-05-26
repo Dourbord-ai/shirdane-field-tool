@@ -884,8 +884,23 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t) => (
-                  <tr key={t.id} className="border-t hover:bg-secondary/30">
+                {filtered.map((t) => {
+                  const eligible = isBulkAttachEligible(t);
+                  const checked = selectedIds.has(t.id);
+                  return (
+                  <tr key={t.id} className={`border-t hover:bg-secondary/30 ${checked ? "bg-primary/5" : ""}`}>
+                    {/* Per-row checkbox. Rendered (but disabled) for
+                        ineligible rows too so the column stays aligned and
+                        the operator can see WHY they can't select certain
+                        rows (greyed out). */}
+                    <td className="p-2 align-middle">
+                      <Checkbox
+                        checked={checked}
+                        disabled={!eligible}
+                        onCheckedChange={() => toggleSelect(t.id, eligible)}
+                        aria-label="انتخاب تراکنش"
+                      />
+                    </td>
                     <td className="p-2">{banks[t.bank_id || ""]?.title || banks[t.bank_id || ""]?.bank_name || "—"}</td>
                     <td className="p-2"><JalaliDateCell value={t.transaction_datetime} withTime /></td>
                     <td className="p-2">{t.transaction_type === "deposit" ? "واریز" : "برداشت"}</td>
