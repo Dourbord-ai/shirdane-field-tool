@@ -704,7 +704,7 @@ export async function createReceiveIdentification(input: CreateReceiveIdInput): 
   return ri;
 }
 
-export async function approveReceiveIdentification(receiveIdId: string): Promise<{ ok: boolean; error?: string }> {
+export async function approveReceiveIdentification(receiveIdId: string): Promise<{ ok: boolean; error?: string; trusted_saved?: boolean }> {
   const { data: ri, error } = await supabase
     .from("finance_receive_identifications")
     .select("*")
