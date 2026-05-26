@@ -785,17 +785,27 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
               <div key={group.title} className="space-y-2">
                 <h3 className="text-xs font-bold text-muted-foreground">{group.title}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {group.actions.map((a) => (
-                    <Button
-                      key={a.key}
-                      variant="outline"
-                      className="justify-start gap-2 h-11"
-                      onClick={() => handleAction(a.key)}
-                    >
-                      <Plus className="w-4 h-4 text-primary" />
-                      {a.label}
-                    </Button>
-                  ))}
+                  {group.actions.map((a) => {
+                    // The dry-off action is blocked when the cow is already
+                    // dry (cow.is_dry) OR the latest dry_off event has no
+                    // calving after it. We render it disabled with a Persian
+                    // tooltip rather than hiding it so the user understands
+                    // why the action is unavailable.
+                    const disabled = a.key === "dry_off" && dryOffBlocked;
+                    return (
+                      <Button
+                        key={a.key}
+                        variant="outline"
+                        className="justify-start gap-2 h-11"
+                        onClick={() => handleAction(a.key)}
+                        disabled={disabled}
+                        title={disabled ? "این دام قبلاً خشک شده است" : undefined}
+                      >
+                        <Plus className="w-4 h-4 text-primary" />
+                        {a.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
