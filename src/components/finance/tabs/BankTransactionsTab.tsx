@@ -481,21 +481,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   function clearSelection() {
     setSelectedIds(new Set());
   }
-  // Drop selections for rows that are no longer visible OR no longer
-  // eligible after a reload. Prevents stale IDs from leaking into the
-  // bulk-attach call.
-  useEffect(() => {
-    if (selectedIds.size === 0) return;
-    const validIds = new Set(txs.filter(isBulkAttachEligible).map((t) => t.id));
-    let changed = false;
-    const next = new Set<string>();
-    selectedIds.forEach((id) => {
-      if (validIds.has(id)) next.add(id);
-      else changed = true;
-    });
-    if (changed) setSelectedIds(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txs]);
+  // NOTE: the previous `useEffect([txs])` that pruned stale selections is no
+  // longer needed — we already reset `selectedIds` on every filter/page
+  // change above, which is the only way `txs` can change. Keeping that hook
+  // would double-clear and fight with manual toggles.
+
 
 
   return (
