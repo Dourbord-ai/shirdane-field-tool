@@ -618,7 +618,12 @@ async function saveTrustedBeneficiaryMapping(
       // Row exists → only update finance_party_id (+ fill in name/bank fields
       // if they were empty). Status is intentionally left alone so we don't
       // clobber operator-curated values.
-      const patch: Record<string, unknown> = { finance_party_id: partyId };
+      // Build a narrowly-typed patch so supabase-js accepts the update payload
+      const patch: {
+        finance_party_id: string;
+        matchname?: string;
+        matchbankname?: string;
+      } = { finance_party_id: partyId };
       if (!existing.matchname && verified?.name) patch.matchname = verified.name;
       if (!existing.matchbankname && verified?.bankName)
         patch.matchbankname = verified.bankName;
