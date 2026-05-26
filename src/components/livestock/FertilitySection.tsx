@@ -668,8 +668,6 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calfCowIdsKey]);
 
-  // Removed below — the second `useLegacyUserNames` call kept the existing
-  // behaviour; we now invoke it once above next to the map declaration.
 
 
   function handleAction(key: ActionKey) {
