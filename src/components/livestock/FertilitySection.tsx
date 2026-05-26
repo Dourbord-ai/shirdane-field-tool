@@ -360,16 +360,25 @@ function EventCard({
       {isCalving && !cancelled && (
         <CalvesPanel calves={calves} liveMap={calfLiveMap} />
       )}
-      {hasCalves && onCreateCalves && !cancelled && (
+      {/*
+        Show the "ایجاد دام از اطلاعات گوساله‌ها" button ONLY when at least
+        one calf in metadata.calves[] still lacks created_cow_id. Once every
+        calf is linked to a real cow row (allCreated === true), the button
+        disappears completely — already-created calves are visible as
+        clickable chips inside <CalvesPanel/> above, so no extra entry point
+        is needed. This matches the user request to hide the button after
+        all calves are created and prevents accidental re-creation attempts.
+      */}
+      {hasCalves && !allCreated && onCreateCalves && !cancelled && (
         <Button
           type="button"
           size="sm"
-          variant={allCreated ? "outline" : "default"}
+          variant="default"
           className="w-full gap-1 mt-1"
           onClick={() => onCreateCalves(e)}
         >
           <Baby className="w-4 h-4" />
-          {allCreated ? "مشاهده گوساله‌های ایجادشده" : "ایجاد دام از اطلاعات گوساله‌ها"}
+          ایجاد دام از اطلاعات گوساله‌ها
         </Button>
       )}
       {!cancelled && (onEdit || onCancel) && (
