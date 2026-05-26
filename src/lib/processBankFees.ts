@@ -561,77 +561,127 @@ export async function processBankFees(
     return progress;
   }
 
-  // Pull all candidate rows in one query so we know the total up-front for
-  // the progress bar. Filtering on assignment_status + is_deleted + withdraw
-  // type matches the user's spec exactly.
-  const { data: rows, error } = await supabase
-    .from("finance_bank_transactions")
-    .select("id, bank_id, transaction_type, withdraw_amount, deposit_amount, amount, transaction_datetime, description")
-    .eq("assignment_status", "unassigned")
-    .eq("is_deleted", false)
-    .order("transaction_datetime", { ascending: true });
-  if (error) {
-    progress.lastMessage = error.message;
-    progress.failures.push({ txId: "—", step: "fetch", message: error.message });
-    onProgress({ ...progress });
+  // -------------------------------------------------------------------------
+  // Fetch ALL eligible rows using explicit pagination so the default 1000-row
+  // PostgREST cap never silently truncates the scan. We re-fetch in pages of
+  // PAGE_SIZE until a short page comes back (= no more rows).
+  //
+  // Eligibility filter (per user spec — MUST NOT exclude bank_fee_candidate
+  // or previously-failed rows, since those are exactly what we need to retry):
+  //   - is_deleted = false
+  //   - assignment_status = 'unassigned'
+  //   - transaction_type = 'withdraw'                  (DB-side filter)
+  //   - abs(coalesce(withdraw_amount, amount, 0)) < threshold   (client-side)
+  // -------------------------------------------------------------------------
+  const PAGE_SIZE = 1000;
+  const all: FeeTx[] = [];
+  let pageIndex = 0;
+  // We use range-based pagination because count('exact') + offset is the
+  // recommended pattern for streaming large result sets in Supabase.
+  while (true) {
+    const from = pageIndex * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data: page, error: pageErr } = await supabase
+      .from("finance_bank_transactions")
+      .select("id, bank_id, transaction_type, withdraw_amount, deposit_amount, amount, transaction_datetime, description, assigned_operation_type")
+      .eq("assignment_status", "unassigned")
+      .eq("is_deleted", false)
+      .eq("transaction_type", "withdraw")
+      .order("transaction_datetime", { ascending: true })
+      .range(from, to);
+    if (pageErr) {
+      progress.lastMessage = pageErr.message;
+      progress.failures.push({ txId: "—", step: "fetch", message: pageErr.message });
+      onProgress({ ...progress });
+      // eslint-disable-next-line no-console
+      console.error(TAG, "fetch failed", pageErr);
+      // eslint-disable-next-line no-console
+      console.groupEnd();
+      return progress;
+    }
+    const rowsPage = (page ?? []) as FeeTx[];
     // eslint-disable-next-line no-console
-    console.error(TAG, "fetch failed", error);
-    // eslint-disable-next-line no-console
-    console.groupEnd();
-    return progress;
+    console.log(TAG, "fetched.batch", { pageIndex, fetched: rowsPage.length, runningTotal: all.length + rowsPage.length });
+    all.push(...rowsPage);
+    if (rowsPage.length < PAGE_SIZE) break; // last page reached
+    pageIndex++;
   }
 
-  const all = (rows ?? []) as FeeTx[];
-  progress.total = all.length;
-  progress.remaining = all.length;
-  onProgress({ ...progress });
-  // eslint-disable-next-line no-console
-  console.log(TAG, "fetched", { total: all.length, threshold: FEE_THRESHOLD_IRR });
+  // Apply the amount threshold client-side (some rows carry the amount in
+  // `amount` rather than `withdraw_amount`, so SQL filtering would miss them).
+  const eligible = all.filter((tx) => {
+    const w = Math.abs(Number(tx.withdraw_amount) || 0);
+    const a = Math.abs(Number(tx.amount) || 0);
+    const absWithdraw = w || a;
+    return absWithdraw > 0 && absWithdraw < FEE_THRESHOLD_IRR;
+  });
 
-  // Process in BATCH_SIZE chunks. We yield to the UI between batches via
-  // setTimeout(0) so React can repaint the progress panel.
-  for (let i = 0; i < all.length; i += BATCH_SIZE) {
-    const batch = all.slice(i, i + BATCH_SIZE);
+  progress.total = eligible.length;
+  progress.eligibleTotal = eligible.length;
+  progress.remaining = eligible.length;
+  progress.remainingEligible = eligible.length;
+  onProgress({ ...progress });
+
+  // eslint-disable-next-line no-console
+  console.log(TAG, "eligible.total", {
+    eligibleTotal: eligible.length,
+    fetchedUnassignedTotal: all.length,
+    threshold: FEE_THRESHOLD_IRR,
+  });
+
+  // Track retry candidates separately for the coverage report.
+  const retryIds = new Set(
+    eligible
+      .filter((tx) => tx.assigned_operation_type === "bank_fee_candidate")
+      .map((tx) => tx.id),
+  );
+  // eslint-disable-next-line no-console
+  console.log(TAG, "retry.candidate", { count: retryIds.size });
+
+  // Process in BATCH_SIZE chunks. setTimeout(0) yields between batches so
+  // the UI repaints the progress panel.
+  for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+    const batch = eligible.slice(i, i + BATCH_SIZE);
     // eslint-disable-next-line no-console
     console.log(TAG, "batch", { index: i / BATCH_SIZE, size: batch.length });
 
     for (const tx of batch) {
       progress.checked++;
-      progress.remaining = all.length - progress.checked;
-
-      // ---- Threshold check (the only acceptance rule) -------------------
-      const withdrawAmount = Number(tx.withdraw_amount) || 0;
-      const fallback = Math.abs(Number(tx.amount) || 0);
-      const absWithdraw = Math.abs(withdrawAmount) || fallback;
-      const isWithdraw = tx.transaction_type === "withdraw" || withdrawAmount > 0;
-
-      if (!isWithdraw) {
-        // eslint-disable-next-line no-console
-        console.log(TAG, "tx.skip.not_withdraw", { txId: tx.id });
-        onProgress({ ...progress });
-        continue;
-      }
-      if (absWithdraw <= 0) {
-        // eslint-disable-next-line no-console
-        console.log(TAG, "tx.skip.zero_amount", { txId: tx.id });
-        onProgress({ ...progress });
-        continue;
-      }
-      if (absWithdraw >= FEE_THRESHOLD_IRR) {
-        // eslint-disable-next-line no-console
-        console.log(TAG, "tx.skip.over_threshold", { txId: tx.id, amount: absWithdraw, threshold: FEE_THRESHOLD_IRR });
-        onProgress({ ...progress });
-        continue;
-      }
+      progress.processedThisRun++;
+      progress.remaining = eligible.length - progress.checked;
+      progress.remainingEligible = progress.remaining;
 
       progress.fee_candidates++;
-      progress.lastMessage = `پردازش تراکنش ${tx.id.slice(0, 8)} — ${absWithdraw.toLocaleString("fa-IR")} ریال`;
+      const isRetry = retryIds.has(tx.id);
+      if (isRetry) progress.retried++;
+      progress.lastMessage = `پردازش تراکنش ${tx.id.slice(0, 8)}${isRetry ? " (بازپخش)" : ""}`;
       onProgress({ ...progress });
 
-      const result = await processOneFeeTx(tx, cfg.partyId);
+      // CRITICAL: wrap processOneFeeTx in try/catch so an unhandled throw
+      // on one row can NEVER terminate the rest of the scan. Per user spec.
+      let result: Awaited<ReturnType<typeof processOneFeeTx>>;
+      try {
+        result = await processOneFeeTx(tx, cfg.partyId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // eslint-disable-next-line no-console
+        console.error(TAG, "tx.unhandled_throw", { txId: tx.id, error: msg });
+        await audit(tx.id, "fee.unhandled_throw", false, msg);
+        result = {
+          ok: false,
+          prId: null,
+          voucherId: null,
+          sepidarVoucherId: null,
+          message: msg,
+          failedStep: "unhandled",
+        };
+      }
 
       if (result.prId) progress.payment_requests_created++;
       if (result.sepidarVoucherId) progress.sepidar_posted++;
+      if (result.ok && !result.failedStep) {
+        progress.successful++;
+      }
       if (!result.ok || result.failedStep === "sepidar_post") {
         progress.failed++;
         progress.failures.push({
@@ -642,13 +692,13 @@ export async function processBankFees(
       }
       progress.matched.push({
         txId: tx.id,
-        amount: absWithdraw,
+        amount: Math.abs(Number(tx.withdraw_amount) || Number(tx.amount) || 0),
         prId: result.prId,
         voucherId: result.voucherId,
         sepidarVoucherId: result.sepidarVoucherId,
       });
       // eslint-disable-next-line no-console
-      console.log(TAG, "tx.done", { txId: tx.id, ...result });
+      console.log(TAG, "tx.done", { txId: tx.id, isRetry, ...result });
       onProgress({ ...progress });
     }
 
@@ -656,9 +706,49 @@ export async function processBankFees(
     await new Promise((r) => setTimeout(r, 0));
   }
 
+  // -------------------------------------------------------------------------
+  // Post-run coverage probe. We recount remaining eligible rows from the DB
+  // to surface any never-touched rows (e.g. inserted during the run, or
+  // skipped because a transient error blocked the update).
+  // -------------------------------------------------------------------------
+  let remainingAfter = 0;
+  try {
+    const { count } = await supabase
+      .from("finance_bank_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("assignment_status", "unassigned")
+      .eq("is_deleted", false)
+      .eq("transaction_type", "withdraw");
+    remainingAfter = count ?? 0;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(TAG, "remaining recount failed", e);
+  }
+  progress.remainingEligible = remainingAfter;
+  // neverTouched = rows that were eligible at start but didn't get processed
+  // (should be 0 in healthy runs — surfaced for diagnostics).
+  progress.neverTouched = Math.max(0, progress.eligibleTotal - progress.processedThisRun);
+  // eslint-disable-next-line no-console
+  console.log(TAG, "never_processed", { count: progress.neverTouched });
+
+  // Final coverage report (per user spec — always log, never gated).
+  const coverage = {
+    eligibleTotal: progress.eligibleTotal,
+    processedThisRun: progress.processedThisRun,
+    successful: progress.successful,
+    retried: progress.retried,
+    neverTouched: progress.neverTouched,
+    failed: progress.failed,
+    remainingEligible: progress.remainingEligible,
+  };
+  // eslint-disable-next-line no-console
+  console.log(TAG, "coverage.report", coverage);
+  // eslint-disable-next-line no-console
+  console.table(coverage);
+
   progress.lastMessage =
-    `پایان: ${progress.payment_requests_created} درخواست ساخته شد، ` +
-    `${progress.sepidar_posted} در سپیدار ثبت شد، ${progress.failed} ناموفق.`;
+    `پایان: ${progress.successful} موفق، ${progress.retried} بازپخش، ` +
+    `${progress.failed} ناموفق، ${progress.remainingEligible} باقی‌مانده.`;
   // eslint-disable-next-line no-console
   console.log(TAG, "final", progress);
   // eslint-disable-next-line no-console
