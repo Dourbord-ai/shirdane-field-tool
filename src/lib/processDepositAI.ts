@@ -130,7 +130,7 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
     log("candidates.error", { error: error.message });
     throw error;
   }
-  return (data || []) as CandidateTx[];
+  return (data || []) as unknown as CandidateTx[];
 }
 
 // ---------------------------------------------------------------------------
