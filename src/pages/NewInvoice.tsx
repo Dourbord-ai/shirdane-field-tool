@@ -1454,12 +1454,30 @@ export default function NewInvoice() {
         <div className="animate-fade-in space-y-2">
           <label className="block text-sm font-medium text-foreground">
             {isMilk ? "شماره قبض" : "شماره فاکتور"}
+            {/* For sales we show a small hint so it's clear the value is
+                auto-calculated from the latest sales invoice in the DB. */}
+            {isSale && (
+              <span className="mr-2 text-xs text-muted-foreground">
+                (به‌صورت خودکار محاسبه شد)
+              </span>
+            )}
           </label>
           <Input
             value={data.invoiceNumber}
-            onChange={(e) => set("invoiceNumber", e.target.value)}
+            // Sales invoice numbers are derived from the system — make the
+            // field read-only so the operator can't accidentally diverge
+            // from the auto-increment sequence. Purchase invoices stay
+            // editable because the supplier dictates the printed number.
+            onChange={(e) => {
+              if (isSale) return;
+              set("invoiceNumber", e.target.value);
+            }}
+            readOnly={isSale}
             placeholder={isMilk ? "شماره قبض را وارد کنید..." : "شماره فاکتور را وارد کنید..."}
-            className="rounded-xl touch-target"
+            className={
+              "rounded-xl touch-target " +
+              (isSale ? "bg-muted/40 cursor-not-allowed" : "")
+            }
           />
         </div>
       )}
