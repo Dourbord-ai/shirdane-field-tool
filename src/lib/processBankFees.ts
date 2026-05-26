@@ -121,6 +121,7 @@ interface FeeTx {
   amount: number | null;
   transaction_datetime: string | null;
   description: string | null;
+  assigned_operation_type: string | null;
 }
 
 // ---------------------------------------------------------------------------
