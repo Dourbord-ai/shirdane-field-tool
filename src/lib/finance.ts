@@ -560,6 +560,97 @@ export async function syncVoucherToSepidar(voucherId: string): Promise<SepidarVo
 }
 
 
+// ---------- Trusted beneficiary learning ----------
+// After a successful manual receive identification, persist the
+// (matchtype, matchcontent) → finance_party_id mapping in
+// bankpartyaccountinfos so future deposits from the same card/sheba/account
+// can be auto-identified by DepositAI (which currently stops at
+// `party_not_found` whenever finance_party_id is NULL).
+//
+// We read the source identifier from the bank transaction's
+// ai_verify_payload (written when the operator verified the account before
+// assignment). Shape: { type: "1"|"2"|"3", number: string, bankCode?: string }
+// and the verified owner/bank name from ai_verified_result when available.
+//
+// Idempotent: relies on idx_bankpartyaccountinfos_type_content
+// (UNIQUE on matchtype, matchcontent). If a row already exists, we UPDATE
+// finance_party_id (and refresh matchname/matchbankname only when empty);
+// otherwise we INSERT a new trusted row with status='trusted_manual'.
+//
+// Returns true when a mapping was upserted, false when there was nothing to
+// persist (no payload, missing fields, or DB error). Never throws — this
+// is a best-effort side-effect that must not block the main approval flow.
+async function saveTrustedBeneficiaryMapping(
+  bankTransactionId: string,
+  partyId: string,
+): Promise<boolean> {
+  try {
+    // Pull the verify payload + verified result snapshot from the bank tx
+    const { data: tx } = await supabase
+      .from("finance_bank_transactions")
+      .select("ai_verify_payload, ai_verified_result")
+      .eq("id", bankTransactionId)
+      .maybeSingle();
+
+    // Narrow the jsonb columns to the shapes we expect
+    const payload = (tx?.ai_verify_payload ?? null) as
+      | { type?: string | number; number?: string; bankCode?: string | null }
+      | null;
+    const verified = (tx?.ai_verified_result ?? null) as
+      | { name?: string; bankName?: string }
+      | null;
+
+    if (!payload) return false;
+    const matchtype = payload.type != null ? String(payload.type) : "";
+    const matchcontent = payload.number ? String(payload.number) : "";
+    // Without a (type, content) pair we cannot honor the unique index
+    if (!matchtype || !matchcontent) return false;
+
+    // Look up existing row by the unique (matchtype, matchcontent) pair
+    const { data: existing } = await supabase
+      .from("bankpartyaccountinfos")
+      .select("id, matchname, matchbankname")
+      .eq("matchtype", matchtype)
+      .eq("matchcontent", matchcontent)
+      .maybeSingle();
+
+    if (existing?.id) {
+      // Row exists → only update finance_party_id (+ fill in name/bank fields
+      // if they were empty). Status is intentionally left alone so we don't
+      // clobber operator-curated values.
+      // Build a narrowly-typed patch so supabase-js accepts the update payload
+      const patch: {
+        finance_party_id: string;
+        matchname?: string;
+        matchbankname?: string;
+      } = { finance_party_id: partyId };
+      if (!existing.matchname && verified?.name) patch.matchname = verified.name;
+      if (!existing.matchbankname && verified?.bankName)
+        patch.matchbankname = verified.bankName;
+      await supabase
+        .from("bankpartyaccountinfos")
+        .update(patch)
+        .eq("id", existing.id);
+      return true;
+    }
+
+    // No row → insert a fresh trusted mapping
+    await supabase.from("bankpartyaccountinfos").insert({
+      matchtype,
+      matchcontent,
+      finance_party_id: partyId,
+      matchname: verified?.name ?? null,
+      matchbankname: verified?.bankName ?? null,
+      status: "trusted_manual",
+    });
+    return true;
+  } catch {
+    // Never let a learning failure break the main approval flow
+    return false;
+  }
+}
+
+
 // ---------- Receive Identification workflow ----------
 export interface CreateReceiveIdInput {
   bank_transaction_id: string;
@@ -613,7 +704,7 @@ export async function createReceiveIdentification(input: CreateReceiveIdInput): 
   return ri;
 }
 
-export async function approveReceiveIdentification(receiveIdId: string): Promise<{ ok: boolean; error?: string }> {
+export async function approveReceiveIdentification(receiveIdId: string): Promise<{ ok: boolean; error?: string; trusted_saved?: boolean }> {
   const { data: ri, error } = await supabase
     .from("finance_receive_identifications")
     .select("*")
@@ -697,7 +788,16 @@ export async function approveReceiveIdentification(receiveIdId: string): Promise
     await supabase.from("finance_parties").update({ balance: newBal }).eq("id", ri.party_id);
 
     await recalculateBankUnassignedBalances(ri.bank_id);
-    return { ok: true };
+
+    // Trusted-beneficiary learning: now that this party is confirmed as the
+    // real owner of this deposit, persist the (matchtype, matchcontent) →
+    // finance_party_id link so DepositAI can auto-identify next time. Best
+    // effort — never fail the approval just because the mapping write fails.
+    const trustedSaved = await saveTrustedBeneficiaryMapping(
+      ri.bank_transaction_id as string,
+      ri.party_id as string,
+    );
+    return { ok: true, trusted_saved: trustedSaved };
   } else {
     await supabase
       .from("finance_receive_identifications")
