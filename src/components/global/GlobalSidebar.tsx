@@ -9,6 +9,7 @@ const items = [
   { title: "داشبورد",       icon: LayoutDashboard, to: "/dashboard" },
   { title: "دام‌ها",         icon: Beef,            to: "/livestock" },
   { title: "لیست شخصی دام‌ها", icon: ListFilter,    to: "/livestock/list-builder" },
+  { title: "ثبت خشکی",       icon: Droplet,         to: "/livestock/dry-off/new" },
   { title: "قبوض شیر",       icon: Milk,            to: "/receipts/milk" },
   { title: "قبوض آزمایشگاه", icon: Receipt,         to: "/receipts/lab" },
   { title: "خرید و فروش",    icon: ShoppingCart,    to: "/invoices" },
