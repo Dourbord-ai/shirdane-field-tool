@@ -324,6 +324,13 @@ export async function processDepositAI(
     progress.processed += 1;
     const payload = tx.ai_verify_payload;
 
+    // Track where we are within the per-row pipeline so the outer catch
+    // can pick the right terminal status. Before verify-account succeeds,
+    // any thrown exception is a verify-side failure; after it, we are in
+    // the posting half of the pipeline.
+    let verifySucceeded = false;
+    let lastVerifyData: unknown = null;
+
     try {
       // Rerun protection — only process rows still in 'parsed_by_regex'.
       if (!payload || tx.assignment_status !== "unassigned") {
@@ -339,11 +346,14 @@ export async function processDepositAI(
       }
 
       // 3a) verify-account — pass ai_verify_payload EXACTLY as the body.
+      // We use supabase.functions.invoke (NOT raw fetch) so the user's JWT
+      // is attached automatically; verify-account requires it.
       log("verify.started", { txId: tx.id, payload });
       const { data: verifyData, error: verifyError } = await supabase.functions.invoke(
         "verify-account",
         { body: payload },
       );
+      lastVerifyData = verifyData;
 
       const verifyOk =
         !verifyError && Boolean((verifyData as { ok?: boolean } | null)?.ok);
@@ -366,6 +376,14 @@ export async function processDepositAI(
 
       log("verify.success", { txId: tx.id });
       progress.verify_success += 1;
+      verifySucceeded = true;
+
+      // Spec literal: persist the intermediate 'verified' state BEFORE we
+      // continue. This guarantees the row never sits in 'processing' if a
+      // later step (party match / RPC) throws — the next run will see
+      // 'verified' and can resume from party matching by manual UI, while
+      // the recovery sweep won't touch it (it only resets 'processing').
+      await setVerifyResult(tx.id, "verified", { result: verifyData, error: null });
 
       // Spec-mandated marker: log the start of party matching so operators can
       // correlate it with cache/history lookups that follow.
