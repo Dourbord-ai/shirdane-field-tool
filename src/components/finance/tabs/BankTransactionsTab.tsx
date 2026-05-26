@@ -982,10 +982,24 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
           {/* Mobile cards */}
           <div className="md:hidden space-y-2">
-            {filtered.map((t) => (
-              <div key={t.id} className="rounded-xl border bg-card p-3">
+            {filtered.map((t) => {
+              const eligible = isBulkAttachEligible(t);
+              const checked = selectedIds.has(t.id);
+              return (
+              <div key={t.id} className={`rounded-xl border bg-card p-3 ${checked ? "ring-2 ring-primary" : ""}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-sm">{banks[t.bank_id || ""]?.title || "—"}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Mobile selection checkbox — only renders for eligible
+                        rows to avoid cluttering deposits / assigned rows. */}
+                    {eligible && (
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleSelect(t.id, eligible)}
+                        aria-label="انتخاب تراکنش"
+                      />
+                    )}
+                    <span className="font-bold text-sm truncate">{banks[t.bank_id || ""]?.title || "—"}</span>
+                  </div>
                   <FinanceStatusBadge status={t.assignment_status} />
                 </div>
                 <div className="mt-2 flex items-center justify-between">
