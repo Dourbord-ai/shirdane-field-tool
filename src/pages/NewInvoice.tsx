@@ -368,8 +368,14 @@ const initial: InvoiceData = {
   serviceSubType: "",
   date: null,
   invoiceNumber: "",
-  tax: "",
-  sellerType: "",
+  // UX simplification: default tax to "ندارد" (no). Operator can switch to
+  // "دارد" manually when an invoice actually has VAT. Previously this was
+  // "" which forced an extra selection step in every flow.
+  tax: "no",
+  // UX simplification: default party type to "company" (شرکت) behind the
+  // scenes. The seller/buyer type selector is hidden — every counterparty
+  // now flows through the unified `finance_parties` selector directly.
+  sellerType: "company",
   company: "",
   // M5: blank until the operator picks a party from the unified selector.
   financePartyId: "",
@@ -720,6 +726,49 @@ export default function NewInvoice() {
   const isWage = isServices && data.serviceSubType === "wage";
   const isDailyWorker = isServices && data.serviceSubType === "daily_worker";
   const isRental = data.productType === "rental";
+
+  // ---------------------------------------------------------------------
+  // Sales-invoice auto-numbering.
+  // For sales invoices (فروش / خرده فروشی), the operator should NOT type
+  // an invoice number — we read the latest one in `factors` and offer the
+  // next integer. Purchase invoices keep the old manual behavior because
+  // the supplier dictates the number printed on the paper invoice.
+  //
+  // We only auto-fill when:
+  //   - invoice_type is a sale
+  //   - the field is still empty (so re-renders / refocuses don't bump it)
+  //   - we're in create mode (this page has no edit mode, so always true)
+  // ---------------------------------------------------------------------
+  const isSale = data.invoiceType === "sell" || data.invoiceType === "retail_sell";
+  useEffect(() => {
+    if (!isSale) return;
+    if (data.invoiceNumber) return; // never regenerate over an existing value
+    let cancelled = false;
+    (async () => {
+      // Pull the latest 500 sales rows and compute the numeric max in JS.
+      // `invoice_number` is stored as `text` in Postgres so we can't rely
+      // on ORDER BY for numeric comparison; strip non-digits and parse.
+      const { data: rows, error } = await supabase
+        .from("factors")
+        .select("invoice_number")
+        .in("invoice_type", ["sell", "retail_sell"])
+        .not("invoice_number", "is", null)
+        .order("id", { ascending: false })
+        .limit(500);
+      if (cancelled || error) return;
+      let max = 0;
+      (rows ?? []).forEach((r: { invoice_number: string | null }) => {
+        const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
+        const n = parseInt(raw, 10);
+        if (!isNaN(n) && n > max) max = n;
+      });
+      set("invoiceNumber", String(max + 1));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSale, data.invoiceNumber]);
 
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
@@ -1405,12 +1454,30 @@ export default function NewInvoice() {
         <div className="animate-fade-in space-y-2">
           <label className="block text-sm font-medium text-foreground">
             {isMilk ? "شماره قبض" : "شماره فاکتور"}
+            {/* For sales we show a small hint so it's clear the value is
+                auto-calculated from the latest sales invoice in the DB. */}
+            {isSale && (
+              <span className="mr-2 text-xs text-muted-foreground">
+                (به‌صورت خودکار محاسبه شد)
+              </span>
+            )}
           </label>
           <Input
             value={data.invoiceNumber}
-            onChange={(e) => set("invoiceNumber", e.target.value)}
+            // Sales invoice numbers are derived from the system — make the
+            // field read-only so the operator can't accidentally diverge
+            // from the auto-increment sequence. Purchase invoices stay
+            // editable because the supplier dictates the printed number.
+            onChange={(e) => {
+              if (isSale) return;
+              set("invoiceNumber", e.target.value);
+            }}
+            readOnly={isSale}
             placeholder={isMilk ? "شماره قبض را وارد کنید..." : "شماره فاکتور را وارد کنید..."}
-            className="rounded-xl touch-target"
+            className={
+              "rounded-xl touch-target " +
+              (isSale ? "bg-muted/40 cursor-not-allowed" : "")
+            }
           />
         </div>
       )}
@@ -1657,12 +1724,13 @@ export default function NewInvoice() {
         </div>
       )}
 
-      {/* ===== NON-MILK FLOW ===== */}
-      {showSellerType && (
-        <div className="animate-fade-in">
-          <SearchableSelect label="فروشنده" options={sellerTypeOptions} value={data.sellerType} onChange={(v) => { set("sellerType", v); set("company", ""); }} placeholder="نوع فروشنده..." />
-        </div>
-      )}
+      {/* ===== NON-MILK FLOW =====
+          UX simplification: the "شرکت / شخص" selector is removed. We
+          always default `sellerType` to "company" in `initial`, so the
+          finance-party selector below is shown directly whenever the
+          previous showSellerType gate would have passed. The hidden
+          default keeps every downstream consumer (Sepidar payload,
+          factors.seller_type column, etc.) on its existing code path. */}
 
       {showCompany && (
         <div className="animate-fade-in">
