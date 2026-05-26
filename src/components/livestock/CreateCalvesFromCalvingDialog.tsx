@@ -345,7 +345,7 @@ export default function CreateCalvesFromCalvingDialog({
                       فوتی — قابل ثبت به عنوان دام نیست
                     </div>
                   ) : null}
-                  {!created && isCreatable(c) ? (
+                  {!created && isCreatable(c) && (
                     <>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
