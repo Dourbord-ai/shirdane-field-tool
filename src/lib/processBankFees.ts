@@ -46,6 +46,9 @@ import {
   approvePaymentRequest,
   createPaymentAllocation,
 } from "@/lib/finance";
+// Canonical (amount_type, amount_type_code) pair builder — the ONLY way
+// new code should produce that pair, so the two fields can never drift.
+import { buildPaymentRequestItemAmountType } from "@/lib/paymentAmountTypes";
 
 // Threshold below which a withdraw is treated as a bank-fee candidate.
 // Mirrors BANK_FEE_THRESHOLD_IRR in autoProcessUnassigned.ts so the two
@@ -341,13 +344,18 @@ async function processOneFeeTx(
       legacy_request_type_code: "",
       status: "pending_approval",
     };
-    // itemPayload mirrors the manual form: creditor (amount_type_code=2)
-    // bank-fee party, exact withdraw amount, descriptive note.
+    // Build the single-line item using the canonical helper so we cannot
+    // drift from the (code ↔ key) mapping defined in paymentAmountTypes.ts.
+    // Bank-fee auto-PRs are always بستانکار (creditor) — the fee party has
+    // a real credit balance against us that this request is consuming.
+    //   creditor ↔ code 1  (verified by buildPaymentRequestItemAmountType)
+    const feeAmountType = buildPaymentRequestItemAmountType("creditor");
     const itemPayload = [{
       party_id: feePartyId,
       amount: absWithdraw,
-      amount_type_code: 2,
-      amount_type: "creditor",
+      // Spread the {amount_type, amount_type_code} pair from the helper so
+      // the two fields are guaranteed to stay in sync.
+      ...feeAmountType,
       description,
       status: "pending_approval",
     }];

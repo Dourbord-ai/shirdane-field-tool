@@ -34,6 +34,35 @@ export function getPaymentAmountTypeCode(key: string | null | undefined): number
 }
 
 /**
+ * Defensive builder for a payment-request-item amount-type pair.
+ *
+ * Why: the DB stores BOTH `amount_type` (text) and `amount_type_code` (int)
+ * on each `finance_payment_request_items` row. They MUST stay in lockstep
+ * (a new DB CHECK constraint also enforces this). Historically a callsite
+ * once hand-coded `amount_type='creditor', amount_type_code=2` — which
+ * silently meant "advance" under the new mapping. This helper exists so
+ * no future code can repeat that mistake: callers pass the business key,
+ * and we always derive the matching numeric code from the single
+ * `PAYMENT_AMOUNT_TYPES` table of truth.
+ *
+ * Accepts the legacy alias "prepayment" and normalizes it to "advance"
+ * so older callsites keep compiling without behavior change.
+ */
+export function buildPaymentRequestItemAmountType(
+  key: PaymentAmountTypeKey | "prepayment",
+): { amount_type: PaymentAmountTypeKey; amount_type_code: number } {
+  // Normalize the legacy "prepayment" alias to its modern equivalent.
+  const normalized: PaymentAmountTypeKey = key === "prepayment" ? "advance" : key;
+  const entry = PAYMENT_AMOUNT_TYPES.find((x) => x.key === normalized);
+  // Hard fail loudly during development if a typo slips in — better than
+  // writing an inconsistent (text, code) pair to the database.
+  if (!entry) {
+    throw new Error(`buildPaymentRequestItemAmountType: unknown key "${key}"`);
+  }
+  return { amount_type: entry.key, amount_type_code: entry.code };
+}
+
+/**
  * Validates a بستانکار (creditor) item against the party's available creditor balance.
  * Convention: party.balance is negative when the party is creditor (we owe them).
  *   Available creditor balance = abs(min(party.balance, 0))
