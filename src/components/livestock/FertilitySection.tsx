@@ -23,9 +23,10 @@ import {
   formatEventDate,
 } from "@/lib/fertility";
 import { fertilityLabel } from "@/lib/livestock";
-import { Loader2, Activity, History, Plus } from "lucide-react";
+import { Loader2, Activity, History, Plus, Droplet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
