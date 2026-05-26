@@ -46,6 +46,9 @@ import {
   approvePaymentRequest,
   createPaymentAllocation,
 } from "@/lib/finance";
+// Canonical (amount_type, amount_type_code) pair builder — the ONLY way
+// new code should produce that pair, so the two fields can never drift.
+import { buildPaymentRequestItemAmountType } from "@/lib/paymentAmountTypes";
 
 // Threshold below which a withdraw is treated as a bank-fee candidate.
 // Mirrors BANK_FEE_THRESHOLD_IRR in autoProcessUnassigned.ts so the two
