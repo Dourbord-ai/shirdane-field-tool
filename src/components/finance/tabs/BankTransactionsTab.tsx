@@ -135,6 +135,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [feesRunning, setFeesRunning] = useState(false);
   const [feesProgress, setFeesProgress] = useState<BankFeesProgress>(emptyFeesProgress());
 
+  // "شناسایی واریزها" state — independent of the two sweeps above so its
+  // progress panel can render in parallel without overwriting their counters.
+  const [depositAIRunning, setDepositAIRunning] = useState(false);
+  const [depositAIProgress, setDepositAIProgress] = useState<DepositAIProgress>(
+    emptyDepositAIProgress(),
+  );
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
