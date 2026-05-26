@@ -414,9 +414,77 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <ArrowUpFromLine className="w-4 h-4 ml-1" />
             {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
           </Button>
+          {/* "شناسایی واریزها" — distinctive emerald tone so it visually
+              separates from the primary "شناسایی کارمزد" button. Uses inline
+              brand colours (bg-emerald-600) intentionally so this NEW action
+              is immediately distinguishable in the toolbar; the rest of the
+              design system remains untouched. */}
+          <Button
+            onClick={runDepositAI}
+            disabled={depositAIRunning}
+            className="bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            <ArrowDownToLine className="w-4 h-4 ml-1" />
+            {depositAIRunning ? "هوشیار در حال بررسی…" : "شناسایی واریزها"}
+          </Button>
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
+
+      {/* Live progress panel for the "شناسایی واریزها" sweep. Mirrors the
+          structure of the bank-fee panel so operators get a consistent
+          experience across automation buttons. */}
+      {(depositAIRunning || depositAIProgress.total > 0 || depositAIProgress.failures.length > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">گزارش شناسایی واریزها (هوشیار)</span>
+            <span className="text-muted-foreground">
+              {depositAIProgress.processed} از {depositAIProgress.total}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <div className="text-[10px] text-muted-foreground">تعداد بررسی‌شده</div>
+              <div className="text-base font-bold">{depositAIProgress.total}</div>
+            </div>
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2">
+              <div className="text-[10px] text-emerald-700">شناسایی‌شده توسط هوشیار</div>
+              <div className="text-base font-bold text-emerald-700">{depositAIProgress.identified_by_ai}</div>
+            </div>
+            <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2">
+              <div className="text-[10px] text-blue-700">تایید حساب موفق</div>
+              <div className="text-base font-bold text-blue-700">{depositAIProgress.verify_success}</div>
+            </div>
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+              <div className="text-[10px] text-amber-700">طرف حساب پیدا نشد</div>
+              <div className="text-base font-bold text-amber-700">{depositAIProgress.party_not_found}</div>
+            </div>
+            <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
+              <div className="text-[10px] text-primary">ثبت موفق</div>
+              <div className="text-base font-bold text-primary">{depositAIProgress.posted}</div>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2">
+              <div className="text-[10px] text-destructive">خطادار</div>
+              <div className="text-base font-bold text-destructive">{depositAIProgress.failed}</div>
+            </div>
+          </div>
+          {depositAIProgress.lastMessage && (
+            <div className="text-[11px] text-muted-foreground truncate">{depositAIProgress.lastMessage}</div>
+          )}
+          {depositAIProgress.failures.length > 0 && (
+            <details className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+              <summary className="cursor-pointer text-[11px] font-bold text-destructive">
+                خطاها ({depositAIProgress.failures.length})
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-[11px]">
+                {depositAIProgress.failures.slice(-30).map((f, idx) => (
+                  <li key={idx} className="truncate"><code>{f.txId.slice(0, 8)}</code> — {f.step}: {f.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
 
       {/* Dedicated summary panel for the bank-fee sweep — shows the five
           headline counters requested by the spec. */}
