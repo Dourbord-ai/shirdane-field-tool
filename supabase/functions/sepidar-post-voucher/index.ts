@@ -1099,7 +1099,7 @@ Deno.serve(async (req) => {
     const raw = e instanceof Error ? e.message : String(e);
     const message = raw === EXTRA_PARTY_TRANSFER_PARAM_ERR ? raw : persianizeError(raw);
     console.error("[sepidar-post-voucher] error", { voucherId, spName, raw });
-    await markFailed(sb, voucherId, message, attempts);
+    await markFailed(sb, voucherId, message, attempts, raw);
     return json({ success: false, message, rawError: raw }, 500);
   } finally {
     try {
