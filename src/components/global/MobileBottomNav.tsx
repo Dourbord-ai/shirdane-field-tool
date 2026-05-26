@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Beef, Plus, BarChart3, Grid3x3,
-  Milk, Receipt, ShoppingCart, HeartPulse, Wallet, Users, Award, Settings, ListFilter,
+  Milk, Receipt, ShoppingCart, HeartPulse, Wallet, Users, Award, Settings, ListFilter, Droplet,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ const allItems = [
   { title: "داشبورد",        icon: LayoutDashboard, to: "/dashboard" },
   { title: "دام‌ها",          icon: Beef,            to: "/livestock" },
   { title: "لیست شخصی دام‌ها", icon: ListFilter,     to: "/livestock/list-builder" },
+  { title: "ثبت خشکی",         icon: Droplet,         to: "/livestock/dry-off/new" },
   { title: "قبوض شیر",        icon: Milk,            to: "/receipts/milk" },
   { title: "قبوض آزمایشگاه",  icon: Receipt,         to: "/receipts/lab" },
   { title: "خرید و فروش",     icon: ShoppingCart,    to: "/invoices" },

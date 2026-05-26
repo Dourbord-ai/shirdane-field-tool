@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, SlidersHorizontal, Loader2, ChevronLeft, X } from "lucide-react";
+import { Search, SlidersHorizontal, Loader2, ChevronLeft, X, Droplet } from "lucide-react";
 import kpiCowHerd from "@/assets/kpi-cow-herd.png";
 import kpiCowMilking from "@/assets/kpi-cow-milking.png";
 import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
@@ -297,13 +297,21 @@ export default function Livestock() {
   return (
     <div className="livestock-surface -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 space-y-4 animate-fade-in min-h-[calc(100vh-3.5rem)]">
       {/* Header */}
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-heading text-foreground">مدیریت دام</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             مجموع: <span className="tabular-nums font-semibold text-foreground">{totals.total.toLocaleString("fa-IR")}</span>
           </p>
         </div>
+        {/* Quick-access: open the Dry-Off Registration form */}
+        <Button
+          onClick={() => navigate("/livestock/dry-off/new")}
+          className="gap-2 bg-gradient-primary text-primary-foreground glow-primary"
+        >
+          <Droplet className="w-4 h-4" />
+          ثبت خشکی
+        </Button>
       </div>
 
       {/* KPI strip — image-rich enterprise tiles */}
