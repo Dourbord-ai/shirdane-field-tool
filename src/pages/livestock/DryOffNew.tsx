@@ -216,6 +216,8 @@ export default function DryOffNew() {
     // Mandatory validation per spec: cow + date.
     if (!cowId) return toast.error("لطفاً دام را انتخاب کنید");
     if (!date) return toast.error("لطفاً تاریخ خشکی را انتخاب کنید");
+    // Duplicate prevention — short-circuit before touching the DB.
+    if (activeDryBlock) return toast.error(activeDryBlock);
 
     setSubmitting(true);
     try {
