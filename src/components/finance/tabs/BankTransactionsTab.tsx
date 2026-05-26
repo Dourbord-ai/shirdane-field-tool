@@ -19,6 +19,14 @@ import { autoProcessUnassigned, emptyProgress, type AutoProcessProgress } from "
 // Dedicated "شناسایی کارمزد" pipeline — withdraws under FEE_THRESHOLD_IRR
 // get a payment-request + auto-approval + Sepidar voucher in one click.
 import { processBankFees, emptyFeesProgress, type BankFeesProgress } from "@/lib/processBankFees";
+// "شناسایی واریزها" — n8n-AI-assisted deposit identification orchestrator.
+// Reuses the canonical manual receive-identification + approval helpers; it
+// only adds the n8n webhook trigger and the ai_verify_status state machine.
+import {
+  processDepositAI,
+  emptyDepositAIProgress,
+  type DepositAIProgress,
+} from "@/lib/processDepositAI";
 // Auto-identify summary type is still consumed by the import-dialog UI for
 // historical compatibility (it now renders null after the upload-flow split).
 import { type AutoIdentifySummary } from "@/lib/autoIdentify";
