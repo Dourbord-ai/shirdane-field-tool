@@ -727,6 +727,49 @@ export default function NewInvoice() {
   const isDailyWorker = isServices && data.serviceSubType === "daily_worker";
   const isRental = data.productType === "rental";
 
+  // ---------------------------------------------------------------------
+  // Sales-invoice auto-numbering.
+  // For sales invoices (فروش / خرده فروشی), the operator should NOT type
+  // an invoice number — we read the latest one in `factors` and offer the
+  // next integer. Purchase invoices keep the old manual behavior because
+  // the supplier dictates the number printed on the paper invoice.
+  //
+  // We only auto-fill when:
+  //   - invoice_type is a sale
+  //   - the field is still empty (so re-renders / refocuses don't bump it)
+  //   - we're in create mode (this page has no edit mode, so always true)
+  // ---------------------------------------------------------------------
+  const isSale = data.invoiceType === "sell" || data.invoiceType === "retail_sell";
+  useEffect(() => {
+    if (!isSale) return;
+    if (data.invoiceNumber) return; // never regenerate over an existing value
+    let cancelled = false;
+    (async () => {
+      // Pull the latest 500 sales rows and compute the numeric max in JS.
+      // `invoice_number` is stored as `text` in Postgres so we can't rely
+      // on ORDER BY for numeric comparison; strip non-digits and parse.
+      const { data: rows, error } = await supabase
+        .from("factors")
+        .select("invoice_number")
+        .in("invoice_type", ["sell", "retail_sell"])
+        .not("invoice_number", "is", null)
+        .order("id", { ascending: false })
+        .limit(500);
+      if (cancelled || error) return;
+      let max = 0;
+      (rows ?? []).forEach((r: { invoice_number: string | null }) => {
+        const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
+        const n = parseInt(raw, 10);
+        if (!isNaN(n) && n > max) max = n;
+      });
+      set("invoiceNumber", String(max + 1));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSale, data.invoiceNumber]);
+
   // Milk calculations (multi-row)
   const milkRowCalcs = milkRows.map((r) => {
     const kg = parseFloat(r.quantityKg) || 0;
