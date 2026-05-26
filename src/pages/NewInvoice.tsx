@@ -1009,13 +1009,35 @@ export default function NewInvoice() {
           setSubmitted(true);
           setTimeout(() => navigate("/invoices"), 1200);
         } else {
-          // Server-side validation rejected the data (e.g. duplicate cow id,
-          // cow already in herd, etc.). Show the Persian message verbatim.
-          toast({
-            title: "خطا در ثبت فاکتور",
-            description: apiResp.message || "خطای نامشخص از سمت سرور.",
-            variant: "destructive",
-          });
+          // Concurrency-safety branch for livestock sales: the
+          // `submit_cow_factor` RPC wraps errors as
+          // "خطای پایگاه داده: <SQLERRM>", and the SQLERRM for our partial
+          // unique index contains the constraint name + "duplicate key".
+          // Detect that case, regenerate the next number, and ask the
+          // operator to resubmit.
+          const dupSales =
+            isSale &&
+            /factors_sales_invoice_number_unique|duplicate key/i.test(
+              apiResp.message || ""
+            );
+          if (dupSales) {
+            const next = await fetchNextSalesInvoiceNumber();
+            if (next) set("invoiceNumber", next);
+            toast({
+              title: "شماره فاکتور تکراری است",
+              description:
+                "این شماره فاکتور فروش هم‌اکنون توسط کاربر دیگری ثبت شد. شماره جدید به‌صورت خودکار محاسبه شد؛ لطفاً دوباره «ثبت نهایی» را بزنید.",
+              variant: "destructive",
+            });
+          } else {
+            // Server-side validation rejected the data (e.g. duplicate cow id,
+            // cow already in herd, etc.). Show the Persian message verbatim.
+            toast({
+              title: "خطا در ثبت فاکتور",
+              description: apiResp.message || "خطای نامشخص از سمت سرور.",
+              variant: "destructive",
+            });
+          }
         }
       } catch (err) {
         // Two kinds of errors land here:
