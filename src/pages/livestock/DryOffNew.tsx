@@ -25,8 +25,8 @@
 // =============================================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Loader2, Droplet } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Loader2, Droplet, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -80,6 +80,11 @@ function cowLabel(c: CowOpt) {
 
 export default function DryOffNew() {
   const navigate = useNavigate();
+  // Optional `?cowId=<id>` query param. When present we auto-select that cow
+  // so users coming from the cow profile / fertility actions don't have to
+  // search again. Falls back to the manual searchable picker otherwise.
+  const [searchParams] = useSearchParams();
+  const prefilledCowId = searchParams.get("cowId") ?? "";
 
   // -- Lookup data -----------------------------------------------------------
   const [cows, setCows] = useState<CowOpt[]>([]);
@@ -88,12 +93,17 @@ export default function DryOffNew() {
   const [loadingLookups, setLoadingLookups] = useState(true);
 
   // -- Form state ------------------------------------------------------------
-  const [cowId, setCowId] = useState<string>("");
+  const [cowId, setCowId] = useState<string>(prefilledCowId);
   const [date, setDate] = useState<JalaliDate | null>(todayJalali());
   const [reason, setReason] = useState("");
   const [description, setDescription] = useState("");
   const [operatorId, setOperatorId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  // Duplicate-prevention guard. When the currently selected cow has an
+  // active dry-off (latest dry_off event newer than latest calving event,
+  // OR cows.is_dry === true) we block submission and show an inline alert
+  // instead of letting the user create a duplicate row.
+  const [activeDryBlock, setActiveDryBlock] = useState<string | null>(null);
 
   // Load eligible cows (female, in herd, not already dry) + operators + dry pen.
   useEffect(() => {
@@ -156,6 +166,48 @@ export default function DryOffNew() {
     },
   );
 
+  // Whenever the selected cow changes, look up the latest dry_off + calving
+  // events for that cow and decide whether dry-off registration should be
+  // blocked. This mirrors the same rule used in FertilitySection so both
+  // entry points stay in sync: a cow is "currently dry" when either
+  //   - cows.is_dry === true, OR
+  //   - the latest non-cancelled dry_off event is newer than the latest
+  //     non-cancelled calving event (i.e. no calving has reset the cycle).
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedCow) {
+      setActiveDryBlock(null);
+      return;
+    }
+    if (selectedCow.is_dry) {
+      setActiveDryBlock("این دام در حال حاضر خشک است و امکان ثبت مجدد خشکی وجود ندارد.");
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("livestock_fertility_events" as any)
+        .select("event_type, event_date, is_cancelled")
+        .eq("livestock_id", selectedCow.id)
+        .in("event_type", ["dry_off", "calving"])
+        .order("event_date", { ascending: false })
+        .limit(50);
+      if (cancelled) return;
+      const rows = ((data as any[]) ?? []).filter((r) => !r.is_cancelled);
+      const lastDry = rows.find((r) => r.event_type === "dry_off")?.event_date ?? null;
+      const lastCalv = rows.find((r) => r.event_type === "calving")?.event_date ?? null;
+      const active =
+        !!lastDry && (!lastCalv || new Date(lastDry).getTime() > new Date(lastCalv).getTime());
+      setActiveDryBlock(
+        active
+          ? "برای این دام یک رویداد خشک کردن فعال ثبت شده و هنوز زایش بعدی ثبت نشده است."
+          : null,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCow]);
+
   // -- Submit handler --------------------------------------------------------
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -164,6 +216,8 @@ export default function DryOffNew() {
     // Mandatory validation per spec: cow + date.
     if (!cowId) return toast.error("لطفاً دام را انتخاب کنید");
     if (!date) return toast.error("لطفاً تاریخ خشکی را انتخاب کنید");
+    // Duplicate prevention — short-circuit before touching the DB.
+    if (activeDryBlock) return toast.error(activeDryBlock);
 
     setSubmitting(true);
     try {
@@ -375,9 +429,19 @@ export default function DryOffNew() {
             </CardContent>
           </Card>
 
+          {/* Duplicate-prevention banner — shown only when the selected cow
+              is currently in an active dry-off cycle. Mirrors the same
+              gating logic used inside FertilitySection. */}
+          {activeDryBlock && (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 text-destructive px-3 py-2 flex items-start gap-2 text-sm">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>{activeDryBlock}</p>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <Button type="submit" disabled={submitting} className="flex-1">
+            <Button type="submit" disabled={submitting || !!activeDryBlock} className="flex-1">
               {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
               ثبت خشکی
             </Button>

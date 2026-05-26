@@ -298,6 +298,7 @@ export default function LivestockProfile() {
           <FertilitySection
             livestockId={cow.id}
             latestStatus={liveStatusId}
+            isDry={cow.is_dry}
             onOperationSaved={() => {
               console.log("Fertility operation saved; refreshing cow profile UI", cow.id);
               refresh();

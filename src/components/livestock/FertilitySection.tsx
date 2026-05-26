@@ -23,9 +23,10 @@ import {
   formatEventDate,
 } from "@/lib/fertility";
 import { fertilityLabel } from "@/lib/livestock";
-import { Loader2, Activity, History, Plus } from "lucide-react";
+import { Loader2, Activity, History, Plus, Droplet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import HeatRegistrationDialog from "./HeatRegistrationDialog";
 import RinseRegistrationDialog from "./RinseRegistrationDialog";
 import CleanTestRegistrationDialog from "./CleanTestRegistrationDialog";
@@ -54,6 +55,10 @@ import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
 type Props = {
   livestockId: number;
   latestStatus: number | null;
+  // Whether the cow is currently flagged dry on the cows table. Used to
+  // disable the "ثبت خشک کردن" quick action and operations-sheet item so a
+  // user can't accidentally register a duplicate dry-off.
+  isDry?: boolean | null;
   onOperationSaved?: () => void;
 };
 
@@ -510,7 +515,8 @@ const ACTION_GROUPS: { title: string; actions: { key: ActionKey; label: string }
   },
 ];
 
-export default function FertilitySection({ livestockId, latestStatus, onOperationSaved }: Props) {
+export default function FertilitySection({ livestockId, latestStatus, isDry, onOperationSaved }: Props) {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [events, setEvents] = useState<FertilityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -679,6 +685,21 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
 
 
 
+  // Active dry-off detection: cow is considered "currently dry" when the
+  // most recent dry_off event is newer than the most recent calving event.
+  // We use this together with cows.is_dry to block duplicate registrations.
+  const hasActiveDryOff = useMemo(() => {
+    const last = (t: string) =>
+      events.find((e) => e.event_type === t && !e.is_cancelled)?.event_date ?? null;
+    const lastDry = last("dry_off");
+    const lastCalv = last("calving");
+    if (!lastDry) return false;
+    if (!lastCalv) return true;
+    return new Date(lastDry).getTime() > new Date(lastCalv).getTime();
+  }, [events]);
+  // Single source of truth for whether the dry-off action should be blocked.
+  const dryOffBlocked = !!isDry || hasActiveDryOff;
+
   function handleAction(key: ActionKey) {
     setActionsOpen(false);
     switch (key) {
@@ -703,6 +724,19 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
       case "calving":
         setCalvingOpen(true);
         break;
+      case "dry_off":
+        // Reuse the standalone dry-off page; pass cowId so the form auto-
+        // selects this cow without forcing the user to search again.
+        if (dryOffBlocked) {
+          toast({
+            title: "ثبت خشک کردن مجاز نیست",
+            description: "این دام قبلاً خشک شده است",
+            variant: "destructive",
+          });
+          return;
+        }
+        navigate(`/livestock/dry-off/new?cowId=${livestockId}`);
+        break;
       default:
         toast({
           title: "به‌زودی",
@@ -718,10 +752,27 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
           <Activity className="w-4 h-4 text-primary shrink-0" />
           <span className="truncate">وضعیت باروری و رویدادها</span>
         </h2>
-        <Button size="sm" onClick={() => setActionsOpen(true)} className="gap-1 shrink-0">
-          <Plus className="w-4 h-4" />
-          ثبت عملیات باروری
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Quick shortcut for the most common "exit-from-lactation" flow.
+              Disabled (with a Persian title tooltip) when the cow is already
+              dry to prevent duplicate registrations. Female-only is enforced
+              by the parent (FertilitySection mounts for females only). */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1"
+            onClick={() => handleAction("dry_off")}
+            disabled={dryOffBlocked}
+            title={dryOffBlocked ? "این دام قبلاً خشک شده است" : undefined}
+          >
+            <Droplet className="w-4 h-4" />
+            ثبت خشک کردن
+          </Button>
+          <Button size="sm" onClick={() => setActionsOpen(true)} className="gap-1">
+            <Plus className="w-4 h-4" />
+            ثبت عملیات باروری
+          </Button>
+        </div>
       </div>
 
       <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
@@ -734,17 +785,27 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               <div key={group.title} className="space-y-2">
                 <h3 className="text-xs font-bold text-muted-foreground">{group.title}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {group.actions.map((a) => (
-                    <Button
-                      key={a.key}
-                      variant="outline"
-                      className="justify-start gap-2 h-11"
-                      onClick={() => handleAction(a.key)}
-                    >
-                      <Plus className="w-4 h-4 text-primary" />
-                      {a.label}
-                    </Button>
-                  ))}
+                  {group.actions.map((a) => {
+                    // The dry-off action is blocked when the cow is already
+                    // dry (cow.is_dry) OR the latest dry_off event has no
+                    // calving after it. We render it disabled with a Persian
+                    // tooltip rather than hiding it so the user understands
+                    // why the action is unavailable.
+                    const disabled = a.key === "dry_off" && dryOffBlocked;
+                    return (
+                      <Button
+                        key={a.key}
+                        variant="outline"
+                        className="justify-start gap-2 h-11"
+                        onClick={() => handleAction(a.key)}
+                        disabled={disabled}
+                        title={disabled ? "این دام قبلاً خشک شده است" : undefined}
+                      >
+                        <Plus className="w-4 h-4 text-primary" />
+                        {a.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
