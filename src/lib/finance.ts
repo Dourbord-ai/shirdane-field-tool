@@ -542,10 +542,15 @@ export async function syncVoucherToSepidar(voucherId: string): Promise<SepidarVo
     const ok = (data as { success?: boolean } | null)?.success === true;
     if (ok) return { status: "synced", error_message: null };
 
-    const msg =
-      (data as { message?: string } | null)?.message ??
-      "ثبت سند در سپیدار ناموفق بود.";
-    return { status: "failed", error_message: msg };
+    // Surface the Sepidar raw error alongside the generic Persian message
+    // so operators can see the actual SQL Server / bridge reason in the UI
+    // and in the persisted voucher.sepidar_error_message column.
+    const payload = (data ?? {}) as { message?: string; rawError?: string };
+    const friendly = payload.message || "ثبت سند در سپیدار ناموفق بود.";
+    const composed = payload.rawError && payload.rawError !== friendly
+      ? `${friendly} (${payload.rawError})`
+      : friendly;
+    return { status: "failed", error_message: composed };
   } catch (e) {
     // Defensive catch — supabase-js shouldn't throw here, but if Deno
     // serialization or a CORS preflight breaks we still need to mark failure.
