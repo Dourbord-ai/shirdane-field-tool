@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Beef, Milk, BarChart3, Wallet, Users,
-  Award, HeartPulse, Settings, ShoppingCart, Receipt, ListFilter,
+  Award, HeartPulse, Settings, ShoppingCart, Receipt, ListFilter, Droplet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
