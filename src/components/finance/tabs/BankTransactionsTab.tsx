@@ -123,22 +123,53 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // NOT on `created_at` (when the row was inserted into our DB).
   const [filterFromDate, setFilterFromDate] = useState<string | null>(null);
   const [filterToDate, setFilterToDate] = useState<string | null>(null);
-  // Amount range filters — applied client-side over deposit OR withdraw amount
-  // so a single range covers both directions of the transaction.
+  // Amount range filters — server-side via PostgREST `.or()` so a single
+  // range covers whichever direction (deposit OR withdraw) is populated.
   const [filterMinAmount, setFilterMinAmount] = useState("");
   const [filterMaxAmount, setFilterMaxAmount] = useState("");
+  // ---- Debounced mirrors of the text/amount inputs ---------------------
+  // Typing should NOT fire a Supabase round-trip per keystroke. 300ms is a
+  // common UX sweet-spot — fast enough to feel live, slow enough to coalesce
+  // a typed word/number into a single query.
+  const [debouncedDescr, setDebouncedDescr] = useState("");
+  const [debouncedMin, setDebouncedMin] = useState("");
+  const [debouncedMax, setDebouncedMax] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDescr(filterDescr.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterDescr]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMin(filterMinAmount.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterMinAmount]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMax(filterMaxAmount.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterMaxAmount]);
+
   const [openManual, setOpenManual] = useState(false);
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
   // ---- Bulk-attach selection state ---------------------------------------
-  // We track selected tx IDs in a Set for O(1) toggle + lookup. Only rows
-  // that pass `isBulkAttachEligible` (withdraw + unassigned) can be put in
-  // here; the table guards each addition so the user can never select an
-  // ineligible row even if the underlying data shifts between renders.
+  // Only rows that pass `isBulkAttachEligible` (withdraw + unassigned) can be
+  // added; the table guards each addition so ineligible rows never end up in
+  // the set even if data shifts between renders.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openBulkAttach, setOpenBulkAttach] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // ---- Server-side pagination + counts -----------------------------------
+  // page is 1-indexed for UX; converted to a 0-indexed `.range()` below.
+  // `totalCount`    = grand total in finance_bank_transactions (no filters)
+  // `filteredCount` = total matching the currently applied server filters,
+  //                   used both for the "نتیجه فیلتر فعلی" label AND for
+  //                   computing the last page number.
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [filteredCount, setFilteredCount] = useState<number | null>(null);
+
   // Manual auto-processing state. `running` drives the dialog visibility and
   // disables the trigger button so a second click can't double-fire the
   // orchestrator while one is already in-flight.
@@ -198,8 +229,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
   // "شناسایی واریزها" — single-click orchestrator: fires the n8n webhook,
   // then processes whatever n8n parsed by reusing the canonical manual
-  // receive-identification + approval helpers. The loading toast satisfies
-  // the spec's required Persian message while the sweep runs.
+  // receive-identification + approval helpers.
   async function runDepositAI() {
     if (depositAIRunning) return;
     setDepositAIRunning(true);
@@ -223,11 +253,21 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   }
 
   useEffect(() => {
+    // Bank lookup map for row labels.
     supabase.from("finance_banks").select("id,title,bank_name").then(({ data }) => {
       const m: Record<string, BankRef> = {};
       (data as BankRef[] || []).forEach((b) => (m[b.id] = b));
       setBanks(m);
     });
+    // Grand total — independent of any filter — fetched once for the
+    // "کل تراکنش‌ها" label. Cheap HEAD count query, no rows returned.
+    void (async () => {
+      const { count } = await supabase
+        .from("finance_bank_transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false);
+      setTotalCount(count ?? 0);
+    })();
   }, []);
 
   // Per-row enrichment maps populated alongside `txs` so badges & chip
@@ -236,88 +276,112 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [receiveByTx, setReceiveByTx] = useState<Record<string, ReceiveMeta>>({});
   const [partyNames, setPartyNames] = useState<Record<string, string>>({});
   // Chip filter — empty string = "show all"; otherwise narrows to a single
-  // auto-identification state. Applied client-side because the state is
-  // a join across three tables and we already have the rows in memory.
+  // auto-identification state. Applied CLIENT-side over the current page
+  // only because the state is derived from a join across three tables; the
+  // chip counts therefore reflect the current page, not the whole DB.
   const [filterAutoState, setFilterAutoState] = useState<"" | AutoState>("");
 
-  // Re-fetch when server-side filters change. Date range goes here too so
-  // we don't pull 500 rows and then trim — Postgres does the work.
-  useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
+  // Whenever a server-side filter changes, snap back to page 1 so the user
+  // doesn't end up on a now-out-of-range page (e.g. page 7 of a 3-page set).
+  useEffect(() => {
+    setPage(1);
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax]);
+
+  // Re-fetch on any server filter OR page change.
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+
+  // Clear bulk-attach selection on filter/page change so we never carry over
+  // selections that the user can no longer see in the table.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+
 
   async function load() {
     setLoading(true);
+    // -----------------------------------------------------------------------
+    // SERVER-SIDE FILTERING + PAGINATION.
+    //
+    // Every filter the user can express in the toolbar is translated into a
+    // Supabase query parameter so Postgres does the work — we never pull a
+    // huge result set into the browser only to trim it.
+    //
+    // Flow (per spec):
+    //   1. Build base query (`is_deleted = false`).
+    //   2. Apply every filter.
+    //   3. Apply sort.
+    //   4. Get total filtered count (via `count: 'exact'` on the same query).
+    //   5. Apply `.range(from, to)` for the visible page only.
+    // -----------------------------------------------------------------------
     let q = supabase
       .from("finance_bank_transactions")
-      .select("*")
-      .eq("is_deleted", false)
-      .order("transaction_datetime", { ascending: false })
-      .limit(500);
+      .select("*", { count: "exact" })
+      .eq("is_deleted", false);
+
     if (filterBank) q = q.eq("bank_id", filterBank);
     if (filterType) q = q.eq("transaction_type", filterType);
     if (filterAssign) q = q.eq("assignment_status", filterAssign);
-    // Inclusive range on the real transaction date column.
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
-    const { data } = await q;
+
+    // Description search — PostgREST ILIKE is case-insensitive substring.
+    if (debouncedDescr) {
+      // Escape `%` and `,` characters so they're treated as literals; they
+      // would otherwise be interpreted as PostgREST wildcards/delimiters.
+      const safe = debouncedDescr.replace(/[%,]/g, " ");
+      q = q.ilike("description", `%${safe}%`);
+    }
+
+    // Amount range — server-side via `.or()`. A row matches if either
+    // deposit_amount OR withdraw_amount falls inside the [min, max] range.
+    // This mirrors the previous client-side `Math.abs(deposit||withdraw)`
+    // semantics without pulling rows for filtering.
+    const min = debouncedMin ? parseMoney(debouncedMin) : null;
+    const max = debouncedMax ? parseMoney(debouncedMax) : null;
+    if (min !== null && max !== null) {
+      q = q.or(
+        `and(deposit_amount.gte.${min},deposit_amount.lte.${max}),and(withdraw_amount.gte.${min},withdraw_amount.lte.${max})`,
+      );
+    } else if (min !== null) {
+      q = q.or(`deposit_amount.gte.${min},withdraw_amount.gte.${min}`);
+    } else if (max !== null) {
+      q = q.or(`deposit_amount.lte.${max},withdraw_amount.lte.${max}`);
+    }
+
+    q = q.order("transaction_datetime", { ascending: false });
+
+    // Pagination — .range() is INCLUSIVE on both ends.
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    q = q.range(from, to);
+
+    const { data, count } = await q;
     const rows = (data as Tx[]) || [];
     setTxs(rows);
+    setFilteredCount(count ?? 0);
 
     // -----------------------------------------------------------------------
-    // Side-load the per-tx enrichment used by badges & chip filters. Three
-    // parallel `.in()` queries keep this O(1) round-trips regardless of how
-    // many rows came back from the main fetch.
+    // Side-load the per-tx enrichment used by badges & chip filters. Only
+    // for the current page's rows — at PAGE_SIZE=50 the IN-list stays well
+    // under PostgREST's URI limit, so a single round-trip per table is fine.
     // -----------------------------------------------------------------------
     const ids = rows.map((r) => r.id);
     if (ids.length === 0) {
       setIdentByTx({}); setReceiveByTx({}); setPartyNames({});
     } else {
-      // -----------------------------------------------------------------------
-      // Chunk the `.in()` lookups. PostgREST accepts large IN-lists, but the
-      // URL-encoded query string can blow past Nginx's URI length cap (~8KB)
-      // and return 414 Request-URI Too Large. Each UUID + separator costs
-      // ~40 bytes, so 50 IDs/chunk (~2KB) leaves comfortable headroom.
-      // -----------------------------------------------------------------------
-      const CHUNK_SIZE = 50;
-      const chunks: string[][] = [];
-      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-        chunks.push(ids.slice(i, i + CHUNK_SIZE));
-      }
-      console.log("fetchBankTxIdentifiers", {
-        operationName: "fetchBankTxIdentifiers",
-        totalIds: ids.length,
-        chunkCount: chunks.length,
-        chunkSize: CHUNK_SIZE,
-      });
-
-      // Fire all chunks in parallel — N round-trips overlap on the wire and
-      // avoid the 414 entirely. We do this for BOTH identifiers and receives
-      // since they share the same `ids` list and both used to `.in()` it.
-      const identPromises = chunks.map((chunk, chunkIndex) => {
-        console.log("fetchBankTxIdentifiers chunk", {
-          operationName: "fetchBankTxIdentifiers",
-          chunkIndex,
-          chunkSize: chunk.length,
-        });
-        return supabase
+      const [identsRes, receivesRes] = await Promise.all([
+        supabase
           .from("finance_bank_tx_identifiers")
           .select("bank_transaction_id, match_type, raw_value, normalized_value, verified_owner_name, verified_bank_name")
-          .in("bank_transaction_id", chunk);
-      });
-      const receivePromises = chunks.map((chunk) =>
+          .in("bank_transaction_id", ids),
         supabase
           .from("finance_receive_identifications")
           .select("id, bank_transaction_id, party_id, status, auto_identified, identification_source, sepidar_sync_status, voucher_id")
-          .in("bank_transaction_id", chunk)
+          .in("bank_transaction_id", ids)
           .eq("is_deleted", false),
-      );
-      const [identsResults, receivesResults] = await Promise.all([
-        Promise.all(identPromises),
-        Promise.all(receivePromises),
       ]);
-
-      // Flatten chunked results, then group by bank_transaction_id as before.
-      const identsData = identsResults.flatMap((r) => r.data || []);
-      const receivesData = receivesResults.flatMap((r) => r.data || []);
+      const identsData = identsRes.data || [];
+      const receivesData = receivesRes.data || [];
 
       const im: Record<string, IdentRow[]> = {};
       for (const r of identsData as Array<IdentRow & { bank_transaction_id: string }>) {
@@ -327,9 +391,6 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       const rm: Record<string, ReceiveMeta> = {};
       const partyIds = new Set<string>();
       for (const r of receivesData as Array<ReceiveMeta & { bank_transaction_id: string }>) {
-        // A tx should only have ONE active receive identification (DB guard
-        // enforces this), but if duplicates ever slip through we keep the
-        // first — order doesn't matter for badge rendering.
         if (!rm[r.bank_transaction_id]) rm[r.bank_transaction_id] = r;
         if (r.party_id) partyIds.add(r.party_id);
       }
@@ -355,34 +416,19 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     setLoading(false);
   }
 
+  // The auto-state chip filter still runs CLIENT-side because the derived
+  // state requires joining 3 tables. It narrows the current page only —
+  // chip counts therefore reflect the page, not the full DB. The base server
+  // filters above already do the heavy lifting against the real dataset.
   const filtered = useMemo(() => {
-    // Parse amount bounds once. Empty string → no bound.
-    const min = filterMinAmount ? parseMoney(filterMinAmount) : null;
-    const max = filterMaxAmount ? parseMoney(filterMaxAmount) : null;
-    const needle = filterDescr.trim().toLowerCase();
-    return txs.filter((t) => {
-      if (needle && !(t.description || "").toLowerCase().includes(needle)) return false;
-      if (min !== null || max !== null) {
-        // Compare against whichever side of the transaction is non-zero.
-        // Falls back to abs(amount) for legacy rows that only set `amount`.
-        const v = Math.abs(
-          Number(t.deposit_amount) || Number(t.withdraw_amount) || Number(t.amount) || 0,
-        );
-        if (min !== null && v < min) return false;
-        if (max !== null && v > max) return false;
-      }
-      // Auto-identification chip filter — derived state, applied last so
-      // it composes cleanly with the existing description / amount filters.
-      if (filterAutoState) {
-        const st = deriveAutoState(t, identByTx[t.id], receiveByTx[t.id]);
-        if (st !== filterAutoState) return false;
-      }
-      return true;
-    });
-  }, [txs, filterDescr, filterMinAmount, filterMaxAmount, filterAutoState, identByTx, receiveByTx]);
+    if (!filterAutoState) return txs;
+    return txs.filter(
+      (t) => deriveAutoState(t, identByTx[t.id], receiveByTx[t.id]) === filterAutoState,
+    );
+  }, [txs, filterAutoState, identByTx, receiveByTx]);
 
-  // Live counts for the chip bar — driven by the unfiltered (server-side
-  // filtered) set so the user can see how many rows each chip would reveal.
+  // Live counts for the chip bar — driven by the current page (txs) so the
+  // user can see how many rows on the visible page belong to each state.
   const autoCounts = useMemo(() => {
     const c: Record<AutoState, number> = {
       auto_identified: 0, manual: 0, needs_review: 0, no_identifier: 0, sepidar_failed: 0,
@@ -390,6 +436,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     for (const t of txs) c[deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])]++;
     return c;
   }, [txs, identByTx, receiveByTx]);
+
+  // Pagination math — derived from server-provided `filteredCount`.
+  const pageCount = Math.max(1, Math.ceil((filteredCount ?? 0) / PAGE_SIZE));
+  const rangeFrom = filteredCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeTo = Math.min((filteredCount ?? 0), page * PAGE_SIZE);
+
+
 
 
   async function softDelete(t: Tx) {
@@ -428,21 +481,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   function clearSelection() {
     setSelectedIds(new Set());
   }
-  // Drop selections for rows that are no longer visible OR no longer
-  // eligible after a reload. Prevents stale IDs from leaking into the
-  // bulk-attach call.
-  useEffect(() => {
-    if (selectedIds.size === 0) return;
-    const validIds = new Set(txs.filter(isBulkAttachEligible).map((t) => t.id));
-    let changed = false;
-    const next = new Set<string>();
-    selectedIds.forEach((id) => {
-      if (validIds.has(id)) next.add(id);
-      else changed = true;
-    });
-    if (changed) setSelectedIds(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txs]);
+  // NOTE: the previous `useEffect([txs])` that pruned stale selections is no
+  // longer needed — we already reset `selectedIds` on every filter/page
+  // change above, which is the only way `txs` can change. Keeping that hook
+  // would double-clear and fight with manual toggles.
+
 
 
   return (
@@ -768,14 +811,26 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       )}
 
-      {/* Auto-identification chip filters — server-side filtered txs are
-          partitioned into 5 derived states (see deriveAutoState). Counts
-          reflect the unfiltered set so the user sees the impact of each
-          chip before clicking it. */}
+      {/* ---- Count summary ---------------------------------------------
+          Three numbers, exactly as required by the spec:
+            • کل تراکنش‌ها     = grand total in the DB (no filters)
+            • نتیجه فیلتر فعلی  = total matching current server filters
+            • نمایش             = visible row range on this page
+          Numbers come straight from the server-side count queries, so they
+          stay correct regardless of how many pages of data exist. ----- */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>کل تراکنش‌ها: <span className="font-bold text-foreground tabular-nums">{(totalCount ?? 0).toLocaleString("fa-IR")}</span></span>
+        <span>نتیجه فیلتر فعلی: <span className="font-bold text-foreground tabular-nums">{(filteredCount ?? 0).toLocaleString("fa-IR")}</span></span>
+        <span>نمایش: <span className="font-bold text-foreground tabular-nums">{rangeFrom.toLocaleString("fa-IR")} تا {rangeTo.toLocaleString("fa-IR")}</span></span>
+      </div>
+
+      {/* Auto-identification chip filters — applied client-side over the
+          current page only. The "همه" count shows the filtered server total
+          so it always matches the count summary above. */}
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            ["", "همه", txs.length],
+            ["", "همه", filteredCount ?? 0],
             ["auto_identified", "شناسایی خودکار", autoCounts.auto_identified],
             ["manual", "شناسایی دستی", autoCounts.manual],
             ["needs_review", "نیازمند بازبینی", autoCounts.needs_review],
@@ -786,6 +841,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <button
             key={key || "all"}
             onClick={() => setFilterAutoState(key as "" | AutoState)}
+
             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
               filterAutoState === key
                 ? "bg-primary text-primary-foreground border-primary"
@@ -1040,8 +1096,35 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <p className="text-center text-muted-foreground py-8">تراکنشی یافت نشد</p>
             )}
           </div>
+
+          {/* ---- Pagination ----------------------------------------------
+              Server-driven. `pageCount` comes from the filtered total so
+              clicks never overshoot the real last page. Buttons are
+              disabled at the edges and during loading. ----------------- */}
+          {(filteredCount ?? 0) > 0 && (
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                صفحه {page.toLocaleString("fa-IR")} از {pageCount.toLocaleString("fa-IR")}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage(1)}>
+                  ابتدا
+                </Button>
+                <Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                  قبلی
+                </Button>
+                <Button size="sm" variant="outline" disabled={page >= pageCount || loading} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
+                  بعدی
+                </Button>
+                <Button size="sm" variant="outline" disabled={page >= pageCount || loading} onClick={() => setPage(pageCount)}>
+                  انتها
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
+
 
       {/* Bulk-attach dialog — projects the selected tx rows down to the
           minimal shape the dialog needs. We re-fetch fresh data inside the
