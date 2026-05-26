@@ -1096,8 +1096,35 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <p className="text-center text-muted-foreground py-8">تراکنشی یافت نشد</p>
             )}
           </div>
+
+          {/* ---- Pagination ----------------------------------------------
+              Server-driven. `pageCount` comes from the filtered total so
+              clicks never overshoot the real last page. Buttons are
+              disabled at the edges and during loading. ----------------- */}
+          {(filteredCount ?? 0) > 0 && (
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                صفحه {page.toLocaleString("fa-IR")} از {pageCount.toLocaleString("fa-IR")}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage(1)}>
+                  ابتدا
+                </Button>
+                <Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                  قبلی
+                </Button>
+                <Button size="sm" variant="outline" disabled={page >= pageCount || loading} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
+                  بعدی
+                </Button>
+                <Button size="sm" variant="outline" disabled={page >= pageCount || loading} onClick={() => setPage(pageCount)}>
+                  انتها
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
+
 
       {/* Bulk-attach dialog — projects the selected tx rows down to the
           minimal shape the dialog needs. We re-fetch fresh data inside the
