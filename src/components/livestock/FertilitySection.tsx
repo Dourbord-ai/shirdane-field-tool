@@ -915,6 +915,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
+              calfLiveMap={calfLiveMap}
             />
           </TabsContent>
 
