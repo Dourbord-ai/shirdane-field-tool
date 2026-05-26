@@ -80,6 +80,11 @@ function cowLabel(c: CowOpt) {
 
 export default function DryOffNew() {
   const navigate = useNavigate();
+  // Optional `?cowId=<id>` query param. When present we auto-select that cow
+  // so users coming from the cow profile / fertility actions don't have to
+  // search again. Falls back to the manual searchable picker otherwise.
+  const [searchParams] = useSearchParams();
+  const prefilledCowId = searchParams.get("cowId") ?? "";
 
   // -- Lookup data -----------------------------------------------------------
   const [cows, setCows] = useState<CowOpt[]>([]);
@@ -88,12 +93,17 @@ export default function DryOffNew() {
   const [loadingLookups, setLoadingLookups] = useState(true);
 
   // -- Form state ------------------------------------------------------------
-  const [cowId, setCowId] = useState<string>("");
+  const [cowId, setCowId] = useState<string>(prefilledCowId);
   const [date, setDate] = useState<JalaliDate | null>(todayJalali());
   const [reason, setReason] = useState("");
   const [description, setDescription] = useState("");
   const [operatorId, setOperatorId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  // Duplicate-prevention guard. When the currently selected cow has an
+  // active dry-off (latest dry_off event newer than latest calving event,
+  // OR cows.is_dry === true) we block submission and show an inline alert
+  // instead of letting the user create a duplicate row.
+  const [activeDryBlock, setActiveDryBlock] = useState<string | null>(null);
 
   // Load eligible cows (female, in herd, not already dry) + operators + dry pen.
   useEffect(() => {
