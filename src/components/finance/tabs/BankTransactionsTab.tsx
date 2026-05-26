@@ -798,6 +798,39 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       </div>
 
 
+      {/* ---- Bulk-attach action bar ------------------------------------
+          Appears only when at least one row is selected. Mirrors common
+          spreadsheet/email UX: shows the selection count, total amount,
+          a primary "اتصال به درخواست پرداخت" CTA, and a clear-selection
+          escape hatch. Sticky-positioned on mobile so it stays in reach
+          even after the operator scrolls the long tx list. --------- */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-2 z-30 rounded-xl border bg-primary/10 backdrop-blur p-3 flex flex-wrap items-center gap-2 justify-between">
+          <div className="text-sm font-bold">
+            {selectedIds.size} تراکنش انتخاب شده
+            <span className="mr-2 text-xs text-muted-foreground font-normal">
+              (جمع: {(() => {
+                // Sum the selected txs' withdraw amounts. Done inline rather
+                // than memoised because selectedIds.size is small (UI only).
+                const sum = txs
+                  .filter((t) => selectedIds.has(t.id))
+                  .reduce((s, t) => s + Number(t.withdraw_amount || 0), 0);
+                return parseMoney("0") , sum.toLocaleString("fa-IR");
+              })()} ریال)
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setOpenBulkAttach(true)}>
+              <Link2 className="w-4 h-4 ml-1" />
+              اتصال به درخواست پرداخت
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              <X className="w-4 h-4 ml-1" /> پاک کردن انتخاب
+            </Button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
       ) : (
@@ -807,6 +840,36 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr className="text-right">
+                  {/* Header checkbox — "select all eligible visible rows".
+                      Indeterminate visual is skipped (shadcn Checkbox doesn't
+                      expose it cleanly); a simple checked/unchecked toggle
+                      matches the rest of the toolbar. */}
+                  <th className="p-2 w-8">
+                    {(() => {
+                      const eligible = filtered.filter(isBulkAttachEligible);
+                      const allSelected =
+                        eligible.length > 0 && eligible.every((t) => selectedIds.has(t.id));
+                      return (
+                        <Checkbox
+                          checked={allSelected}
+                          disabled={eligible.length === 0}
+                          onCheckedChange={(v) => {
+                            // When toggled ON: union currently-eligible
+                            // visible rows into the selection set. When OFF:
+                            // remove only those visible rows (keep
+                            // selections from other filter views intact).
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (v) eligible.forEach((t) => next.add(t.id));
+                              else eligible.forEach((t) => next.delete(t.id));
+                              return next;
+                            });
+                          }}
+                          aria-label="انتخاب همه"
+                        />
+                      );
+                    })()}
+                  </th>
                   <th className="p-2 font-bold">بانک</th>
                   <th className="p-2 font-bold">تاریخ</th>
                   <th className="p-2 font-bold">نوع</th>
