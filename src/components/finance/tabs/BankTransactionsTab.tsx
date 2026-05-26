@@ -123,22 +123,53 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // NOT on `created_at` (when the row was inserted into our DB).
   const [filterFromDate, setFilterFromDate] = useState<string | null>(null);
   const [filterToDate, setFilterToDate] = useState<string | null>(null);
-  // Amount range filters — applied client-side over deposit OR withdraw amount
-  // so a single range covers both directions of the transaction.
+  // Amount range filters — server-side via PostgREST `.or()` so a single
+  // range covers whichever direction (deposit OR withdraw) is populated.
   const [filterMinAmount, setFilterMinAmount] = useState("");
   const [filterMaxAmount, setFilterMaxAmount] = useState("");
+  // ---- Debounced mirrors of the text/amount inputs ---------------------
+  // Typing should NOT fire a Supabase round-trip per keystroke. 300ms is a
+  // common UX sweet-spot — fast enough to feel live, slow enough to coalesce
+  // a typed word/number into a single query.
+  const [debouncedDescr, setDebouncedDescr] = useState("");
+  const [debouncedMin, setDebouncedMin] = useState("");
+  const [debouncedMax, setDebouncedMax] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDescr(filterDescr.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterDescr]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMin(filterMinAmount.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterMinAmount]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMax(filterMaxAmount.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterMaxAmount]);
+
   const [openManual, setOpenManual] = useState(false);
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
   // ---- Bulk-attach selection state ---------------------------------------
-  // We track selected tx IDs in a Set for O(1) toggle + lookup. Only rows
-  // that pass `isBulkAttachEligible` (withdraw + unassigned) can be put in
-  // here; the table guards each addition so the user can never select an
-  // ineligible row even if the underlying data shifts between renders.
+  // Only rows that pass `isBulkAttachEligible` (withdraw + unassigned) can be
+  // added; the table guards each addition so ineligible rows never end up in
+  // the set even if data shifts between renders.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openBulkAttach, setOpenBulkAttach] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // ---- Server-side pagination + counts -----------------------------------
+  // page is 1-indexed for UX; converted to a 0-indexed `.range()` below.
+  // `totalCount`    = grand total in finance_bank_transactions (no filters)
+  // `filteredCount` = total matching the currently applied server filters,
+  //                   used both for the "نتیجه فیلتر فعلی" label AND for
+  //                   computing the last page number.
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [filteredCount, setFilteredCount] = useState<number | null>(null);
+
   // Manual auto-processing state. `running` drives the dialog visibility and
   // disables the trigger button so a second click can't double-fire the
   // orchestrator while one is already in-flight.
@@ -198,8 +229,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
   // "شناسایی واریزها" — single-click orchestrator: fires the n8n webhook,
   // then processes whatever n8n parsed by reusing the canonical manual
-  // receive-identification + approval helpers. The loading toast satisfies
-  // the spec's required Persian message while the sweep runs.
+  // receive-identification + approval helpers.
   async function runDepositAI() {
     if (depositAIRunning) return;
     setDepositAIRunning(true);
@@ -223,11 +253,21 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   }
 
   useEffect(() => {
+    // Bank lookup map for row labels.
     supabase.from("finance_banks").select("id,title,bank_name").then(({ data }) => {
       const m: Record<string, BankRef> = {};
       (data as BankRef[] || []).forEach((b) => (m[b.id] = b));
       setBanks(m);
     });
+    // Grand total — independent of any filter — fetched once for the
+    // "کل تراکنش‌ها" label. Cheap HEAD count query, no rows returned.
+    void (async () => {
+      const { count } = await supabase
+        .from("finance_bank_transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false);
+      setTotalCount(count ?? 0);
+    })();
   }, []);
 
   // Per-row enrichment maps populated alongside `txs` so badges & chip
@@ -236,13 +276,26 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [receiveByTx, setReceiveByTx] = useState<Record<string, ReceiveMeta>>({});
   const [partyNames, setPartyNames] = useState<Record<string, string>>({});
   // Chip filter — empty string = "show all"; otherwise narrows to a single
-  // auto-identification state. Applied client-side because the state is
-  // a join across three tables and we already have the rows in memory.
+  // auto-identification state. Applied CLIENT-side over the current page
+  // only because the state is derived from a join across three tables; the
+  // chip counts therefore reflect the current page, not the whole DB.
   const [filterAutoState, setFilterAutoState] = useState<"" | AutoState>("");
 
-  // Re-fetch when server-side filters change. Date range goes here too so
-  // we don't pull 500 rows and then trim — Postgres does the work.
-  useEffect(() => { void load(); }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate]);
+  // Whenever a server-side filter changes, snap back to page 1 so the user
+  // doesn't end up on a now-out-of-range page (e.g. page 7 of a 3-page set).
+  useEffect(() => {
+    setPage(1);
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax]);
+
+  // Re-fetch on any server filter OR page change.
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+
+  // Clear bulk-attach selection on filter/page change so we never carry over
+  // selections that the user can no longer see in the table.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+
 
   async function load() {
     setLoading(true);
