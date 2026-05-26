@@ -37,7 +37,9 @@ import CreateCalvesFromCalvingDialog from "./CreateCalvesFromCalvingDialog";
 import CancelFertilityEventDialog from "./CancelFertilityEventDialog";
 import EditFertilityEventDialog from "./EditFertilityEventDialog";
 import { Switch } from "@/components/ui/switch";
-import { Baby, Pencil, Ban } from "lucide-react";
+import { Baby, Pencil, Ban, AlertTriangle, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
+import { existanceLabel, isFemaleCow } from "@/lib/cowPresence";
 // New: derived timeline + summary used by per-tab headers and row enrichment.
 // All math centralised in src/lib/fertility/* so dialogs/cards/tabs share logic.
 import { useFertilitySummary } from "@/hooks/useFertilitySummary";
@@ -150,6 +152,120 @@ function renderEnrichment(ee: EnrichedEvent | undefined): React.ReactNode {
   return <div className="flex flex-wrap gap-1 pt-1">{chips}</div>;
 }
 
+// Per-calf row info used by the CalvesPanel. Pulled live from `cows` when a
+// calf metadata entry has `created_cow_id`, so sex/status reflect the
+// CURRENT state of the calf, not the snapshot taken at calving time.
+export type CalfLiveInfo = {
+  id: number;
+  tag_number: string | null;
+  earnumber: number | null;
+  sex: number | null;
+  sextype: string | null;
+  existancestatus: number | null;
+};
+
+/**
+ * CalvesPanel — renders the calf list for a single calving event.
+ *
+ * Linkage model (verified against schema):
+ *   - The calving event row in `livestock_fertility_events` carries a
+ *     `metadata.calves[]` array. Each entry describes one calf born at that
+ *     specific event and, once converted to a cow record, gets
+ *     `created_cow_id` populated.
+ *   - The `cows.mother_id` column ONLY links a calf to its mother — it does
+ *     NOT link it to a specific calving event. Therefore the metadata array
+ *     is the ONLY reliable per-event linkage today.
+ *   - If `metadata.calves` is empty/missing we show a Persian warning rather
+ *     than guessing.
+ */
+function CalvesPanel({
+  calves,
+  liveMap,
+}: {
+  calves: any[] | undefined;
+  liveMap?: Map<number, CalfLiveInfo>;
+}) {
+  // No structured calf data was recorded with this calving → explicit warning.
+  if (!Array.isArray(calves) || calves.length === 0) {
+    return (
+      <div className="mt-1 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 flex items-center gap-2 text-amber-400 text-[11px]">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+        <span>برای این زایش، رکورد گوساله ثبت نشده است</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 rounded-md border border-border bg-muted/20 p-2 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold text-foreground flex items-center gap-1">
+          <Baby className="w-3.5 h-3.5 text-primary" />
+          گوساله‌های این زایش
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          تعداد: {calves.length.toLocaleString("fa-IR")}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {calves.map((c, idx) => {
+          // Prefer the live cow record (current truth) when available, otherwise
+          // fall back to the snapshot recorded inside metadata.
+          const live = c?.created_cow_id ? liveMap?.get(Number(c.created_cow_id)) : undefined;
+          const ear =
+            live?.tag_number ??
+            (live?.earnumber != null ? String(live.earnumber) : null) ??
+            c?.ear_number ??
+            (c?.body_number ? `بدن ${c.body_number}` : null);
+          // Sex: live record wins, then metadata gender / gender_label.
+          const sexText = live
+            ? isFemaleCow(live) ? "ماده" : "نر"
+            : (c?.gender_label as string) ||
+              (c?.gender === "female" ? "ماده" : c?.gender === "male" ? "نر" : null);
+          // Status: live cow.existancestatus, else metadata.physical_status.
+          const statusText = live
+            ? existanceLabel(live.existancestatus)
+            : c?.physical_status === "dead"
+              ? "تلف شده"
+              : c?.physical_status_label || (c?.physical_status === "alive" ? "زنده" : null);
+          // Alive when existancestatus is 0/null. Used only for chip tone.
+          const aliveTone = live
+            ? live.existancestatus == null || live.existancestatus === 0
+            : c?.physical_status !== "dead";
+          const chipTone = aliveTone
+            ? "bg-primary/10 text-primary border-primary/30"
+            : "bg-destructive/10 text-destructive border-destructive/30";
+
+          // Body of the chip — clickable when we have a real cow record.
+          const inner = (
+            <>
+              <span className="font-bold" dir="ltr">{ear ?? "بدون شماره"}</span>
+              {sexText && <span className="opacity-80">• {sexText}</span>}
+              {statusText && <span className="opacity-80">• {statusText}</span>}
+              {live && <ExternalLink className="w-3 h-3 opacity-70" />}
+            </>
+          );
+
+          const baseClass = `inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${chipTone}`;
+          return live ? (
+            <Link
+              key={idx}
+              to={`/livestock/${live.id}`}
+              className={`${baseClass} hover:opacity-80 transition-opacity`}
+              title="مشاهده پروفایل گوساله"
+            >
+              {inner}
+            </Link>
+          ) : (
+            <span key={idx} className={baseClass} title="هنوز به دام تبدیل نشده">
+              {inner}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function EventCard({
   e,
   enrichment,
@@ -159,6 +275,8 @@ function EventCard({
   // Optional resolver for legacy numeric user IDs → real names. When omitted,
   // raw values are shown (so the component still works in isolation).
   resolveUserName,
+  // Map of created_cow_id → live cow record, used by CalvesPanel.
+  calfLiveMap,
 }: {
   e: FertilityEvent;
   enrichment?: EnrichedEvent;
@@ -166,9 +284,11 @@ function EventCard({
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
   resolveUserName?: (v: number | string | null | undefined) => string | null;
+  calfLiveMap?: Map<number, CalfLiveInfo>;
 }) {
   const calves = (e.metadata as any)?.calves as any[] | undefined;
-  const hasCalves = e.event_type === "calving" && Array.isArray(calves) && calves.length > 0;
+  const isCalving = e.event_type === "calving";
+  const hasCalves = isCalving && Array.isArray(calves) && calves.length > 0;
   const allCreated = hasCalves && calves!.every((c) => c?.created_cow_id);
   const cancelled = !!e.is_cancelled;
   const isLegacyReadOnly = !!e.legacy_table_name && e.legacy_table_name !== "manual";
@@ -232,6 +352,13 @@ function EventCard({
       )}
       {cancelled && e.cancel_reason && (
         <p className="text-[11px] text-destructive">دلیل لغو: {e.cancel_reason}</p>
+      )}
+      {/* For every calving event, show the linked calves panel — even when
+          metadata.calves is empty, the panel renders an explicit Persian
+          warning so users immediately see there are no calf records to
+          inspect. The legacy "ایجاد دام" button stays underneath. */}
+      {isCalving && !cancelled && (
+        <CalvesPanel calves={calves} liveMap={calfLiveMap} />
       )}
       {hasCalves && onCreateCalves && !cancelled && (
         <Button
@@ -301,17 +428,18 @@ function EventList({
   onEdit,
   onCancel,
   resolveUserName,
+  calfLiveMap,
 }: {
   events: FertilityEvent[];
   emptyText: string;
-  // Optional id → EnrichedEvent map. When provided, each card renders extra
-  // derived chips (AI #, outcome, linked AI, etc).
   enrichmentMap?: Map<string, EnrichedEvent>;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
-  // Threaded through to EventCard so operator/vet IDs become real names.
   resolveUserName?: (v: number | string | null | undefined) => string | null;
+  // Forwarded to EventCard so calving rows can show live calf chips with
+  // up-to-date sex/status from the cows table.
+  calfLiveMap?: Map<number, CalfLiveInfo>;
 }) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
@@ -325,11 +453,13 @@ function EventList({
           onEdit={onEdit}
           onCancel={onCancel}
           resolveUserName={resolveUserName}
+          calfLiveMap={calfLiveMap}
         />
       ))}
     </div>
   );
 }
+
 
 type ActionKey =
   | "heat"
@@ -484,6 +614,60 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
     return ids;
   }, [events]);
   const { resolve: resolveUserName } = useLegacyUserNames(operatorIds);
+
+  // ---- Live calf lookup -------------------------------------------------
+  // Walk every calving event, collect the `created_cow_id` field from each
+  // entry of `metadata.calves[]`, and batch-load the current `cows` rows so
+  // CalvesPanel can render up-to-date sex/status chips (and a deep-link to
+  // each calf profile). We keep this in a local useEffect — same pattern as
+  // the events loader above — to avoid pulling react-query into a section
+  // that doesn't already use it.
+  const [calfLiveMap, setCalfLiveMap] = useState<Map<number, CalfLiveInfo>>(
+    () => new Map(),
+  );
+  // Collect calf cow IDs from all calving events' metadata.calves[].created_cow_id.
+  const calfCowIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const e of events) {
+      if (e.event_type !== "calving") continue;
+      const arr = (e.metadata as any)?.calves;
+      if (!Array.isArray(arr)) continue;
+      for (const c of arr) {
+        const id = Number(c?.created_cow_id);
+        if (Number.isFinite(id) && id > 0) ids.add(id);
+      }
+    }
+    return Array.from(ids);
+  }, [events]);
+  // Stable key so the effect only re-fetches when the actual ID set changes,
+  // not on every parent re-render.
+  const calfCowIdsKey = useMemo(() => calfCowIds.slice().sort().join(","), [calfCowIds]);
+  useEffect(() => {
+    let cancelled = false;
+    if (calfCowIds.length === 0) {
+      setCalfLiveMap(new Map());
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from("cows")
+        .select("id, tag_number, earnumber, sex, sextype, existancestatus")
+        .in("id", calfCowIds);
+      if (cancelled) return;
+      if (error) {
+        console.error("[FertilitySection] calf cows load error", error);
+        return;
+      }
+      const map = new Map<number, CalfLiveInfo>();
+      for (const row of (data ?? []) as CalfLiveInfo[]) map.set(row.id, row);
+      setCalfLiveMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calfCowIdsKey]);
+
 
 
   function handleAction(key: ActionKey) {
@@ -731,6 +915,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
+              calfLiveMap={calfLiveMap}
             />
           </TabsContent>
 
@@ -784,6 +969,7 @@ export default function FertilitySection({ livestockId, latestStatus, onOperatio
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
+              calfLiveMap={calfLiveMap}
             />
           </TabsContent>
 
