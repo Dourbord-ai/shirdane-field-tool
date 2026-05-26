@@ -971,9 +971,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={11} className="p-8 text-center text-muted-foreground">تراکنشی یافت نشد</td></tr>
+                  <tr><td colSpan={12} className="p-8 text-center text-muted-foreground">تراکنشی یافت نشد</td></tr>
                 )}
               </tbody>
             </table>
