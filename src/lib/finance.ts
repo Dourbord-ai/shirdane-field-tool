@@ -788,7 +788,16 @@ export async function approveReceiveIdentification(receiveIdId: string): Promise
     await supabase.from("finance_parties").update({ balance: newBal }).eq("id", ri.party_id);
 
     await recalculateBankUnassignedBalances(ri.bank_id);
-    return { ok: true };
+
+    // Trusted-beneficiary learning: now that this party is confirmed as the
+    // real owner of this deposit, persist the (matchtype, matchcontent) →
+    // finance_party_id link so DepositAI can auto-identify next time. Best
+    // effort — never fail the approval just because the mapping write fails.
+    const trustedSaved = await saveTrustedBeneficiaryMapping(
+      ri.bank_transaction_id as string,
+      ri.party_id as string,
+    );
+    return { ok: true, trusted_saved: trustedSaved };
   } else {
     await supabase
       .from("finance_receive_identifications")
