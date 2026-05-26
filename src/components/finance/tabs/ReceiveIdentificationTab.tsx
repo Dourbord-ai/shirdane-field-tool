@@ -136,8 +136,14 @@ export default function ReceiveIdentificationTab() {
     setBusyId(ri.id);
     try {
       const res = await approveReceiveIdentification(ri.id);
-      if (res.ok) toast.success("تایید و در سپیدار ثبت شد");
-      else toastFinanceError(toast, res.error || new Error("خطا در ثبت سپیدار"));
+      if (res.ok) {
+        toast.success("تایید و در سپیدار ثبت شد");
+        // Trusted-beneficiary learning feedback: only shown when the
+        // (matchtype, matchcontent) → finance_party_id mapping was actually
+        // upserted into bankpartyaccountinfos so future deposits can be
+        // auto-identified by "شناسایی واریزها".
+        if (res.trusted_saved) toast.success("این ذینفع برای دفعات بعد ذخیره شد");
+      } else toastFinanceError(toast, res.error || new Error("خطا در ثبت سپیدار"));
       void load();
     } catch (e: unknown) {
       toastFinanceError(toast, e);
