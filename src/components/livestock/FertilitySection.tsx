@@ -428,17 +428,18 @@ function EventList({
   onEdit,
   onCancel,
   resolveUserName,
+  calfLiveMap,
 }: {
   events: FertilityEvent[];
   emptyText: string;
-  // Optional id → EnrichedEvent map. When provided, each card renders extra
-  // derived chips (AI #, outcome, linked AI, etc).
   enrichmentMap?: Map<string, EnrichedEvent>;
   onCreateCalves?: (e: FertilityEvent) => void;
   onEdit?: (e: FertilityEvent) => void;
   onCancel?: (e: FertilityEvent) => void;
-  // Threaded through to EventCard so operator/vet IDs become real names.
   resolveUserName?: (v: number | string | null | undefined) => string | null;
+  // Forwarded to EventCard so calving rows can show live calf chips with
+  // up-to-date sex/status from the cows table.
+  calfLiveMap?: Map<number, CalfLiveInfo>;
 }) {
   if (events.length === 0) return <EmptyList text={emptyText} />;
   return (
@@ -452,11 +453,13 @@ function EventList({
           onEdit={onEdit}
           onCancel={onCancel}
           resolveUserName={resolveUserName}
+          calfLiveMap={calfLiveMap}
         />
       ))}
     </div>
   );
 }
+
 
 type ActionKey =
   | "heat"
