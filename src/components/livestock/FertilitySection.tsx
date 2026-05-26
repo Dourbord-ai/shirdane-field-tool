@@ -294,7 +294,20 @@ function EventCard({
   const calves = (e.metadata as any)?.calves as any[] | undefined;
   const isCalving = e.event_type === "calving";
   const hasCalves = isCalving && Array.isArray(calves) && calves.length > 0;
-  const allCreated = hasCalves && calves!.every((c) => c?.created_cow_id);
+  // Only calves that are still creatable: not yet linked to a cow row AND
+  // physically healthy/alive. Dead/stillborn calves must never trigger
+  // creation, and already-created calves don't need it either.
+  const creatableCalves = hasCalves
+    ? calves!.filter(
+        (c) =>
+          !c?.created_cow_id &&
+          (c?.physical_status === "healthy" || c?.physical_status === "alive"),
+      )
+    : [];
+  const hasCreatable = creatableCalves.length > 0;
+  // Kept for backward-compat naming in the JSX below: button hides when
+  // there is nothing left to create (all created OR remaining are dead).
+  const allCreated = hasCalves && !hasCreatable;
   const cancelled = !!e.is_cancelled;
   const isLegacyReadOnly = !!e.legacy_table_name && e.legacy_table_name !== "manual";
   return (
