@@ -1,12 +1,19 @@
-// Legacy payment request item AmountType mapping
-// 1 = بستانکار (creditor) — pay against existing creditor balance
-// 2 = پیش پرداخت (prepayment)
-// 3 = علی الحساب (on_account)
-export type PaymentAmountTypeKey = "creditor" | "prepayment" | "on_account";
+// Payment request item AmountType mapping (business basis of the request amount).
+// This is NOT a debit/credit accounting direction — it describes how the
+// amount should be treated against the beneficiary's balance:
+//   1 = بستانکار (creditor)   → MUST validate creditor balance before allowing
+//   2 = پیش پرداخت (advance)  → no balance validation
+//   3 = علی الحساب (on_account) → no balance validation
+//
+// NOTE: the legacy key "prepayment" is treated as an alias for "advance" so
+// any in-flight code or older rows keep working. New code should emit "advance".
+export type PaymentAmountTypeKey = "creditor" | "advance" | "on_account";
 
 export const PAYMENT_AMOUNT_TYPES: { code: number; key: PaymentAmountTypeKey; label: string }[] = [
+  // Order matches the legacy numeric codes already persisted in the DB column
+  // `amount_type_code`, so we don't churn historical data.
   { code: 1, key: "creditor", label: "بستانکار" },
-  { code: 2, key: "prepayment", label: "پیش پرداخت" },
+  { code: 2, key: "advance", label: "پیش پرداخت" },
   { code: 3, key: "on_account", label: "علی الحساب" },
 ];
 
