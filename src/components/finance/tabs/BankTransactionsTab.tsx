@@ -34,6 +34,14 @@ import { legacyBankLabel } from "@/lib/legacyBanks";
 import { NewReceiveIdDialog } from "@/components/finance/tabs/ReceiveIdentificationTab";
 import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Link2 } from "lucide-react";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
+// Bulk "Attach to Payment Request" — pure frontend orchestrator. See the
+// dialog file's header doc for why concurrency is serialized and why we
+// never split a transaction across items. The backend stays unchanged: we
+// reuse `createPaymentAllocation` per row.
+import BulkAttachPaymentRequestDialog, {
+  type BulkAttachTx,
+} from "@/components/finance/BulkAttachPaymentRequestDialog";
 // Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
 import DatePicker from "@/components/DatePicker";
 
