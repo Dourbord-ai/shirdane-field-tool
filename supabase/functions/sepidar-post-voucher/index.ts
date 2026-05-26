@@ -1047,7 +1047,7 @@ Deno.serve(async (req) => {
     if (successFlag === 0) {
       const errMsg = String(row.error_message ?? row.ErrorMessage ?? "unknown SP failure");
       console.error("[sepidar-post-voucher] SP returned success=0", errMsg, row);
-      await markFailed(sb, voucherId, errMsg, attempts);
+      await markFailed(sb, voucherId, "ثبت سند در سپیدار ناموفق بود.", attempts, errMsg);
       return json({
         success: false,
         message: "ثبت سند در سپیدار ناموفق بود.",
