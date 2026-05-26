@@ -142,6 +142,8 @@ async function fetchCandidates(): Promise<CandidateTx[]> {
 // row (so concurrent runs cannot double-process the same transaction).
 // ---------------------------------------------------------------------------
 async function claim(txId: string): Promise<boolean> {
+  // Emit the spec-mandated log marker so dashboards can group claim attempts.
+  log("claim.started", { txId });
   const { data, error } = await supabase
     .from("finance_bank_transactions")
     .update({ ai_verify_status: "processing" })
@@ -153,7 +155,11 @@ async function claim(txId: string): Promise<boolean> {
     log("claim.error", { txId, error: error.message });
     return false;
   }
-  return Boolean(data?.id);
+  const ok = Boolean(data?.id);
+  // Distinct success/skip markers — the spec asks for both so operators can
+  // tell concurrency races (skipped) apart from real successful claims.
+  log(ok ? "claim.success" : "claim.skipped", { txId });
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
