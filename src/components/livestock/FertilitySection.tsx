@@ -685,6 +685,21 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
 
 
 
+  // Active dry-off detection: cow is considered "currently dry" when the
+  // most recent dry_off event is newer than the most recent calving event.
+  // We use this together with cows.is_dry to block duplicate registrations.
+  const hasActiveDryOff = useMemo(() => {
+    const last = (t: string) =>
+      events.find((e) => e.event_type === t && !e.is_cancelled)?.event_date ?? null;
+    const lastDry = last("dry_off");
+    const lastCalv = last("calving");
+    if (!lastDry) return false;
+    if (!lastCalv) return true;
+    return new Date(lastDry).getTime() > new Date(lastCalv).getTime();
+  }, [events]);
+  // Single source of truth for whether the dry-off action should be blocked.
+  const dryOffBlocked = !!isDry || hasActiveDryOff;
+
   function handleAction(key: ActionKey) {
     setActionsOpen(false);
     switch (key) {
@@ -708,6 +723,19 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
         break;
       case "calving":
         setCalvingOpen(true);
+        break;
+      case "dry_off":
+        // Reuse the standalone dry-off page; pass cowId so the form auto-
+        // selects this cow without forcing the user to search again.
+        if (dryOffBlocked) {
+          toast({
+            title: "ثبت خشک کردن مجاز نیست",
+            description: "این دام قبلاً خشک شده است",
+            variant: "destructive",
+          });
+          return;
+        }
+        navigate(`/livestock/dry-off/new?cowId=${livestockId}`);
         break;
       default:
         toast({
