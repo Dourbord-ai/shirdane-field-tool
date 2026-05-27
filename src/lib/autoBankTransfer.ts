@@ -144,6 +144,7 @@ const MATCH_WINDOW_HOURS = 48;
 // ----------------------------------------------------------------------------
 export async function autoMatchBankTransfer(
   tx: AutoBankTransferInput,
+  opts: { force?: boolean } = {},
 ): Promise<AutoBankTransferOutcome> {
   // --- Early-outs (no logging — silent no-op) ------------------------------
   if (tx.transaction_type !== "deposit") return { state: "no_match" };
@@ -153,7 +154,9 @@ export async function autoMatchBankTransfer(
 
   // Feature flag — when disabled we don't even probe candidates. This keeps
   // the import path's perceived cost zero until the operator opts in.
-  if (!(await isFlagOn("auto_create_bank_transfers"))) {
+  // `force=true` bypasses the flag (used by the explicit
+  // "شناسایی تراکنش بین بانکی" toolbar button which is an operator action).
+  if (!opts.force && !(await isFlagOn("auto_create_bank_transfers"))) {
     return { state: "no_match" };
   }
 
