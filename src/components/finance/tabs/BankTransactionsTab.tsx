@@ -542,34 +542,77 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <Download className="w-4 h-4 ml-1" /> دریافت از API
           </Button>
           {/* All three identification buttons share a unified blue palette
-              so they read as a related family of automation actions. The
-              previous "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده" button
-              was removed per request — its underlying runAutoProcess
-              pipeline is still available programmatically. */}
-          <Button
-            onClick={runFeeIdentification}
-            disabled={feesRunning}
-            className="bg-blue-600 text-white hover:bg-blue-700"
-          >
-            <ArrowUpFromLine className="w-4 h-4 ml-1" />
-            {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
-          </Button>
-          <Button
-            onClick={runDepositAI}
-            disabled={depositAIRunning}
-            className="bg-blue-600 text-white hover:bg-blue-700"
-          >
-            <ArrowDownToLine className="w-4 h-4 ml-1" />
-            {depositAIRunning ? "هوشیار در حال بررسی…" : "شناسایی واریزها"}
-          </Button>
-          <Button
-            onClick={runInternalTransferAI}
-            disabled={internalTransferRunning}
-            className="bg-blue-600 text-white hover:bg-blue-700"
-          >
-            <ArrowLeftRight className="w-4 h-4 ml-1" />
-            {internalTransferRunning ? "در حال بررسی انتقال‌ها…" : "شناسایی تراکنش بین بانکی"}
-          </Button>
+              so they read as a related family of automation actions.
+              Mutual lock rule (per request): while either «شناسایی واریزها»
+              or «شناسایی تراکنش بین بانکی» is running, the other one is
+              disabled and shows a Persian tooltip explaining that هوشیار
+              is busy. شناسایی کارمزد is a separate lightweight pipeline
+              and is intentionally NOT part of this mutual lock. */}
+          {(() => {
+            // Local helper: any automation job currently in flight that
+            // should block the other automation button.
+            const automationBusy = depositAIRunning || internalTransferRunning;
+            // Persian tooltip shown on the *other* button while one is busy.
+            const busyTooltip = "هوشیار در حال پردازش است؛ لطفاً تا پایان عملیات صبر کنید";
+            return (
+              <TooltipProvider delayDuration={150}>
+                <Button
+                  onClick={runFeeIdentification}
+                  disabled={feesRunning}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {feesRunning
+                    ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                    : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
+                  {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
+                </Button>
+
+                {/* شناسایی واریزها — disabled while internalTransferRunning */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* span wrapper lets the tooltip show even when the
+                        underlying button is disabled (pointer-events:none). */}
+                    <span className={internalTransferRunning ? "inline-block" : "contents"}>
+                      <Button
+                        onClick={runDepositAI}
+                        disabled={automationBusy}
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        {depositAIRunning
+                          ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                          : <ArrowDownToLine className="w-4 h-4 ml-1" />}
+                        {depositAIRunning ? "هوشیار در حال بررسی…" : "شناسایی واریزها"}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {internalTransferRunning && (
+                    <TooltipContent>{busyTooltip}</TooltipContent>
+                  )}
+                </Tooltip>
+
+                {/* شناسایی تراکنش بین بانکی — disabled while depositAIRunning */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={depositAIRunning ? "inline-block" : "contents"}>
+                      <Button
+                        onClick={runInternalTransferAI}
+                        disabled={automationBusy}
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        {internalTransferRunning
+                          ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                          : <ArrowLeftRight className="w-4 h-4 ml-1" />}
+                        {internalTransferRunning ? "در حال بررسی انتقال‌ها…" : "شناسایی تراکنش بین بانکی"}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {depositAIRunning && (
+                    <TooltipContent>{busyTooltip}</TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })()}
 
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
