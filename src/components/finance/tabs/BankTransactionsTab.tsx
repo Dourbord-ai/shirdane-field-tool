@@ -36,6 +36,14 @@ import {
   emptyInternalTransferAIProgress,
   type InternalTransferAIProgress,
 } from "@/lib/processInternalTransferAI";
+// "شناسایی برداشت‌ها" — withdraw identification orchestrator. Mirrors the
+// deposit-AI pattern but delegates posting to the canonical manual helper
+// `createPaymentAllocation` (which owns voucher + Sepidar + assignment).
+import {
+  processWithdrawAI,
+  emptyWithdrawAIProgress,
+  type WithdrawAIProgress,
+} from "@/lib/processWithdrawAI";
 // Auto-identify summary type is still consumed by the import-dialog UI for
 // historical compatibility (it now renders null after the upload-flow split).
 import { type AutoIdentifySummary } from "@/lib/autoIdentify";
@@ -205,6 +213,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     emptyInternalTransferAIProgress(),
   );
 
+  // "شناسایی برداشت‌ها" state — third member of the automation family.
+  // Independent progress so its panel renders alongside the other two.
+  const [withdrawAIRunning, setWithdrawAIRunning] = useState(false);
+  const [withdrawAIProgress, setWithdrawAIProgress] = useState<WithdrawAIProgress>(
+    emptyWithdrawAIProgress(),
+  );
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
@@ -294,6 +309,35 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setInternalTransferRunning(false);
     }
   }
+
+  // "شناسایی برداشت‌ها" — sweep every unassigned withdraw, resolve a
+  // trusted finance party via identifier cache/history, then delegate to
+  // the canonical manual helper `createPaymentAllocation` (which owns the
+  // voucher, Sepidar sync and the assignment_status flip).
+  async function runWithdrawAI() {
+    if (withdrawAIRunning) return;
+    setWithdrawAIRunning(true);
+    setWithdrawAIProgress(emptyWithdrawAIProgress());
+    // Persian loading toast — text wording specified in the request.
+    const loadingToastId = toast.loading(
+      "هوشیار در حال بررسی برداشت‌هاست\nلطفاً کمی صبر کنید",
+    );
+    try {
+      const final = await processWithdrawAI((p) => setWithdrawAIProgress(p));
+      toast.dismiss(loadingToastId);
+      toast.success(
+        `شناسایی برداشت‌ها — بررسی‌شده: ${final.total} · شناسایی‌شده: ${final.identified} · ثبت موفق: ${final.posted} · طرف حساب پیدا نشد: ${final.party_not_found} · نیاز به تخصیص: ${final.needs_mapping} · انتقال داخلی رد شد: ${final.internal_skipped} · خطادار: ${final.failed}`,
+      );
+      void load();
+    } catch (e) {
+      toast.dismiss(loadingToastId);
+      toastFinanceError(toast, e);
+    } finally {
+      setWithdrawAIRunning(false);
+    }
+  }
+
+
 
 
   useEffect(() => {
@@ -550,10 +594,17 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               and is intentionally NOT part of this mutual lock. */}
           {(() => {
             // Local helper: any automation job currently in flight that
-            // should block the other automation button.
-            const automationBusy = depositAIRunning || internalTransferRunning;
-            // Persian tooltip shown on the *other* button while one is busy.
+            // should block the OTHER automation buttons. All three deposit/
+            // withdraw/internal-transfer pipelines now participate in the
+            // mutual lock so a busy n8n/Sepidar run is never stepped on.
+            const automationBusy =
+              depositAIRunning || internalTransferRunning || withdrawAIRunning;
+            // Persian tooltip shown on the *other* buttons while one is busy.
             const busyTooltip = "هوشیار در حال پردازش است؛ لطفاً تا پایان عملیات صبر کنید";
+            // True when something OTHER than this button is busy — drives
+            // each tooltip individually so the active button itself never
+            // shows the "busy please wait" message.
+            const otherBusyFor = (self: boolean) => automationBusy && !self;
             return (
               <TooltipProvider delayDuration={150}>
                 <Button
@@ -567,12 +618,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
                 </Button>
 
-                {/* شناسایی واریزها — disabled while internalTransferRunning */}
+                {/* شناسایی واریزها */}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     {/* span wrapper lets the tooltip show even when the
                         underlying button is disabled (pointer-events:none). */}
-                    <span className={internalTransferRunning ? "inline-block" : "contents"}>
+                    <span className={otherBusyFor(depositAIRunning) ? "inline-block" : "contents"}>
                       <Button
                         onClick={runDepositAI}
                         disabled={automationBusy}
@@ -585,15 +636,36 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {internalTransferRunning && (
+                  {otherBusyFor(depositAIRunning) && (
                     <TooltipContent>{busyTooltip}</TooltipContent>
                   )}
                 </Tooltip>
 
-                {/* شناسایی تراکنش بین بانکی — disabled while depositAIRunning */}
+                {/* شناسایی برداشت‌ها — new third member of the family. */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className={depositAIRunning ? "inline-block" : "contents"}>
+                    <span className={otherBusyFor(withdrawAIRunning) ? "inline-block" : "contents"}>
+                      <Button
+                        onClick={runWithdrawAI}
+                        disabled={automationBusy}
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        {withdrawAIRunning
+                          ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                          : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
+                        {withdrawAIRunning ? "در حال بررسی برداشت‌ها…" : "شناسایی برداشت‌ها"}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {otherBusyFor(withdrawAIRunning) && (
+                    <TooltipContent>{busyTooltip}</TooltipContent>
+                  )}
+                </Tooltip>
+
+                {/* شناسایی تراکنش بین بانکی */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={otherBusyFor(internalTransferRunning) ? "inline-block" : "contents"}>
                       <Button
                         onClick={runInternalTransferAI}
                         disabled={automationBusy}
@@ -606,13 +678,14 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {depositAIRunning && (
+                  {otherBusyFor(internalTransferRunning) && (
                     <TooltipContent>{busyTooltip}</TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
             );
           })()}
+
 
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
@@ -723,6 +796,63 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           )}
         </div>
       )}
+
+      {/* Live progress panel for the "شناسایی برداشت‌ها" sweep. Same six-
+          chip layout as the other automation panels for visual parity. */}
+      {(withdrawAIRunning || withdrawAIProgress.total > 0 || withdrawAIProgress.failures.length > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">گزارش شناسایی برداشت‌ها</span>
+            <span className="text-muted-foreground">
+              {withdrawAIProgress.processed} از {withdrawAIProgress.total}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <div className="text-[10px] text-muted-foreground">تعداد بررسی‌شده</div>
+              <div className="text-base font-bold">{withdrawAIProgress.total}</div>
+            </div>
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2">
+              <div className="text-[10px] text-emerald-700">شناسایی‌شده</div>
+              <div className="text-base font-bold text-emerald-700">{withdrawAIProgress.identified}</div>
+            </div>
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+              <div className="text-[10px] text-amber-700">طرف حساب پیدا نشد</div>
+              <div className="text-base font-bold text-amber-700">{withdrawAIProgress.party_not_found}</div>
+            </div>
+            <div className="rounded-md border border-orange-500/40 bg-orange-500/10 p-2">
+              <div className="text-[10px] text-orange-700">نیاز به تخصیص</div>
+              <div className="text-base font-bold text-orange-700">{withdrawAIProgress.needs_mapping}</div>
+            </div>
+            <div className="rounded-md border border-indigo-500/40 bg-indigo-500/10 p-2">
+              <div className="text-[10px] text-indigo-700">انتقال داخلی رد شد</div>
+              <div className="text-base font-bold text-indigo-700">{withdrawAIProgress.internal_skipped}</div>
+            </div>
+            <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
+              <div className="text-[10px] text-primary">ثبت موفق</div>
+              <div className="text-base font-bold text-primary">{withdrawAIProgress.posted}</div>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2">
+              <div className="text-[10px] text-destructive">خطادار</div>
+              <div className="text-base font-bold text-destructive">{withdrawAIProgress.failed}</div>
+            </div>
+          </div>
+          {withdrawAIProgress.failures.length > 0 && (
+            <details className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+              <summary className="cursor-pointer text-[11px] font-bold text-destructive">
+                خطاها ({withdrawAIProgress.failures.length})
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-[11px]">
+                {withdrawAIProgress.failures.slice(-30).map((f, idx) => (
+                  <li key={idx} className="truncate"><code>{f.tx_id.slice(0, 8)}</code> — {f.step}: {f.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+
 
 
       {/* Dedicated summary panel for the bank-fee sweep — shows the five
