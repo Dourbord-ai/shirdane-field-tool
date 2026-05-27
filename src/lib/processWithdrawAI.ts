@@ -342,9 +342,7 @@ export async function processWithdrawAI(
       if (!resolved) {
         log("party.match.failed", { tx_id: tx.id, idents });
         progress.party_not_found += 1;
-        progress.processed += 1;
-        push();
-        continue;
+        continue; // finally handles processed++ / push()
       }
       log("party.match.success", {
         tx_id: tx.id,
