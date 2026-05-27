@@ -797,6 +797,63 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       )}
 
+      {/* Live progress panel for the "شناسایی برداشت‌ها" sweep. Same six-
+          chip layout as the other automation panels for visual parity. */}
+      {(withdrawAIRunning || withdrawAIProgress.total > 0 || withdrawAIProgress.failures.length > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">گزارش شناسایی برداشت‌ها</span>
+            <span className="text-muted-foreground">
+              {withdrawAIProgress.processed} از {withdrawAIProgress.total}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <div className="text-[10px] text-muted-foreground">تعداد بررسی‌شده</div>
+              <div className="text-base font-bold">{withdrawAIProgress.total}</div>
+            </div>
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2">
+              <div className="text-[10px] text-emerald-700">شناسایی‌شده</div>
+              <div className="text-base font-bold text-emerald-700">{withdrawAIProgress.identified}</div>
+            </div>
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+              <div className="text-[10px] text-amber-700">طرف حساب پیدا نشد</div>
+              <div className="text-base font-bold text-amber-700">{withdrawAIProgress.party_not_found}</div>
+            </div>
+            <div className="rounded-md border border-orange-500/40 bg-orange-500/10 p-2">
+              <div className="text-[10px] text-orange-700">نیاز به تخصیص</div>
+              <div className="text-base font-bold text-orange-700">{withdrawAIProgress.needs_mapping}</div>
+            </div>
+            <div className="rounded-md border border-indigo-500/40 bg-indigo-500/10 p-2">
+              <div className="text-[10px] text-indigo-700">انتقال داخلی رد شد</div>
+              <div className="text-base font-bold text-indigo-700">{withdrawAIProgress.internal_skipped}</div>
+            </div>
+            <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
+              <div className="text-[10px] text-primary">ثبت موفق</div>
+              <div className="text-base font-bold text-primary">{withdrawAIProgress.posted}</div>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2">
+              <div className="text-[10px] text-destructive">خطادار</div>
+              <div className="text-base font-bold text-destructive">{withdrawAIProgress.failed}</div>
+            </div>
+          </div>
+          {withdrawAIProgress.failures.length > 0 && (
+            <details className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+              <summary className="cursor-pointer text-[11px] font-bold text-destructive">
+                خطاها ({withdrawAIProgress.failures.length})
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-[11px]">
+                {withdrawAIProgress.failures.slice(-30).map((f, idx) => (
+                  <li key={idx} className="truncate"><code>{f.tx_id.slice(0, 8)}</code> — {f.step}: {f.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+
+
 
       {/* Dedicated summary panel for the bank-fee sweep — shows the five
           headline counters requested by the spec. */}
