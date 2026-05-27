@@ -334,9 +334,7 @@ export async function processWithdrawAI(
         // we guard explicitly so a bad import row can never crash the sweep.
         log("party.match.failed", { tx_id: tx.id, reason: "invalid_amount" });
         progress.party_not_found += 1;
-        progress.processed += 1;
-        push();
-        continue;
+        continue; // finally handles processed++ / push()
       }
 
       // Resolve trusted party from cache → history.
