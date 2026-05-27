@@ -137,14 +137,22 @@ export interface AutoBankTransferInput {
 // between source and destination. 48h is generous; tighten later if we
 // see false multi-matches in production.
 const MATCH_WINDOW_HOURS = 48;
+// Aggressive window — used when the caller has independent confirmation
+// (e.g. own-bank identifier hit) that the deposit IS an internal transfer.
+// We widen to 7 days to catch cross-day posting drift, and resolve ambiguity
+// by picking the withdraw row closest in time instead of bailing out.
+const AGGRESSIVE_MATCH_WINDOW_HOURS = 24 * 7;
 
 // ----------------------------------------------------------------------------
 // Public entry point. Returns a "no_match" outcome (zero side-effects) if
 // the creation feature flag is OFF or the row isn't an eligible deposit.
+// `aggressive` widens the time window and breaks ambiguity by closest-time
+// tie-break — only safe when the caller has already confirmed the deposit
+// is an internal transfer (orchestrator's own-bank identifier hit).
 // ----------------------------------------------------------------------------
 export async function autoMatchBankTransfer(
   tx: AutoBankTransferInput,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; aggressive?: boolean } = {},
 ): Promise<AutoBankTransferOutcome> {
   // --- Early-outs (no logging — silent no-op) ------------------------------
   if (tx.transaction_type !== "deposit") return { state: "no_match" };
