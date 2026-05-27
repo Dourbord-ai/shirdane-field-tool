@@ -203,23 +203,35 @@ export async function processInternalTransferAI(
         transaction_datetime: tx.transaction_datetime,
       };
 
-      const outcome = await autoMatchBankTransfer(input, { force: true });
+      // Business rule: when the deposit is independently confirmed as an
+      // own-bank transfer (card/IBAN/account hit), we run the matcher in
+      // AGGRESSIVE mode — wider time window + closest-time tie-break — so
+      // the row is auto-completed instead of being dumped into the manual
+      // review bucket. Standard mode is kept for non-own-bank deposits to
+      // preserve the strict "silent guessing is forbidden" guarantee.
+      const outcome = await autoMatchBankTransfer(input, {
+        force: true,
+        aggressive: Boolean(ownBankHit),
+      });
       console.log("[InternalTransferAI] pair.outcome", { tx_id: tx.id, outcome });
 
       switch (outcome.state) {
         case "no_match":
-          // No pair AND no own-bank signal → genuinely not an internal
-          // transfer. Silent skip. Own-bank-flagged without pair becomes
-          // needs_review so the operator can investigate.
+          // No withdrawal sibling found in DB. For own-bank-confirmed rows
+          // this just means the sibling hasn't been imported yet — it's
+          // NOT something the operator can act on, so do not surface it
+          // as needs_review. Silent skip for both branches.
           if (ownBankHit) {
-            progress.needs_review += 1;
-            console.log("[InternalTransferAI] failed", {
+            console.log("[InternalTransferAI] own_bank_pair_pending", {
               tx_id: tx.id,
-              reason: "own_bank_no_pair",
+              reason: "sibling_withdraw_not_imported_yet",
             });
           }
           break;
         case "auto_bank_transfer_needs_review":
+          // With aggressive mode, own-bank rows never land here (tie-break
+          // resolves ambiguity). Reaching this branch means a genuinely
+          // ambiguous non-own-bank case OR an RPC-level failure.
           progress.needs_review += 1;
           console.log("[InternalTransferAI] failed", {
             tx_id: tx.id,
