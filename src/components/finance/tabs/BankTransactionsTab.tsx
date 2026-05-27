@@ -275,13 +275,20 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (internalTransferRunning) return;
     setInternalTransferRunning(true);
     setInternalTransferProgress(emptyInternalTransferAIProgress());
+    // Persian loading toast — mirrors runDepositAI so the user sees an
+    // immediate confirmation that the sweep has started.
+    const loadingToastId = toast.loading(
+      "هوشیار در حال بررسی انتقال‌های بین بانکی\nلطفاً کمی صبر کنید",
+    );
     try {
       const final = await processInternalTransferAI((p) => setInternalTransferProgress(p));
+      toast.dismiss(loadingToastId);
       toast.success(
         `شناسایی تراکنش بین بانکی — بررسی‌شده: ${final.total} · جفت‌های انتقال داخلی: ${final.pairs_detected} · ثبت موفق: ${final.posted} · نیازمند بررسی: ${final.needs_review} · خطادار: ${final.failed + final.matched_not_posted}`,
       );
       void load();
     } catch (e) {
+      toast.dismiss(loadingToastId);
       toastFinanceError(toast, e);
     } finally {
       setInternalTransferRunning(false);
