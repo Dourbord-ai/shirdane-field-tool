@@ -27,6 +27,15 @@ import {
   emptyDepositAIProgress,
   type DepositAIProgress,
 } from "@/lib/processDepositAI";
+// "شناسایی تراکنش بین بانکی" — internal inter-bank transfer orchestrator.
+// Reuses the canonical manual transfer helper (`autoMatchBankTransfer`)
+// with `force:true` so the SECURITY DEFINER RPC + createVoucher +
+// syncVoucherToSepidar pipeline runs end-to-end per row.
+import {
+  processInternalTransferAI,
+  emptyInternalTransferAIProgress,
+  type InternalTransferAIProgress,
+} from "@/lib/processInternalTransferAI";
 // Auto-identify summary type is still consumed by the import-dialog UI for
 // historical compatibility (it now renders null after the upload-flow split).
 import { type AutoIdentifySummary } from "@/lib/autoIdentify";
@@ -188,6 +197,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     emptyDepositAIProgress(),
   );
 
+  // "شناسایی تراکنش بین بانکی" state — independent progress so panels can
+  // coexist with the deposit-AI panel above.
+  const [internalTransferRunning, setInternalTransferRunning] = useState(false);
+  const [internalTransferProgress, setInternalTransferProgress] = useState<InternalTransferAIProgress>(
+    emptyInternalTransferAIProgress(),
+  );
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
@@ -251,6 +267,26 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setDepositAIRunning(false);
     }
   }
+
+  // "شناسایی تراکنش بین بانکی" — sweep every unassigned deposit and run it
+  // through the canonical manual inter-bank-transfer flow row-by-row.
+  async function runInternalTransferAI() {
+    if (internalTransferRunning) return;
+    setInternalTransferRunning(true);
+    setInternalTransferProgress(emptyInternalTransferAIProgress());
+    try {
+      const final = await processInternalTransferAI((p) => setInternalTransferProgress(p));
+      toast.success(
+        `شناسایی تراکنش بین بانکی — بررسی‌شده: ${final.total} · جفت‌های انتقال داخلی: ${final.pairs_detected} · ثبت موفق: ${final.posted} · نیازمند بررسی: ${final.needs_review} · خطادار: ${final.failed + final.matched_not_posted}`,
+      );
+      void load();
+    } catch (e) {
+      toastFinanceError(toast, e);
+    } finally {
+      setInternalTransferRunning(false);
+    }
+  }
+
 
   useEffect(() => {
     // Bank lookup map for row labels.
@@ -526,6 +562,17 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <ArrowDownToLine className="w-4 h-4 ml-1" />
             {depositAIRunning ? "هوشیار در حال بررسی…" : "شناسایی واریزها"}
           </Button>
+          {/* "شناسایی تراکنش بین بانکی" — internal inter-bank transfers.
+              Uses indigo accent to distinguish it from the emerald
+              external-deposit button. */}
+          <Button
+            onClick={runInternalTransferAI}
+            disabled={internalTransferRunning}
+            className="bg-indigo-600 text-white hover:bg-indigo-700"
+          >
+            <ArrowLeftRight className="w-4 h-4 ml-1" />
+            {internalTransferRunning ? "در حال بررسی انتقال‌ها…" : "شناسایی تراکنش بین بانکی"}
+          </Button>
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
@@ -584,6 +631,58 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           )}
         </div>
       )}
+
+      {/* Live progress panel for the "شناسایی تراکنش بین بانکی" sweep.
+          Independent counters; row-by-row updates mirror the other panels. */}
+      {(internalTransferRunning || internalTransferProgress.total > 0 || internalTransferProgress.failures.length > 0) && (
+        <div className="rounded-lg border bg-card p-3 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">گزارش شناسایی تراکنش بین بانکی</span>
+            <span className="text-muted-foreground">
+              {internalTransferProgress.processed} از {internalTransferProgress.total}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <div className="text-[10px] text-muted-foreground">تعداد بررسی‌شده</div>
+              <div className="text-base font-bold">{internalTransferProgress.total}</div>
+            </div>
+            <div className="rounded-md border border-indigo-500/40 bg-indigo-500/10 p-2">
+              <div className="text-[10px] text-indigo-700">شناسایی توسط کارت/شبا داخلی</div>
+              <div className="text-base font-bold text-indigo-700">{internalTransferProgress.own_bank_detected}</div>
+            </div>
+            <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2">
+              <div className="text-[10px] text-blue-700">جفت‌های انتقال داخلی</div>
+              <div className="text-base font-bold text-blue-700">{internalTransferProgress.pairs_detected}</div>
+            </div>
+            <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
+              <div className="text-[10px] text-primary">ثبت موفق</div>
+              <div className="text-base font-bold text-primary">{internalTransferProgress.posted}</div>
+            </div>
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2">
+              <div className="text-[10px] text-amber-700">نیازمند بررسی</div>
+              <div className="text-base font-bold text-amber-700">{internalTransferProgress.needs_review}</div>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2">
+              <div className="text-[10px] text-destructive">خطادار</div>
+              <div className="text-base font-bold text-destructive">{internalTransferProgress.failed + internalTransferProgress.matched_not_posted}</div>
+            </div>
+          </div>
+          {internalTransferProgress.failures.length > 0 && (
+            <details className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+              <summary className="cursor-pointer text-[11px] font-bold text-destructive">
+                خطاها ({internalTransferProgress.failures.length})
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-[11px]">
+                {internalTransferProgress.failures.slice(-30).map((f, idx) => (
+                  <li key={idx} className="truncate"><code>{f.tx_id.slice(0, 8)}</code> — {f.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
 
       {/* Dedicated summary panel for the bank-fee sweep — shows the five
           headline counters requested by the spec. */}
