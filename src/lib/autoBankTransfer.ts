@@ -169,10 +169,14 @@ export async function autoMatchBankTransfer(
   }
 
   // --- Step 1: candidate search --------------------------------------------
-  // Build the time window around the deposit's timestamp.
+  // Build the time window around the deposit's timestamp. Aggressive mode
+  // widens to 7 days for own-bank-confirmed internal transfers.
+  const windowHours = opts.aggressive
+    ? AGGRESSIVE_MATCH_WINDOW_HOURS
+    : MATCH_WINDOW_HOURS;
   const depAt = new Date(tx.transaction_datetime).getTime();
-  const fromISO = new Date(depAt - MATCH_WINDOW_HOURS * 3600_000).toISOString();
-  const toISO = new Date(depAt + MATCH_WINDOW_HOURS * 3600_000).toISOString();
+  const fromISO = new Date(depAt - windowHours * 3600_000).toISOString();
+  const toISO = new Date(depAt + windowHours * 3600_000).toISOString();
 
   const { data: candidates, error: candErr } = await supabase
     .from("finance_bank_transactions")
@@ -198,21 +202,35 @@ export async function autoMatchBankTransfer(
   const list = candidates ?? [];
   if (list.length === 0) return { state: "no_match" };
 
+  let withdraw = list[0];
   if (list.length > 1) {
-    // Ambiguous — log and surface as needs_review. We deliberately do NOT
-    // try a tie-breaker (closest timestamp) in v1: silent guessing is the
-    // exact failure mode the user told us to avoid.
-    await logStep(tx.id, "auto_bank_transfer_needs_review", false, {
-      candidates: list.map((c) => c.id),
-      message: `${list.length} matching withdrawals found`,
-    });
-    return {
-      state: "auto_bank_transfer_needs_review",
-      message: `${list.length} برداشت همخوان یافت شد — نیاز به بازبینی`,
-    };
+    if (opts.aggressive) {
+      // Caller confirmed this is an internal transfer (own-bank hit). Pick
+      // the withdraw closest in time to the deposit — safe tie-break since
+      // amount + opposite-direction + cross-bank are already locked in.
+      withdraw = list.reduce((best, c) => {
+        const d = (t: string | null) =>
+          t ? Math.abs(new Date(t).getTime() - depAt) : Number.POSITIVE_INFINITY;
+        return d(c.transaction_datetime) < d(best.transaction_datetime) ? c : best;
+      }, list[0]);
+      await logStep(tx.id, "auto_bank_transfer_aggressive_tiebreak", true, {
+        candidates: list.map((c) => c.id),
+        message: `picked closest-time withdraw=${withdraw.id} from ${list.length}`,
+      });
+    } else {
+      // Ambiguous — log and surface as needs_review. We deliberately do NOT
+      // try a tie-breaker (closest timestamp) in v1: silent guessing is the
+      // exact failure mode the user told us to avoid.
+      await logStep(tx.id, "auto_bank_transfer_needs_review", false, {
+        candidates: list.map((c) => c.id),
+        message: `${list.length} matching withdrawals found`,
+      });
+      return {
+        state: "auto_bank_transfer_needs_review",
+        message: `${list.length} برداشت همخوان یافت شد — نیاز به بازبینی`,
+      };
+    }
   }
-
-  const withdraw = list[0];
 
   // --- Step 2: create the transfer via the SECURITY DEFINER RPC ------------
   // The RPC enforces locking, type/amount/bank checks, and is idempotent on
