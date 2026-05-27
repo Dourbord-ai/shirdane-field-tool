@@ -197,6 +197,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     emptyDepositAIProgress(),
   );
 
+  // "شناسایی تراکنش بین بانکی" state — independent progress so panels can
+  // coexist with the deposit-AI panel above.
+  const [internalTransferRunning, setInternalTransferRunning] = useState(false);
+  const [internalTransferProgress, setInternalTransferProgress] = useState<InternalTransferAIProgress>(
+    emptyInternalTransferAIProgress(),
+  );
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
