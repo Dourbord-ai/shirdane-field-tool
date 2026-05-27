@@ -594,10 +594,17 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               and is intentionally NOT part of this mutual lock. */}
           {(() => {
             // Local helper: any automation job currently in flight that
-            // should block the other automation button.
-            const automationBusy = depositAIRunning || internalTransferRunning;
-            // Persian tooltip shown on the *other* button while one is busy.
+            // should block the OTHER automation buttons. All three deposit/
+            // withdraw/internal-transfer pipelines now participate in the
+            // mutual lock so a busy n8n/Sepidar run is never stepped on.
+            const automationBusy =
+              depositAIRunning || internalTransferRunning || withdrawAIRunning;
+            // Persian tooltip shown on the *other* buttons while one is busy.
             const busyTooltip = "هوشیار در حال پردازش است؛ لطفاً تا پایان عملیات صبر کنید";
+            // True when something OTHER than this button is busy — drives
+            // each tooltip individually so the active button itself never
+            // shows the "busy please wait" message.
+            const otherBusyFor = (self: boolean) => automationBusy && !self;
             return (
               <TooltipProvider delayDuration={150}>
                 <Button
@@ -611,12 +618,12 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
                 </Button>
 
-                {/* شناسایی واریزها — disabled while internalTransferRunning */}
+                {/* شناسایی واریزها */}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     {/* span wrapper lets the tooltip show even when the
                         underlying button is disabled (pointer-events:none). */}
-                    <span className={internalTransferRunning ? "inline-block" : "contents"}>
+                    <span className={otherBusyFor(depositAIRunning) ? "inline-block" : "contents"}>
                       <Button
                         onClick={runDepositAI}
                         disabled={automationBusy}
@@ -629,15 +636,36 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {internalTransferRunning && (
+                  {otherBusyFor(depositAIRunning) && (
                     <TooltipContent>{busyTooltip}</TooltipContent>
                   )}
                 </Tooltip>
 
-                {/* شناسایی تراکنش بین بانکی — disabled while depositAIRunning */}
+                {/* شناسایی برداشت‌ها — new third member of the family. */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className={depositAIRunning ? "inline-block" : "contents"}>
+                    <span className={otherBusyFor(withdrawAIRunning) ? "inline-block" : "contents"}>
+                      <Button
+                        onClick={runWithdrawAI}
+                        disabled={automationBusy}
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        {withdrawAIRunning
+                          ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                          : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
+                        {withdrawAIRunning ? "در حال بررسی برداشت‌ها…" : "شناسایی برداشت‌ها"}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {otherBusyFor(withdrawAIRunning) && (
+                    <TooltipContent>{busyTooltip}</TooltipContent>
+                  )}
+                </Tooltip>
+
+                {/* شناسایی تراکنش بین بانکی */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={otherBusyFor(internalTransferRunning) ? "inline-block" : "contents"}>
                       <Button
                         onClick={runInternalTransferAI}
                         disabled={automationBusy}
@@ -650,13 +678,14 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {depositAIRunning && (
+                  {otherBusyFor(internalTransferRunning) && (
                     <TooltipContent>{busyTooltip}</TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
             );
           })()}
+
 
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
