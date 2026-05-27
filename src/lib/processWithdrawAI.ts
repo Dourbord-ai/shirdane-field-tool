@@ -318,9 +318,7 @@ export async function processWithdrawAI(
       if (internalHit) {
         log("internal_transfer.skipped", { tx_id: tx.id, ident: internalHit });
         progress.internal_skipped += 1;
-        progress.processed += 1;
-        push();
-        continue;
+        continue; // finally handles processed++ / push()
       }
 
       // Log every distinct identifier we'll try (helps operator debugging).
