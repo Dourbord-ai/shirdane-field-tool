@@ -36,6 +36,14 @@ import {
   emptyInternalTransferAIProgress,
   type InternalTransferAIProgress,
 } from "@/lib/processInternalTransferAI";
+// "شناسایی برداشت‌ها" — withdraw identification orchestrator. Mirrors the
+// deposit-AI pattern but delegates posting to the canonical manual helper
+// `createPaymentAllocation` (which owns voucher + Sepidar + assignment).
+import {
+  processWithdrawAI,
+  emptyWithdrawAIProgress,
+  type WithdrawAIProgress,
+} from "@/lib/processWithdrawAI";
 // Auto-identify summary type is still consumed by the import-dialog UI for
 // historical compatibility (it now renders null after the upload-flow split).
 import { type AutoIdentifySummary } from "@/lib/autoIdentify";
