@@ -297,9 +297,9 @@ export async function processWithdrawAI(
         .eq("id", tx.id)
         .maybeSingle();
       if (!fresh || fresh.is_deleted || fresh.assignment_status !== "unassigned") {
+        // The `finally` block at the bottom of the loop handles processed++
+        // and push() for us — emitting them here too would double-count.
         log("claim.skipped", { tx_id: tx.id, reason: "stale_state" });
-        progress.processed += 1;
-        push();
         continue;
       }
 
