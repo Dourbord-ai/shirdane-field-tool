@@ -27,6 +27,15 @@ import {
   emptyDepositAIProgress,
   type DepositAIProgress,
 } from "@/lib/processDepositAI";
+// "شناسایی تراکنش بین بانکی" — internal inter-bank transfer orchestrator.
+// Reuses the canonical manual transfer helper (`autoMatchBankTransfer`)
+// with `force:true` so the SECURITY DEFINER RPC + createVoucher +
+// syncVoucherToSepidar pipeline runs end-to-end per row.
+import {
+  processInternalTransferAI,
+  emptyInternalTransferAIProgress,
+  type InternalTransferAIProgress,
+} from "@/lib/processInternalTransferAI";
 // Auto-identify summary type is still consumed by the import-dialog UI for
 // historical compatibility (it now renders null after the upload-flow split).
 import { type AutoIdentifySummary } from "@/lib/autoIdentify";
