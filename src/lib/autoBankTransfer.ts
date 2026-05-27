@@ -246,7 +246,9 @@ export async function autoMatchBankTransfer(
   // --- Step 3: optional Sepidar posting ------------------------------------
   // Gated behind the second flag. When OFF, the transfer is preserved with
   // status='approved' and voucher_id=NULL; the user can issue/post manually.
-  if (!(await isFlagOn("auto_post_bank_transfers_to_sepidar"))) {
+  // `force=true` also bypasses the post-flag so the manual button always
+  // posts to Sepidar end-to-end (mirrors the manual BankTransferTab flow).
+  if (!opts.force && !(await isFlagOn("auto_post_bank_transfers_to_sepidar"))) {
     return outcome;
   }
 
