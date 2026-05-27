@@ -310,6 +310,35 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     }
   }
 
+  // "شناسایی برداشت‌ها" — sweep every unassigned withdraw, resolve a
+  // trusted finance party via identifier cache/history, then delegate to
+  // the canonical manual helper `createPaymentAllocation` (which owns the
+  // voucher, Sepidar sync and the assignment_status flip).
+  async function runWithdrawAI() {
+    if (withdrawAIRunning) return;
+    setWithdrawAIRunning(true);
+    setWithdrawAIProgress(emptyWithdrawAIProgress());
+    // Persian loading toast — text wording specified in the request.
+    const loadingToastId = toast.loading(
+      "هوشیار در حال بررسی برداشت‌هاست\nلطفاً کمی صبر کنید",
+    );
+    try {
+      const final = await processWithdrawAI((p) => setWithdrawAIProgress(p));
+      toast.dismiss(loadingToastId);
+      toast.success(
+        `شناسایی برداشت‌ها — بررسی‌شده: ${final.total} · شناسایی‌شده: ${final.identified} · ثبت موفق: ${final.posted} · طرف حساب پیدا نشد: ${final.party_not_found} · نیاز به تخصیص: ${final.needs_mapping} · انتقال داخلی رد شد: ${final.internal_skipped} · خطادار: ${final.failed}`,
+      );
+      void load();
+    } catch (e) {
+      toast.dismiss(loadingToastId);
+      toastFinanceError(toast, e);
+    } finally {
+      setWithdrawAIRunning(false);
+    }
+  }
+
+
+
 
   useEffect(() => {
     // Bank lookup map for row labels.
