@@ -370,9 +370,7 @@ export async function processWithdrawAI(
               ? "چند درخواست پرداخت باز با همین مبلغ — نیاز به تخصیص دستی"
               : "درخواست پرداخت بازی با مبلغ یکسان برای این طرف یافت نشد",
         });
-        progress.processed += 1;
-        push();
-        continue;
+        continue; // finally handles processed++ / push()
       }
 
       // Delegate to the SAME manual helper — voucher + Sepidar +
