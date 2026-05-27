@@ -562,6 +562,17 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             <ArrowDownToLine className="w-4 h-4 ml-1" />
             {depositAIRunning ? "هوشیار در حال بررسی…" : "شناسایی واریزها"}
           </Button>
+          {/* "شناسایی تراکنش بین بانکی" — internal inter-bank transfers.
+              Uses indigo accent to distinguish it from the emerald
+              external-deposit button. */}
+          <Button
+            onClick={runInternalTransferAI}
+            disabled={internalTransferRunning}
+            className="bg-indigo-600 text-white hover:bg-indigo-700"
+          >
+            <ArrowLeftRight className="w-4 h-4 ml-1" />
+            {internalTransferRunning ? "در حال بررسی انتقال‌ها…" : "شناسایی تراکنش بین بانکی"}
+          </Button>
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
