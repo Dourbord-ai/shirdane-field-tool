@@ -213,6 +213,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     emptyInternalTransferAIProgress(),
   );
 
+  // "شناسایی برداشت‌ها" state — third member of the automation family.
+  // Independent progress so its panel renders alongside the other two.
+  const [withdrawAIRunning, setWithdrawAIRunning] = useState(false);
+  const [withdrawAIProgress, setWithdrawAIProgress] = useState<WithdrawAIProgress>(
+    emptyWithdrawAIProgress(),
+  );
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
