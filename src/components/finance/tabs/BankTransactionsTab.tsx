@@ -533,46 +533,36 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <Button variant="outline" onClick={() => toast.info("دریافت از API هنوز پیاده‌سازی نشده — placeholder")}>
             <Download className="w-4 h-4 ml-1" /> دریافت از API
           </Button>
-          {/* Manual trigger for the auto-processing pipeline. Disabled while a
-              run is in-flight to prevent double execution. */}
-          <Button variant="secondary" onClick={runAutoProcess} disabled={autoRunning}>
-            <Link2 className="w-4 h-4 ml-1" />
-            {autoRunning ? "در حال پردازش…" : "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده"}
-          </Button>
-          {/* Dedicated "شناسایی کارمزد" trigger — coloured with the primary
-              token so it stands out from the neutral toolbar buttons. */}
+          {/* All three identification buttons share a unified blue palette
+              so they read as a related family of automation actions. The
+              previous "تشخیص و ثبت اتوماتیک تراکنش‌های تخصیص‌نشده" button
+              was removed per request — its underlying runAutoProcess
+              pipeline is still available programmatically. */}
           <Button
             onClick={runFeeIdentification}
             disabled={feesRunning}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-blue-600 text-white hover:bg-blue-700"
           >
             <ArrowUpFromLine className="w-4 h-4 ml-1" />
             {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
           </Button>
-          {/* "شناسایی واریزها" — distinctive emerald tone so it visually
-              separates from the primary "شناسایی کارمزد" button. Uses inline
-              brand colours (bg-emerald-600) intentionally so this NEW action
-              is immediately distinguishable in the toolbar; the rest of the
-              design system remains untouched. */}
           <Button
             onClick={runDepositAI}
             disabled={depositAIRunning}
-            className="bg-emerald-600 text-white hover:bg-emerald-700"
+            className="bg-blue-600 text-white hover:bg-blue-700"
           >
             <ArrowDownToLine className="w-4 h-4 ml-1" />
             {depositAIRunning ? "هوشیار در حال بررسی…" : "شناسایی واریزها"}
           </Button>
-          {/* "شناسایی تراکنش بین بانکی" — internal inter-bank transfers.
-              Uses indigo accent to distinguish it from the emerald
-              external-deposit button. */}
           <Button
             onClick={runInternalTransferAI}
             disabled={internalTransferRunning}
-            className="bg-indigo-600 text-white hover:bg-indigo-700"
+            className="bg-blue-600 text-white hover:bg-blue-700"
           >
             <ArrowLeftRight className="w-4 h-4 ml-1" />
             {internalTransferRunning ? "در حال بررسی انتقال‌ها…" : "شناسایی تراکنش بین بانکی"}
           </Button>
+
           <Button onClick={() => setOpenManual(true)}><Plus className="w-4 h-4 ml-1" /> ثبت دستی</Button>
         </div>
       </div>
