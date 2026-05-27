@@ -268,6 +268,26 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     }
   }
 
+  // "شناسایی تراکنش بین بانکی" — sweep every unassigned deposit and run it
+  // through the canonical manual inter-bank-transfer flow row-by-row.
+  async function runInternalTransferAI() {
+    if (internalTransferRunning) return;
+    setInternalTransferRunning(true);
+    setInternalTransferProgress(emptyInternalTransferAIProgress());
+    try {
+      const final = await processInternalTransferAI((p) => setInternalTransferProgress(p));
+      toast.success(
+        `شناسایی تراکنش بین بانکی — بررسی‌شده: ${final.total} · جفت‌های انتقال داخلی: ${final.pairs_detected} · ثبت موفق: ${final.posted} · نیازمند بررسی: ${final.needs_review} · خطادار: ${final.failed + final.matched_not_posted}`,
+      );
+      void load();
+    } catch (e) {
+      toastFinanceError(toast, e);
+    } finally {
+      setInternalTransferRunning(false);
+    }
+  }
+
+
   useEffect(() => {
     // Bank lookup map for row labels.
     supabase.from("finance_banks").select("id,title,bank_name").then(({ data }) => {
