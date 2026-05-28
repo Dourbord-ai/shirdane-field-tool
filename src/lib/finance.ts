@@ -665,24 +665,47 @@ async function saveTrustedBeneficiaryMapping(
         .from("bankpartyaccountinfos")
         .update(patch)
         .eq("id", existing.id);
-      return true;
+    } else {
+      // No row → insert a fresh trusted mapping
+      await supabase.from("bankpartyaccountinfos").insert({
+        matchtype,
+        matchcontent,
+        finance_party_id: partyId,
+        matchname,
+        matchbankname,
+        status: "trusted_manual",
+      });
     }
 
-    // No row → insert a fresh trusted mapping
-    await supabase.from("bankpartyaccountinfos").insert({
-      matchtype,
-      matchcontent,
-      finance_party_id: partyId,
-      matchname,
-      matchbankname,
-      status: "trusted_manual",
-    });
+    // 4) Reset matching unassigned deposit rows so the next
+    //    "شناسایی واریزها" run re-evaluates them against the freshly
+    //    saved trusted mapping — no manual SQL needed.
+    //    Filter mirrors the auto-process pipeline gating: deposit,
+    //    unassigned, not soft-deleted, and currently stuck at
+    //    party_not_found / parsed_by_regex. We match purely on
+    //    ai_verify_payload.{type,number} so older rows that share the
+    //    same identifier are unblocked too.
+    try {
+      await supabase
+        .from("finance_bank_transactions")
+        .update({ ai_verify_status: "parsed_by_regex", ai_verify_error: null })
+        .eq("transaction_type", "deposit")
+        .eq("assignment_status", "unassigned")
+        .eq("is_deleted", false)
+        .in("ai_verify_status", ["party_not_found", "parsed_by_regex"])
+        .eq("ai_verify_payload->>type", matchtype)
+        .eq("ai_verify_payload->>number", matchcontent);
+    } catch {
+      // Best-effort — never block learning on the reset step.
+    }
+
     return true;
   } catch {
     // Never let a learning failure break the main approval flow
     return false;
   }
 }
+
 
 
 // ---------- Receive Identification workflow ----------
