@@ -493,18 +493,16 @@ Deno.serve(async (req) => {
   const party = partyRes.party;
 
   // PartyAccountSLRef resolution — STRICT, no silent fallback.
-  // Priority for factor posting:
+  // Priority for factor posting (local schema — party_account_sl_ref column
+  // does NOT exist on finance_parties, so it is not consulted):
   //   1) finance_parties.sepidar_account_id (per-party Sepidar account id)
-  //   2) finance_parties.party_account_sl_ref (per-party SL ref)
-  //   3) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
+  //   2) finance_sepidar_settings.sepidar_party_account_sl_ref (optional global)
   let partyAccountSLRef = 0;
   const acctId = Number(party.sepidar_account_id ?? 0);
   if (Number.isFinite(acctId) && acctId > 0) {
     partyAccountSLRef = acctId;
-  } else {
-    const slRef = Number(party.party_account_sl_ref ?? 0);
-    if (Number.isFinite(slRef) && slRef > 0) partyAccountSLRef = slRef;
   }
+
   if (!partyAccountSLRef || partyAccountSLRef <= 0) {
     const { data: settingsRow } = await sb
       .from("finance_sepidar_settings")
