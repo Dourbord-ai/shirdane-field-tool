@@ -84,30 +84,62 @@ function toJalali(date: Date): string {
 
 // --------------------------------------------------------------------------
 // Resolve the finance_parties row used for the factor.
-// factors has no direct FK to finance_parties, so we follow the legacy link:
-//   - purchase factor (factor_type_id = 1) → shopping_center_id  → finance_parties.legacy_id
-//   - sale factor     (factor_type_id = 2) → buyer_user_id       → finance_parties.legacy_id
+// After the M5 unification factors store the selected counterparty directly
+// on `factors.finance_party_id` (uuid → finance_parties.id). For older rows
+// we fall back to the legacy legacy_id lookup:
+//   - purchase factor (factor_type_id = 1) → shopping_center_id → finance_parties.legacy_id
+//   - sale factor     (factor_type_id = 2) → buyer_user_id      → finance_parties.legacy_id
 // Returns null if no match (caller surfaces Persian error and aborts).
 // --------------------------------------------------------------------------
 async function resolveParty(
   sb: ReturnType<typeof createClient>,
   factor: Record<string, unknown>,
-): Promise<{ sepidar_party_id: number; party_account_sl_ref: number | null; name: string } | null> {
-  const factorType = Number(factor.factor_type_id);
-  const legacyId = factorType === 1
-    ? Number(factor.shopping_center_id)
-    : Number(factor.buyer_user_id);
-  if (!Number.isFinite(legacyId) || legacyId <= 0) return null;
+): Promise<
+  | {
+      id: string;
+      sepidar_party_id: number;
+      sepidar_account_id: number | null;
+      party_account_sl_ref: number | null;
+      name: string;
+    }
+  | null
+> {
+  const cols =
+    "id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name";
 
-  const { data } = await sb
-    .from("finance_parties")
-    .select("sepidar_party_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name")
-    .eq("legacy_id", legacyId)
-    .limit(1)
-    .maybeSingle();
+  let row: Record<string, unknown> | null = null;
 
-  if (!data) return null;
-  const row = data as Record<string, unknown>;
+  // 1) Preferred: direct uuid link on factors.finance_party_id (post-M5).
+  const fpid = (factor.finance_party_id as string | null) || null;
+  if (fpid) {
+    const { data } = await sb
+      .from("finance_parties")
+      .select(cols)
+      .eq("id", fpid)
+      .limit(1)
+      .maybeSingle();
+    if (data) row = data as Record<string, unknown>;
+  }
+
+  // 2) Legacy fallback: shopping_center_id / buyer_user_id → legacy_id.
+  if (!row) {
+    const factorType = Number(factor.factor_type_id);
+    const legacyId = factorType === 1
+      ? Number(factor.shopping_center_id)
+      : Number(factor.buyer_user_id);
+    if (Number.isFinite(legacyId) && legacyId > 0) {
+      const { data } = await sb
+        .from("finance_parties")
+        .select(cols)
+        .eq("legacy_id", legacyId)
+        .limit(1)
+        .maybeSingle();
+      if (data) row = data as Record<string, unknown>;
+    }
+  }
+
+  if (!row) return null;
+
   const sepidarId = Number(row.sepidar_party_id);
   if (!Number.isFinite(sepidarId) || sepidarId <= 0) return null;
 
@@ -120,11 +152,14 @@ async function resolveParty(
     "ذینفع";
 
   return {
+    id: row.id as string,
     sepidar_party_id: sepidarId,
+    sepidar_account_id: (row.sepidar_account_id as number | null) ?? null,
     party_account_sl_ref: (row.party_account_sl_ref as number | null) ?? null,
     name,
   };
 }
+
 
 // NOTE: No hardcoded fallback for factor posting. Unlike the receive/payment
 // flow, factor vouchers MUST resolve PartyAccountSLRef from a configured
@@ -252,11 +287,12 @@ Deno.serve(async (req) => {
   // =========================================================================
   const { data: factorRow, error: factorErr } = await sb
     .from("factors")
-    .select("id, factor_type_id, invoice_date, payable_amount, shopping_center_id, buyer_user_id")
+    .select(
+      "id, factor_type_id, invoice_date, payable_amount, shopping_center_id, buyer_user_id, finance_party_id",
+    )
     .eq("id", factorId)
     .maybeSingle();
 
-  if (factorErr || !factorRow) {
     return json({ success: false, step: "load_factor", message: "بارگذاری فاکتور با خطا مواجه شد." }, 500);
   }
 
@@ -306,12 +342,20 @@ Deno.serve(async (req) => {
 
   // PartyAccountSLRef resolution — STRICT, no silent fallback.
   // Priority for factor posting:
-  //   1) finance_parties.party_account_sl_ref (per-party value)
-  //   2) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
-  // If neither is set, we refuse to post — guessing a default SL could route
-  // the voucher to the wrong account.
-  let partyAccountSLRef = Number(party.party_account_sl_ref ?? 0);
-  if (!Number.isFinite(partyAccountSLRef) || partyAccountSLRef <= 0) {
+  //   1) finance_parties.sepidar_account_id (per-party Sepidar account id)
+  //   2) finance_parties.party_account_sl_ref (per-party SL ref)
+  //   3) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
+  // If none of those is set, refuse to post — guessing a default SL could
+  // route the voucher to the wrong account.
+  let partyAccountSLRef = 0;
+  const acctId = Number(party.sepidar_account_id ?? 0);
+  if (Number.isFinite(acctId) && acctId > 0) {
+    partyAccountSLRef = acctId;
+  } else {
+    const slRef = Number(party.party_account_sl_ref ?? 0);
+    if (Number.isFinite(slRef) && slRef > 0) partyAccountSLRef = slRef;
+  }
+  if (!partyAccountSLRef || partyAccountSLRef <= 0) {
     const { data: settingsRow } = await sb
       .from("finance_sepidar_settings")
       .select("sepidar_party_account_sl_ref")
@@ -342,6 +386,7 @@ Deno.serve(async (req) => {
       message: msg,
     });
   }
+
 
 
   // Creator: env-level constant — same pattern as the receive/payment flow.
