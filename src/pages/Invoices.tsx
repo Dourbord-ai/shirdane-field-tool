@@ -1114,6 +1114,11 @@ export default function Invoices() {
           feedItems={selectedFeedItems}
           medicineItems={selectedMedicineItems}
           livestockItems={selectedLivestockItems}
+          wageItems={selectedWageItems}
+          dailyWorkerItems={selectedDailyWorkerItems}
+          rentalItems={selectedRentalItems}
+          loading={detailLoading}
+          errorMsg={detailError}
           onChanged={fetchFactors}
           onClose={() => {
             setSelectedId(null);
@@ -1122,6 +1127,10 @@ export default function Invoices() {
             setSelectedFeedItems([]);
             setSelectedMedicineItems([]);
             setSelectedLivestockItems([]);
+            setSelectedWageItems([]);
+            setSelectedDailyWorkerItems([]);
+            setSelectedRentalItems([]);
+            setDetailError(null);
           }}
         />
       )}
