@@ -103,23 +103,22 @@ type ResolvePartyResult =
         id: string;
         sepidar_party_id: number;
         sepidar_account_id: number | null;
-        party_account_sl_ref: number | null;
         name: string;
       };
       debug: Record<string, unknown>;
     }
   | {
       ok: false;
-      // Discriminated error codes so the caller can show the precise Persian
-      // message instead of the generic "not found in Sepidar".
       error_code:
         | "no_party_link"
         | "finance_party_row_missing"
+        | "finance_party_query_error"
         | "sepidar_party_id_missing"
         | "party_account_missing";
       message: string;
       debug: Record<string, unknown>;
     };
+
 
 async function resolveParty(
   sb: ReturnType<typeof createClient>,
