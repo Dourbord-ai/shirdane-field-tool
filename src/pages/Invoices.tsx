@@ -933,6 +933,10 @@ export default function Invoices() {
       setSelectedFeedItems([]);
       setSelectedMedicineItems([]);
       setSelectedLivestockItems([]);
+      setSelectedWageItems([]);
+      setSelectedDailyWorkerItems([]);
+      setSelectedRentalItems([]);
+      setDetailError(null);
       return;
     }
     setSelectedId(id);
@@ -941,60 +945,94 @@ export default function Invoices() {
     setSelectedFeedItems([]);
     setSelectedMedicineItems([]);
     setSelectedLivestockItems([]);
+    setSelectedWageItems([]);
+    setSelectedDailyWorkerItems([]);
+    setSelectedRentalItems([]);
+    setDetailError(null);
+    setDetailLoading(true);
 
-    // The RPC row only includes the fields the list/filter needs. The detail
-    // panel renders many more legacy columns (delivery_date, tax, buyer_type,
-    // settlement_*, description, etc.) so we lazily fetch the full row + the
-    // joined party display name when a row is expanded, then merge it back
-    // into `factors` so InvoiceDetail has the complete shape.
-    const { data: full } = await supabase
-      .from("factors")
-      .select(
-        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
-      )
-      .eq("id", id)
-      .maybeSingle();
-    if (full) {
-      const raw = full as Record<string, unknown>;
-      const party = (raw.party ?? null) as
-        | {
-            company_name: string | null;
-            first_name: string | null;
-            last_name: string | null;
-            sepidar_full_name: string | null;
-          }
-        | null;
-      const personName = party
-        ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
-        : "";
-      const party_name =
-        party?.sepidar_full_name || party?.company_name || personName || null;
-      const { party: _omit, ...rest } = raw as { party?: unknown };
-      const merged = { ...(rest as unknown as FactorRow), party_name };
-      setFactors((prev) => prev.map((p) => (p.id === id ? { ...p, ...merged } : p)));
-    }
+    try {
+      // The RPC row only includes the fields the list/filter needs. The detail
+      // panel renders many more legacy columns (delivery_date, tax, buyer_type,
+      // settlement_*, description, etc.) so we lazily fetch the full row + the
+      // joined party display name when a row is expanded, then merge it back
+      // into `factors` so InvoiceDetail has the complete shape.
+      const { data: full, error: fullErr } = await supabase
+        .from("factors")
+        .select(
+          "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      if (fullErr) throw fullErr;
+      if (full) {
+        const raw = full as Record<string, unknown>;
+        const party = (raw.party ?? null) as
+          | {
+              company_name: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              sepidar_full_name: string | null;
+            }
+          | null;
+        const personName = party
+          ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
+          : "";
+        const party_name =
+          party?.sepidar_full_name || party?.company_name || personName || null;
+        const { party: _omit, ...rest } = raw as { party?: unknown };
+        const merged = { ...(rest as unknown as FactorRow), party_name };
+        setFactors((prev) => prev.map((p) => (p.id === id ? { ...p, ...merged } : p)));
+      }
 
-    const factor = factors.find((f) => f.id === id);
-    if (factor?.product_type === "sperm") {
-      const { data } = await supabase
-        .from("spermbuy")
-        .select("*")
-        .eq("factor_id", id);
-      setSelectedItems((data as SpermBuyRow[]) || []);
-    } else if (factor?.product_type === "milk") {
-      const { data } = await supabase.from("milk").select("*").eq("factor_id", id);
-      setSelectedMilkItems((data as MilkRow[]) || []);
-    } else if (factor?.product_type === "feed") {
-      const { data } = await supabase.from("feed_items").select("*").eq("factor_id", id);
-      setSelectedFeedItems((data as FeedItemRow[]) || []);
-    } else if (factor?.product_type === "medicine") {
-      const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
-      setSelectedMedicineItems((data as MedicineItemRow[]) || []);
-    } else if (factor?.product_type === "livestock") {
-      const { data } = await supabase.from("livestock_items").select("*").eq("factor_id", id);
-      setSelectedLivestockItems((data as LivestockItemRow[]) || []);
+      // Re-read the factor from the freshly-merged list so product_type is
+      // correct even when the list row was stale.
+      const factor = (full as unknown as FactorRow | null) ?? factors.find((f) => f.id === id) ?? null;
+      const pt = factor?.product_type;
+
+      // Fan-out fetch: one query per dedicated items table the product_type
+      // is known to use. Manure has no items table yet — the description /
+      // totals are rendered from the factor row itself.
+      if (pt === "sperm") {
+        const { data } = await supabase.from("spermbuy").select("*").eq("factor_id", id);
+        setSelectedItems((data as SpermBuyRow[]) || []);
+      } else if (pt === "milk") {
+        const { data } = await supabase.from("milk").select("*").eq("factor_id", id);
+        setSelectedMilkItems((data as MilkRow[]) || []);
+      } else if (pt === "feed") {
+        const { data } = await supabase.from("feed_items").select("*").eq("factor_id", id);
+        setSelectedFeedItems((data as FeedItemRow[]) || []);
+      } else if (pt === "medicine") {
+        const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
+        setSelectedMedicineItems((data as MedicineItemRow[]) || []);
+      } else if (pt === "livestock") {
+        const { data } = await supabase.from("livestock_items").select("*").eq("factor_id", id);
+        setSelectedLivestockItems((data as LivestockItemRow[]) || []);
+      } else if (pt === "services") {
+        // Services pull from up to FOUR tables in parallel — wage, daily
+        // worker, rental, and medicine_items (medicine_type='معاینات' is the
+        // examination sub-flow which reuses the medicine table per NewInvoice).
+        const [wageRes, dwRes, rentalRes, examRes] = await Promise.all([
+          (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (c: string, v: string) => Promise<{ data: unknown }> } } })
+            .from("wage_items").select("*").eq("factor_id", id),
+          (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (c: string, v: string) => Promise<{ data: unknown }> } } })
+            .from("daily_worker_items").select("*").eq("factor_id", id),
+          (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (c: string, v: string) => Promise<{ data: unknown }> } } })
+            .from("rental_items").select("*").eq("factor_id", id),
+          supabase.from("medicine_items").select("*").eq("factor_id", id),
+        ]);
+        setSelectedWageItems((wageRes.data as WageItemRow[]) || []);
+        setSelectedDailyWorkerItems((dwRes.data as DailyWorkerItemRow[]) || []);
+        setSelectedRentalItems((rentalRes.data as RentalItemRow[]) || []);
+        setSelectedMedicineItems((examRes.data as MedicineItemRow[]) || []);
+      }
+      // Note: "manure" / "other" / legacy_product_* have no dedicated items
+      // table — the detail panel renders factor.description + totals only.
+    } catch (e) {
+      setDetailError((e as Error).message || "خطا در بارگذاری جزئیات فاکتور");
+    } finally {
+      setDetailLoading(false);
     }
-    // Note: "other" product type stores item info in factor.description (no dedicated table yet)
   };
 
   const selectedFactor = factors.find((f) => f.id === selectedId);
