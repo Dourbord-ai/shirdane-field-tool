@@ -463,7 +463,35 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   );
 }
 
-function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, livestockItems, onClose, onChanged }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; livestockItems: LivestockItemRow[]; onClose: () => void; onChanged: () => void }) {
+function InvoiceDetail({
+  factor,
+  items,
+  milkItems,
+  feedItems,
+  medicineItems,
+  livestockItems,
+  wageItems,
+  dailyWorkerItems,
+  rentalItems,
+  loading,
+  errorMsg,
+  onClose,
+  onChanged,
+}: {
+  factor: FactorRow;
+  items: SpermBuyRow[];
+  milkItems: MilkRow[];
+  feedItems: FeedItemRow[];
+  medicineItems: MedicineItemRow[];
+  livestockItems: LivestockItemRow[];
+  wageItems: WageItemRow[];
+  dailyWorkerItems: DailyWorkerItemRow[];
+  rentalItems: RentalItemRow[];
+  loading: boolean;
+  errorMsg: string | null;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
   // Group C: factor.invoice_date is now a Gregorian timestamptz coming from
   // PostgreSQL. Render it through formatShamsi so the user still sees a
   // Jalali/Persian date — never pipe a raw timestamp through toPersianDigits.
