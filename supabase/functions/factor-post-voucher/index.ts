@@ -128,6 +128,9 @@ async function resolveParty(
   const cols =
     "id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name";
 
+  // Keep both the raw value and the normalized string in debug output so we can
+  // distinguish a real UUID from unexpected runtime shapes (undefined, number,
+  // whitespace-padded strings) without guessing from the Persian error alone.
   const rawFinancePartyId = factor.finance_party_id;
   const fpid = rawFinancePartyId == null ? null : String(rawFinancePartyId).trim() || null;
   const shoppingCenterId = Number(factor.shopping_center_id ?? 0);
@@ -157,6 +160,10 @@ async function resolveParty(
   // 1) Preferred: direct uuid link on factors.finance_party_id (post-M5).
   if (fpid) {
     debug.query_column_used = "id";
+    // This lookup intentionally uses only finance_parties.id. Do not add
+    // legacy_id, sepidar_party_id, or is_deleted predicates here: the factor
+    // already stores the canonical finance party UUID selected by the operator,
+    // and extra filters can incorrectly turn a valid linked party into "missing".
     const { data, error } = await sb
       .from("finance_parties")
       .select("id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name")
