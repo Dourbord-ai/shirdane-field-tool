@@ -159,7 +159,18 @@ export default function SpermSettingsCard() {
     });
   }, [orClause]);
 
+  // Trigger fetches whenever the relevant inputs change.
+  useEffect(() => {
+    void fetchPage();
+  }, [fetchPage]);
+  useEffect(() => {
+    void fetchCounts();
+  }, [fetchCounts]);
+
+  // Toggle is_active for a single sperm and update local state optimistically.
+  async function toggle(row: SpermRow, next: boolean) {
     // Mark this row as pending so the switch is disabled briefly.
+
     setPending((s) => new Set(s).add(row.id));
     // Optimistic UI update on the currently visible page.
     setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, is_active: next } : r)));
