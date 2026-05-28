@@ -839,8 +839,22 @@ function InvoiceDetail({
               </p>
             </>
           )}
+          {/* Generic "no items" fallback for non-services / non-manure types
+              when the dedicated query returned zero rows. */}
+          {!loading && !errorMsg && (
+            (factor.product_type === "sperm" && items.length === 0) ||
+            (factor.product_type === "milk" && milkItems.length === 0) ||
+            (factor.product_type === "feed" && feedItems.length === 0) ||
+            (factor.product_type === "medicine" && medicineItems.length === 0) ||
+            (factor.product_type === "livestock" && livestockItems.length === 0)
+          ) && (
+            <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
+              ردیف اقلامی برای این فاکتور یافت نشد.
+            </p>
+          )}
 
           {/* Loading + empty + error states for the items area */}
+
           {loading && (
             <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> در حال بارگذاری اقلام فاکتور…
