@@ -701,7 +701,160 @@ function InvoiceDetail({
             </>
           )}
 
+          {/* Services factors split into 4 lists. Each list renders only when
+              it has rows. We always show the section header so the operator
+              can tell that services items WERE expected to be there even if
+              empty (e.g. an old factor that was only described in the
+              factor.description field). */}
+          {factor.product_type === "services" && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام خدمات:</p>
+
+              {wageItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">اجرت</p>
+                  {wageItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.purpose || "—"}</span>
+                      </div>
+                      {(it.daily_amount || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">مبلغ روزانه</span>
+                          <span>{formatRial(it.daily_amount || 0)}</span>
+                        </div>
+                      )}
+                      {(it.contract_amount || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">مبلغ پیمانی</span>
+                          <span>{formatRial(it.contract_amount || 0)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">جمع ردیف</span>
+                        <span>{formatRial(it.row_total || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {dailyWorkerItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">کارگر روزمزد</p>
+                  {dailyWorkerItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.worker_name || it.purpose || "—"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">روز × نرخ</span>
+                        <span>
+                          {toPersianDigits(String(it.days_count || 0))} × {formatRial(it.daily_rate || 0)}
+                        </span>
+                      </div>
+                      {(it.hours_count || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">ساعت × نرخ</span>
+                          <span>
+                            {toPersianDigits(String(it.hours_count))} × {formatRial(it.hourly_rate || 0)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">جمع ردیف</span>
+                        <span>{formatRial(it.row_total || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {rentalItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">کرایه</p>
+                  {rentalItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.driver_name || it.purpose || "—"}</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">مبلغ</span>
+                        <span>{formatRial(it.row_total || it.amount || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Examination items live in medicine_items with medicine_type='معاینات' */}
+              {medicineItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">معاینات / سایر خدمات</p>
+                  {medicineItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.medicine_name || "—"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">تعداد × قیمت واحد</span>
+                        <span>
+                          {toPersianDigits(String(it.quantity || 0))} × {formatRial(it.unit_price || 0)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">جمع ردیف</span>
+                        <span>{formatRial(it.row_total || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {wageItems.length === 0 &&
+                dailyWorkerItems.length === 0 &&
+                rentalItems.length === 0 &&
+                medicineItems.length === 0 &&
+                !loading && (
+                  <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
+                    ردیف خدماتی ثبت نشده — جزئیات در توضیحات فاکتور قابل مشاهده است.
+                  </p>
+                )}
+            </>
+          )}
+
+          {/* Manure has no dedicated items table; we surface a friendly note
+              so the operator knows the totals below come straight from the
+              factor row itself. */}
+          {factor.product_type === "manure" && !loading && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
+                این فاکتور کود دامی ردیف اقلام تفکیکی ندارد؛ توضیحات و مبالغ در بخش زیر آمده است.
+              </p>
+            </>
+          )}
+
+          {/* Loading + empty + error states for the items area */}
+          {loading && (
+            <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> در حال بارگذاری اقلام فاکتور…
+            </div>
+          )}
+          {errorMsg && !loading && (
+            <p className="text-xs text-destructive bg-destructive/5 rounded-lg p-2">
+              {errorMsg}
+            </p>
+          )}
+
           <Separator className="my-2" />
+
+
 
           <DetailRow label="مبلغ کل" value={formatRial(factor.total_amount || 0)} />
           {(factor.discount || 0) > 0 && <DetailRow label="تخفیف" value={formatRial(factor.discount!)} />}
