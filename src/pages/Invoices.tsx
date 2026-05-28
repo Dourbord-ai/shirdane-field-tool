@@ -752,6 +752,15 @@ export default function Invoices() {
   const [selectedFeedItems, setSelectedFeedItems] = useState<FeedItemRow[]>([]);
   const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
   const [selectedLivestockItems, setSelectedLivestockItems] = useState<LivestockItemRow[]>([]);
+  // Services factors split across three line-item tables (wage/daily worker/
+  // rental) plus examinations which we store in medicine_items. We keep three
+  // separate buckets so the renderer can label each section correctly.
+  const [selectedWageItems, setSelectedWageItems] = useState<WageItemRow[]>([]);
+  const [selectedDailyWorkerItems, setSelectedDailyWorkerItems] = useState<DailyWorkerItemRow[]>([]);
+  const [selectedRentalItems, setSelectedRentalItems] = useState<RentalItemRow[]>([]);
+  // Loading flag drives the spinner + "empty" message inside the detail panel.
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Load finance_parties for the counterparty selector. We compose the same
