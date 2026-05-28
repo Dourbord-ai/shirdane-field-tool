@@ -1363,9 +1363,13 @@ export default function Invoices() {
         // Build a UUID -> display label map in one shot.
         const cowIds = Array.from(
           new Set(
+        // cows.id is a bigint — keep numeric ids for the `.in()` filter, and
+        // build the lookup map keyed by string for stable matching.
+        const cowIds = Array.from(
+          new Set(
             cfdRows
-              .map((r) => (r.cow_id != null ? String(r.cow_id) : null))
-              .filter((v): v is string => !!v),
+              .map((r) => (r.cow_id != null ? Number(r.cow_id) : NaN))
+              .filter((v) => Number.isFinite(v)) as number[],
           ),
         );
         const cowLabelMap = new Map<string, string>();
@@ -1375,9 +1379,6 @@ export default function Invoices() {
             .select("id, bodynumber, tag_number, earnumber")
             .in("id", cowIds);
           for (const c of (cowRows as Array<Record<string, unknown>> | null) || []) {
-            // Prefer bodynumber → tag_number → earnumber. If all empty we
-            // intentionally store the Persian "no-plaque" fallback so the
-            // UI never leaks the UUID.
             const label =
               (c.bodynumber != null && String(c.bodynumber).trim()) ||
               (c.tag_number != null && String(c.tag_number).trim()) ||
