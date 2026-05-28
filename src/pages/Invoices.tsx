@@ -1187,8 +1187,35 @@ export default function Invoices() {
         const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
         setSelectedMedicineItems((data as MedicineItemRow[]) || []);
       } else if (pt === "livestock") {
-        const { data } = await supabase.from("livestock_items").select("*").eq("factor_id", id);
-        setSelectedLivestockItems((data as LivestockItemRow[]) || []);
+        // Livestock factors store their per-cow lines in `cow_factor_details`
+        // (written by submit_cow_factor). The newer `livestock_items` table
+        // exists but is empty for the current dataset, so we read from
+        // cow_factor_details and map into the LivestockItemRow shape that
+        // InvoiceDetail expects. Fallback to livestock_items if any rows
+        // exist there (future-proof for the migrated schema).
+        const { data: cfd } = await supabase
+          .from("cow_factor_details")
+          .select("id, cow_id, weight, unit_price, row_price, description")
+          .eq("factor_id", id);
+        let rows: LivestockItemRow[] = ((cfd as Array<Record<string, unknown>> | null) || []).map(
+          (r) => ({
+            id: String(r.id),
+            animal_number: r.cow_id != null ? String(r.cow_id) : null,
+            weight_kg: (r.weight as number | null) ?? null,
+            price_per_kg: (r.unit_price as number | null) ?? null,
+            row_total: (r.row_price as number | null) ?? null,
+            description: (r.description as string | null) ?? null,
+          }),
+        );
+        if (rows.length === 0) {
+          const { data } = await supabase
+            .from("livestock_items")
+            .select("*")
+            .eq("factor_id", id);
+          rows = (data as LivestockItemRow[]) || [];
+        }
+        setSelectedLivestockItems(rows);
+
       } else if (pt === "services") {
         // Services pull from up to FOUR tables in parallel — wage, daily
         // worker, rental, and medicine_items (medicine_type='معاینات' is the
