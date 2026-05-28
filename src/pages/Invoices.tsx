@@ -1360,11 +1360,9 @@ export default function Invoices() {
           .eq("factor_id", id);
         const cfdRows = (cfd as Array<Record<string, unknown>> | null) || [];
 
-        // Build a UUID -> display label map in one shot.
-        const cowIds = Array.from(
-          new Set(
         // cows.id is a bigint — keep numeric ids for the `.in()` filter, and
         // build the lookup map keyed by string for stable matching.
+
         const cowIds = Array.from(
           new Set(
             cfdRows
