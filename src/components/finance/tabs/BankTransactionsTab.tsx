@@ -701,25 +701,30 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   )}
                 </Tooltip>
 
-                {/* شناسایی برداشت‌ها — new third member of the family. */}
+                {/* شناسایی برداشت‌ها — temporarily DISABLED per product
+                    decision. The execution path (`runWithdrawAI` + the
+                    `processWithdrawAI` orchestrator) is intentionally kept
+                    intact so we can flip the feature back on later without
+                    touching backend or business logic. While disabled we
+                    still render the button (so users see the upcoming
+                    capability) and show a Persian tooltip explaining that
+                    it's being prepared. */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className={otherBusyFor(withdrawAIRunning) ? "inline-block" : "contents"}>
+                    <span className="inline-block">
                       <Button
-                        onClick={runWithdrawAI}
-                        disabled={automationBusy}
-                        className="bg-blue-600 text-white hover:bg-blue-700"
+                        // onClick intentionally a no-op while disabled — leaving
+                        // a handler would still be safe (disabled blocks click)
+                        // but omitting it makes the intent obvious.
+                        disabled
+                        className="bg-blue-600 text-white hover:bg-blue-700 opacity-60 cursor-not-allowed"
                       >
-                        {withdrawAIRunning
-                          ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
-                          : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
-                        {withdrawAIRunning ? "در حال بررسی برداشت‌ها…" : "شناسایی برداشت‌ها"}
+                        <ArrowUpFromLine className="w-4 h-4 ml-1" />
+                        شناسایی برداشت‌ها
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {otherBusyFor(withdrawAIRunning) && (
-                    <TooltipContent>{busyTooltip}</TooltipContent>
-                  )}
+                  <TooltipContent>این قابلیت در حال آماده‌سازی است</TooltipContent>
                 </Tooltip>
 
                 {/* شناسایی تراکنش بین بانکی */}
