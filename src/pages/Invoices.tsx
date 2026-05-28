@@ -1023,8 +1023,12 @@ function InvoiceDetail({
               yet entered the accounting pipeline (lifecycle_state NULL/draft). */}
           {/* Approval (Approve/Reject) runs first for draft rows; PostingPanel
               takes over once the factor reaches the 'approved' bucket. */}
+          {/* Recovery: surfaces when finance_party_id is NULL so the operator
+              can repair pre-validation or imported factors and unblock posting. */}
+          <FixPartyPanel factor={factor} onChanged={onChanged} />
           <ApprovalPanel factor={factor} onChanged={onChanged} />
           <PostingPanel factor={factor} onChanged={onChanged} />
+
         </div>
       </div>
     </div>
