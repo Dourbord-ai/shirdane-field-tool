@@ -145,8 +145,9 @@ async function resolveParty(
   };
 
   let row: Record<string, unknown> | null = null;
-  let matchedBy: ResolvePartyResult extends { ok: true; matched_by: infer M } ? M : never;
-  matchedBy = "finance_party_id" as typeof matchedBy;
+  type MatchedBy = "finance_party_id" | "legacy_shopping_center_id" | "legacy_buyer_user_id";
+  let matchedBy: MatchedBy = "finance_party_id";
+
 
   // 1) Preferred: direct uuid link on factors.finance_party_id (post-M5).
   if (fpid) {
