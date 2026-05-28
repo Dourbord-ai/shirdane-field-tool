@@ -123,7 +123,6 @@ type ResolvePartyResult =
 async function resolveParty(
   sb: ReturnType<typeof createClient>,
   factor: Record<string, unknown>,
-  factor: Record<string, unknown>,
 ): Promise<ResolvePartyResult> {
   // Columns that actually exist in this project's finance_parties schema.
   // NOTE: party_account_sl_ref does NOT exist locally — use sepidar_account_id.
