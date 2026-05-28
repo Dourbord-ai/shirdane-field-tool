@@ -418,32 +418,46 @@ Deno.serve(async (req) => {
   }
 
   // =========================================================================
-  // STEP D: resolve party + creator
+  // STEP D: resolve party + creator (discriminated result → precise errors)
   // =========================================================================
-  const party = await resolveParty(sb, factorRow as Record<string, unknown>);
-  if (!party) {
-    // Mark as sepidar_failed so retry button stays visible after operator
-    // fixes the party mapping in finance settings.
+  const partyRes = await resolveParty(sb, factorRow as Record<string, unknown>);
+  // Always log the structured resolution outcome so we can prove which branch
+  // ran in production without re-deploying instrumentation later.
+  console.log(
+    "[factor-post-voucher]",
+    JSON.stringify({
+      version: FACTOR_POST_VOUCHER_VERSION,
+      factor_id: factorId,
+      party_resolution: partyRes.ok
+        ? { ok: true, matched_by: partyRes.matched_by, ...partyRes.debug }
+        : { ok: false, error_code: partyRes.error_code, ...partyRes.debug },
+    }),
+  );
+
+  if (!partyRes.ok) {
     await sb.from("factors").update({
       lifecycle_state: "sepidar_failed",
-      last_posting_error: "ذینفع متناظر فاکتور در لیست ذینفع‌ها یافت نشد.",
+      last_posting_error: partyRes.message,
       last_posting_attempted_at: new Date().toISOString(),
     }).eq("id", factorId);
     return json({
       success: false,
       step: "resolve_party",
+      version: FACTOR_POST_VOUCHER_VERSION,
       voucher_id: voucherId,
-      message: "ذینفع متناظر فاکتور در سپیدار یافت نشد. ابتدا ذینفع را در بخش مالی همگام کنید.",
+      error_code: partyRes.error_code,
+      debug: partyRes.debug,
+      message: partyRes.message,
     });
   }
+
+  const party = partyRes.party;
 
   // PartyAccountSLRef resolution — STRICT, no silent fallback.
   // Priority for factor posting:
   //   1) finance_parties.sepidar_account_id (per-party Sepidar account id)
   //   2) finance_parties.party_account_sl_ref (per-party SL ref)
   //   3) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
-  // If none of those is set, refuse to post — guessing a default SL could
-  // route the voucher to the wrong account.
   let partyAccountSLRef = 0;
   const acctId = Number(party.sepidar_account_id ?? 0);
   if (Number.isFinite(acctId) && acctId > 0) {
@@ -462,7 +476,7 @@ Deno.serve(async (req) => {
     partyAccountSLRef = (sv != null && Number(sv) > 0) ? Number(sv) : 0;
   }
   if (!partyAccountSLRef || partyAccountSLRef <= 0) {
-    const msg = "حساب معین طرف حساب برای ثبت سند سپیدار تنظیم نشده است.";
+    const msg = "حساب معین سپیدار ذینفع تنظیم نشده است.";
     await sb.from("factors").update({
       lifecycle_state: "sepidar_failed",
       last_posting_error: msg,
@@ -472,17 +486,20 @@ Deno.serve(async (req) => {
       factor_id: factorId,
       voucher_id: voucherId,
       success: false,
-      error_code: "resolve_party_account_sl_ref",
+      error_code: "party_account_missing",
       request_payload: { party_id: party.sepidar_party_id } as never,
       response_payload: { message: msg } as never,
     } as never);
     return json({
       success: false,
       step: "resolve_party_account_sl_ref",
+      version: FACTOR_POST_VOUCHER_VERSION,
       voucher_id: voucherId,
+      error_code: "party_account_missing",
       message: msg,
     });
   }
+
 
 
 
