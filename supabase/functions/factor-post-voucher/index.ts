@@ -93,7 +93,7 @@ function toJalali(date: Date): string {
 // --------------------------------------------------------------------------
 // Version marker — bumped any time the party resolution contract changes so
 // logs/responses can prove which build is live.
-const FACTOR_POST_VOUCHER_VERSION = "finance_party_id_v2";
+const FACTOR_POST_VOUCHER_VERSION = "finance_party_id_v3_direct_party_lookup";
 
 type ResolvePartyResult =
   | {
@@ -128,13 +128,21 @@ async function resolveParty(
   const cols =
     "id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name";
 
-  const fpid = (factor.finance_party_id as string | null) || null;
+  // Keep both the raw value and the normalized string in debug output so we can
+  // distinguish a real UUID from unexpected runtime shapes (undefined, number,
+  // whitespace-padded strings) without guessing from the Persian error alone.
+  const rawFinancePartyId = factor.finance_party_id;
+  const fpid = rawFinancePartyId == null ? null : String(rawFinancePartyId).trim() || null;
   const shoppingCenterId = Number(factor.shopping_center_id ?? 0);
   const buyerUserId = Number(factor.buyer_user_id ?? 0);
 
   const debug: Record<string, unknown> = {
     factor_id: factor.id,
     finance_party_id: fpid,
+    finance_party_id_value: rawFinancePartyId,
+    finance_party_id_type: rawFinancePartyId === null ? "null" : typeof rawFinancePartyId,
+    query_column_used: null as "id" | "legacy_id" | null,
+    matched_party_id: null as string | null,
     shopping_center_id: shoppingCenterId || null,
     buyer_user_id: buyerUserId || null,
     matched_by: null as string | null,
@@ -151,12 +159,31 @@ async function resolveParty(
 
   // 1) Preferred: direct uuid link on factors.finance_party_id (post-M5).
   if (fpid) {
-    const { data } = await sb
+    debug.query_column_used = "id";
+    // This lookup intentionally uses only finance_parties.id. Do not add
+    // legacy_id, sepidar_party_id, or is_deleted predicates here: the factor
+    // already stores the canonical finance party UUID selected by the operator,
+    // and extra filters can incorrectly turn a valid linked party into "missing".
+    const { data, error } = await sb
       .from("finance_parties")
-      .select(cols)
+      .select("id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name")
       .eq("id", fpid)
-      .limit(1)
       .maybeSingle();
+
+    debug.matched_party_id = (data?.id as string | undefined) ?? null;
+    if (error) debug.finance_party_lookup_error = error.message;
+    console.log(
+      "[factor-post-voucher:finance_party_id_lookup]",
+      JSON.stringify({
+        version: FACTOR_POST_VOUCHER_VERSION,
+        factor_id: factor.id,
+        finance_party_id_value: rawFinancePartyId,
+        finance_party_id_type: rawFinancePartyId === null ? "null" : typeof rawFinancePartyId,
+        query_column_used: "id",
+        matched_party_id: debug.matched_party_id,
+        query_error: error?.message ?? null,
+      }),
+    );
     if (data) {
       row = data as Record<string, unknown>;
       matchedBy = "finance_party_id";
@@ -177,6 +204,7 @@ async function resolveParty(
     const factorType = Number(factor.factor_type_id);
     const legacyId = factorType === 1 ? shoppingCenterId : buyerUserId;
     if (Number.isFinite(legacyId) && legacyId > 0) {
+      debug.query_column_used = "legacy_id";
       const { data } = await sb
         .from("finance_parties")
         .select(cols)
@@ -253,7 +281,7 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "بدنه درخواست نامعتبر است." }, 400);
   }
   const factorId = (body.factor_id ?? "").toString().trim();
-  if (!factorId) return json({ success: false, message: "factor_id الزامی است." }, 400);
+  if (!factorId) return json({ success: false, version: FACTOR_POST_VOUCHER_VERSION, message: "factor_id الزامی است." }, 400);
 
   // ---- Supabase service client (used for RPC + reads + writes) -------------
   const url = Deno.env.get("SUPABASE_URL") || "";
@@ -288,7 +316,15 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (!existingFactor) {
-    return json({ success: false, message: "فاکتور یافت نشد." }, 404);
+    console.log(
+      "[factor-post-voucher:factor_lookup]",
+      JSON.stringify({
+        version: FACTOR_POST_VOUCHER_VERSION,
+        factor_id: factorId,
+        factor_found: false,
+      }),
+    );
+    return json({ success: false, version: FACTOR_POST_VOUCHER_VERSION, message: "فاکتور یافت نشد." }, 404);
   }
 
   if (existingFactor.sepidar_voucher_id) {
