@@ -24,7 +24,7 @@ import {
   getPaymentAmountTypeKey,
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
-import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance, type SepidarBeneficiary } from "@/lib/sepidar";
+import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
 // parties that exist locally but aren't in Sepidar's beneficiary view. Rows
