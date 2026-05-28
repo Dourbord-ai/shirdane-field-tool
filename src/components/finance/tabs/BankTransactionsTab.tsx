@@ -412,12 +412,42 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
 
-    // Description search — PostgREST ILIKE is case-insensitive substring.
+    // -------------------------------------------------------------------
+    // Real-time multi-column search.
+    //
+    // Why so many columns? Operators search by *anything visible on a row*:
+    // descriptions, document/reference/tracking numbers, card/sheba/account
+    // fragments, the verified owner name from `verify-account`, and the
+    // bankCode/number n8n stored in ai_verify_payload. We translate that
+    // into a single PostgREST `.or()` so Postgres does the heavy lifting
+    // (indexed ILIKE on text columns + `->>` JSONB text extraction).
+    //
+    // Why `*` instead of `%`? PostgREST `.or()` parses commas / parens as
+    // syntax. We strip any unsafe character with a space, then wrap the
+    // remaining tokens in `*…*` (PostgREST's `ilike` wildcard sibling of
+    // `%…%`). This keeps the query safe regardless of what the operator
+    // types — Persian text included.
+    // -------------------------------------------------------------------
     if (debouncedDescr) {
-      // Escape `%` and `,` characters so they're treated as literals; they
-      // would otherwise be interpreted as PostgREST wildcards/delimiters.
-      const safe = debouncedDescr.replace(/[%,]/g, " ");
-      q = q.ilike("description", `%${safe}%`);
+      const safe = debouncedDescr.replace(/[%,()*]/g, " ").trim();
+      if (safe) {
+        const pat = `*${safe}*`;
+        q = q.or(
+          [
+            `description.ilike.${pat}`,
+            `document_number.ilike.${pat}`,
+            `reference_number.ilike.${pat}`,
+            `tracking_number.ilike.${pat}`,
+            `card_number.ilike.${pat}`,
+            `match_content.ilike.${pat}`,
+            `match_name.ilike.${pat}`,
+            `match_bank_name.ilike.${pat}`,
+            `ai_verify_payload->>number.ilike.${pat}`,
+            `ai_verified_result->>name.ilike.${pat}`,
+            `ai_verified_result->>bankName.ilike.${pat}`,
+          ].join(","),
+        );
+      }
     }
 
     // Amount range — server-side via `.or()`. A row matches if either
