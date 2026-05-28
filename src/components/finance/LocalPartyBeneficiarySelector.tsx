@@ -64,8 +64,8 @@ interface PartyRow {
   mobile: string | null;
   telephone: string | null;
   sepidar_party_id: number | null;
-  sepidar_dl_id: string | null;
-  sepidar_dl_code: string | null;
+  sepidar_dl_id: number | string | null;
+  sepidar_dl_code: number | string | null;
   balance: number | null;
 }
 
