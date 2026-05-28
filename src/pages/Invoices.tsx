@@ -184,17 +184,25 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
 // allowed to post to Sepidar today. Keep this tiny + colocated so it's obvious
 // when adding a new product type.
 //
-// Current truth (audited 2026-05-24 against factor_accounting_map):
-//   - Only `product_type = 'livestock'` has accounting map rows wired into the
-//     `post_approved_factor` engine. So that is the only type for which we
-//     surface the "Post to Sepidar" button via the MVP voucher pipeline.
-//   - Feed *sales* must NEVER show Sepidar posting yet (explicit M5 rule).
-//   - Feed *purchase* historically used the legacy `sync_queue` worker path,
-//     not the voucher engine. We intentionally do NOT resurface that button
-//     here until that pipeline is reconnected — showing it would just fail
-//     with "no accounting map" because the engine doesn't know feed yet.
+// Current truth (audited 2026-05-28 against factor_accounting_map):
+//   - `post_approved_factor` now supports the simple two-line voucher model
+//     for: livestock, feed, medicine, sperm, manure, services. Each has
+//     active mappings (inventory/ap for buy, ar/revenue for sell).
+//   - Feed *sales* historically had an explicit "do not post" rule (M5);
+//     that rule is kept here as a defensive override so a single product_type
+//     toggle does not accidentally re-enable it. Flip the helper if/when
+//     finance signs off on feed-sale posting.
+//   - milk / other / legacy_product_* are intentionally NOT in the supported
+//     set — they have no accounting mappings yet.
 // =============================================================================
-const POSTING_SUPPORTED_PRODUCT_TYPES = new Set<string>(["livestock"]);
+const POSTING_SUPPORTED_PRODUCT_TYPES = new Set<string>([
+  "livestock",
+  "feed",
+  "medicine",
+  "sperm",
+  "manure",
+  "services",
+]);
 
 function isFeedSale(f: FactorRow): boolean {
   return (
@@ -204,10 +212,12 @@ function isFeedSale(f: FactorRow): boolean {
 }
 
 function supportsSepidarPosting(f: FactorRow): boolean {
-  // Feed sales rule wins over everything else.
+  // Defensive: feed sales remain explicitly blocked even though the engine
+  // could technically build a balanced voucher for them now.
   if (isFeedSale(f)) return false;
   return POSTING_SUPPORTED_PRODUCT_TYPES.has(f.product_type);
 }
+
 
 // -----------------------------------------------------------------------------
 // ApprovalPanel: Approve / Reject controls for draft (or NULL lifecycle) rows.
