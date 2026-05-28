@@ -131,6 +131,45 @@ interface LivestockItemRow {
   description: string | null;
 }
 
+// Services-related item rows. Services factors don't have a single items
+// table — they live across wage_items / daily_worker_items / rental_items
+// (plus medicine_items with medicine_type='معاینات' for examinations). The
+// detail panel renders whichever lists are non-empty for the selected row.
+interface WageItemRow {
+  id: string;
+  purpose: string | null;
+  work_mode: string | null;
+  payment_type: string | null;
+  daily_amount: number | null;
+  contract_amount: number | null;
+  account_holder: string | null;
+  iban_or_card: string | null;
+  row_total: number | null;
+  description: string | null;
+}
+
+interface DailyWorkerItemRow {
+  id: string;
+  purpose: string | null;
+  worker_name: string | null;
+  days_count: number | null;
+  hours_count: number | null;
+  daily_rate: number | null;
+  hourly_rate: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
+interface RentalItemRow {
+  id: string;
+  purpose: string | null;
+  driver_name: string | null;
+  iban_or_card: string | null;
+  amount: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
