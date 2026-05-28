@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
     return json({ success: false, message: "بدنه درخواست نامعتبر است." }, 400);
   }
   const factorId = (body.factor_id ?? "").toString().trim();
-  if (!factorId) return json({ success: false, message: "factor_id الزامی است." }, 400);
+  if (!factorId) return json({ success: false, version: FACTOR_POST_VOUCHER_VERSION, message: "factor_id الزامی است." }, 400);
 
   // ---- Supabase service client (used for RPC + reads + writes) -------------
   const url = Deno.env.get("SUPABASE_URL") || "";
@@ -309,7 +309,15 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (!existingFactor) {
-    return json({ success: false, message: "فاکتور یافت نشد." }, 404);
+    console.log(
+      "[factor-post-voucher:factor_lookup]",
+      JSON.stringify({
+        version: FACTOR_POST_VOUCHER_VERSION,
+        factor_id: factorId,
+        factor_found: false,
+      }),
+    );
+    return json({ success: false, version: FACTOR_POST_VOUCHER_VERSION, message: "فاکتور یافت نشد." }, 404);
   }
 
   if (existingFactor.sepidar_voucher_id) {
