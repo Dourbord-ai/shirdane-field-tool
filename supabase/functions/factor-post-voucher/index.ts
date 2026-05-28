@@ -91,26 +91,64 @@ function toJalali(date: Date): string {
 //   - sale factor     (factor_type_id = 2) → buyer_user_id      → finance_parties.legacy_id
 // Returns null if no match (caller surfaces Persian error and aborts).
 // --------------------------------------------------------------------------
+// Version marker — bumped any time the party resolution contract changes so
+// logs/responses can prove which build is live.
+const FACTOR_POST_VOUCHER_VERSION = "finance_party_id_v2";
+
+type ResolvePartyResult =
+  | {
+      ok: true;
+      matched_by: "finance_party_id" | "legacy_shopping_center_id" | "legacy_buyer_user_id";
+      party: {
+        id: string;
+        sepidar_party_id: number;
+        sepidar_account_id: number | null;
+        party_account_sl_ref: number | null;
+        name: string;
+      };
+      debug: Record<string, unknown>;
+    }
+  | {
+      ok: false;
+      // Discriminated error codes so the caller can show the precise Persian
+      // message instead of the generic "not found in Sepidar".
+      error_code:
+        | "no_party_link"
+        | "finance_party_row_missing"
+        | "sepidar_party_id_missing"
+        | "party_account_missing";
+      message: string;
+      debug: Record<string, unknown>;
+    };
+
 async function resolveParty(
   sb: ReturnType<typeof createClient>,
   factor: Record<string, unknown>,
-): Promise<
-  | {
-      id: string;
-      sepidar_party_id: number;
-      sepidar_account_id: number | null;
-      party_account_sl_ref: number | null;
-      name: string;
-    }
-  | null
-> {
+): Promise<ResolvePartyResult> {
   const cols =
     "id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name";
 
+  const fpid = (factor.finance_party_id as string | null) || null;
+  const shoppingCenterId = Number(factor.shopping_center_id ?? 0);
+  const buyerUserId = Number(factor.buyer_user_id ?? 0);
+
+  const debug: Record<string, unknown> = {
+    factor_id: factor.id,
+    finance_party_id: fpid,
+    shopping_center_id: shoppingCenterId || null,
+    buyer_user_id: buyerUserId || null,
+    matched_by: null as string | null,
+    party_found: false,
+    sepidar_party_id: null as number | null,
+    sepidar_account_id: null as number | null,
+    party_account_sl_ref: null as number | null,
+  };
+
   let row: Record<string, unknown> | null = null;
+  let matchedBy: ResolvePartyResult extends { ok: true; matched_by: infer M } ? M : never;
+  matchedBy = "finance_party_id" as typeof matchedBy;
 
   // 1) Preferred: direct uuid link on factors.finance_party_id (post-M5).
-  const fpid = (factor.finance_party_id as string | null) || null;
   if (fpid) {
     const { data } = await sb
       .from("finance_parties")
@@ -118,15 +156,25 @@ async function resolveParty(
       .eq("id", fpid)
       .limit(1)
       .maybeSingle();
-    if (data) row = data as Record<string, unknown>;
+    if (data) {
+      row = data as Record<string, unknown>;
+      matchedBy = "finance_party_id";
+    } else {
+      // finance_party_id is set but the row is gone — precise error.
+      debug.matched_by = "finance_party_id";
+      return {
+        ok: false,
+        error_code: "finance_party_row_missing",
+        message: "ذینفع انتخاب‌شده در جدول مالی یافت نشد.",
+        debug,
+      };
+    }
   }
 
   // 2) Legacy fallback: shopping_center_id / buyer_user_id → legacy_id.
   if (!row) {
     const factorType = Number(factor.factor_type_id);
-    const legacyId = factorType === 1
-      ? Number(factor.shopping_center_id)
-      : Number(factor.buyer_user_id);
+    const legacyId = factorType === 1 ? shoppingCenterId : buyerUserId;
     if (Number.isFinite(legacyId) && legacyId > 0) {
       const { data } = await sb
         .from("finance_parties")
@@ -134,17 +182,38 @@ async function resolveParty(
         .eq("legacy_id", legacyId)
         .limit(1)
         .maybeSingle();
-      if (data) row = data as Record<string, unknown>;
+      if (data) {
+        row = data as Record<string, unknown>;
+        matchedBy = factorType === 1 ? "legacy_shopping_center_id" : "legacy_buyer_user_id";
+      }
     }
   }
 
-  if (!row) return null;
+  if (!row) {
+    return {
+      ok: false,
+      error_code: "no_party_link",
+      message: "ذینفع فاکتور مشخص نشده است. ابتدا ذینفع را انتخاب و ذخیره کنید.",
+      debug,
+    };
+  }
+
+  debug.party_found = true;
+  debug.matched_by = matchedBy;
+  debug.sepidar_party_id = (row.sepidar_party_id as number | null) ?? null;
+  debug.sepidar_account_id = (row.sepidar_account_id as number | null) ?? null;
+  debug.party_account_sl_ref = (row.party_account_sl_ref as number | null) ?? null;
 
   const sepidarId = Number(row.sepidar_party_id);
-  if (!Number.isFinite(sepidarId) || sepidarId <= 0) return null;
+  if (!Number.isFinite(sepidarId) || sepidarId <= 0) {
+    return {
+      ok: false,
+      error_code: "sepidar_party_id_missing",
+      message: "شناسه سپیدار ذینفع تنظیم نشده است.",
+      debug,
+    };
+  }
 
-  // Prefer the synced full name from Sepidar; fall back to first+last or
-  // company name so the Description2 line always carries a human label.
   const name =
     (row.sepidar_full_name as string | null) ||
     [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
@@ -152,13 +221,19 @@ async function resolveParty(
     "ذینفع";
 
   return {
-    id: row.id as string,
-    sepidar_party_id: sepidarId,
-    sepidar_account_id: (row.sepidar_account_id as number | null) ?? null,
-    party_account_sl_ref: (row.party_account_sl_ref as number | null) ?? null,
-    name,
+    ok: true,
+    matched_by: matchedBy,
+    party: {
+      id: row.id as string,
+      sepidar_party_id: sepidarId,
+      sepidar_account_id: (row.sepidar_account_id as number | null) ?? null,
+      party_account_sl_ref: (row.party_account_sl_ref as number | null) ?? null,
+      name,
+    },
+    debug,
   };
 }
+
 
 
 // NOTE: No hardcoded fallback for factor posting. Unlike the receive/payment
