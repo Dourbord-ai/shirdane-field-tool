@@ -341,13 +341,22 @@ Deno.serve(async (req) => {
   }
 
   // PartyAccountSLRef resolution — STRICT, no silent fallback.
+  // PartyAccountSLRef resolution — STRICT, no silent fallback.
   // Priority for factor posting:
-  //   1) finance_parties.party_account_sl_ref (per-party value)
-  //   2) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
-  // If neither is set, we refuse to post — guessing a default SL could route
-  // the voucher to the wrong account.
-  let partyAccountSLRef = Number(party.party_account_sl_ref ?? 0);
-  if (!Number.isFinite(partyAccountSLRef) || partyAccountSLRef <= 0) {
+  //   1) finance_parties.sepidar_account_id (per-party Sepidar account id)
+  //   2) finance_parties.party_account_sl_ref (per-party SL ref)
+  //   3) finance_sepidar_settings.sepidar_party_account_sl_ref (explicit config)
+  // If none of those is set, refuse to post — guessing a default SL could
+  // route the voucher to the wrong account.
+  let partyAccountSLRef = 0;
+  const acctId = Number(party.sepidar_account_id ?? 0);
+  if (Number.isFinite(acctId) && acctId > 0) {
+    partyAccountSLRef = acctId;
+  } else {
+    const slRef = Number(party.party_account_sl_ref ?? 0);
+    if (Number.isFinite(slRef) && slRef > 0) partyAccountSLRef = slRef;
+  }
+  if (!partyAccountSLRef || partyAccountSLRef <= 0) {
     const { data: settingsRow } = await sb
       .from("finance_sepidar_settings")
       .select("sepidar_party_account_sl_ref")
@@ -356,7 +365,7 @@ Deno.serve(async (req) => {
       ?.sepidar_party_account_sl_ref;
     partyAccountSLRef = (sv != null && Number(sv) > 0) ? Number(sv) : 0;
   }
-  if (!partyAccountSLRef || partyAccountSLRef <= 0) {
+
     const msg = "حساب معین طرف حساب برای ثبت سند سپیدار تنظیم نشده است.";
     await sb.from("factors").update({
       lifecycle_state: "sepidar_failed",
