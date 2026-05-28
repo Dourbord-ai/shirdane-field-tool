@@ -24,8 +24,13 @@ import {
   getPaymentAmountTypeKey,
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
-import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance, type SepidarBeneficiary } from "@/lib/sepidar";
-import { SepidarBeneficiarySelector } from "@/components/finance/SepidarBeneficiarySelector";
+import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+// Payment-request beneficiary picker now reads from the LOCAL finance_parties
+// table (same source used by «شناسایی دریافت») so we don't silently hide
+// parties that exist locally but aren't in Sepidar's beneficiary view. Rows
+// without a sepidar_party_id are shown disabled with a clear warning rather
+// than dropped from the list.
+import { LocalPartyBeneficiarySelector, type LocalPartyBeneficiary } from "@/components/finance/LocalPartyBeneficiarySelector";
 
 interface PR {
   id: string;
@@ -506,18 +511,21 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </Button>
                       )}
                     </div>
-                    {/* Sepidar-backed beneficiary picker. Selecting a row
-                        snapshots beneficiary_id / dl_ref / dl_code / name /
-                        type / balance onto this item so the payment request
-                        is independent of any later changes in Sepidar. */}
-                    <SepidarBeneficiarySelector
-                      value={it.beneficiary_id ?? null}
+                    {/* Local-party beneficiary picker. Searches finance_parties
+                        directly (matches «شناسایی دریافت») across name,
+                        company, sepidar_full_name, national code, mobile and
+                        sepidar_dl_code. The selected row provides the local
+                        finance_parties UUID AND the snapshotted Sepidar
+                        identifiers needed by the voucher generator, so we
+                        don't need a second round-trip to resolve party_id. */}
+                    <LocalPartyBeneficiarySelector
+                      value={it.party_id ?? null}
                       fallbackLabel={it.beneficiary_name}
-                      onChange={(id, b?: SepidarBeneficiary) => {
-                        if (!id || !b) {
-                          // Clearing the selection must also wipe party_id so
-                          // a stale UUID from a previous pick can't leak into
-                          // the RPC payload.
+                      onChange={(partyId, b?: LocalPartyBeneficiary) => {
+                        if (!partyId || !b) {
+                          // Clearing the selection wipes every snapshotted
+                          // field so stale data from a previous pick can't
+                          // leak into the RPC payload.
                           updateItem(idx, {
                             party_id: null,
                             beneficiary_id: null,
@@ -529,47 +537,20 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                           });
                           return;
                         }
-                        // Snapshot Sepidar-side fields immediately for the UI.
-                        // party_id is reset here and then populated below once
-                        // we resolve the matching local finance_parties row —
-                        // this prevents a previous row's UUID from sticking.
+                        // Snapshot ALL fields in one shot — party_id is the
+                        // local UUID, beneficiary_id/dl_ref/dl_code come from
+                        // the local Sepidar mirror columns so they stay
+                        // consistent with the party row used by every other
+                        // finance flow (شناسایی دریافت included).
                         updateItem(idx, {
-                          beneficiary_id: id,
-                          dl_ref: b.dl_ref != null ? String(b.dl_ref) : null,
-                          dl_code: b.dl_code != null ? String(b.dl_code) : null,
+                          party_id: partyId,
+                          beneficiary_id: b.beneficiary_id != null ? String(b.beneficiary_id) : null,
+                          dl_ref: b.dl_ref,
+                          dl_code: b.dl_code,
                           beneficiary_name: b.beneficiary_name,
                           beneficiary_type: b.beneficiary_type,
                           beneficiary_balance_snapshot: b.balance,
-                          party_id: null,
                         });
-                        // Resolve the local finance_parties UUID by Sepidar
-                        // party id. The RPC stores this UUID into
-                        // finance_payment_request_items.party_id, which the
-                        // voucher generator / Sepidar posting depend on.
-                        const sepId = Number(b.beneficiary_id);
-                        if (!sepId || Number.isNaN(sepId)) {
-                          toast.error("ذینفع انتخاب‌شده شناسه سپیدار معتبر ندارد");
-                          return;
-                        }
-                        void (async () => {
-                          const { data, error } = await supabase
-                            .from("finance_parties")
-                            .select("id")
-                            .eq("sepidar_party_id", sepId)
-                            .eq("is_deleted", false)
-                            .maybeSingle();
-                          if (error) {
-                            toastFinanceError(toast, error);
-                            return;
-                          }
-                          if (!data?.id) {
-                            toast.error(
-                              "ذینفع سپیدار در فهرست طرف‌حساب‌های محلی پیدا نشد. ابتدا طرف‌حساب را همگام‌سازی کنید.",
-                            );
-                            return;
-                          }
-                          updateItem(idx, { party_id: data.id });
-                        })();
                       }}
                     />
                     <div className="grid grid-cols-2 gap-2">

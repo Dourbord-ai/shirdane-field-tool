@@ -131,6 +131,45 @@ interface LivestockItemRow {
   description: string | null;
 }
 
+// Services-related item rows. Services factors don't have a single items
+// table — they live across wage_items / daily_worker_items / rental_items
+// (plus medicine_items with medicine_type='معاینات' for examinations). The
+// detail panel renders whichever lists are non-empty for the selected row.
+interface WageItemRow {
+  id: string;
+  purpose: string | null;
+  work_mode: string | null;
+  payment_type: string | null;
+  daily_amount: number | null;
+  contract_amount: number | null;
+  account_holder: string | null;
+  iban_or_card: string | null;
+  row_total: number | null;
+  description: string | null;
+}
+
+interface DailyWorkerItemRow {
+  id: string;
+  purpose: string | null;
+  worker_name: string | null;
+  days_count: number | null;
+  hours_count: number | null;
+  daily_rate: number | null;
+  hourly_rate: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
+interface RentalItemRow {
+  id: string;
+  purpose: string | null;
+  driver_name: string | null;
+  iban_or_card: string | null;
+  amount: number | null;
+  row_total: number | null;
+  description: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
@@ -424,7 +463,35 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   );
 }
 
-function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, livestockItems, onClose, onChanged }: { factor: FactorRow; items: SpermBuyRow[]; milkItems: MilkRow[]; feedItems: FeedItemRow[]; medicineItems: MedicineItemRow[]; livestockItems: LivestockItemRow[]; onClose: () => void; onChanged: () => void }) {
+function InvoiceDetail({
+  factor,
+  items,
+  milkItems,
+  feedItems,
+  medicineItems,
+  livestockItems,
+  wageItems,
+  dailyWorkerItems,
+  rentalItems,
+  loading,
+  errorMsg,
+  onClose,
+  onChanged,
+}: {
+  factor: FactorRow;
+  items: SpermBuyRow[];
+  milkItems: MilkRow[];
+  feedItems: FeedItemRow[];
+  medicineItems: MedicineItemRow[];
+  livestockItems: LivestockItemRow[];
+  wageItems: WageItemRow[];
+  dailyWorkerItems: DailyWorkerItemRow[];
+  rentalItems: RentalItemRow[];
+  loading: boolean;
+  errorMsg: string | null;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
   // Group C: factor.invoice_date is now a Gregorian timestamptz coming from
   // PostgreSQL. Render it through formatShamsi so the user still sees a
   // Jalali/Persian date — never pipe a raw timestamp through toPersianDigits.
@@ -634,7 +701,160 @@ function InvoiceDetail({ factor, items, milkItems, feedItems, medicineItems, liv
             </>
           )}
 
+          {/* Services factors split into 4 lists. Each list renders only when
+              it has rows. We always show the section header so the operator
+              can tell that services items WERE expected to be there even if
+              empty (e.g. an old factor that was only described in the
+              factor.description field). */}
+          {factor.product_type === "services" && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام خدمات:</p>
+
+              {wageItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">اجرت</p>
+                  {wageItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.purpose || "—"}</span>
+                      </div>
+                      {(it.daily_amount || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">مبلغ روزانه</span>
+                          <span>{formatRial(it.daily_amount || 0)}</span>
+                        </div>
+                      )}
+                      {(it.contract_amount || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">مبلغ پیمانی</span>
+                          <span>{formatRial(it.contract_amount || 0)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">جمع ردیف</span>
+                        <span>{formatRial(it.row_total || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {dailyWorkerItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">کارگر روزمزد</p>
+                  {dailyWorkerItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.worker_name || it.purpose || "—"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">روز × نرخ</span>
+                        <span>
+                          {toPersianDigits(String(it.days_count || 0))} × {formatRial(it.daily_rate || 0)}
+                        </span>
+                      </div>
+                      {(it.hours_count || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">ساعت × نرخ</span>
+                          <span>
+                            {toPersianDigits(String(it.hours_count))} × {formatRial(it.hourly_rate || 0)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">جمع ردیف</span>
+                        <span>{formatRial(it.row_total || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {rentalItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">کرایه</p>
+                  {rentalItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.driver_name || it.purpose || "—"}</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">مبلغ</span>
+                        <span>{formatRial(it.row_total || it.amount || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Examination items live in medicine_items with medicine_type='معاینات' */}
+              {medicineItems.length > 0 && (
+                <div className="space-y-2 mb-2">
+                  <p className="text-[11px] text-muted-foreground">معاینات / سایر خدمات</p>
+                  {medicineItems.map((it, idx) => (
+                    <div key={it.id} className="bg-secondary/50 rounded-lg p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ردیف {toPersianDigits(String(idx + 1))}</span>
+                        <span className="font-medium">{it.medicine_name || "—"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">تعداد × قیمت واحد</span>
+                        <span>
+                          {toPersianDigits(String(it.quantity || 0))} × {formatRial(it.unit_price || 0)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span className="text-muted-foreground">جمع ردیف</span>
+                        <span>{formatRial(it.row_total || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {wageItems.length === 0 &&
+                dailyWorkerItems.length === 0 &&
+                rentalItems.length === 0 &&
+                medicineItems.length === 0 &&
+                !loading && (
+                  <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
+                    ردیف خدماتی ثبت نشده — جزئیات در توضیحات فاکتور قابل مشاهده است.
+                  </p>
+                )}
+            </>
+          )}
+
+          {/* Manure has no dedicated items table; we surface a friendly note
+              so the operator knows the totals below come straight from the
+              factor row itself. */}
+          {factor.product_type === "manure" && !loading && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
+                این فاکتور کود دامی ردیف اقلام تفکیکی ندارد؛ توضیحات و مبالغ در بخش زیر آمده است.
+              </p>
+            </>
+          )}
+
+          {/* Loading + empty + error states for the items area */}
+          {loading && (
+            <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> در حال بارگذاری اقلام فاکتور…
+            </div>
+          )}
+          {errorMsg && !loading && (
+            <p className="text-xs text-destructive bg-destructive/5 rounded-lg p-2">
+              {errorMsg}
+            </p>
+          )}
+
           <Separator className="my-2" />
+
+
 
           <DetailRow label="مبلغ کل" value={formatRial(factor.total_amount || 0)} />
           {(factor.discount || 0) > 0 && <DetailRow label="تخفیف" value={formatRial(factor.discount!)} />}
@@ -713,6 +933,15 @@ export default function Invoices() {
   const [selectedFeedItems, setSelectedFeedItems] = useState<FeedItemRow[]>([]);
   const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
   const [selectedLivestockItems, setSelectedLivestockItems] = useState<LivestockItemRow[]>([]);
+  // Services factors split across three line-item tables (wage/daily worker/
+  // rental) plus examinations which we store in medicine_items. We keep three
+  // separate buckets so the renderer can label each section correctly.
+  const [selectedWageItems, setSelectedWageItems] = useState<WageItemRow[]>([]);
+  const [selectedDailyWorkerItems, setSelectedDailyWorkerItems] = useState<DailyWorkerItemRow[]>([]);
+  const [selectedRentalItems, setSelectedRentalItems] = useState<RentalItemRow[]>([]);
+  // Loading flag drives the spinner + "empty" message inside the detail panel.
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Load finance_parties for the counterparty selector. We compose the same
@@ -885,6 +1114,10 @@ export default function Invoices() {
       setSelectedFeedItems([]);
       setSelectedMedicineItems([]);
       setSelectedLivestockItems([]);
+      setSelectedWageItems([]);
+      setSelectedDailyWorkerItems([]);
+      setSelectedRentalItems([]);
+      setDetailError(null);
       return;
     }
     setSelectedId(id);
@@ -893,60 +1126,94 @@ export default function Invoices() {
     setSelectedFeedItems([]);
     setSelectedMedicineItems([]);
     setSelectedLivestockItems([]);
+    setSelectedWageItems([]);
+    setSelectedDailyWorkerItems([]);
+    setSelectedRentalItems([]);
+    setDetailError(null);
+    setDetailLoading(true);
 
-    // The RPC row only includes the fields the list/filter needs. The detail
-    // panel renders many more legacy columns (delivery_date, tax, buyer_type,
-    // settlement_*, description, etc.) so we lazily fetch the full row + the
-    // joined party display name when a row is expanded, then merge it back
-    // into `factors` so InvoiceDetail has the complete shape.
-    const { data: full } = await supabase
-      .from("factors")
-      .select(
-        "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
-      )
-      .eq("id", id)
-      .maybeSingle();
-    if (full) {
-      const raw = full as Record<string, unknown>;
-      const party = (raw.party ?? null) as
-        | {
-            company_name: string | null;
-            first_name: string | null;
-            last_name: string | null;
-            sepidar_full_name: string | null;
-          }
-        | null;
-      const personName = party
-        ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
-        : "";
-      const party_name =
-        party?.sepidar_full_name || party?.company_name || personName || null;
-      const { party: _omit, ...rest } = raw as { party?: unknown };
-      const merged = { ...(rest as unknown as FactorRow), party_name };
-      setFactors((prev) => prev.map((p) => (p.id === id ? { ...p, ...merged } : p)));
-    }
+    try {
+      // The RPC row only includes the fields the list/filter needs. The detail
+      // panel renders many more legacy columns (delivery_date, tax, buyer_type,
+      // settlement_*, description, etc.) so we lazily fetch the full row + the
+      // joined party display name when a row is expanded, then merge it back
+      // into `factors` so InvoiceDetail has the complete shape.
+      const { data: full, error: fullErr } = await supabase
+        .from("factors")
+        .select(
+          "*, party:finance_party_id(company_name, first_name, last_name, sepidar_full_name)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      if (fullErr) throw fullErr;
+      if (full) {
+        const raw = full as Record<string, unknown>;
+        const party = (raw.party ?? null) as
+          | {
+              company_name: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              sepidar_full_name: string | null;
+            }
+          | null;
+        const personName = party
+          ? [party.first_name, party.last_name].filter(Boolean).join(" ").trim()
+          : "";
+        const party_name =
+          party?.sepidar_full_name || party?.company_name || personName || null;
+        const { party: _omit, ...rest } = raw as { party?: unknown };
+        const merged = { ...(rest as unknown as FactorRow), party_name };
+        setFactors((prev) => prev.map((p) => (p.id === id ? { ...p, ...merged } : p)));
+      }
 
-    const factor = factors.find((f) => f.id === id);
-    if (factor?.product_type === "sperm") {
-      const { data } = await supabase
-        .from("spermbuy")
-        .select("*")
-        .eq("factor_id", id);
-      setSelectedItems((data as SpermBuyRow[]) || []);
-    } else if (factor?.product_type === "milk") {
-      const { data } = await supabase.from("milk").select("*").eq("factor_id", id);
-      setSelectedMilkItems((data as MilkRow[]) || []);
-    } else if (factor?.product_type === "feed") {
-      const { data } = await supabase.from("feed_items").select("*").eq("factor_id", id);
-      setSelectedFeedItems((data as FeedItemRow[]) || []);
-    } else if (factor?.product_type === "medicine") {
-      const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
-      setSelectedMedicineItems((data as MedicineItemRow[]) || []);
-    } else if (factor?.product_type === "livestock") {
-      const { data } = await supabase.from("livestock_items").select("*").eq("factor_id", id);
-      setSelectedLivestockItems((data as LivestockItemRow[]) || []);
+      // Re-read the factor from the freshly-merged list so product_type is
+      // correct even when the list row was stale.
+      const factor = (full as unknown as FactorRow | null) ?? factors.find((f) => f.id === id) ?? null;
+      const pt = factor?.product_type;
+
+      // Fan-out fetch: one query per dedicated items table the product_type
+      // is known to use. Manure has no items table yet — the description /
+      // totals are rendered from the factor row itself.
+      if (pt === "sperm") {
+        const { data } = await supabase.from("spermbuy").select("*").eq("factor_id", id);
+        setSelectedItems((data as SpermBuyRow[]) || []);
+      } else if (pt === "milk") {
+        const { data } = await supabase.from("milk").select("*").eq("factor_id", id);
+        setSelectedMilkItems((data as MilkRow[]) || []);
+      } else if (pt === "feed") {
+        const { data } = await supabase.from("feed_items").select("*").eq("factor_id", id);
+        setSelectedFeedItems((data as FeedItemRow[]) || []);
+      } else if (pt === "medicine") {
+        const { data } = await supabase.from("medicine_items").select("*").eq("factor_id", id);
+        setSelectedMedicineItems((data as MedicineItemRow[]) || []);
+      } else if (pt === "livestock") {
+        const { data } = await supabase.from("livestock_items").select("*").eq("factor_id", id);
+        setSelectedLivestockItems((data as LivestockItemRow[]) || []);
+      } else if (pt === "services") {
+        // Services pull from up to FOUR tables in parallel — wage, daily
+        // worker, rental, and medicine_items (medicine_type='معاینات' is the
+        // examination sub-flow which reuses the medicine table per NewInvoice).
+        const [wageRes, dwRes, rentalRes, examRes] = await Promise.all([
+          (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (c: string, v: string) => Promise<{ data: unknown }> } } })
+            .from("wage_items").select("*").eq("factor_id", id),
+          (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (c: string, v: string) => Promise<{ data: unknown }> } } })
+            .from("daily_worker_items").select("*").eq("factor_id", id),
+          (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (c: string, v: string) => Promise<{ data: unknown }> } } })
+            .from("rental_items").select("*").eq("factor_id", id),
+          supabase.from("medicine_items").select("*").eq("factor_id", id),
+        ]);
+        setSelectedWageItems((wageRes.data as WageItemRow[]) || []);
+        setSelectedDailyWorkerItems((dwRes.data as DailyWorkerItemRow[]) || []);
+        setSelectedRentalItems((rentalRes.data as RentalItemRow[]) || []);
+        setSelectedMedicineItems((examRes.data as MedicineItemRow[]) || []);
+      }
+      // Note: "manure" / "other" / legacy_product_* have no dedicated items
+      // table — the detail panel renders factor.description + totals only.
+    } catch (e) {
+      setDetailError((e as Error).message || "خطا در بارگذاری جزئیات فاکتور");
+    } finally {
+      setDetailLoading(false);
     }
-    // Note: "other" product type stores item info in factor.description (no dedicated table yet)
   };
 
   const selectedFactor = factors.find((f) => f.id === selectedId);
@@ -1000,6 +1267,11 @@ export default function Invoices() {
           feedItems={selectedFeedItems}
           medicineItems={selectedMedicineItems}
           livestockItems={selectedLivestockItems}
+          wageItems={selectedWageItems}
+          dailyWorkerItems={selectedDailyWorkerItems}
+          rentalItems={selectedRentalItems}
+          loading={detailLoading}
+          errorMsg={detailError}
           onChanged={fetchFactors}
           onClose={() => {
             setSelectedId(null);
@@ -1008,6 +1280,10 @@ export default function Invoices() {
             setSelectedFeedItems([]);
             setSelectedMedicineItems([]);
             setSelectedLivestockItems([]);
+            setSelectedWageItems([]);
+            setSelectedDailyWorkerItems([]);
+            setSelectedRentalItems([]);
+            setDetailError(null);
           }}
         />
       )}
