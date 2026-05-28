@@ -1,6 +1,8 @@
-// Reports (گزارشات) page — hosts the fertility legacy chart for now.
-// Kept thin so we can add more report modules later without touching the chart.
+// Reports (گزارشات) page — hosts the fertility legacy chart and the
+// finance "وضعیت ذینفعان" read-only report. Kept thin so we can keep
+// adding report modules without touching individual ones.
 import FertilityLegacyChart from "@/components/reports/FertilityLegacyChart";
+import BeneficiariesStatusReport from "@/components/reports/BeneficiariesStatusReport";
 
 export default function Reports() {
   return (
@@ -8,6 +10,9 @@ export default function Reports() {
       <header className="flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-bold text-foreground">گزارشات</h1>
       </header>
+      {/* Beneficiaries status — finance party balances & approved payment
+          requests. Read-only; never mutates balance values. */}
+      <BeneficiariesStatusReport />
       <FertilityLegacyChart />
     </div>
   );

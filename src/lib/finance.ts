@@ -585,7 +585,9 @@ async function saveTrustedBeneficiaryMapping(
   partyId: string,
 ): Promise<boolean> {
   try {
-    // Pull the verify payload + verified result snapshot from the bank tx
+    // 1) Pull the verify payload + verified result snapshot from the bank tx.
+    //    These two JSONB fields are populated when n8n (شناسایی واریزها)
+    //    extracted the identifier + verify-account confirmed the owner.
     const { data: tx } = await supabase
       .from("finance_bank_transactions")
       .select("ai_verify_payload, ai_verified_result")
@@ -600,13 +602,47 @@ async function saveTrustedBeneficiaryMapping(
       | { name?: string; bankName?: string }
       | null;
 
-    if (!payload) return false;
-    const matchtype = payload.type != null ? String(payload.type) : "";
-    const matchcontent = payload.number ? String(payload.number) : "";
+    // Working copies — start from ai_verify_payload, then fall back to the
+    // identifier extraction table when the AI flow never ran for this tx.
+    let matchtype = payload?.type != null ? String(payload.type) : "";
+    let matchcontent = payload?.number ? String(payload.number) : "";
+    let matchname = verified?.name ?? null;
+    let matchbankname = verified?.bankName ?? null;
+
+    // 2) Fallback: pull the identifier from finance_bank_tx_identifiers when
+    //    the AI payload is empty. This handles the operator-only path where
+    //    a user manually attaches a party to a deposit that never went
+    //    through n8n / verify-account. We prefer the row with a verified
+    //    owner name when one exists, otherwise just take the first one.
+    if (!matchtype || !matchcontent) {
+      const { data: idents } = await supabase
+        .from("finance_bank_tx_identifiers")
+        .select("match_type, normalized_value, raw_value, verified_owner_name, verified_bank_name")
+        .eq("bank_transaction_id", bankTransactionId)
+        .order("verified_owner_name", { ascending: false, nullsFirst: false })
+        .limit(1);
+      const ident = (idents || [])[0] as
+        | {
+            match_type: number | null;
+            normalized_value: string | null;
+            raw_value: string | null;
+            verified_owner_name: string | null;
+            verified_bank_name: string | null;
+          }
+        | undefined;
+      if (ident && ident.match_type != null) {
+        matchtype = String(ident.match_type);
+        matchcontent = (ident.normalized_value || ident.raw_value || "").trim();
+        // Don't overwrite values that came from ai_verified_result above.
+        matchname ??= ident.verified_owner_name;
+        matchbankname ??= ident.verified_bank_name;
+      }
+    }
+
     // Without a (type, content) pair we cannot honor the unique index
     if (!matchtype || !matchcontent) return false;
 
-    // Look up existing row by the unique (matchtype, matchcontent) pair
+    // 3) Upsert on the unique (matchtype, matchcontent) pair.
     const { data: existing } = await supabase
       .from("bankpartyaccountinfos")
       .select("id, matchname, matchbankname")
@@ -615,18 +651,16 @@ async function saveTrustedBeneficiaryMapping(
       .maybeSingle();
 
     if (existing?.id) {
-      // Row exists → only update finance_party_id (+ fill in name/bank fields
-      // if they were empty). Status is intentionally left alone so we don't
-      // clobber operator-curated values.
-      // Build a narrowly-typed patch so supabase-js accepts the update payload
+      // Row exists → update finance_party_id (+ backfill name/bank only when
+      // empty). Status is intentionally NOT clobbered so operator-curated
+      // values survive.
       const patch: {
         finance_party_id: string;
         matchname?: string;
         matchbankname?: string;
       } = { finance_party_id: partyId };
-      if (!existing.matchname && verified?.name) patch.matchname = verified.name;
-      if (!existing.matchbankname && verified?.bankName)
-        patch.matchbankname = verified.bankName;
+      if (!existing.matchname && matchname) patch.matchname = matchname;
+      if (!existing.matchbankname && matchbankname) patch.matchbankname = matchbankname;
       await supabase
         .from("bankpartyaccountinfos")
         .update(patch)
@@ -639,8 +673,8 @@ async function saveTrustedBeneficiaryMapping(
       matchtype,
       matchcontent,
       finance_party_id: partyId,
-      matchname: verified?.name ?? null,
-      matchbankname: verified?.bankName ?? null,
+      matchname,
+      matchbankname,
       status: "trusted_manual",
     });
     return true;

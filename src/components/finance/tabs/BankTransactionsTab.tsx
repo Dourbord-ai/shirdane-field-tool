@@ -412,28 +412,88 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
 
-    // Description search — PostgREST ILIKE is case-insensitive substring.
+    // -------------------------------------------------------------------
+    // Real-time multi-column search.
+    //
+    // Why so many columns? Operators search by *anything visible on a row*:
+    // descriptions, document/reference/tracking numbers, card/sheba/account
+    // fragments, the verified owner name from `verify-account`, and the
+    // bankCode/number n8n stored in ai_verify_payload. We translate that
+    // into a single PostgREST `.or()` so Postgres does the heavy lifting
+    // (indexed ILIKE on text columns + `->>` JSONB text extraction).
+    //
+    // Why `*` instead of `%`? PostgREST `.or()` parses commas / parens as
+    // syntax. We strip any unsafe character with a space, then wrap the
+    // remaining tokens in `*…*` (PostgREST's `ilike` wildcard sibling of
+    // `%…%`). This keeps the query safe regardless of what the operator
+    // types — Persian text included.
+    // -------------------------------------------------------------------
     if (debouncedDescr) {
-      // Escape `%` and `,` characters so they're treated as literals; they
-      // would otherwise be interpreted as PostgREST wildcards/delimiters.
-      const safe = debouncedDescr.replace(/[%,]/g, " ");
-      q = q.ilike("description", `%${safe}%`);
+      const safe = debouncedDescr.replace(/[%,()*]/g, " ").trim();
+      if (safe) {
+        const pat = `*${safe}*`;
+        q = q.or(
+          [
+            `description.ilike.${pat}`,
+            `document_number.ilike.${pat}`,
+            `reference_number.ilike.${pat}`,
+            `tracking_number.ilike.${pat}`,
+            `card_number.ilike.${pat}`,
+            `match_content.ilike.${pat}`,
+            `match_name.ilike.${pat}`,
+            `match_bank_name.ilike.${pat}`,
+            `ai_verify_payload->>number.ilike.${pat}`,
+            `ai_verified_result->>name.ilike.${pat}`,
+            `ai_verified_result->>bankName.ilike.${pat}`,
+          ].join(","),
+        );
+      }
     }
 
-    // Amount range — server-side via `.or()`. A row matches if either
-    // deposit_amount OR withdraw_amount falls inside the [min, max] range.
-    // This mirrors the previous client-side `Math.abs(deposit||withdraw)`
-    // semantics without pulling rows for filtering.
+    // Amount range — server-side via `.or()`. Always evaluated in Rial.
+    //
+    // We accept matches from THREE numeric sources because legacy/new
+    // import templates fill them inconsistently:
+    //   • deposit_amount  → positive Rial value for واریز rows
+    //   • withdraw_amount → positive Rial value for برداشت rows
+    //   • amount          → signed Rial value (positive deposit, negative
+    //                       withdraw) used by some templates that don't
+    //                       split into deposit_amount / withdraw_amount.
+    //
+    // For the signed `amount` column we compare against BOTH +X and -X so
+    // the filter is applied to its absolute value (operator types positive
+    // Rial; we shouldn't ask them to think about sign).
     const min = debouncedMin ? parseMoney(debouncedMin) : null;
     const max = debouncedMax ? parseMoney(debouncedMax) : null;
     if (min !== null && max !== null) {
       q = q.or(
-        `and(deposit_amount.gte.${min},deposit_amount.lte.${max}),and(withdraw_amount.gte.${min},withdraw_amount.lte.${max})`,
+        [
+          `and(deposit_amount.gte.${min},deposit_amount.lte.${max})`,
+          `and(withdraw_amount.gte.${min},withdraw_amount.lte.${max})`,
+          // |amount| within [min,max] → either positive in [min,max] or
+          // negative in [-max,-min]. Expressed as two AND clauses inside OR.
+          `and(amount.gte.${min},amount.lte.${max})`,
+          `and(amount.gte.${-max},amount.lte.${-min})`,
+        ].join(","),
       );
     } else if (min !== null) {
-      q = q.or(`deposit_amount.gte.${min},withdraw_amount.gte.${min}`);
+      q = q.or(
+        [
+          `deposit_amount.gte.${min}`,
+          `withdraw_amount.gte.${min}`,
+          `amount.gte.${min}`,
+          `amount.lte.${-min}`, // negative withdraw whose magnitude ≥ min
+        ].join(","),
+      );
     } else if (max !== null) {
-      q = q.or(`deposit_amount.lte.${max},withdraw_amount.lte.${max}`);
+      q = q.or(
+        [
+          `deposit_amount.lte.${max}`,
+          `withdraw_amount.lte.${max}`,
+          // |amount| ≤ max ⇒ amount BETWEEN -max AND max
+          `and(amount.gte.${-max},amount.lte.${max})`,
+        ].join(","),
+      );
     }
 
     q = q.order("transaction_datetime", { ascending: false });
@@ -641,25 +701,30 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   )}
                 </Tooltip>
 
-                {/* شناسایی برداشت‌ها — new third member of the family. */}
+                {/* شناسایی برداشت‌ها — temporarily DISABLED per product
+                    decision. The execution path (`runWithdrawAI` + the
+                    `processWithdrawAI` orchestrator) is intentionally kept
+                    intact so we can flip the feature back on later without
+                    touching backend or business logic. While disabled we
+                    still render the button (so users see the upcoming
+                    capability) and show a Persian tooltip explaining that
+                    it's being prepared. */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className={otherBusyFor(withdrawAIRunning) ? "inline-block" : "contents"}>
+                    <span className="inline-block">
                       <Button
-                        onClick={runWithdrawAI}
-                        disabled={automationBusy}
-                        className="bg-blue-600 text-white hover:bg-blue-700"
+                        // onClick intentionally a no-op while disabled — leaving
+                        // a handler would still be safe (disabled blocks click)
+                        // but omitting it makes the intent obvious.
+                        disabled
+                        className="bg-blue-600 text-white hover:bg-blue-700 opacity-60 cursor-not-allowed"
                       >
-                        {withdrawAIRunning
-                          ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
-                          : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
-                        {withdrawAIRunning ? "در حال بررسی برداشت‌ها…" : "شناسایی برداشت‌ها"}
+                        <ArrowUpFromLine className="w-4 h-4 ml-1" />
+                        شناسایی برداشت‌ها
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {otherBusyFor(withdrawAIRunning) && (
-                    <TooltipContent>{busyTooltip}</TooltipContent>
-                  )}
+                  <TooltipContent>این قابلیت در حال آماده‌سازی است</TooltipContent>
                 </Tooltip>
 
                 {/* شناسایی تراکنش بین بانکی */}
