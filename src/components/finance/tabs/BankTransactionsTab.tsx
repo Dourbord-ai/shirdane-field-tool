@@ -450,20 +450,50 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       }
     }
 
-    // Amount range — server-side via `.or()`. A row matches if either
-    // deposit_amount OR withdraw_amount falls inside the [min, max] range.
-    // This mirrors the previous client-side `Math.abs(deposit||withdraw)`
-    // semantics without pulling rows for filtering.
+    // Amount range — server-side via `.or()`. Always evaluated in Rial.
+    //
+    // We accept matches from THREE numeric sources because legacy/new
+    // import templates fill them inconsistently:
+    //   • deposit_amount  → positive Rial value for واریز rows
+    //   • withdraw_amount → positive Rial value for برداشت rows
+    //   • amount          → signed Rial value (positive deposit, negative
+    //                       withdraw) used by some templates that don't
+    //                       split into deposit_amount / withdraw_amount.
+    //
+    // For the signed `amount` column we compare against BOTH +X and -X so
+    // the filter is applied to its absolute value (operator types positive
+    // Rial; we shouldn't ask them to think about sign).
     const min = debouncedMin ? parseMoney(debouncedMin) : null;
     const max = debouncedMax ? parseMoney(debouncedMax) : null;
     if (min !== null && max !== null) {
       q = q.or(
-        `and(deposit_amount.gte.${min},deposit_amount.lte.${max}),and(withdraw_amount.gte.${min},withdraw_amount.lte.${max})`,
+        [
+          `and(deposit_amount.gte.${min},deposit_amount.lte.${max})`,
+          `and(withdraw_amount.gte.${min},withdraw_amount.lte.${max})`,
+          // |amount| within [min,max] → either positive in [min,max] or
+          // negative in [-max,-min]. Expressed as two AND clauses inside OR.
+          `and(amount.gte.${min},amount.lte.${max})`,
+          `and(amount.gte.${-max},amount.lte.${-min})`,
+        ].join(","),
       );
     } else if (min !== null) {
-      q = q.or(`deposit_amount.gte.${min},withdraw_amount.gte.${min}`);
+      q = q.or(
+        [
+          `deposit_amount.gte.${min}`,
+          `withdraw_amount.gte.${min}`,
+          `amount.gte.${min}`,
+          `amount.lte.${-min}`, // negative withdraw whose magnitude ≥ min
+        ].join(","),
+      );
     } else if (max !== null) {
-      q = q.or(`deposit_amount.lte.${max},withdraw_amount.lte.${max}`);
+      q = q.or(
+        [
+          `deposit_amount.lte.${max}`,
+          `withdraw_amount.lte.${max}`,
+          // |amount| ≤ max ⇒ amount BETWEEN -max AND max
+          `and(amount.gte.${-max},amount.lte.${max})`,
+        ].join(","),
+      );
     }
 
     q = q.order("transaction_datetime", { ascending: false });
