@@ -539,18 +539,21 @@ Deno.serve(async (req) => {
 
 
 
-  // Creator: env-level constant — same pattern as the receive/payment flow.
-  // (app_users has no sepidar_user_id column today; if/when it gets one, swap
-  // this for a per-user lookup keyed on triggeredBy.)
-  const creatorEnv = Number(Deno.env.get("SEPIDAR_CREATOR_ID") || 0);
-  if (!Number.isFinite(creatorEnv) || creatorEnv <= 0) {
+  // Creator: same resolution as sepidar-post-voucher (receive/payment posting).
+  // That function reads SEPIDAR_CREATOR_ID with a hardcoded fallback of "1".
+  // We mirror that exactly so factor posting works in any environment where
+  // receive/payment posting already works — no new env or settings required.
+  const creatorRaw = Deno.env.get("SEPIDAR_CREATOR_ID") || "1";
+  const creatorEnv = Number(creatorRaw);
+  if (!Number.isInteger(creatorEnv) || creatorEnv <= 0) {
     return json({
       success: false,
       step: "resolve_creator",
       voucher_id: voucherId,
-      message: "شناسه ثبت‌کننده سپیدار (SEPIDAR_CREATOR_ID) تنظیم نشده است.",
+      message: "SEPIDAR_CREATOR_ID باید عدد صحیح معتبر باشد.",
     });
   }
+
 
   // =========================================================================
   // STEP E: compose Description / Description1 / Description2 per contract.
