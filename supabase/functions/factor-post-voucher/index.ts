@@ -287,11 +287,12 @@ Deno.serve(async (req) => {
   // =========================================================================
   const { data: factorRow, error: factorErr } = await sb
     .from("factors")
-    .select("id, factor_type_id, invoice_date, payable_amount, shopping_center_id, buyer_user_id")
+    .select(
+      "id, factor_type_id, invoice_date, payable_amount, shopping_center_id, buyer_user_id, finance_party_id",
+    )
     .eq("id", factorId)
     .maybeSingle();
 
-  if (factorErr || !factorRow) {
     return json({ success: false, step: "load_factor", message: "بارگذاری فاکتور با خطا مواجه شد." }, 500);
   }
 
