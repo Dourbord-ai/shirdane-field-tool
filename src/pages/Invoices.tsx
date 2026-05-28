@@ -284,6 +284,16 @@ function ApprovalPanel({ factor, onChanged }: { factor: FactorRow; onChanged: ()
   if (!canApprove && !canReject) return null;
 
   const run = async (action: "approve" | "reject") => {
+    // Hard gate: refuse to approve a factor that has no counterparty link.
+    // Posting to Sepidar would fail downstream, and the operator would have
+    // to come back to fix it anyway. Reject is still allowed.
+    if (action === "approve" && !factor.finance_party_id) {
+      setMsg({
+        ok: false,
+        text: "ذینفع فاکتور مشخص نشده است. ابتدا ذینفع را انتخاب و ذخیره کنید.",
+      });
+      return;
+    }
     setBusy(action);
     setMsg(null);
     try {
@@ -303,6 +313,7 @@ function ApprovalPanel({ factor, onChanged }: { factor: FactorRow; onChanged: ()
       onChanged();
     }
   };
+
 
   return (
     <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
