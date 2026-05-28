@@ -284,6 +284,16 @@ function ApprovalPanel({ factor, onChanged }: { factor: FactorRow; onChanged: ()
   if (!canApprove && !canReject) return null;
 
   const run = async (action: "approve" | "reject") => {
+    // Hard gate: refuse to approve a factor that has no counterparty link.
+    // Posting to Sepidar would fail downstream, and the operator would have
+    // to come back to fix it anyway. Reject is still allowed.
+    if (action === "approve" && !factor.finance_party_id) {
+      setMsg({
+        ok: false,
+        text: "ذینفع فاکتور مشخص نشده است. ابتدا ذینفع را انتخاب و ذخیره کنید.",
+      });
+      return;
+    }
     setBusy(action);
     setMsg(null);
     try {
@@ -303,6 +313,7 @@ function ApprovalPanel({ factor, onChanged }: { factor: FactorRow; onChanged: ()
       onChanged();
     }
   };
+
 
   return (
     <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
@@ -462,6 +473,139 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
     </div>
   );
 }
+
+// FixPartyPanel: recovery UI for factors whose finance_party_id is NULL.
+// ---------------------------------------------------------------------------
+// Lets the operator assign a finance_parties row to an existing factor so
+// Sepidar posting can resolve the counterparty. Required for factors created
+// before validation was added, or imported rows where the legacy pointer
+// didn't backfill. Writes directly to factors.finance_party_id and snapshots
+// the chosen party's display name into the legacy factors.company column so
+// list rendering stays consistent.
+function FixPartyPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () => void }) {
+  // Only show when there is no canonical party link. Legacy fallback (the
+  // edge function still tries shopping_center_id / buyer_user_id) cannot be
+  // detected from this lean row shape, so we key purely off finance_party_id
+  // — when it's set, the panel is irrelevant; when it's not, we offer the fix.
+  const [open, setOpen] = useState(false);
+  const [parties, setParties] = useState<{ id: string; label: string }[]>([]);
+  const [selected, setSelected] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // Lazy-load the finance_parties list only when the operator opens the panel
+  // (avoids fetching ~hundreds of rows for every detail view).
+  useEffect(() => {
+    if (!open || parties.length > 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from("finance_parties")
+        .select("id, company_name, first_name, last_name, sepidar_full_name")
+        .eq("is_deleted", false);
+      if (!data) return;
+      const opts = data.map((p) => {
+        const personName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+        const label = p.sepidar_full_name || p.company_name || personName || "(بدون نام)";
+        return { id: p.id as string, label };
+      });
+      opts.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+      setParties(opts);
+    })();
+  }, [open, parties.length]);
+
+  if (factor.finance_party_id) return null;
+
+  const filtered = search.trim()
+    ? parties.filter((p) => p.label.toLowerCase().includes(search.trim().toLowerCase()))
+    : parties;
+
+  const save = async () => {
+    if (!selected) return;
+    setSaving(true); setErrMsg(null);
+    try {
+      const chosen = parties.find((p) => p.id === selected);
+      const { error } = await supabase
+        .from("factors")
+        .update({
+          finance_party_id: selected,
+          // Snapshot label into legacy `company` column so the list/detail
+          // still shows a human-readable name on first paint (party_name
+          // join will overwrite on next fetch).
+          company: chosen?.label || null,
+          // Clear stale posting error so PostingPanel re-enables retry.
+          last_posting_error: null,
+        })
+        .eq("id", factor.id);
+      if (error) throw error;
+      setOpen(false);
+      onChanged();
+    } catch (e) {
+      setErrMsg((e as Error).message || "خطا در ذخیره ذینفع.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-destructive">ذینفع فاکتور مشخص نشده است</span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-lg text-xs"
+        >
+          {open ? "بستن" : "انتخاب/اصلاح ذینفع"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        برای ارسال این فاکتور به سپیدار باید ذینفع آن مشخص باشد. ذینفع را انتخاب و ذخیره کنید.
+      </p>
+      {open && (
+        <div className="space-y-2">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="جستجو نام طرف حساب..."
+            className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm"
+            dir="auto"
+          />
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-card">
+            {filtered.length === 0 ? (
+              <p className="p-3 text-xs text-muted-foreground text-center">موردی یافت نشد</p>
+            ) : (
+              filtered.slice(0, 200).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelected(p.id)}
+                  className={cn(
+                    "w-full text-right px-3 py-2 text-sm hover:bg-secondary/60 border-b border-border last:border-b-0",
+                    selected === p.id && "bg-primary/10 text-primary font-bold",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))
+            )}
+          </div>
+          {errMsg && <p className="text-xs text-destructive">{errMsg}</p>}
+          <Button
+            onClick={save}
+            disabled={!selected || saving}
+            className="w-full rounded-lg bg-gradient-primary text-primary-foreground"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+            ذخیره ذینفع
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function InvoiceDetail({
   factor,
@@ -890,8 +1034,12 @@ function InvoiceDetail({
               yet entered the accounting pipeline (lifecycle_state NULL/draft). */}
           {/* Approval (Approve/Reject) runs first for draft rows; PostingPanel
               takes over once the factor reaches the 'approved' bucket. */}
+          {/* Recovery: surfaces when finance_party_id is NULL so the operator
+              can repair pre-validation or imported factors and unblock posting. */}
+          <FixPartyPanel factor={factor} onChanged={onChanged} />
           <ApprovalPanel factor={factor} onChanged={onChanged} />
           <PostingPanel factor={factor} onChanged={onChanged} />
+
         </div>
       </div>
     </div>

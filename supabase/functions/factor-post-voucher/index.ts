@@ -293,8 +293,30 @@ Deno.serve(async (req) => {
     .eq("id", factorId)
     .maybeSingle();
 
+  if (factorErr || !factorRow) {
     return json({ success: false, step: "load_factor", message: "بارگذاری فاکتور با خطا مواجه شد." }, 500);
   }
+
+  // Pre-check: distinguish "no party link at all" from "party link but no
+  // Sepidar mirror". The first case requires the operator to assign a party
+  // on the factor; the second requires syncing the party with Sepidar.
+  const hasPartyLink = !!factorRow.finance_party_id ||
+    Number(factorRow.shopping_center_id ?? 0) > 0 ||
+    Number(factorRow.buyer_user_id ?? 0) > 0;
+  if (!hasPartyLink) {
+    await sb.from("factors").update({
+      lifecycle_state: "sepidar_failed",
+      last_posting_error: "ذینفع فاکتور مشخص نشده است.",
+      last_posting_attempted_at: new Date().toISOString(),
+    }).eq("id", factorId);
+    return json({
+      success: false,
+      step: "resolve_party",
+      voucher_id: voucherId,
+      message: "ذینفع فاکتور مشخص نشده است. ابتدا ذینفع را انتخاب و ذخیره کنید.",
+    });
+  }
+
 
   const factorTypeId = Number(factorRow.factor_type_id);
   if (factorTypeId !== 1 && factorTypeId !== 2) {

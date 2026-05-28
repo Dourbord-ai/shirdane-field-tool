@@ -941,6 +941,27 @@ export default function NewInvoice() {
       return;
     }
 
+    // M5 hard-requirement: every normal buy/sell factor must carry a
+    // finance_party_id so Sepidar posting can resolve the counterparty
+    // without falling back to legacy shopping_center_id / buyer_user_id
+    // (which are NULL on factors created post-unification). We exempt:
+    //   - milk-retail without a company buyer (no counterparty at all)
+    //   - examinations / wage / daily-worker rows that pay individual
+    //     workers without a finance_parties row (kept on the legacy path
+    //     until those flows get their own party selectors).
+    const isMilkRetailNoBuyer = isMilk && !data.isBuyerCompany;
+    const partyOptional = isLivestock || isMilkRetailNoBuyer
+      || isExaminations || isWage || isDailyWorker || isRental;
+    if (!partyOptional && !data.financePartyId) {
+      toast({
+        title: "ذینفع فاکتور انتخاب نشده است",
+        description: "ذینفع فاکتور مشخص نشده است. ابتدا ذینفع را انتخاب و ذخیره کنید.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+
     // =================================================================
     // ===== LIVESTOCK ("دام") — NEW .NET API FLOW =====================
     // We intercept this branch BEFORE the legacy Supabase flow runs,
