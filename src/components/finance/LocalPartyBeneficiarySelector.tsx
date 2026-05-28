@@ -209,8 +209,8 @@ export function LocalPartyBeneficiarySelector({
     const out: LocalPartyBeneficiary = {
       party_id: p.id,
       beneficiary_id: p.sepidar_party_id,
-      dl_ref: p.sepidar_dl_id,
-      dl_code: p.sepidar_dl_code,
+      dl_ref: p.sepidar_dl_id != null ? String(p.sepidar_dl_id) : null,
+      dl_code: p.sepidar_dl_code != null ? String(p.sepidar_dl_code) : null,
       beneficiary_name: partyLabel(p),
       beneficiary_type: p.ownership_type,
       balance: p.balance,
