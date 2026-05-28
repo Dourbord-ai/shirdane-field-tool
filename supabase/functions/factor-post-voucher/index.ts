@@ -123,13 +123,13 @@ type ResolvePartyResult =
 async function resolveParty(
   sb: ReturnType<typeof createClient>,
   factor: Record<string, unknown>,
+  factor: Record<string, unknown>,
 ): Promise<ResolvePartyResult> {
+  // Columns that actually exist in this project's finance_parties schema.
+  // NOTE: party_account_sl_ref does NOT exist locally — use sepidar_account_id.
   const cols =
-    "id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name";
+    "id, sepidar_party_id, sepidar_account_id, sepidar_dl_id, sepidar_dl_code, sepidar_full_name, first_name, last_name, company_name";
 
-  // Keep both the raw value and the normalized string in debug output so we can
-  // distinguish a real UUID from unexpected runtime shapes (undefined, number,
-  // whitespace-padded strings) without guessing from the Persian error alone.
   const rawFinancePartyId = factor.finance_party_id;
   const fpid = rawFinancePartyId == null ? null : String(rawFinancePartyId).trim() || null;
   const shoppingCenterId = Number(factor.shopping_center_id ?? 0);
@@ -148,24 +148,18 @@ async function resolveParty(
     party_found: false,
     sepidar_party_id: null as number | null,
     sepidar_account_id: null as number | null,
-    party_account_sl_ref: null as number | null,
   };
 
   let row: Record<string, unknown> | null = null;
   type MatchedBy = "finance_party_id" | "legacy_shopping_center_id" | "legacy_buyer_user_id";
   let matchedBy: MatchedBy = "finance_party_id";
 
-
   // 1) Preferred: direct uuid link on factors.finance_party_id (post-M5).
   if (fpid) {
     debug.query_column_used = "id";
-    // This lookup intentionally uses only finance_parties.id. Do not add
-    // legacy_id, sepidar_party_id, or is_deleted predicates here: the factor
-    // already stores the canonical finance party UUID selected by the operator,
-    // and extra filters can incorrectly turn a valid linked party into "missing".
     const { data, error } = await sb
       .from("finance_parties")
-      .select("id, sepidar_party_id, sepidar_account_id, party_account_sl_ref, sepidar_full_name, first_name, last_name, company_name")
+      .select(cols)
       .eq("id", fpid)
       .maybeSingle();
 
@@ -183,11 +177,21 @@ async function resolveParty(
         query_error: error?.message ?? null,
       }),
     );
+    if (error) {
+      // Real query error (e.g. missing column) — surface distinctly so we don't
+      // mis-report it as "finance_party_row_missing".
+      debug.matched_by = "finance_party_id";
+      return {
+        ok: false,
+        error_code: "finance_party_query_error",
+        message: `خطا در واکشی ذینفع از پایگاه داده: ${error.message}`,
+        debug,
+      };
+    }
     if (data) {
       row = data as Record<string, unknown>;
       matchedBy = "finance_party_id";
     } else {
-      // finance_party_id is set but the row is gone — precise error.
       debug.matched_by = "finance_party_id";
       return {
         ok: false,
@@ -230,7 +234,6 @@ async function resolveParty(
   debug.matched_by = matchedBy;
   debug.sepidar_party_id = (row.sepidar_party_id as number | null) ?? null;
   debug.sepidar_account_id = (row.sepidar_account_id as number | null) ?? null;
-  debug.party_account_sl_ref = (row.party_account_sl_ref as number | null) ?? null;
 
   const sepidarId = Number(row.sepidar_party_id);
   if (!Number.isFinite(sepidarId) || sepidarId <= 0) {
@@ -255,12 +258,12 @@ async function resolveParty(
       id: row.id as string,
       sepidar_party_id: sepidarId,
       sepidar_account_id: (row.sepidar_account_id as number | null) ?? null,
-      party_account_sl_ref: (row.party_account_sl_ref as number | null) ?? null,
       name,
     },
     debug,
   };
 }
+
 
 
 
