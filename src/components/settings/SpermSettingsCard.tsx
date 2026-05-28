@@ -83,24 +83,16 @@ export default function SpermSettingsCard() {
 
   // Build the base query with the current filter + search applied. We
   // factor this out because both the page fetch and the count fetches
-  // need the same WHERE clauses (well, the chip counts ignore `filter`
-  // since each chip represents its own filter).
-  const applySearch = useCallback(
-    <T extends ReturnType<typeof supabase.from>>(qb: T): T => {
-      // Server-side search across name OR code. We use Supabase's `.or()`
-      // with `ilike` (case-insensitive LIKE) and wrap the term in `%` on
-      // both sides so partial matches work. `*` is Supabase's wildcard
-      // inside `.or()` strings.
-      if (debouncedQ) {
-        const escaped = debouncedQ.replace(/[%,]/g, " ");
-        return qb.or(
-          `name.ilike.%${escaped}%,code.ilike.%${escaped}%`,
-        ) as unknown as T;
-      }
-      return qb;
-    },
-    [debouncedQ],
-  );
+  // Build the `.or(...)` argument string for name/code ilike search, or
+  // null when there's no search term. Factored out so the page query and
+  // each chip-count query can apply the same clause.
+  const orClause = useMemo(() => {
+    if (!debouncedQ) return null;
+    // Strip characters that would confuse Supabase's `.or()` parser
+    // (`,` separates clauses, `%` is the wildcard).
+    const escaped = debouncedQ.replace(/[%,]/g, " ");
+    return `name.ilike.%${escaped}%,code.ilike.%${escaped}%`;
+  }, [debouncedQ]);
 
   // Refetch the current page whenever filter/search/page changes. We use
   // `.range(from, to)` for offset pagination and `count: 'exact'` so we
@@ -108,8 +100,8 @@ export default function SpermSettingsCard() {
   const fetchPage = useCallback(async () => {
     setLoading(true);
 
-    // Build the page query. Note we ask for `count: 'exact'` here so the
-    // response includes the total matching row count along with the page.
+    // Build the page query. `count: 'exact'` makes the response include
+    // the total matching row count alongside the page slice.
     let pageQuery = supabase
       .from("sperms")
       .select("id, name, code, is_active", { count: "exact" })
@@ -121,7 +113,7 @@ export default function SpermSettingsCard() {
     else if (filter === "inactive") pageQuery = pageQuery.eq("is_active", false);
 
     // Apply the shared search clause.
-    pageQuery = applySearch(pageQuery);
+    if (orClause) pageQuery = pageQuery.or(orClause);
 
     const { data, error, count } = await pageQuery;
     if (error) {
@@ -137,21 +129,20 @@ export default function SpermSettingsCard() {
       setTotal(count ?? 0);
     }
     setLoading(false);
-  }, [page, filter, applySearch]);
+  }, [page, filter, orClause]);
 
   // Refetch chip counts when the search term changes. Each chip shows the
   // total number of rows that would appear under its own filter, so we
-  // issue three HEAD-only requests in parallel.
+  // issue three HEAD-only requests in parallel (`head: true` skips the
+  // row payload entirely and just returns the count — much cheaper).
   const fetchCounts = useCallback(async () => {
-    // Helper to build a count-only query with the shared search clause
-    // applied. `head: true` makes Supabase return only the count and no
-    // rows, which is much cheaper.
     const make = (state?: boolean) => {
       let q1 = supabase
         .from("sperms")
         .select("id", { count: "exact", head: true });
       if (state !== undefined) q1 = q1.eq("is_active", state);
-      return applySearch(q1);
+      if (orClause) q1 = q1.or(orClause);
+      return q1;
     };
 
     // Fire all three in parallel for speed.
@@ -166,18 +157,8 @@ export default function SpermSettingsCard() {
       active: activeRes.count ?? 0,
       inactive: inactiveRes.count ?? 0,
     });
-  }, [applySearch]);
+  }, [orClause]);
 
-  // Trigger fetches whenever the relevant inputs change.
-  useEffect(() => {
-    void fetchPage();
-  }, [fetchPage]);
-  useEffect(() => {
-    void fetchCounts();
-  }, [fetchCounts]);
-
-  // Toggle is_active for a single sperm and update local state optimistically.
-  async function toggle(row: SpermRow, next: boolean) {
     // Mark this row as pending so the switch is disabled briefly.
     setPending((s) => new Set(s).add(row.id));
     // Optimistic UI update on the currently visible page.
