@@ -45,17 +45,15 @@ type SortKey =
   | "display_name"
   | "debtor"
   | "creditor"
-  | "request_balance"
-  | "status"
-  | "approval_status";
+  | "balance"
+  | "request_balance";
 
 const SORT_DB_COLUMN: Record<SortKey, string> = {
   display_name: "sepidar_full_name",
   debtor: "balance",
   creditor: "balance",
+  balance: "balance",
   request_balance: "request_balance",
-  status: "status",
-  approval_status: "approval_status",
 };
 
 // Quick-filter for the balance sign — applied server-side via `.lt` / `.gt`
@@ -107,14 +105,11 @@ export default function FinanceReportsTab() {
   const [side, setSide] = useState<SideFilter>("all");
 
   // Per-column filters — text for textual columns, numeric "≥" for amounts.
-  // Kept as plain strings so users can type Persian digits and we normalise
-  // later. Empty string means "no filter".
   const [fName, setFName] = useState("");
   const [fDebtor, setFDebtor] = useState("");
   const [fCreditor, setFCreditor] = useState("");
+  const [fBalance, setFBalance] = useState("");
   const [fRequest, setFRequest] = useState("");
-  const [fStatus, setFStatus] = useState("");
-  const [fApproval, setFApproval] = useState("");
 
   // Debounce the global search box — 300ms is enough to feel live but spares
   // the DB on every keystroke (Persian IME may fire many events per char).
@@ -125,12 +120,12 @@ export default function FinanceReportsTab() {
 
   // Whenever any filter narrows the set, jump back to the first page so we
   // never land on an out-of-range offset.
-  useEffect(() => setPage(1), [debouncedSearch, sortKey, sortAsc, side, fDebtor, fCreditor, fRequest]);
+  useEffect(() => setPage(1), [debouncedSearch, sortKey, sortAsc, side, fDebtor, fCreditor, fBalance, fRequest]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortKey, sortAsc, page, side, fDebtor, fCreditor, fRequest]);
+  }, [debouncedSearch, sortKey, sortAsc, page, side, fDebtor, fCreditor, fBalance, fRequest]);
 
   // Persian/Arabic digit → ASCII so numeric filter inputs accept ۱۲۳ etc.
   function toAsciiNumber(s: string): number | null {
@@ -191,6 +186,9 @@ export default function FinanceReportsTab() {
     if (creditorMin != null && creditorMin > 0) q = q.gte("balance", creditorMin);
     const requestMin = toAsciiNumber(fRequest);
     if (requestMin != null && requestMin > 0) q = q.gte("request_balance", requestMin);
+    // مانده |≥| → match rows whose absolute balance is at least the threshold.
+    const balMin = toAsciiNumber(fBalance);
+    if (balMin != null && balMin > 0) q = q.or(`balance.gte.${balMin},balance.lte.${-balMin}`);
 
     q = q.order(SORT_DB_COLUMN[sortKey], {
       // debtor column: smaller (more negative) balance comes first when ASC.
@@ -220,20 +218,12 @@ export default function FinanceReportsTab() {
       const q = fName.toLowerCase();
       list = list.filter((p) => p._display.toLowerCase().includes(q));
     }
-    if (fStatus) {
-      const q = fStatus.toLowerCase();
-      list = list.filter((p) => (p.status || "").toLowerCase().includes(q));
-    }
-    if (fApproval) {
-      const q = fApproval.toLowerCase();
-      list = list.filter((p) => (p.approval_status || "").toLowerCase().includes(q));
-    }
     if (sortKey === "display_name") {
       list.sort((a, b) => a._display.localeCompare(b._display, "fa"));
       if (!sortAsc) list.reverse();
     }
     return list;
-  }, [rows, sortKey, sortAsc, fName, fStatus, fApproval]);
+  }, [rows, sortKey, sortAsc, fName]);
 
   const pageCount = Math.max(1, Math.ceil((totalCount ?? 0) / PAGE_SIZE));
 
@@ -311,20 +301,16 @@ export default function FinanceReportsTab() {
                 <th className="text-right p-2"><SortHeader k="display_name">نام ذینفع</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="debtor">بدهکار</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="creditor">بستانکار</SortHeader></th>
+                <th className="text-right p-2"><SortHeader k="balance">مانده</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="request_balance">درخواست پرداخت تایید شده</SortHeader></th>
-                <th className="text-right p-2"><SortHeader k="status">وضعیت</SortHeader></th>
-                <th className="text-right p-2"><SortHeader k="approval_status">تایید</SortHeader></th>
               </tr>
-              {/* Per-column filter row — empty string means no filter. Numeric
-                  inputs are inputMode="numeric" but we still accept Persian
-                  digits via toAsciiNumber. */}
+              {/* Per-column filter row — empty string means no filter. */}
               <tr className="border-b">
                 <th className="p-1"><Input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fDebtor} onChange={(e) => setFDebtor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fCreditor} onChange={(e) => setFCreditor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
+                <th className="p-1"><Input value={fBalance} onChange={(e) => setFBalance(e.target.value)} placeholder="|≥|" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fRequest} onChange={(e) => setFRequest(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
-                <th className="p-1"><Input value={fStatus} onChange={(e) => setFStatus(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
-                <th className="p-1"><Input value={fApproval} onChange={(e) => setFApproval(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
               </tr>
             </thead>
             <tbody>
@@ -340,9 +326,8 @@ export default function FinanceReportsTab() {
                     <td className="p-2 font-medium">{p._display}</td>
                     <td className="p-2"><Money value={debtor} tone="debit" /></td>
                     <td className="p-2"><Money value={creditor} tone="credit" /></td>
+                    <td className="p-2"><Money value={bal} tone={bal < 0 ? "debit" : bal > 0 ? "credit" : "neutral"} /></td>
                     <td className="p-2"><Money value={Number(p.request_balance ?? 0)} tone="neutral" /></td>
-                    <td className="p-2 text-xs text-muted-foreground">{p.status || "—"}</td>
-                    <td className="p-2 text-xs text-muted-foreground">{p.approval_status || "—"}</td>
                   </tr>
                 );
               })}
