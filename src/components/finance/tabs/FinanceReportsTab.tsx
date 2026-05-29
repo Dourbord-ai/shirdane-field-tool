@@ -45,17 +45,15 @@ type SortKey =
   | "display_name"
   | "debtor"
   | "creditor"
-  | "request_balance"
-  | "status"
-  | "approval_status";
+  | "balance"
+  | "request_balance";
 
 const SORT_DB_COLUMN: Record<SortKey, string> = {
   display_name: "sepidar_full_name",
   debtor: "balance",
   creditor: "balance",
+  balance: "balance",
   request_balance: "request_balance",
-  status: "status",
-  approval_status: "approval_status",
 };
 
 // Quick-filter for the balance sign — applied server-side via `.lt` / `.gt`
