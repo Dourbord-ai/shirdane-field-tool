@@ -192,7 +192,7 @@ export default function MilkRecordsReport() {
       let nums = new Map<number, string>();
       if (ids.length) {
         const { data: items } = await supabase
-          .from("livestock_items").select("id, animal_number").in("id", ids);
+          .from("livestock_items").select("id, animal_number").in("id", ids as any);
         for (const it of items || []) nums.set(Number(it.id), String(it.animal_number ?? it.id));
       }
       // Build rows, optional cow-number text filter, sort desc by today, take 10.
