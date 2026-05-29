@@ -1186,9 +1186,7 @@ export async function retryPaymentAllocationSync(allocationId: string): Promise<
       .maybeSingle();
     const newPaid = Number(item?.paid_amount || 0) + Number(alloc.amount);
     await supabase.from("finance_payment_request_items").update({ paid_amount: newPaid }).eq("id", alloc.payment_request_item_id);
-    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", alloc.party_id).maybeSingle();
-    const newBal = Number(party?.balance || 0) + Number(alloc.amount);
-    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", alloc.party_id);
+    // Party balance auto-recomputed by DB trigger — no manual write needed.
     await refreshPaymentRequestPaidTotals(alloc.payment_request_id);
     await recalculateBankUnassignedBalances(alloc.bank_id);
     return { ok: true };
