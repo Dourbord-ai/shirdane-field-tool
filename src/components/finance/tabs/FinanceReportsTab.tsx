@@ -215,20 +215,12 @@ export default function FinanceReportsTab() {
       const q = fName.toLowerCase();
       list = list.filter((p) => p._display.toLowerCase().includes(q));
     }
-    if (fStatus) {
-      const q = fStatus.toLowerCase();
-      list = list.filter((p) => (p.status || "").toLowerCase().includes(q));
-    }
-    if (fApproval) {
-      const q = fApproval.toLowerCase();
-      list = list.filter((p) => (p.approval_status || "").toLowerCase().includes(q));
-    }
     if (sortKey === "display_name") {
       list.sort((a, b) => a._display.localeCompare(b._display, "fa"));
       if (!sortAsc) list.reverse();
     }
     return list;
-  }, [rows, sortKey, sortAsc, fName, fStatus, fApproval]);
+  }, [rows, sortKey, sortAsc, fName]);
 
   const pageCount = Math.max(1, Math.ceil((totalCount ?? 0) / PAGE_SIZE));
 
