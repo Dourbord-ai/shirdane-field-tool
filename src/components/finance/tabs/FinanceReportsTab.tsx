@@ -105,14 +105,11 @@ export default function FinanceReportsTab() {
   const [side, setSide] = useState<SideFilter>("all");
 
   // Per-column filters — text for textual columns, numeric "≥" for amounts.
-  // Kept as plain strings so users can type Persian digits and we normalise
-  // later. Empty string means "no filter".
   const [fName, setFName] = useState("");
   const [fDebtor, setFDebtor] = useState("");
   const [fCreditor, setFCreditor] = useState("");
+  const [fBalance, setFBalance] = useState("");
   const [fRequest, setFRequest] = useState("");
-  const [fStatus, setFStatus] = useState("");
-  const [fApproval, setFApproval] = useState("");
 
   // Debounce the global search box — 300ms is enough to feel live but spares
   // the DB on every keystroke (Persian IME may fire many events per char).
