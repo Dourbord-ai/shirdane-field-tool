@@ -5309,6 +5309,10 @@ export type Database = {
         Returns: undefined
       }
       rebuild_cow_type_cache: { Args: { p_cow_id: number }; Returns: undefined }
+      recompute_party_balance: {
+        Args: { p_party_id: string }
+        Returns: undefined
+      }
       safe_text_to_date: { Args: { p_text: string }; Returns: string }
       submit_cow_factor: {
         Args: { p_details: Json; p_factor: Json }

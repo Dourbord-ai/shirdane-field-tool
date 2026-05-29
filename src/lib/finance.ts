@@ -839,10 +839,11 @@ export async function approveReceiveIdentification(receiveIdId: string): Promise
       })
       .eq("id", ri.bank_transaction_id);
 
-    // Update party balance
-    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", ri.party_id).maybeSingle();
-    const newBal = Number(party?.balance || 0) + Number(ri.amount || 0);
-    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", ri.party_id);
+    // Party balance is now maintained by the DB trigger
+    // trg_recompute_party_balance_items on finance_voucher_items, which
+    // mirrors the Sepidar comparison logic (sum of debit-credit across
+    // non-deleted voucher items). No manual increment here — doing it
+    // would double-count against the voucher we just created above.
 
     await recalculateBankUnassignedBalances(ri.bank_id);
 
@@ -1142,10 +1143,8 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
       .from("finance_payment_request_items")
       .update({ paid_amount: newPaid })
       .eq("id", input.payment_request_item_id);
-    // Reduce party balance (we paid them — balance moves toward zero / debit)
-    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", item.party_id).maybeSingle();
-    const newBal = Number(party?.balance || 0) + Number(input.amount); // creditor (negative) → adding moves toward 0
-    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", item.party_id);
+    // Party balance auto-recomputed by DB trigger on the voucher items
+    // we created above — single source of truth matches Sepidar compare.
     await refreshPaymentRequestPaidTotals(input.payment_request_id);
     await recalculateBankUnassignedBalances(tx.bank_id);
     return { id: alloc.id, ok: true };
@@ -1187,9 +1186,7 @@ export async function retryPaymentAllocationSync(allocationId: string): Promise<
       .maybeSingle();
     const newPaid = Number(item?.paid_amount || 0) + Number(alloc.amount);
     await supabase.from("finance_payment_request_items").update({ paid_amount: newPaid }).eq("id", alloc.payment_request_item_id);
-    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", alloc.party_id).maybeSingle();
-    const newBal = Number(party?.balance || 0) + Number(alloc.amount);
-    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", alloc.party_id);
+    // Party balance auto-recomputed by DB trigger — no manual write needed.
     await refreshPaymentRequestPaidTotals(alloc.payment_request_id);
     await recalculateBankUnassignedBalances(alloc.bank_id);
     return { ok: true };
