@@ -62,9 +62,14 @@ interface FactorRow {
   // pipeline; no change to the factor *registration* UI is made.
   lifecycle_state: string | null;
   voucher_id: string | null;
+  // Sepidar mirror fields. EITHER of these being non-null means the factor
+  // already has a voucher in Sepidar — the post button must stay blocked
+  // regardless of lifecycle_state to avoid duplicate posts.
+  sepidar_voucher_id: string | null;
   sepidar_voucher_number: string | null;
   last_posting_error: string | null;
   posting_attempt_count: number | null;
+
   // M5: composed display name from the joined finance_parties row. The
   // join is performed in the supabase select below and reduced to a flat
   // string in fetchFactors so the rest of the UI stays simple.
