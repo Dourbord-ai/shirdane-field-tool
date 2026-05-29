@@ -330,6 +330,16 @@ Deno.serve(async (req) => {
 
   if (existingFactor.sepidar_voucher_id) {
     // Already posted on a previous attempt — short-circuit, do NOT touch SQL.
+    // Defensive: also force lifecycle_state='posted' in case a previous run
+    // wrote the sepidar id but failed to flip lifecycle (partial mirror).
+    // This is the single source of truth that prevents the UI from re-posting.
+    const { error: lifecycleErr } = await sb.from("factors").update({
+      lifecycle_state: "posted",
+      last_posting_error: null,
+    }).eq("id", factorId);
+    if (lifecycleErr) {
+      console.warn("[factor-post-voucher:already_posted lifecycle update]", lifecycleErr.message);
+    }
     return json({
       success: true,
       step: "already_posted",
@@ -339,6 +349,7 @@ Deno.serve(async (req) => {
       message: "این فاکتور قبلاً در سپیدار ثبت شده است.",
     });
   }
+
 
   // Secondary guard: voucher row may already carry a sepidar id from a
   // previous partial run (factor row not yet mirrored). Mirror it back and
