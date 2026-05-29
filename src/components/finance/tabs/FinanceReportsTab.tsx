@@ -186,6 +186,9 @@ export default function FinanceReportsTab() {
     if (creditorMin != null && creditorMin > 0) q = q.gte("balance", creditorMin);
     const requestMin = toAsciiNumber(fRequest);
     if (requestMin != null && requestMin > 0) q = q.gte("request_balance", requestMin);
+    // مانده |≥| → match rows whose absolute balance is at least the threshold.
+    const balMin = toAsciiNumber(fBalance);
+    if (balMin != null && balMin > 0) q = q.or(`balance.gte.${balMin},balance.lte.${-balMin}`);
 
     q = q.order(SORT_DB_COLUMN[sortKey], {
       // debtor column: smaller (more negative) balance comes first when ASC.
