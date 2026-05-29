@@ -379,14 +379,25 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   const [resultOk, setResultOk] = useState<boolean | null>(null);
 
   const state = factor.lifecycle_state ?? "";
-  const isPosted = state === "posted" && !!factor.sepidar_voucher_number;
-  const canPost = ["approved", "voucher_failed", "sepidar_failed"].includes(state);
+  // SINGLE SOURCE OF TRUTH for "this factor is already in Sepidar":
+  // either mirror field is enough — we never want to allow a second post
+  // even if a partial update left lifecycle_state behind. This guards
+  // against duplicate Sepidar vouchers from a double-click or stale state.
+  const hasSepidarVoucher = !!(factor.sepidar_voucher_id || factor.sepidar_voucher_number);
+  const isPosted = state === "posted" || hasSepidarVoucher;
+  // Posting is only allowed when there is NO sepidar mirror yet AND the
+  // factor is in a re-postable state. Note `isPosted` already covers the
+  // sepidar-mirror case, so we additionally require !hasSepidarVoucher.
+  const canPost =
+    !hasSepidarVoucher &&
+    ["approved", "voucher_failed", "sepidar_failed"].includes(state);
   // Gate the whole panel by product-type support. This is what hides Sepidar
   // posting for feed sales and for any product type the engine can't handle.
   const supported = supportsSepidarPosting(factor);
   // TODO: replace with the real permission key once roles are enabled.
   const canUserPost = hasPermission("factor.post_sepidar");
   const showNothing = !supported || (!isPosted && !canPost);
+
 
   const handlePost = async () => {
     setBusy(true); setResultMsg(null); setResultOk(null);
