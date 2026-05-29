@@ -839,10 +839,11 @@ export async function approveReceiveIdentification(receiveIdId: string): Promise
       })
       .eq("id", ri.bank_transaction_id);
 
-    // Update party balance
-    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", ri.party_id).maybeSingle();
-    const newBal = Number(party?.balance || 0) + Number(ri.amount || 0);
-    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", ri.party_id);
+    // Party balance is now maintained by the DB trigger
+    // trg_recompute_party_balance_items on finance_voucher_items, which
+    // mirrors the Sepidar comparison logic (sum of debit-credit across
+    // non-deleted voucher items). No manual increment here — doing it
+    // would double-count against the voucher we just created above.
 
     await recalculateBankUnassignedBalances(ri.bank_id);
 
