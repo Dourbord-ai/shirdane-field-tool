@@ -120,12 +120,12 @@ export default function FinanceReportsTab() {
 
   // Whenever any filter narrows the set, jump back to the first page so we
   // never land on an out-of-range offset.
-  useEffect(() => setPage(1), [debouncedSearch, sortKey, sortAsc, side, fDebtor, fCreditor, fRequest]);
+  useEffect(() => setPage(1), [debouncedSearch, sortKey, sortAsc, side, fDebtor, fCreditor, fBalance, fRequest]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortKey, sortAsc, page, side, fDebtor, fCreditor, fRequest]);
+  }, [debouncedSearch, sortKey, sortAsc, page, side, fDebtor, fCreditor, fBalance, fRequest]);
 
   // Persian/Arabic digit → ASCII so numeric filter inputs accept ۱۲۳ etc.
   function toAsciiNumber(s: string): number | null {
