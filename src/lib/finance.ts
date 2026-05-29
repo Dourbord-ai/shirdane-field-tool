@@ -1143,10 +1143,8 @@ export async function createPaymentAllocation(input: CreatePaymentAllocationInpu
       .from("finance_payment_request_items")
       .update({ paid_amount: newPaid })
       .eq("id", input.payment_request_item_id);
-    // Reduce party balance (we paid them — balance moves toward zero / debit)
-    const { data: party } = await supabase.from("finance_parties").select("balance").eq("id", item.party_id).maybeSingle();
-    const newBal = Number(party?.balance || 0) + Number(input.amount); // creditor (negative) → adding moves toward 0
-    await supabase.from("finance_parties").update({ balance: newBal }).eq("id", item.party_id);
+    // Party balance auto-recomputed by DB trigger on the voucher items
+    // we created above — single source of truth matches Sepidar compare.
     await refreshPaymentRequestPaidTotals(input.payment_request_id);
     await recalculateBankUnassignedBalances(tx.bank_id);
     return { id: alloc.id, ok: true };
