@@ -434,7 +434,7 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
         <span className="text-sm font-bold text-foreground">وضعیت ثبت سند مالی</span>
         {isPosted ? (
           <span className="px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-bold">
-            ثبت شده • سپیدار {toPersianDigits(factor.sepidar_voucher_number || "")}
+            ثبت شده • سپیدار {toPersianDigits(factor.sepidar_voucher_number || factor.sepidar_voucher_id || "")}
           </span>
         ) : state === "voucher_failed" ? (
           <span className="px-2.5 py-1 rounded-lg bg-destructive/15 text-destructive text-xs font-bold">
