@@ -281,14 +281,10 @@ function PartyTransferFormDialog({ onClose, onDone }: { onClose: () => void; onD
 
       await supabase.from("finance_party_transfers").update({ voucher_id: v.id }).eq("id", pt.id);
 
-      const [{ data: from }, { data: to }] = await Promise.all([
-        supabase.from("finance_parties").select("balance").eq("id", fromParty).maybeSingle(),
-        supabase.from("finance_parties").select("balance").eq("id", toParty).maybeSingle(),
-      ]);
-      await Promise.all([
-        supabase.from("finance_parties").update({ balance: Number(from?.balance || 0) - amt }).eq("id", fromParty),
-        supabase.from("finance_parties").update({ balance: Number(to?.balance || 0) + amt }).eq("id", toParty),
-      ]);
+      // Party balances are derived from finance_voucher_items via the
+      // DB trigger trg_recompute_party_balance_items. The voucher we
+      // created above already includes both sides of the transfer, so
+      // touching finance_parties.balance here would double-count.
 
       await sepidarSyncPlaceholder(v.id, "post_voucher");
 
