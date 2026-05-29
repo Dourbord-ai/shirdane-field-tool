@@ -5282,6 +5282,7 @@ export type Database = {
           payable_amount: number
           posting_attempt_count: number
           product_type: string
+          sepidar_voucher_id: string
           sepidar_voucher_number: string
           total_count: number
           voucher_id: string

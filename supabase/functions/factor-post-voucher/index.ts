@@ -330,6 +330,16 @@ Deno.serve(async (req) => {
 
   if (existingFactor.sepidar_voucher_id) {
     // Already posted on a previous attempt — short-circuit, do NOT touch SQL.
+    // Defensive: also force lifecycle_state='posted' in case a previous run
+    // wrote the sepidar id but failed to flip lifecycle (partial mirror).
+    // This is the single source of truth that prevents the UI from re-posting.
+    const { error: lifecycleErr } = await sb.from("factors").update({
+      lifecycle_state: "posted",
+      last_posting_error: null,
+    }).eq("id", factorId);
+    if (lifecycleErr) {
+      console.warn("[factor-post-voucher:already_posted lifecycle update]", lifecycleErr.message);
+    }
     return json({
       success: true,
       step: "already_posted",
@@ -339,6 +349,7 @@ Deno.serve(async (req) => {
       message: "این فاکتور قبلاً در سپیدار ثبت شده است.",
     });
   }
+
 
   // Secondary guard: voucher row may already carry a sepidar id from a
   // previous partial run (factor row not yet mirrored). Mirror it back and
@@ -664,21 +675,33 @@ Deno.serve(async (req) => {
   // duplicate Sepidar call.
   // =========================================================================
   if (sepidarOk) {
-    await sb.from("finance_vouchers").update({
+    // Mirror the Sepidar identifiers back to the internal voucher FIRST. If
+    // the second update (factors) fails, the next retry's STEP A secondary
+    // guard reads finance_vouchers and mirrors them back — no duplicate post.
+    const { error: vUpdErr } = await sb.from("finance_vouchers").update({
       sepidar_voucher_id: sepidarVoucherId,
       sepidar_voucher_number: sepidarVoucherNumber,
       sepidar_sync_status: "synced",
       sepidar_synced_at: new Date().toISOString(),
       sepidar_error_message: null,
     }).eq("id", voucherId);
+    if (vUpdErr) {
+      console.error("[factor-post-voucher] finance_vouchers update failed", vUpdErr.message);
+    }
 
-    await sb.from("factors").update({
+    // Now flip the factor to "posted" with the Sepidar mirror. We capture and
+    // log this error explicitly so a silent failure can't leave the UI stuck
+    // on "آماده ثبت" while Sepidar already has the voucher.
+    const { error: fUpdErr } = await sb.from("factors").update({
       sepidar_voucher_id: sepidarVoucherId,
       sepidar_voucher_number: sepidarVoucherNumber,
       lifecycle_state: "posted",
       last_posting_error: null,
       last_posting_attempted_at: new Date().toISOString(),
     }).eq("id", factorId);
+    if (fUpdErr) {
+      console.error("[factor-post-voucher] factors update failed", fUpdErr.message);
+    }
 
     // Audit row — best effort.
     await sb.from("factor_posting_attempts").insert({
@@ -696,8 +719,11 @@ Deno.serve(async (req) => {
       response_payload: {
         sepidar_voucher_id: sepidarVoucherId,
         sepidar_voucher_number: sepidarVoucherNumber,
+        factor_update_error: fUpdErr?.message ?? null,
+        voucher_update_error: vUpdErr?.message ?? null,
       } as never,
     } as never);
+
   } else {
     await sb.from("finance_vouchers").update({
       sepidar_sync_status: "failed",

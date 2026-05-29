@@ -62,9 +62,14 @@ interface FactorRow {
   // pipeline; no change to the factor *registration* UI is made.
   lifecycle_state: string | null;
   voucher_id: string | null;
+  // Sepidar mirror fields. EITHER of these being non-null means the factor
+  // already has a voucher in Sepidar — the post button must stay blocked
+  // regardless of lifecycle_state to avoid duplicate posts.
+  sepidar_voucher_id: string | null;
   sepidar_voucher_number: string | null;
   last_posting_error: string | null;
   posting_attempt_count: number | null;
+
   // M5: composed display name from the joined finance_parties row. The
   // join is performed in the supabase select below and reduced to a flat
   // string in fetchFactors so the rest of the UI stays simple.
@@ -374,14 +379,25 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   const [resultOk, setResultOk] = useState<boolean | null>(null);
 
   const state = factor.lifecycle_state ?? "";
-  const isPosted = state === "posted" && !!factor.sepidar_voucher_number;
-  const canPost = ["approved", "voucher_failed", "sepidar_failed"].includes(state);
+  // SINGLE SOURCE OF TRUTH for "this factor is already in Sepidar":
+  // either mirror field is enough — we never want to allow a second post
+  // even if a partial update left lifecycle_state behind. This guards
+  // against duplicate Sepidar vouchers from a double-click or stale state.
+  const hasSepidarVoucher = !!(factor.sepidar_voucher_id || factor.sepidar_voucher_number);
+  const isPosted = state === "posted" || hasSepidarVoucher;
+  // Posting is only allowed when there is NO sepidar mirror yet AND the
+  // factor is in a re-postable state. Note `isPosted` already covers the
+  // sepidar-mirror case, so we additionally require !hasSepidarVoucher.
+  const canPost =
+    !hasSepidarVoucher &&
+    ["approved", "voucher_failed", "sepidar_failed"].includes(state);
   // Gate the whole panel by product-type support. This is what hides Sepidar
   // posting for feed sales and for any product type the engine can't handle.
   const supported = supportsSepidarPosting(factor);
   // TODO: replace with the real permission key once roles are enabled.
   const canUserPost = hasPermission("factor.post_sepidar");
   const showNothing = !supported || (!isPosted && !canPost);
+
 
   const handlePost = async () => {
     setBusy(true); setResultMsg(null); setResultOk(null);
@@ -418,7 +434,7 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
         <span className="text-sm font-bold text-foreground">وضعیت ثبت سند مالی</span>
         {isPosted ? (
           <span className="px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-bold">
-            ثبت شده • سپیدار {toPersianDigits(factor.sepidar_voucher_number || "")}
+            ثبت شده • سپیدار {toPersianDigits(factor.sepidar_voucher_number || factor.sepidar_voucher_id || "")}
           </span>
         ) : state === "voucher_failed" ? (
           <span className="px-2.5 py-1 rounded-lg bg-destructive/15 text-destructive text-xs font-bold">
