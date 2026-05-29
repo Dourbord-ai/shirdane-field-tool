@@ -298,20 +298,16 @@ export default function FinanceReportsTab() {
                 <th className="text-right p-2"><SortHeader k="display_name">نام ذینفع</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="debtor">بدهکار</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="creditor">بستانکار</SortHeader></th>
+                <th className="text-right p-2"><SortHeader k="balance">مانده</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="request_balance">درخواست پرداخت تایید شده</SortHeader></th>
-                <th className="text-right p-2"><SortHeader k="status">وضعیت</SortHeader></th>
-                <th className="text-right p-2"><SortHeader k="approval_status">تایید</SortHeader></th>
               </tr>
-              {/* Per-column filter row — empty string means no filter. Numeric
-                  inputs are inputMode="numeric" but we still accept Persian
-                  digits via toAsciiNumber. */}
+              {/* Per-column filter row — empty string means no filter. */}
               <tr className="border-b">
                 <th className="p-1"><Input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fDebtor} onChange={(e) => setFDebtor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fCreditor} onChange={(e) => setFCreditor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
+                <th className="p-1"><Input value={fBalance} onChange={(e) => setFBalance(e.target.value)} placeholder="|≥|" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fRequest} onChange={(e) => setFRequest(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
-                <th className="p-1"><Input value={fStatus} onChange={(e) => setFStatus(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
-                <th className="p-1"><Input value={fApproval} onChange={(e) => setFApproval(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
               </tr>
             </thead>
             <tbody>
@@ -327,9 +323,8 @@ export default function FinanceReportsTab() {
                     <td className="p-2 font-medium">{p._display}</td>
                     <td className="p-2"><Money value={debtor} tone="debit" /></td>
                     <td className="p-2"><Money value={creditor} tone="credit" /></td>
+                    <td className="p-2"><Money value={bal} tone={bal < 0 ? "debit" : bal > 0 ? "credit" : "neutral"} /></td>
                     <td className="p-2"><Money value={Number(p.request_balance ?? 0)} tone="neutral" /></td>
-                    <td className="p-2 text-xs text-muted-foreground">{p.status || "—"}</td>
-                    <td className="p-2 text-xs text-muted-foreground">{p.approval_status || "—"}</td>
                   </tr>
                 );
               })}
