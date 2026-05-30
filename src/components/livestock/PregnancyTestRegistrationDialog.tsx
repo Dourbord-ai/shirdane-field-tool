@@ -232,7 +232,20 @@ export default function PregnancyTestRegistrationDialog({
               <Label>
                 نوع تست آبستنی <span className="text-destructive">*</span>
               </Label>
-              <Select value={testType} onValueChange={(v) => setTestType(v as TestType)} dir="rtl">
+              <Select
+                value={testType}
+                onValueChange={(v) => {
+                  const next = v as TestType;
+                  setTestType(next);
+                  // اگر کاربر قبلاً «مشکوک» را برای تست اولیه انتخاب کرده بود
+                  // و حالا نوع تست را به نهایی/تکمیلی/خشکی تغییر داد، مقدار
+                  // نتیجه باید پاک شود تا از ثبت ترکیب نامعتبر جلوگیری شود.
+                  if (result && !ALLOWED_RESULTS_BY_TYPE[next].includes(result as ResultValue)) {
+                    setResult("");
+                  }
+                }}
+                dir="rtl"
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="انتخاب کنید" />
                 </SelectTrigger>
