@@ -1093,10 +1093,8 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
 
           <TabsContent value="dry_off">
             <TabInsightHeader tab="dry_off" summary={summary} />
-            <EventList
+            <DryOffList
               events={byType.dry_off ?? []}
-              emptyText="خشک کردنی ثبت نشده است"
-              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
