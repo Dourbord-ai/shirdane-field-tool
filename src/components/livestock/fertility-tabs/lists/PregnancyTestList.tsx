@@ -37,6 +37,43 @@ const TEST_NUMBER_LABELS: Record<string, string> = {
   dry: "تست خشکی",
 };
 
+// Normalize any stored result value (Persian, English, legacy variants) to
+// a single canonical key so we can render a consistent colored badge.
+// Source of truth: registration form writes the Persian label into `result`
+// and the English code into `metadata.result`. Older rows may have stored
+// either form, so we accept both.
+type ResultKind = "positive" | "negative" | "suspicious";
+function normalizeResult(raw: string): ResultKind | null {
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  if (v === "positive" || v === "مثبت") return "positive";
+  if (v === "negative" || v === "منفی") return "negative";
+  if (v === "suspicious" || v === "suspect" || v === "مشکوک") return "suspicious";
+  return null;
+}
+
+const RESULT_BADGE: Record<ResultKind, { label: string; className: string }> = {
+  // سبز/قرمز/زرد طبق گاید برند داشبورد. از توکن‌های موجود استفاده می‌کنیم
+  // تا در تم تاریک هم خوانا باشد.
+  positive: { label: "مثبت", className: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" },
+  negative: { label: "منفی", className: "bg-red-500/15 text-red-300 border border-red-500/30" },
+  suspicious: { label: "مشکوک", className: "bg-amber-500/15 text-amber-300 border border-amber-500/30" },
+};
+
+function ResultBadge({ value }: { value: string }) {
+  const kind = normalizeResult(value);
+  if (!kind) {
+    // مقدار ناشناخته را به‌صورت متن خام نشان می‌دهیم تا داده‌ای پنهان نشود.
+    return <span className="text-muted-foreground">{value || "—"}</span>;
+  }
+  const cfg = RESULT_BADGE[kind];
+  return (
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
 export default function PregnancyTestList({ events, onEdit, onCancel, resolveUserName }: Props) {
   if (events.length === 0) return <EmptyState text="تست آبستنی ثبت نشده است" />;
 
