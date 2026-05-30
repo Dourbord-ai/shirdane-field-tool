@@ -3206,6 +3206,283 @@ export type Database = {
           },
         ]
       }
+      finance_check_events: {
+        Row: {
+          check_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          event_date: string
+          event_type: Database["public"]["Enums"]["check_event_type"]
+          id: string
+          metadata: Json
+        }
+        Insert: {
+          check_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          event_date?: string
+          event_type: Database["public"]["Enums"]["check_event_type"]
+          id?: string
+          metadata?: Json
+        }
+        Update: {
+          check_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          event_date?: string
+          event_type?: Database["public"]["Enums"]["check_event_type"]
+          id?: string
+          metadata?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_check_events_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "finance_checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_check_links: {
+        Row: {
+          check_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          link_id: string
+          link_type: string
+        }
+        Insert: {
+          check_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          link_id: string
+          link_type: string
+        }
+        Update: {
+          check_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          link_id?: string
+          link_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_check_links_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "finance_checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_checkbook_leaves: {
+        Row: {
+          checkbook_id: string
+          created_at: string
+          description: string | null
+          id: string
+          issued_check_id: string | null
+          serial_number: number
+          status: Database["public"]["Enums"]["checkbook_leaf_status"]
+          updated_at: string
+          used_at: string | null
+          voided_at: string | null
+        }
+        Insert: {
+          checkbook_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          issued_check_id?: string | null
+          serial_number: number
+          status?: Database["public"]["Enums"]["checkbook_leaf_status"]
+          updated_at?: string
+          used_at?: string | null
+          voided_at?: string | null
+        }
+        Update: {
+          checkbook_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          issued_check_id?: string | null
+          serial_number?: number
+          status?: Database["public"]["Enums"]["checkbook_leaf_status"]
+          updated_at?: string
+          used_at?: string | null
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_checkbook_leaves_checkbook_id_fkey"
+            columns: ["checkbook_id"]
+            isOneToOne: false
+            referencedRelation: "finance_checkbooks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_checkbook_leaves_issued_check_id_fkey"
+            columns: ["issued_check_id"]
+            isOneToOne: false
+            referencedRelation: "finance_checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_checkbooks: {
+        Row: {
+          bank_account_id: string | null
+          bank_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          end_serial: number
+          id: string
+          is_active: boolean
+          issued_at: string | null
+          sheet_count: number | null
+          start_serial: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          bank_account_id?: string | null
+          bank_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_serial: number
+          id?: string
+          is_active?: boolean
+          issued_at?: string | null
+          sheet_count?: number | null
+          start_serial: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          bank_account_id?: string | null
+          bank_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_serial?: number
+          id?: string
+          is_active?: boolean
+          issued_at?: string | null
+          sheet_count?: number | null
+          start_serial?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_checkbooks_bank_id_fkey"
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_checks: {
+        Row: {
+          amount: number
+          bank_account_id: string | null
+          bank_effected_at: string | null
+          bank_id: string | null
+          check_number: string
+          checkbook_leaf_id: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          direction: Database["public"]["Enums"]["check_direction"]
+          due_date: string
+          id: string
+          issue_date: string | null
+          party_effected_at: string | null
+          party_id: string | null
+          receive_date: string | null
+          sayad_number: string | null
+          status: Database["public"]["Enums"]["check_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          bank_account_id?: string | null
+          bank_effected_at?: string | null
+          bank_id?: string | null
+          check_number: string
+          checkbook_leaf_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direction: Database["public"]["Enums"]["check_direction"]
+          due_date: string
+          id?: string
+          issue_date?: string | null
+          party_effected_at?: string | null
+          party_id?: string | null
+          receive_date?: string | null
+          sayad_number?: string | null
+          status: Database["public"]["Enums"]["check_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bank_account_id?: string | null
+          bank_effected_at?: string | null
+          bank_id?: string | null
+          check_number?: string
+          checkbook_leaf_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direction?: Database["public"]["Enums"]["check_direction"]
+          due_date?: string
+          id?: string
+          issue_date?: string | null
+          party_effected_at?: string | null
+          party_id?: string | null
+          receive_date?: string | null
+          sayad_number?: string | null
+          status?: Database["public"]["Enums"]["check_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_checks_bank_id_fkey"
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "finance_banks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_checks_leaf_fkey"
+            columns: ["checkbook_leaf_id"]
+            isOneToOne: false
+            referencedRelation: "finance_checkbook_leaves"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_checks_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_feature_flags: {
         Row: {
           description: string | null
@@ -6159,6 +6436,40 @@ export type Database = {
       }
     }
     Enums: {
+      check_direction: "received" | "payable"
+      check_event_type:
+        | "received"
+        | "issued"
+        | "deposited_to_bank"
+        | "transferred_to_party"
+        | "delivered"
+        | "cleared"
+        | "bounced"
+        | "voided"
+        | "marked_lost"
+        | "party_effect_posted"
+        | "bank_effect_posted"
+        | "note"
+        | "status_change"
+      check_status:
+        | "draft"
+        | "received"
+        | "in_cashbox"
+        | "deposited_to_bank"
+        | "transferred_to_party"
+        | "issued"
+        | "delivered"
+        | "cleared"
+        | "bounced"
+        | "voided"
+        | "lost"
+      checkbook_leaf_status:
+        | "available"
+        | "issued"
+        | "cleared"
+        | "bounced"
+        | "voided"
+        | "lost"
       line_role:
         | "inventory"
         | "ap"
@@ -6297,6 +6608,43 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      check_direction: ["received", "payable"],
+      check_event_type: [
+        "received",
+        "issued",
+        "deposited_to_bank",
+        "transferred_to_party",
+        "delivered",
+        "cleared",
+        "bounced",
+        "voided",
+        "marked_lost",
+        "party_effect_posted",
+        "bank_effect_posted",
+        "note",
+        "status_change",
+      ],
+      check_status: [
+        "draft",
+        "received",
+        "in_cashbox",
+        "deposited_to_bank",
+        "transferred_to_party",
+        "issued",
+        "delivered",
+        "cleared",
+        "bounced",
+        "voided",
+        "lost",
+      ],
+      checkbook_leaf_status: [
+        "available",
+        "issued",
+        "cleared",
+        "bounced",
+        "voided",
+        "lost",
+      ],
       line_role: [
         "inventory",
         "ap",

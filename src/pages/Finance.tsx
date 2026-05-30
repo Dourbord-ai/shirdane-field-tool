@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LayoutDashboard, Building2, ArrowRightLeft, ClipboardList, ArrowDownToLine, ArrowLeftRight, Repeat, Users, FileText, Settings, FileSpreadsheet, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Building2, ArrowRightLeft, ClipboardList, ArrowDownToLine, ArrowLeftRight, Repeat, Users, FileText, Settings, FileSpreadsheet, BarChart3, ScrollText } from "lucide-react";
+import ChecksTab from "@/components/finance/checks/ChecksTab";
 import BankImportTemplatesTab from "@/components/finance/tabs/BankImportTemplatesTab";
 import { cn } from "@/lib/utils";
 import FinanceDashboardTab from "@/components/finance/tabs/FinanceDashboardTab";
@@ -26,7 +27,7 @@ const TABS = [
   { key: "party-transfer", label: "انتقال بین ذینفع", icon: Repeat },
   { key: "parties", label: "ذینفعان", icon: Users },
   { key: "vouchers", label: "اسناد مالی", icon: FileText },
-  { key: "vouchers", label: "اسناد مالی", icon: FileText },
+  { key: "checks", label: "مدیریت چک‌ها", icon: ScrollText },
   { key: "reports", label: "گزارش‌ها", icon: BarChart3 },
   { key: "import-templates", label: "قالب‌های فایل بانکی", icon: FileSpreadsheet },
   { key: "sepidar", label: "تنظیمات سپیدار", icon: Settings },
@@ -81,7 +82,7 @@ export default function Finance() {
         {tab === "party-transfer" && <PartyTransferTab />}
         {tab === "parties" && <PartiesTab />}
         {tab === "vouchers" && <VouchersTab />}
-        {tab === "vouchers" && <VouchersTab />}
+        {tab === "checks" && <ChecksTab />}
         {tab === "reports" && <FinanceReportsTab />}
         {tab === "import-templates" && <BankImportTemplatesTab />}
 
