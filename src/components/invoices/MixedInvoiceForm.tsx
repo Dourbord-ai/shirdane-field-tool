@@ -387,25 +387,52 @@ export default function MixedInvoiceForm() {
       //    header so legacy code paths that branch on factors.product_type
       //    can recognize the new normalized invoices and skip per-product
       //    handling. (Existing factors retain their original value.)
-      const { data: factor, error: hdrErr } = await supabase
+      //
+      //    For sales invoices the DB has a partial unique index on
+      //    invoice_number. If a concurrent operator just claimed our
+      //    auto-suggested number, we recover ONCE: re-fetch the next number,
+      //    update local state so the UI reflects it, and retry the insert.
+      const buildHeader = (number: string | null) => ({
+        product_type: "mixed",
+        invoice_type: invoiceType,
+        factor_type_id: invoiceType === "buy" ? 1 : invoiceType === "sell" ? 2 : null,
+        invoice_date: isoDate,
+        invoice_number: number,
+        tax: tax === "yes" ? "دارد" : "ندارد",
+        finance_party_id: financePartyId || null,
+        discount: totals.discountSum,
+        shipping: 0,
+        tax_amount: totals.taxSum,
+        total_amount: totals.total,
+        payable_amount: totals.payable,
+        description: description || null,
+      });
+
+      let { data: factor, error: hdrErr } = await supabase
         .from("factors")
-        .insert({
-          product_type: "mixed",
-          invoice_type: invoiceType,
-          factor_type_id: invoiceType === "buy" ? 1 : invoiceType === "sell" ? 2 : null,
-          invoice_date: isoDate,
-          invoice_number: invoiceNumber || null,
-          tax: tax === "yes" ? "دارد" : "ندارد",
-          finance_party_id: financePartyId || null,
-          discount: totals.discountSum,
-          shipping: 0,
-          tax_amount: totals.taxSum,
-          total_amount: totals.total,
-          payable_amount: totals.payable,
-          description: description || null,
-        })
+        .insert(buildHeader(invoiceNumber || null))
         .select("id")
         .single();
+
+      // Duplicate-key recovery (sales only). We match the same regex the
+      // legacy form used so behavior is consistent.
+      if (
+        hdrErr &&
+        isSale &&
+        /factors_sales_invoice_number_unique|duplicate key/i.test(hdrErr.message ?? "")
+      ) {
+        const next = await fetchNextSalesInvoiceNumber();
+        if (next) {
+          setInvoiceNumber(next);
+          const retry = await supabase
+            .from("factors")
+            .insert(buildHeader(next))
+            .select("id")
+            .single();
+          factor = retry.data;
+          hdrErr = retry.error;
+        }
+      }
 
       if (hdrErr || !factor) throw hdrErr ?? new Error("factor insert failed");
 
