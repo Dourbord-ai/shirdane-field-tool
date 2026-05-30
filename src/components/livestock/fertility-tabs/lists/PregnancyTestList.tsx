@@ -64,8 +64,16 @@ export default function PregnancyTestList({ events, onEdit, onCancel, resolveUse
       <tbody>
         {events.map((e) => {
           const { date, time } = formatEventDateTime(e.event_date, pick(e.metadata, "time"));
-          const testType = pick<string>(e.metadata, "test_type");
-          const testNumber = testType ? TEST_NUMBER_LABELS[testType] ?? testType : "";
+          // Priority chain per business rule:
+          //  1) fertility_operation_id (structured business key — preferred)
+          //  2) metadata.test_type (legacy fallback for old rows)
+          //  3) «نامشخص» when neither is present
+          const opId = e.fertility_operation_id ?? null;
+          const legacyType = pick<string>(e.metadata, "test_type");
+          const testNumber =
+            (opId != null && OP_ID_LABELS[opId]) ||
+            (legacyType && (TEST_NUMBER_LABELS[legacyType] ?? legacyType)) ||
+            "نامشخص";
           
           const result = e.result || pick<string>(e.metadata, "result_label") || "";
           const vet =
