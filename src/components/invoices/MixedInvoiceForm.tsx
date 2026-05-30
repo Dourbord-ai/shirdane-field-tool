@@ -669,6 +669,37 @@ export default function MixedInvoiceForm() {
           detailPayload[key] = isNumeric ? num(raw) : raw;
         }
 
+        // Medicine-specific: snapshot every catalog-derived column from the
+        // chosen medicine_products row into factor_item_medicine_details, so
+        // the invoice line history stays correct even if the catalog row
+        // gets edited or deactivated later.
+        if (row.product_type === "medicine" && row.medicineProduct) {
+          const m = row.medicineProduct;
+          // medicine_name kept for backward compatibility with legacy code
+          // that reads the old text column (display fallback).
+          detailPayload.medicine_product_id = m.id;
+          detailPayload.medicine_name =
+            m.commercial_product_name_fa ?? m.commercial_product_name_en ?? null;
+          detailPayload.commercial_product_name_fa = m.commercial_product_name_fa;
+          detailPayload.commercial_product_name_en = m.commercial_product_name_en;
+          detailPayload.active_ingredient_fa = m.name_fa;
+          detailPayload.active_ingredient_en = m.name_en;
+          detailPayload.company_name_fa = m.company_name_fa;
+          detailPayload.company_name_en = m.company_name_en;
+          detailPayload.company_country = m.company_country;
+          detailPayload.dosage_form = m.dosage_form;
+          detailPayload.route_fa = m.route_fa;
+          detailPayload.category_fa = m.category_fa;
+          detailPayload.milk_withdrawal_days = m.milk_withdrawal_days;
+          detailPayload.meat_withdrawal_days = m.meat_withdrawal_days;
+          detailPayload.label_verification_status = m.label_verification_status;
+          // Legacy `manufacturer` column kept populated from the new
+          // company_name_fa so any existing reports continue to render.
+          if (!detailPayload.manufacturer) {
+            detailPayload.manufacturer = m.company_name_fa ?? m.company_name_en ?? null;
+          }
+        }
+
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
           // map, so this dynamic .from() is safe.
