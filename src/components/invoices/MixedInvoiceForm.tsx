@@ -599,16 +599,20 @@ export default function MixedInvoiceForm() {
       ) {
         const next = await fetchNextSalesInvoiceNumber();
         if (next) {
+          autoFilledRef.current = true;
           setInvoiceNumber(next);
-          const retry = await supabase
-            .from("factors")
-            .insert(buildHeader(next))
-            .select("id")
-            .single();
-          factor = retry.data;
-          hdrErr = retry.error;
         }
+        toast({
+          title: "شماره فاکتور تکراری است",
+          description:
+            "شماره فاکتور تکراری است، لطفاً شماره جدید دریافت کنید یا صفحه را تازه‌سازی کنید.",
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
       }
+
+      if (hdrErr || !factor) throw hdrErr ?? new Error("factor insert failed");
 
       if (hdrErr || !factor) throw hdrErr ?? new Error("factor insert failed");
 
