@@ -21,7 +21,8 @@ import { useInvalidateChecks } from "@/hooks/useChecks";
 import { useCheckbooks, useAvailableLeaves, useInvalidateCheckbooks } from "@/hooks/useCheckbooks";
 import { partyLabel, bankLabel } from "@/lib/checks";
 import { jalaliToGregorian } from "@/lib/jalali";
-import { parseMoney, formatMoney, toPersianDigitsSafe } from "@/lib/finance";
+import { parseMoney, formatMoney } from "@/lib/finance";
+import { toPersianDigits } from "@/lib/jalali";
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void }
 
