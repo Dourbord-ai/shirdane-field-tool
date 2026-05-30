@@ -35,6 +35,9 @@ import { useNavigate } from "react-router-dom";
 // medicine_products catalog). Designed as a global component so it can later
 // power treatments / prescriptions / inventory the same way.
 import MedicineProductPicker, { MedicineProduct } from "@/components/medicine/MedicineProductPicker";
+// Same architecture as MedicineProductPicker: per-field server-side search
+// over feed_products, snapshot the full row into the invoice line on save.
+import FeedProductPicker, { FeedProduct } from "@/components/feed/FeedProductPicker";
 
 // ---------------------------------------------------------------------------
 // Static option lists. These are intentionally local to the new form so
