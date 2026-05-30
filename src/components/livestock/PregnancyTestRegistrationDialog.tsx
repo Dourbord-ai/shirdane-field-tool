@@ -61,6 +61,14 @@ const RESULT_LABELS: Record<ResultValue, string> = {
   suspicious: "مشکوک",
 };
 
+// «مشکوک» فقط برای تست اولیه مجاز است. سایر انواع تست فقط مثبت/منفی دارند.
+const ALLOWED_RESULTS_BY_TYPE: Record<TestType, ResultValue[]> = {
+  initial: ["positive", "negative", "suspicious"],
+  final: ["positive", "negative"],
+  extra: ["positive", "negative"],
+  dry: ["positive", "negative"],
+};
+
 const STATUS_CODE_MAP: Record<TestType, Partial<Record<ResultValue, number>>> = {
   initial: { positive: 4, suspicious: 5, negative: 6 },
   final: { positive: 8, negative: 7 },
@@ -224,7 +232,20 @@ export default function PregnancyTestRegistrationDialog({
               <Label>
                 نوع تست آبستنی <span className="text-destructive">*</span>
               </Label>
-              <Select value={testType} onValueChange={(v) => setTestType(v as TestType)} dir="rtl">
+              <Select
+                value={testType}
+                onValueChange={(v) => {
+                  const next = v as TestType;
+                  setTestType(next);
+                  // اگر کاربر قبلاً «مشکوک» را برای تست اولیه انتخاب کرده بود
+                  // و حالا نوع تست را به نهایی/تکمیلی/خشکی تغییر داد، مقدار
+                  // نتیجه باید پاک شود تا از ثبت ترکیب نامعتبر جلوگیری شود.
+                  if (result && !ALLOWED_RESULTS_BY_TYPE[next].includes(result as ResultValue)) {
+                    setResult("");
+                  }
+                }}
+                dir="rtl"
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="انتخاب کنید" />
                 </SelectTrigger>
@@ -267,7 +288,7 @@ export default function PregnancyTestRegistrationDialog({
                 onValueChange={(v) => setResult(v as ResultValue)}
                 className="flex flex-wrap gap-4"
               >
-                {(Object.keys(RESULT_LABELS) as ResultValue[]).map((r) => (
+                {(testType ? ALLOWED_RESULTS_BY_TYPE[testType] : (Object.keys(RESULT_LABELS) as ResultValue[])).map((r) => (
                   <div key={r} className="flex items-center gap-2">
                     <RadioGroupItem value={r} id={`pt-${r}`} />
                     <Label htmlFor={`pt-${r}`} className="cursor-pointer">

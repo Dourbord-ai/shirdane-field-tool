@@ -89,7 +89,7 @@ export default function HeatList({ events, onEdit, onCancel, resolveUserName }: 
           <Th>کیفیت</Th>
           <Th>ترشحات</Th>
           <Th>عفونت رحمی</Th>
-          <Th>ثبت‌کننده</Th>
+          <Th>گزارش‌دهنده فحلی</Th>
           <Th>یادداشت</Th>
           <Th>وضعیت</Th>
           <Th className="text-left">عملیات</Th>
