@@ -1482,9 +1482,38 @@ export default function NewInvoice() {
     );
   }
 
+  // -------------------------------------------------------------------
+  // Mixed (normalized) mode toggle.
+  // The legacy form below uses a SINGLE global `productType` per invoice.
+  // The new MixedInvoiceForm writes to factors + factor_items + per-type
+  // detail tables and supports per-row product_type. We render either one
+  // based on a local toggle so this page can serve both flows during the
+  // migration window without touching any of the legacy state above.
+  // -------------------------------------------------------------------
+  if (useMixedMode) {
+    return (
+      <div className="py-6 space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h1 className="text-heading text-foreground">ثبت فاکتور جدید (حالت ترکیبی)</h1>
+          <Button variant="outline" size="sm" onClick={() => setUseMixedMode(false)}>
+            بازگشت به فرم کلاسیک
+          </Button>
+        </div>
+        <MixedInvoiceForm />
+      </div>
+    );
+  }
+
   return (
     <div className="py-6 space-y-4 animate-fade-in">
-      <h1 className="text-heading text-foreground">ثبت فاکتور جدید</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-heading text-foreground">ثبت فاکتور جدید</h1>
+        <Button variant="outline" size="sm" onClick={() => setUseMixedMode(true)}>
+          حالت ترکیبی (جدید)
+        </Button>
+      </div>
+
+
 
       {/* Product Type */}
       <SearchableSelect
