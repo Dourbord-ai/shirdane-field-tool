@@ -288,7 +288,7 @@ export default function PregnancyTestRegistrationDialog({
                 onValueChange={(v) => setResult(v as ResultValue)}
                 className="flex flex-wrap gap-4"
               >
-                {(Object.keys(RESULT_LABELS) as ResultValue[]).map((r) => (
+                {(testType ? ALLOWED_RESULTS_BY_TYPE[testType] : (Object.keys(RESULT_LABELS) as ResultValue[])).map((r) => (
                   <div key={r} className="flex items-center gap-2">
                     <RadioGroupItem value={r} id={`pt-${r}`} />
                     <Label htmlFor={`pt-${r}`} className="cursor-pointer">
