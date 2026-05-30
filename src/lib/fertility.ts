@@ -29,6 +29,10 @@ export type FertilityEvent = {
   // rows imported from CowPregnancies — falls back to operator_name (which the
   // old pregnancy dialog historically used for the vet field).
   doctor_name?: string | null;
+  // Structured business key for the specific operation (e.g. for pregnancy
+  // tests: 3=initial, 4=final, 11=extra, 12=dry). Preferred source of truth
+  // over metadata.test_type for classification in reports/lists.
+  fertility_operation_id?: number | null;
   notes: string | null;
   metadata: Record<string, unknown> | null;
   legacy_table_name: string | null;
