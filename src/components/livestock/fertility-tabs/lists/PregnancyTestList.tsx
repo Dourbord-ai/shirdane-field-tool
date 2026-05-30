@@ -53,7 +53,7 @@ export default function PregnancyTestList({ events, onEdit, onCancel, resolveUse
           const { date, time } = formatEventDateTime(e.event_date, pick(e.metadata, "time"));
           const testType = pick<string>(e.metadata, "test_type");
           const testNumber = testType ? TEST_NUMBER_LABELS[testType] ?? testType : "";
-          const method = pick<string>(e.metadata, "test_type_label");
+          
           const result = e.result || pick<string>(e.metadata, "result_label") || "";
           const vet =
             pick<string>(e.metadata, "doctor_name") ||
