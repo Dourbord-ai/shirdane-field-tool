@@ -5775,6 +5775,69 @@ export type Database = {
           },
         ]
       }
+      milk_production_alerts: {
+        Row: {
+          animal_number: string | null
+          baseline_kg: number
+          baseline_mode: string
+          baseline_records_count: number
+          created_at: string
+          diff_kg: number
+          diff_pct: number
+          direction: string
+          id: string
+          livestock_id: number
+          notes: string | null
+          notified_at: string | null
+          reference_date: string
+          session: string | null
+          status: string
+          threshold_pct: number
+          today_kg: number
+          updated_at: string
+        }
+        Insert: {
+          animal_number?: string | null
+          baseline_kg: number
+          baseline_mode: string
+          baseline_records_count: number
+          created_at?: string
+          diff_kg: number
+          diff_pct: number
+          direction: string
+          id?: string
+          livestock_id: number
+          notes?: string | null
+          notified_at?: string | null
+          reference_date: string
+          session?: string | null
+          status?: string
+          threshold_pct: number
+          today_kg: number
+          updated_at?: string
+        }
+        Update: {
+          animal_number?: string | null
+          baseline_kg?: number
+          baseline_mode?: string
+          baseline_records_count?: number
+          created_at?: string
+          diff_kg?: number
+          diff_pct?: number
+          direction?: string
+          id?: string
+          livestock_id?: number
+          notes?: string | null
+          notified_at?: string | null
+          reference_date?: string
+          session?: string | null
+          status?: string
+          threshold_pct?: number
+          today_kg?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       milk_receipts: {
         Row: {
           created_at: string

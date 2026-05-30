@@ -1,29 +1,31 @@
 // ---------------------------------------------------------------------------
-// MilkRecordsReport — Executive milk production dashboard (Version 2)
+// MilkRecordsReport — Executive milk production dashboard (Version 3)
 // Mounts under /reports → tab "رکورد شیر".
 //
-// V2 additions (per user request):
-//   • Baseline picker — compare today against:
-//       prev_day  → روز قبل  (legacy default)
-//       avg3      → میانگین ۳ روز اخیر
-//       avg7      → میانگین ۷ روز اخیر
-//       same_dow  → هفته قبل، روز مشابه
-//   • Threshold input — کاربر درصد کاهش/افزایش هشدار را وارد می‌کند.
-//       اگر |Δ| ≥ آستانه، آیکن قرمز خطر (AlertTriangle) کنار KPI ظاهر می‌شود.
-//   • All on-screen dates are Shamsi (تاریخ شمسی).
-//   • The date filter is a ShamsiDatePicker (not a Gregorian native input).
-//
-// Schema used (unchanged):
-//   livestock_milk_records(livestock_id, record_date, period{1,2,3},
-//                          milk_amount, is_cancelled)
-//   livestock_items(id, animal_number)
+// V3 changes (per user request):
+//   • Baseline picker is now RECORD-BASED, not day-based:
+//       prev3   → سه رکورد قبلی  (last 3 milk records for the cow)
+//       prev6   → شش رکورد قبلی
+//       prev12  → دوازده رکورد قبلی
+//     Farm-level KPI uses the union of these per-cow baseline dates, but the
+//     per-cow alerts (which the messaging worker will consume) always use
+//     each cow's OWN last-N records — so a cow milked irregularly is judged
+//     against its own history, not the herd's calendar.
+//   • Default «آستانه هشدار» raised to 20% (was 10%).
+//   • New «هشدار افت/افزایش تولید» section: per-cow alerts with kg + percent
+//     difference, plus a button to persist them into
+//     public.milk_production_alerts so a future SMS / push worker can pick
+//     them up. Re-running for the same (cow, date, baseline, session)
+//     upserts safely thanks to the unique index.
+//   • All on-screen dates remain Shamsi.
 // ---------------------------------------------------------------------------
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactECharts from "echarts-for-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -38,33 +40,30 @@ import {
 } from "@/lib/jalali";
 import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import {
-  AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Filter, Milk,
+  AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BellRing, Filter, Milk, Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ------ Constants -----------------------------------------------------------
-// Period codes used in livestock_milk_records.period (smallint).
 const SESSIONS: Record<number, string> = { 1: "صبح", 2: "ظهر", 3: "عصر" };
 const SESSION_COLORS: Record<number, string> = {
-  1: "#fbbf24", // amber morning
-  2: "#22d3ee", // cyan noon
-  3: "#a78bfa", // violet evening
+  1: "#fbbf24",
+  2: "#22d3ee",
+  3: "#a78bfa",
 };
 
-// Baseline modes — drive the KPI comparison + the «اختلاف» column on Top10.
-// Each mode has a Persian label and a function that returns the list of
-// reference dates (YYYY-MM-DD) we need to fetch to compute the baseline value.
-type BaselineKey = "prev_day" | "avg3" | "avg7" | "same_dow";
+// NEW — Record-based baseline. Each key maps to N = number of previous
+// milk records (per cow) used to compute the baseline average.
+type BaselineKey = "prev3" | "prev6" | "prev12";
 const BASELINE_LABEL: Record<BaselineKey, string> = {
-  prev_day: "روز قبل",
-  avg3: "میانگین ۳ روز اخیر",
-  avg7: "میانگین ۷ روز اخیر",
-  same_dow: "هفته قبل، روز مشابه",
+  prev3: "سه رکورد قبلی",
+  prev6: "شش رکورد قبلی",
+  prev12: "دوازده رکورد قبلی",
 };
+const BASELINE_N: Record<BaselineKey, number> = { prev3: 3, prev6: 6, prev12: 12 };
 
 // ------ Date helpers --------------------------------------------------------
-// Returns YYYY-MM-DD for a Date in LOCAL time (we never want UTC drift since
-// `record_date` is a calendar date stored without timezone).
 function isoLocal(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -72,12 +71,8 @@ function isoLocal(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
+  const x = new Date(d); x.setDate(x.getDate() + n); return x;
 }
-// Bridge between ShamsiDatePicker (string "YYYY/MM/DD" in Jalali) and the
-// gregorian ISO strings we use everywhere else in the component / DB queries.
 function isoToShamsiString(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   const j = gregorianToJalali(y, m, d);
@@ -89,25 +84,16 @@ function shamsiStringToIso(s: string): string {
   return `${g.year}-${String(g.month).padStart(2, "0")}-${String(g.day).padStart(2, "0")}`;
 }
 
-// Build the list of baseline dates for the chosen mode. Always returns dates
-// strictly BEFORE `refIso` so we never average the reference day into itself.
-function baselineDates(refIso: string, mode: BaselineKey): string[] {
-  const ref = new Date(refIso);
-  switch (mode) {
-    case "prev_day":  return [isoLocal(addDays(ref, -1))];
-    case "avg3":      return [1, 2, 3].map((i) => isoLocal(addDays(ref, -i)));
-    case "avg7":      return [1, 2, 3, 4, 5, 6, 7].map((i) => isoLocal(addDays(ref, -i)));
-    case "same_dow":  return [isoLocal(addDays(ref, -7))];
-  }
-}
-
 // ------ Format helpers ------------------------------------------------------
 function fmtKg(n: number): string {
-  // Persian digits + thousand separators; one decimal so small totals don't read as zero.
   return toPersianDigits(n.toLocaleString("en-US", { maximumFractionDigits: 1 })) + " kg";
 }
+function fmtKgSigned(n: number): string {
+  // For diff_kg display: explicit sign so "+2.4" / "−3.1" are unambiguous.
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  return `${sign}${toPersianDigits(Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 1 }))} kg`;
+}
 function fmtPct(n: number): string {
-  // Negative sign forced LTR-style at left (matches the project's number style).
   const sign = n > 0 ? "+" : n < 0 ? "−" : "";
   const abs = Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 1 });
   return `${sign}${toPersianDigits(abs)}%`;
@@ -116,64 +102,166 @@ function fmtPct(n: number): string {
 // ============================================================================
 export default function MilkRecordsReport() {
   // -- Global filter state --------------------------------------------------
-  // `date` is the "reference day" used by KPI cards, session bar, and top-cow
-  // comparison. Trend chart is anchored to this date and looks back `range` days.
   const [date, setDate] = useState<string>(() => isoLocal(new Date()));
   const [session, setSession] = useState<"all" | "1" | "2" | "3">("all");
   const [cowFilter, setCowFilter] = useState<string>("");
   const [range, setRange] = useState<7 | 30 | 90>(7);
-  // NEW — baseline mode for the comparison, plus the user-defined alert
-  // threshold (in percent). Threshold defaults to 10% which is a sensible
-  // alarm for daily total milk swings.
-  const [baseline, setBaseline] = useState<BaselineKey>("prev_day");
-  const [threshold, setThreshold] = useState<number>(10);
+  // NEW — record-based baseline; default threshold bumped to 20%.
+  const [baseline, setBaseline] = useState<BaselineKey>("prev3");
+  const [threshold, setThreshold] = useState<number>(20);
 
-  // Derived dates we reuse below.
+  const queryClient = useQueryClient();
   const rangeFrom = useMemo(() => isoLocal(addDays(new Date(date), -(range - 1))), [date, range]);
-  // The set of baseline dates derived from the chosen mode. Memoised so
-  // queries below get a stable key (TanStack Query uses deep-equal on keys).
-  const baseDates = useMemo(() => baselineDates(date, baseline), [date, baseline]);
+  const baselineN = BASELINE_N[baseline];
 
   // -------------------------------------------------------------------------
-  // Q1 — KPI totals: today + baseline window (respecting session filter).
-  // Baseline KPI value is the AVERAGE of the daily totals across `baseDates`
-  // (avg-3/avg-7) or just that single day (prev_day / same_dow).
+  // Q-CORE — One wide fetch that powers KPIs, top-10, and per-cow alerts.
+  //
+  // We pull every record from the previous 120 days for cows that have at
+  // least one record on `date`. 120 days is enough to almost always cover
+  // 12 previous records even for cows milked twice a week, while keeping
+  // the payload bounded. Slicing per-cow happens in JS.
   // -------------------------------------------------------------------------
-  const kpis = useQuery({
-    queryKey: ["milk-kpis", date, session, baseline, baseDates.join(",")],
+  const core = useQuery({
+    queryKey: ["milk-core", date, session, baseline],
     queryFn: async () => {
-      // Fetch the reference day plus every baseline date in a single round-trip.
-      const wanted = Array.from(new Set([date, ...baseDates]));
-      let q = supabase
+      // Step 1 — Find cows that produced milk on the reference date.
+      let todayQ = supabase
         .from("livestock_milk_records")
-        .select("livestock_id, milk_amount, record_date, period")
-        .in("record_date", wanted)
+        .select("livestock_id, milk_amount, period")
+        .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
-      if (session !== "all") q = q.eq("period", Number(session));
-      const { data, error } = await q;
-      if (error) throw error;
+      if (session !== "all") todayQ = todayQ.eq("period", Number(session));
+      const { data: todayRows, error: e1 } = await todayQ;
+      if (e1) throw e1;
 
-      // Daily totals keyed by record_date — used to compute today + baseline.
-      const dailyTotals = new Map<string, number>();
-      const todayCows = new Set<number>();
-      for (const r of data || []) {
-        const amt = Number(r.milk_amount) || 0;
-        dailyTotals.set(r.record_date, (dailyTotals.get(r.record_date) || 0) + amt);
-        if (r.record_date === date) todayCows.add(Number(r.livestock_id));
+      // Per-cow total for today (sums across sessions if session = "all").
+      const todayByCow = new Map<number, number>();
+      for (const r of todayRows || []) {
+        const id = Number(r.livestock_id);
+        todayByCow.set(id, (todayByCow.get(id) || 0) + Number(r.milk_amount || 0));
       }
-      const today = dailyTotals.get(date) || 0;
-      // Average daily total across baseline dates. We treat a missing day as 0
-      // (no records). Caller decides if 0 is meaningful via the UI label.
-      const baseSum = baseDates.reduce((s, d) => s + (dailyTotals.get(d) || 0), 0);
-      const baseValue = baseDates.length > 0 ? baseSum / baseDates.length : 0;
-      const change = baseValue > 0 ? ((today - baseValue) / baseValue) * 100 : 0;
-      const avg = todayCows.size > 0 ? today / todayCows.size : 0;
-      return { today, baseValue, change, avg, cowCount: todayCows.size };
+      const cowIds = Array.from(todayByCow.keys());
+
+      // Animal numbers (denormalised onto alerts table later).
+      const numbers = new Map<number, string>();
+      if (cowIds.length) {
+        const { data: items } = await supabase
+          .from("livestock_items").select("id, animal_number").in("id", cowIds as any);
+        for (const it of items || []) numbers.set(Number(it.id), String(it.animal_number ?? it.id));
+      }
+
+      // Step 2 — Pull historic records for those cows in a 120-day window
+      // before `date`. We slice per-cow in JS to get the last N records.
+      const windowFrom = isoLocal(addDays(new Date(date), -120));
+      const windowTo = isoLocal(addDays(new Date(date), -1));
+      let histRows: Array<{ livestock_id: number; milk_amount: number; record_date: string; period: number }> = [];
+      if (cowIds.length) {
+        let histQ = supabase
+          .from("livestock_milk_records")
+          .select("livestock_id, milk_amount, record_date, period")
+          .in("livestock_id", cowIds as any)
+          .gte("record_date", windowFrom)
+          .lte("record_date", windowTo)
+          .or("is_cancelled.is.null,is_cancelled.eq.false")
+          .order("record_date", { ascending: false })
+          .limit(10000);
+        if (session !== "all") histQ = histQ.eq("period", Number(session));
+        const { data, error: e2 } = await histQ;
+        if (e2) throw e2;
+        histRows = (data || []).map((r) => ({
+          livestock_id: Number(r.livestock_id),
+          milk_amount: Number(r.milk_amount || 0),
+          record_date: r.record_date as string,
+          period: Number(r.period),
+        }));
+      }
+
+      // Step 3 — Build per-cow analysis: today, last-N average, diff.
+      //
+      // "Record" here = one (record_date, period) entry per cow. When the
+      // session filter is "all" we still treat each period as a separate
+      // record so prev3 = "last 3 sessions" rather than "last 3 days".
+      const perCow: Array<{
+        livestock_id: number;
+        animal_number: string;
+        today: number;
+        base: number;          // average of last N records (kg per record)
+        baseDailyAvg: number;  // for the farm-level KPI, average daily kg
+        diff_kg: number;
+        diff_pct: number;
+        records_used: number;
+        baseline_dates: string[];
+      }> = [];
+
+      // Group historic rows by cow.
+      const histByCow = new Map<number, Array<{ record_date: string; period: number; milk_amount: number }>>();
+      for (const r of histRows) {
+        const arr = histByCow.get(r.livestock_id) || [];
+        arr.push(r);
+        histByCow.set(r.livestock_id, arr);
+      }
+
+      for (const id of cowIds) {
+        // Already ordered desc by record_date thanks to the query, but we
+        // also need to break ties on period — newer period first within a day.
+        const arr = (histByCow.get(id) || []).slice().sort((a, b) => {
+          if (a.record_date < b.record_date) return 1;
+          if (a.record_date > b.record_date) return -1;
+          return b.period - a.period;
+        });
+        const lastN = arr.slice(0, baselineN);
+        const recordsUsed = lastN.length;
+        const sumN = lastN.reduce((s, r) => s + r.milk_amount, 0);
+        const base = recordsUsed > 0 ? sumN / recordsUsed : 0;
+        // For the herd KPI we want kg/day, so aggregate baseline by date and
+        // average the daily totals instead of per-record values.
+        const dailyMap = new Map<string, number>();
+        for (const r of lastN) {
+          dailyMap.set(r.record_date, (dailyMap.get(r.record_date) || 0) + r.milk_amount);
+        }
+        const baseDailyAvg = dailyMap.size > 0
+          ? Array.from(dailyMap.values()).reduce((a, b) => a + b, 0) / dailyMap.size
+          : 0;
+        const today = todayByCow.get(id) || 0;
+        // Comparison is record-vs-record: today's kg (this session or full
+        // day depending on filter) against the per-record average.
+        const refToday = session === "all" ? today : today; // unchanged either way
+        const refBase = session === "all" ? baseDailyAvg : base;
+        const diff_kg = Number((refToday - refBase).toFixed(2));
+        const diff_pct = refBase > 0 ? Number((((refToday - refBase) / refBase) * 100).toFixed(2)) : 0;
+        perCow.push({
+          livestock_id: id,
+          animal_number: numbers.get(id) || String(id),
+          today: Number(refToday.toFixed(2)),
+          base: Number(refBase.toFixed(2)),
+          baseDailyAvg: Number(baseDailyAvg.toFixed(2)),
+          diff_kg,
+          diff_pct,
+          records_used: recordsUsed,
+          baseline_dates: Array.from(dailyMap.keys()).sort(),
+        });
+      }
+
+      // Herd-level KPI: sum of today and sum of baseline daily averages.
+      const todayTotal = perCow.reduce((s, c) => s + c.today, 0);
+      const baseTotal = perCow.reduce((s, c) => s + c.baseDailyAvg, 0);
+      const change = baseTotal > 0 ? ((todayTotal - baseTotal) / baseTotal) * 100 : 0;
+      const avg = perCow.length > 0 ? todayTotal / perCow.length : 0;
+
+      return {
+        perCow,
+        todayTotal,
+        baseTotal,
+        change,
+        avg,
+        cowCount: perCow.length,
+      };
     },
   });
 
   // -------------------------------------------------------------------------
-  // Q2 — Trend chart: daily totals over [rangeFrom .. date]
+  // Trend chart query (unchanged behaviour: daily totals over [rangeFrom..date])
   // -------------------------------------------------------------------------
   const trend = useQuery({
     queryKey: ["milk-trend", rangeFrom, date, session],
@@ -187,7 +275,6 @@ export default function MilkRecordsReport() {
       if (session !== "all") q = q.eq("period", Number(session));
       const { data, error } = await q;
       if (error) throw error;
-      // Aggregate by day, then fill missing days with 0 so the chart is continuous.
       const byDay = new Map<string, number>();
       for (const r of data || []) {
         byDay.set(r.record_date, (byDay.get(r.record_date) || 0) + Number(r.milk_amount || 0));
@@ -203,10 +290,7 @@ export default function MilkRecordsReport() {
     },
   });
 
-  // -------------------------------------------------------------------------
-  // Q3 — Session breakdown for the selected day (always shows all 3 sessions
-  //      regardless of session filter, so managers see distribution).
-  // -------------------------------------------------------------------------
+  // Session breakdown for the selected day (always shows all 3 sessions).
   const sessionBreakdown = useQuery({
     queryKey: ["milk-session", date],
     queryFn: async () => {
@@ -224,61 +308,95 @@ export default function MilkRecordsReport() {
   });
 
   // -------------------------------------------------------------------------
-  // Q4 — Top 10 producing cows for the selected day, compared to the chosen
-  //      baseline window. Each cow gets a `base` value = its average daily
-  //      total across `baseDates` so the «اختلاف» column matches the KPI.
+  // Derived: top-10 cows (sorted by today desc) and the alerts list.
   // -------------------------------------------------------------------------
-  const top = useQuery({
-    queryKey: ["milk-top", date, session, cowFilter, baseline, baseDates.join(",")],
+  const filteredCows = useMemo(() => {
+    const all = core.data?.perCow || [];
+    return all
+      .filter((r) => !cowFilter.trim() || r.animal_number.includes(cowFilter.trim()))
+      .sort((a, b) => b.today - a.today);
+  }, [core.data, cowFilter]);
+
+  const topRows = useMemo(() => filteredCows.slice(0, 10), [filteredCows]);
+
+  // Alerts = every cow whose |Δ%| crosses the threshold AND has at least
+  // one baseline record (otherwise there's nothing to compare against).
+  const alerts = useMemo(() => {
+    const t = threshold || 0;
+    if (t <= 0) return [];
+    return filteredCows
+      .filter((c) => c.records_used > 0 && Math.abs(c.diff_pct) >= t)
+      // Most severe drops first; surges after.
+      .sort((a, b) => a.diff_pct - b.diff_pct);
+  }, [filteredCows, threshold]);
+
+  const drops = alerts.filter((a) => a.diff_pct < 0);
+  const surges = alerts.filter((a) => a.diff_pct > 0);
+
+  // -------------------------------------------------------------------------
+  // Persist alerts: bulk-upsert to public.milk_production_alerts.
+  // The DB has a unique index on (livestock_id, reference_date, baseline_mode,
+  // COALESCE(session,'all')) so re-running for the same combo updates rather
+  // than duplicates.
+  // -------------------------------------------------------------------------
+  const persistAlerts = useMutation({
+    mutationFn: async () => {
+      if (alerts.length === 0) throw new Error("هیچ هشداری برای ثبت وجود ندارد.");
+      const rows = alerts.map((a) => ({
+        livestock_id: a.livestock_id,
+        animal_number: a.animal_number,
+        reference_date: date,
+        baseline_mode: baseline,
+        baseline_records_count: a.records_used,
+        session: session === "all" ? null : session,
+        today_kg: a.today,
+        baseline_kg: a.base,
+        diff_kg: a.diff_kg,
+        diff_pct: a.diff_pct,
+        threshold_pct: threshold,
+        direction: a.diff_pct < 0 ? "drop" : "surge",
+        status: "open",
+      }));
+      const { error } = await supabase
+        .from("milk_production_alerts")
+        .upsert(rows as any, {
+          // Match the functional unique index. Supabase needs the column list
+          // here even though the actual uniqueness comes from a partial expr.
+          onConflict: "livestock_id,reference_date,baseline_mode,session",
+        });
+      if (error) throw error;
+      return rows.length;
+    },
+    onSuccess: (n) => {
+      toast.success(`${toPersianDigits(n)} هشدار ذخیره شد`);
+      queryClient.invalidateQueries({ queryKey: ["milk-alerts-saved"] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "خطا در ذخیره هشدارها");
+    },
+  });
+
+  // List of previously-saved alerts for this reference date (so the user
+  // can confirm the messaging queue already has them).
+  const savedAlerts = useQuery({
+    queryKey: ["milk-alerts-saved", date, baseline, session],
     queryFn: async () => {
-      const wanted = Array.from(new Set([date, ...baseDates]));
       let q = supabase
-        .from("livestock_milk_records")
-        .select("livestock_id, milk_amount, record_date, period")
-        .in("record_date", wanted)
-        .or("is_cancelled.is.null,is_cancelled.eq.false");
-      if (session !== "all") q = q.eq("period", Number(session));
+        .from("milk_production_alerts")
+        .select("id, animal_number, today_kg, baseline_kg, diff_kg, diff_pct, direction, status, created_at")
+        .eq("reference_date", date)
+        .eq("baseline_mode", baseline)
+        .order("diff_pct", { ascending: true });
+      if (session === "all") q = q.is("session", null);
+      else q = q.eq("session", session);
       const { data, error } = await q;
       if (error) throw error;
-      // Per-cow daily totals → today value + sum across baseline window.
-      const map = new Map<number, { today: number; baseSum: number }>();
-      for (const r of data || []) {
-        const id = Number(r.livestock_id);
-        const cur = map.get(id) || { today: 0, baseSum: 0 };
-        const amt = Number(r.milk_amount || 0);
-        if (r.record_date === date) cur.today += amt;
-        else cur.baseSum += amt;
-        map.set(id, cur);
-      }
-      // Resolve animal_number for these cows in one round-trip.
-      const ids = Array.from(map.keys());
-      let nums = new Map<number, string>();
-      if (ids.length) {
-        const { data: items } = await supabase
-          .from("livestock_items").select("id, animal_number").in("id", ids as any);
-        for (const it of items || []) nums.set(Number(it.id), String(it.animal_number ?? it.id));
-      }
-      const baseLen = Math.max(1, baseDates.length);
-      const rows = Array.from(map.entries())
-        .map(([id, v]) => {
-          const base = Number((v.baseSum / baseLen).toFixed(1));
-          return {
-            livestock_id: id,
-            animal_number: nums.get(id) || String(id),
-            today: Number(v.today.toFixed(1)),
-            base,
-            diff: Number((v.today - base).toFixed(1)),
-          };
-        })
-        .filter((r) => !cowFilter.trim() || r.animal_number.includes(cowFilter.trim()))
-        .sort((a, b) => b.today - a.today)
-        .slice(0, 10);
-      return rows;
+      return data || [];
     },
   });
 
   // -------------------------------------------------------------------------
-  // ECharts options (memoised so they don't reinit on every render).
+  // ECharts options
   // -------------------------------------------------------------------------
   const trendOption = useMemo(() => {
     const days = trend.data?.days || [];
@@ -288,20 +406,13 @@ export default function MilkRecordsReport() {
       tooltip: {
         trigger: "axis",
         formatter: (params: any) => {
-          const p = params?.[0];
-          if (!p) return "";
+          const p = params?.[0]; if (!p) return "";
           return `${formatShamsi(p.axisValue)}<br/><b>${toPersianDigits(p.data)}</b> kg`;
         },
       },
       xAxis: {
-        type: "category",
-        data: days,
-        boundaryGap: false,
-        axisLabel: {
-          // Show Shamsi MM/DD instead of the raw gregorian date.
-          formatter: (v: string) => formatShamsi(v).slice(5),
-          color: "#94a3b8",
-        },
+        type: "category", data: days, boundaryGap: false,
+        axisLabel: { formatter: (v: string) => formatShamsi(v).slice(5), color: "#94a3b8" },
       },
       yAxis: {
         type: "value",
@@ -312,27 +423,21 @@ export default function MilkRecordsReport() {
         { type: "inside" },
         { type: "slider", height: 18, bottom: 12, borderColor: "transparent" },
       ],
-      series: [
-        {
-          name: "تولید روزانه",
-          type: "line",
-          smooth: true,
-          symbol: "circle",
-          symbolSize: 6,
-          data: values,
-          lineStyle: { width: 3, color: "#57D364" },
-          itemStyle: { color: "#57D364" },
-          areaStyle: {
-            color: {
-              type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(87,211,100,0.35)" },
-                { offset: 1, color: "rgba(87,211,100,0.0)" },
-              ],
-            },
+      series: [{
+        name: "تولید روزانه", type: "line", smooth: true, symbol: "circle", symbolSize: 6,
+        data: values,
+        lineStyle: { width: 3, color: "#57D364" },
+        itemStyle: { color: "#57D364" },
+        areaStyle: {
+          color: {
+            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(87,211,100,0.35)" },
+              { offset: 1, color: "rgba(87,211,100,0.0)" },
+            ],
           },
         },
-      ],
+      }],
     };
   }, [trend.data]);
 
@@ -343,17 +448,14 @@ export default function MilkRecordsReport() {
     return {
       grid: { left: 48, right: 16, top: 24, bottom: 28 },
       tooltip: {
-        trigger: "axis",
-        axisPointer: { type: "shadow" },
+        trigger: "axis", axisPointer: { type: "shadow" },
         formatter: (params: any) => {
-          const p = params?.[0];
-          if (!p) return "";
+          const p = params?.[0]; if (!p) return "";
           return `${p.name}<br/><b>${toPersianDigits(p.data)}</b> kg (${toPersianDigits(pct(p.data))}%)`;
         },
       },
       xAxis: {
-        type: "category",
-        data: [SESSIONS[1], SESSIONS[2], SESSIONS[3]],
+        type: "category", data: [SESSIONS[1], SESSIONS[2], SESSIONS[3]],
         axisLabel: { color: "#cbd5e1", fontSize: 13 },
       },
       yAxis: {
@@ -361,25 +463,22 @@ export default function MilkRecordsReport() {
         axisLabel: { color: "#94a3b8", formatter: (val: number) => toPersianDigits(val) },
         splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
       },
-      series: [
-        {
-          type: "bar",
-          barWidth: 48,
-          data: [
-            { value: Number(v[1].toFixed(1)), itemStyle: { color: SESSION_COLORS[1], borderRadius: [6, 6, 0, 0] } },
-            { value: Number(v[2].toFixed(1)), itemStyle: { color: SESSION_COLORS[2], borderRadius: [6, 6, 0, 0] } },
-            { value: Number(v[3].toFixed(1)), itemStyle: { color: SESSION_COLORS[3], borderRadius: [6, 6, 0, 0] } },
-          ],
-          label: {
-            show: true, position: "top", color: "#cbd5e1",
-            formatter: (p: any) => `${toPersianDigits(pct(p.data))}%`,
-          },
+      series: [{
+        type: "bar", barWidth: 48,
+        data: [
+          { value: Number(v[1].toFixed(1)), itemStyle: { color: SESSION_COLORS[1], borderRadius: [6, 6, 0, 0] } },
+          { value: Number(v[2].toFixed(1)), itemStyle: { color: SESSION_COLORS[2], borderRadius: [6, 6, 0, 0] } },
+          { value: Number(v[3].toFixed(1)), itemStyle: { color: SESSION_COLORS[3], borderRadius: [6, 6, 0, 0] } },
+        ],
+        label: {
+          show: true, position: "top", color: "#cbd5e1",
+          formatter: (p: any) => `${toPersianDigits(pct(p.data))}%`,
         },
-      ],
+      }],
     };
   }, [sessionBreakdown.data]);
 
-  // -- Per-cow detail (drawer) ----------------------------------------------
+  // -- Per-cow detail drawer (unchanged) ------------------------------------
   const [selected, setSelected] = useState<null | { livestock_id: number; animal_number: string; today: number; base: number }>(null);
   const cowTrend = useQuery({
     enabled: !!selected,
@@ -396,8 +495,7 @@ export default function MilkRecordsReport() {
       if (error) throw error;
       const byDay = new Map<string, number>();
       for (const r of data || []) byDay.set(r.record_date, (byDay.get(r.record_date) || 0) + Number(r.milk_amount || 0));
-      const days: string[] = [];
-      const values: number[] = [];
+      const days: string[] = []; const values: number[] = [];
       for (let i = 0; i < 7; i++) {
         const d = isoLocal(addDays(new Date(from), i));
         days.push(d);
@@ -427,8 +525,7 @@ export default function MilkRecordsReport() {
     series: [{
       type: "line", smooth: true, symbol: "circle", symbolSize: 5,
       data: cowTrend.data?.values || [],
-      lineStyle: { width: 2.5, color: "#22d3ee" },
-      itemStyle: { color: "#22d3ee" },
+      lineStyle: { width: 2.5, color: "#22d3ee" }, itemStyle: { color: "#22d3ee" },
       areaStyle: {
         color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
@@ -440,22 +537,10 @@ export default function MilkRecordsReport() {
   }), [cowTrend.data]);
 
   // -- Render ---------------------------------------------------------------
-  const change = kpis.data?.change ?? 0;
+  const change = core.data?.change ?? 0;
   const TrendIcon = change > 0 ? ArrowUp : change < 0 ? ArrowDown : ArrowRight;
-  // Threshold check: any absolute change >= threshold triggers the alert.
-  // We only want a "danger" tone when the swing is *negative* (drop) — a big
-  // positive swing is informational, not a problem — but we still render the
-  // amber alert icon for big positive swings so the user notices anomalies.
   const thresholdHit = Math.abs(change) >= (threshold || 0) && (threshold || 0) > 0;
   const isDanger = thresholdHit && change < 0;
-  // Hint line for the baseline KPI, e.g. «میانگین ۳ روز: 06/05 – 06/07».
-  const baselineHint = (() => {
-    if (baseDates.length === 0) return "";
-    if (baseDates.length === 1) return formatShamsi(baseDates[0]);
-    // Range is contiguous; show earliest – latest in Shamsi.
-    const sorted = [...baseDates].sort();
-    return `${formatShamsi(sorted[0])} — ${formatShamsi(sorted[sorted.length - 1])}`;
-  })();
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -465,13 +550,9 @@ export default function MilkRecordsReport() {
           <div className="flex items-center gap-2 text-foreground font-bold">
             <Filter className="w-4 h-4 text-primary" /> فیلترها
           </div>
-          {/* Two rows so the new comparison controls have room without
-              squashing the existing primary filters. */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">تاریخ</Label>
-              {/* Shamsi date picker: we bridge between iso (state) and Jalali
-                  string (picker value) using shamsiStringToIso / isoToShamsiString. */}
               <ShamsiDatePicker
                 value={isoToShamsiString(date)}
                 onChange={(v) => v && setDate(shamsiStringToIso(v))}
@@ -504,54 +585,47 @@ export default function MilkRecordsReport() {
                 </SelectContent>
               </Select>
             </div>
-            {/* NEW — baseline mode for KPI comparison. */}
+            {/* CHANGED — baseline is now record-count based. */}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">مقایسه با</Label>
               <Select value={baseline} onValueChange={(v) => setBaseline(v as BaselineKey)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="prev_day">{BASELINE_LABEL.prev_day}</SelectItem>
-                  <SelectItem value="avg3">{BASELINE_LABEL.avg3}</SelectItem>
-                  <SelectItem value="avg7">{BASELINE_LABEL.avg7}</SelectItem>
-                  <SelectItem value="same_dow">{BASELINE_LABEL.same_dow}</SelectItem>
+                  <SelectItem value="prev3">{BASELINE_LABEL.prev3}</SelectItem>
+                  <SelectItem value="prev6">{BASELINE_LABEL.prev6}</SelectItem>
+                  <SelectItem value="prev12">{BASELINE_LABEL.prev12}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {/* NEW — alert threshold in percent. */}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">آستانه هشدار (%)</Label>
               <Input
-                type="number"
-                min={0}
-                max={100}
+                type="number" min={0} max={100}
                 value={threshold}
                 onChange={(e) => setThreshold(Math.max(0, Number(e.target.value) || 0))}
-                placeholder="مثلاً ۱۰"
+                placeholder="مثلاً ۲۰"
               />
             </div>
           </div>
         </div>
       </GlobalCard>
 
-      {/* ---------- Section 1: KPI cards ---------- */}
+      {/* ---------- KPI cards ---------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPIWidget
           label="تولید امروز"
-          value={kpis.isLoading ? "…" : fmtKg(kpis.data?.today || 0)}
+          value={core.isLoading ? "…" : fmtKg(core.data?.todayTotal || 0)}
           hint={formatShamsi(date)}
           accent="green"
         />
         <KPIWidget
-          // Label now reflects the dynamic baseline mode.
-          label={BASELINE_LABEL[baseline]}
-          value={kpis.isLoading ? "…" : fmtKg(kpis.data?.baseValue || 0)}
-          hint={baselineHint}
+          label={`میانگین ${BASELINE_LABEL[baseline]}`}
+          value={core.isLoading ? "…" : fmtKg(core.data?.baseTotal || 0)}
+          hint={`${toPersianDigits(baselineN)} رکورد به ازای هر دام`}
           accent="blue"
         />
         <GlobalCard className="kpi-tile w-full text-right">
-          <p className="kpi-label">
-            تغییر نسبت به {BASELINE_LABEL[baseline]}
-          </p>
+          <p className="kpi-label">تغییر نسبت به {BASELINE_LABEL[baseline]}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span
               className={cn(
@@ -560,7 +634,7 @@ export default function MilkRecordsReport() {
               )}
               dir="ltr"
             >
-              {kpis.isLoading ? "…" : fmtPct(change)}
+              {core.isLoading ? "…" : fmtPct(change)}
             </span>
             <TrendIcon
               className={cn(
@@ -568,8 +642,6 @@ export default function MilkRecordsReport() {
                 change > 0 ? "text-[#57D364]" : change < 0 ? "text-red-400" : "text-muted-foreground",
               )}
             />
-            {/* Threshold alarm icon — only shown when |Δ| ≥ آستانه.
-                Red triangle for drops, amber for big surges. */}
             {thresholdHit && (
               <span
                 className={cn(
@@ -578,9 +650,6 @@ export default function MilkRecordsReport() {
                     ? "bg-destructive/10 text-destructive border-destructive/30"
                     : "bg-amber-500/10 text-amber-400 border-amber-500/30",
                 )}
-                title={isDanger
-                  ? `کاهش بیش از ${toPersianDigits(threshold)}٪ نسبت به ${BASELINE_LABEL[baseline]}`
-                  : `افزایش بیش از ${toPersianDigits(threshold)}٪ نسبت به ${BASELINE_LABEL[baseline]}`}
               >
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {isDanger ? "خطر افت تولید" : "نوسان غیرعادی"}
@@ -590,13 +659,128 @@ export default function MilkRecordsReport() {
         </GlobalCard>
         <KPIWidget
           label="میانگین هر گاو شیری"
-          value={kpis.isLoading ? "…" : fmtKg(kpis.data?.avg || 0)}
-          hint={`${toPersianDigits(kpis.data?.cowCount || 0)} گاو`}
+          value={core.isLoading ? "…" : fmtKg(core.data?.avg || 0)}
+          hint={`${toPersianDigits(core.data?.cowCount || 0)} گاو`}
           accent="purple"
         />
       </div>
 
-      {/* ---------- Section 2: Trend chart ---------- */}
+      {/* ---------- NEW: Alerts section ---------- */}
+      <GlobalCard className="p-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="font-bold text-foreground flex items-center gap-2">
+            <BellRing className="w-4 h-4 text-destructive" />
+            هشدار افت / افزایش تولید
+            <span className="text-xs font-normal text-muted-foreground mr-1">
+              ({toPersianDigits(drops.length)} افت، {toPersianDigits(surges.length)} افزایش)
+            </span>
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              مرجع: {formatShamsi(date)} • آستانه {toPersianDigits(threshold)}٪ • {BASELINE_LABEL[baseline]}
+            </span>
+            <Button
+              size="sm"
+              variant="default"
+              disabled={alerts.length === 0 || persistAlerts.isPending}
+              onClick={() => persistAlerts.mutate()}
+              className="gap-1"
+            >
+              <Save className="w-4 h-4" />
+              ثبت هشدارها برای پیامک
+            </Button>
+          </div>
+        </div>
+
+        {core.isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : alerts.length === 0 ? (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            هیچ دامی از آستانه {toPersianDigits(threshold)}٪ عبور نکرده است.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted-foreground text-xs">
+                <tr className="border-b border-border">
+                  <th className="text-right py-2 px-2">شماره گاو</th>
+                  <th className="text-right py-2 px-2">جهت</th>
+                  <th className="text-right py-2 px-2">امروز</th>
+                  <th className="text-right py-2 px-2">میانگین {BASELINE_LABEL[baseline]}</th>
+                  <th className="text-right py-2 px-2">اختلاف (kg)</th>
+                  <th className="text-right py-2 px-2">اختلاف (%)</th>
+                  <th className="text-right py-2 px-2">تعداد رکورد پایه</th>
+                  <th className="text-right py-2 px-2">وضعیت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alerts.map((a) => {
+                  const drop = a.diff_pct < 0;
+                  return (
+                    <tr
+                      key={a.livestock_id}
+                      className="border-b border-border/50 hover:bg-muted/40 cursor-pointer"
+                      onClick={() => setSelected({
+                        livestock_id: a.livestock_id,
+                        animal_number: a.animal_number,
+                        today: a.today,
+                        base: a.base,
+                      })}
+                    >
+                      <td className="py-2 px-2 font-bold text-foreground">{toPersianDigits(a.animal_number)}</td>
+                      <td className="py-2 px-2">
+                        <span className={cn(
+                          "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border",
+                          drop
+                            ? "bg-destructive/10 text-destructive border-destructive/30"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/30",
+                        )}>
+                          <AlertTriangle className="w-3 h-3" />
+                          {drop ? "افت" : "افزایش"}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 font-mono tabular-nums" dir="ltr">{toPersianDigits(a.today)}</td>
+                      <td className="py-2 px-2 font-mono tabular-nums text-muted-foreground" dir="ltr">{toPersianDigits(a.base)}</td>
+                      <td className={cn(
+                        "py-2 px-2 font-mono tabular-nums",
+                        drop ? "text-red-400" : "text-[#57D364]",
+                      )} dir="ltr">
+                        {fmtKgSigned(a.diff_kg)}
+                      </td>
+                      <td className={cn(
+                        "py-2 px-2 font-mono tabular-nums",
+                        drop ? "text-red-400" : "text-[#57D364]",
+                      )} dir="ltr">
+                        {fmtPct(a.diff_pct)}
+                      </td>
+                      <td className="py-2 px-2 text-muted-foreground" dir="ltr">
+                        {toPersianDigits(a.records_used)}/{toPersianDigits(baselineN)}
+                      </td>
+                      <td className="py-2 px-2">
+                        {(() => {
+                          // Show whether this alert is already persisted in the DB
+                          // (so the messaging worker can pick it up).
+                          const saved = (savedAlerts.data || []).find(
+                            (s: any) => String(s.animal_number) === String(a.animal_number),
+                          );
+                          if (!saved) return <span className="text-muted-foreground text-xs">ثبت نشده</span>;
+                          return (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border bg-primary/10 text-primary border-primary/30">
+                              ذخیره شد
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </GlobalCard>
+
+      {/* ---------- Trend chart ---------- */}
       <GlobalCard className="p-4">
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-bold text-foreground flex items-center gap-2">
@@ -614,7 +798,7 @@ export default function MilkRecordsReport() {
         )}
       </GlobalCard>
 
-      {/* ---------- Section 3 + 4 side by side on lg ---------- */}
+      {/* ---------- Sessions + Top 10 ---------- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <GlobalCard className="p-4">
           <h2 className="font-bold text-foreground mb-2">تحلیل نوبت‌های دوشش — {formatShamsi(date)}</h2>
@@ -633,26 +817,22 @@ export default function MilkRecordsReport() {
                 <tr className="border-b border-border">
                   <th className="text-right py-2 px-2">شماره گاو</th>
                   <th className="text-right py-2 px-2">امروز</th>
-                  {/* Column header tracks the selected baseline mode. */}
                   <th className="text-right py-2 px-2">{BASELINE_LABEL[baseline]}</th>
                   <th className="text-right py-2 px-2">اختلاف</th>
                   <th className="text-right py-2 px-2">هشدار</th>
                 </tr>
               </thead>
               <tbody>
-                {top.isLoading ? (
+                {core.isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}><td colSpan={5} className="py-2"><Skeleton className="h-6 w-full" /></td></tr>
                   ))
-                ) : (top.data || []).length === 0 ? (
+                ) : topRows.length === 0 ? (
                   <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">رکوردی یافت نشد</td></tr>
                 ) : (
-                  (top.data || []).map((r) => {
-                    // Per-row percent change vs baseline; used for the alert
-                    // column so a single cow drop is visible at a glance.
-                    const cowPct = r.base > 0 ? ((r.today - r.base) / r.base) * 100 : 0;
-                    const cowHit = Math.abs(cowPct) >= (threshold || 0) && (threshold || 0) > 0;
-                    const cowDanger = cowHit && cowPct < 0;
+                  topRows.map((r) => {
+                    const cowHit = Math.abs(r.diff_pct) >= (threshold || 0) && (threshold || 0) > 0;
+                    const cowDanger = cowHit && r.diff_pct < 0;
                     return (
                       <tr
                         key={r.livestock_id}
@@ -660,35 +840,24 @@ export default function MilkRecordsReport() {
                         onClick={() => setSelected(r)}
                       >
                         <td className="py-2 px-2 font-bold text-foreground">{toPersianDigits(r.animal_number)}</td>
-                        <td className="py-2 px-2 font-mono tabular-nums" dir="ltr">
-                          {toPersianDigits(r.today)}
-                        </td>
-                        <td className="py-2 px-2 font-mono tabular-nums text-muted-foreground" dir="ltr">
-                          {toPersianDigits(r.base)}
-                        </td>
-                        <td
-                          className={cn(
-                            "py-2 px-2 font-mono tabular-nums",
-                            r.diff > 0 ? "text-[#57D364]" : r.diff < 0 ? "text-red-400" : "text-muted-foreground",
-                          )}
-                          dir="ltr"
-                        >
-                          {r.diff > 0 ? "+" : r.diff < 0 ? "−" : ""}
-                          {toPersianDigits(Math.abs(r.diff))}
+                        <td className="py-2 px-2 font-mono tabular-nums" dir="ltr">{toPersianDigits(r.today)}</td>
+                        <td className="py-2 px-2 font-mono tabular-nums text-muted-foreground" dir="ltr">{toPersianDigits(r.base)}</td>
+                        <td className={cn(
+                          "py-2 px-2 font-mono tabular-nums",
+                          r.diff_kg > 0 ? "text-[#57D364]" : r.diff_kg < 0 ? "text-red-400" : "text-muted-foreground",
+                        )} dir="ltr">
+                          {fmtKgSigned(r.diff_kg)}
                         </td>
                         <td className="py-2 px-2">
                           {cowHit ? (
-                            <span
-                              className={cn(
-                                "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border",
-                                cowDanger
-                                  ? "bg-destructive/10 text-destructive border-destructive/30"
-                                  : "bg-amber-500/10 text-amber-400 border-amber-500/30",
-                              )}
-                              title={`${fmtPct(cowPct)} نسبت به ${BASELINE_LABEL[baseline]}`}
-                            >
+                            <span className={cn(
+                              "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border",
+                              cowDanger
+                                ? "bg-destructive/10 text-destructive border-destructive/30"
+                                : "bg-amber-500/10 text-amber-400 border-amber-500/30",
+                            )}>
                               <AlertTriangle className="w-3 h-3" />
-                              {fmtPct(cowPct)}
+                              {fmtPct(r.diff_pct)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground text-xs">—</span>
@@ -704,7 +873,7 @@ export default function MilkRecordsReport() {
         </GlobalCard>
       </div>
 
-      {/* ---------- Section 5: Cow detail drawer ---------- */}
+      {/* ---------- Cow detail drawer ---------- */}
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent side="left" className="w-full sm:max-w-md" dir="rtl">
           <SheetHeader>
