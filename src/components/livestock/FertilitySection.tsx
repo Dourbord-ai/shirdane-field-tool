@@ -1059,6 +1059,10 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
                   onCancel={setCancelEvent}
                   onCreateCalves={setCalvesReviewEvent}
                   resolveUserName={resolveUserName}
+                  // Pass the live cow map so the table can show the current
+                  // sex/status of each calf and link to its profile when
+                  // already converted to a dam (parity with the old card view).
+                  calfLiveMap={calfLiveMap}
                 />
               </div>
               <div className="space-y-2">
