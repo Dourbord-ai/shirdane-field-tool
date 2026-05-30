@@ -121,8 +121,8 @@ interface DetailFieldDef {
 const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldDef[] }> = {
   livestock: {
     dbTable: "factor_item_livestock_details",
+    // cow_id is set by the master-table selector below — not editable here.
     fields: [
-      { key: "cow_id", label: "شماره گاو", type: "text" },
       { key: "weight", label: "وزن (kg)", type: "number" },
       { key: "off_unit_price", label: "قیمت پایه", type: "number" },
       { key: "delivery_cost", label: "هزینه تحویل", type: "number" },
@@ -132,8 +132,8 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   feed: {
     dbTable: "factor_item_feed_details",
+    // feed_id + feed_name set by selector.
     fields: [
-      { key: "feed_name", label: "نام خوراک", type: "text" },
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "expire_date", label: "تاریخ انقضا", type: "date" },
       { key: "dry_matter_pct", label: "ماده خشک %", type: "number" },
@@ -141,8 +141,8 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   medicine: {
     dbTable: "factor_item_medicine_details",
+    // medicine_id + medicine_name set by selector.
     fields: [
-      { key: "medicine_name", label: "نام دارو", type: "text" },
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "expire_date", label: "تاریخ انقضا", type: "date" },
       { key: "manufacturer", label: "تولیدکننده", type: "text" },
@@ -151,9 +151,8 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   sperm: {
     dbTable: "factor_item_sperm_details",
+    // sperm_id + bull_code + bull_name set by selector.
     fields: [
-      { key: "bull_code", label: "کد گاو نر", type: "text" },
-      { key: "bull_name", label: "نام گاو نر", type: "text" },
       { key: "breed", label: "نژاد", type: "text" },
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "production_date", label: "تاریخ تولید", type: "date" },
@@ -210,6 +209,75 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
 };
 
+// ---------------------------------------------------------------------------
+// Master-table selector config (per row)
+// ---------------------------------------------------------------------------
+// For product types that have a master list (livestock, sperm, feed,
+// medicine), each row renders a searchable dropdown at the top of its
+// details block. Selecting an option writes the matching FK id (+ a few
+// display fields) into the row.details bag so they round-trip into the
+// matching factor_item_<type>_details table on save. Free-text entry is
+// available only as a fallback for product types without a master table.
+// ---------------------------------------------------------------------------
+type MasterSource = "cows" | "sperms" | "feeds" | "medicines";
+interface SelectorDef {
+  label: string;          // UI label above the dropdown
+  source: MasterSource;   // which master option list to render
+  primaryKey: string;     // the FK detail key (also used as the dropdown's value)
+  // Translate a master record into a partial detail bag patch.
+  apply: (raw: Record<string, unknown>) => Record<string, string>;
+}
+const SELECTOR_CONFIG: Partial<Record<ProductType, SelectorDef>> = {
+  livestock: {
+    label: "انتخاب دام (پلاک)",
+    source: "cows",
+    primaryKey: "cow_id",
+    apply: (c) => ({
+      cow_id: String(c.id),
+      _display: [c.bodynumber, c.earnumber].filter(Boolean).join(" / "),
+    }),
+  },
+  sperm: {
+    label: "انتخاب اسپرم",
+    source: "sperms",
+    primaryKey: "sperm_id",
+    apply: (s) => ({
+      sperm_id: String(s.id),
+      bull_code: String(s.code ?? ""),
+      bull_name: String(s.name ?? ""),
+      _display: `${s.code ?? ""}${s.name ? " - " + s.name : ""}`.trim(),
+    }),
+  },
+  feed: {
+    label: "انتخاب خوراک",
+    source: "feeds",
+    primaryKey: "feed_id",
+    apply: (f) => ({
+      feed_id: String(f.id),
+      feed_name: String(f.name ?? ""),
+      _display: String(f.name ?? ""),
+    }),
+  },
+  medicine: {
+    label: "انتخاب دارو",
+    source: "medicines",
+    primaryKey: "medicine_id",
+    apply: (m) => ({
+      medicine_id: String(m.id),
+      medicine_name: String(m.name ?? ""),
+      _display: String(m.name ?? ""),
+    }),
+  },
+};
+
+// Detail-bag keys that must be coerced to number before insert (FK ids).
+const NUMERIC_DETAIL_KEYS = new Set([
+  "cow_id",
+  "sperm_id",
+  "feed_id",
+  "medicine_id",
+]);
+
 // Numeric coercion helper used at save time. Empty string → null so the DB
 // stores NULL (rather than 0) for fields the operator left blank.
 const num = (v: string | undefined): number | null => {
@@ -259,6 +327,98 @@ export default function MixedInvoiceForm() {
       setPartyOptions(opts);
     })();
   }, []);
+
+  // -----------------------------------------------------------------------
+  // Master option lists for per-row selectors.
+  //
+  // We load each master table once on mount and keep:
+  //   - `options`: the {label, value} shape SearchableSelect expects
+  //   - `raw`:     a Map keyed by stringified id so we can look up the
+  //                full record when an option is picked and project it
+  //                into the row.details bag via SELECTOR_CONFIG.apply().
+  // -----------------------------------------------------------------------
+  type MasterBucket = {
+    options: { label: string; value: string }[];
+    raw: Map<string, Record<string, unknown>>;
+  };
+  const emptyBucket = (): MasterBucket => ({ options: [], raw: new Map() });
+  const [masters, setMasters] = useState<Record<MasterSource, MasterBucket>>({
+    cows: emptyBucket(),
+    sperms: emptyBucket(),
+    feeds: emptyBucket(),
+    medicines: emptyBucket(),
+  });
+
+  useEffect(() => {
+    (async () => {
+      // Build a bucket from a raw rowset + a label projector.
+      const buildBucket = (
+        rows: Record<string, unknown>[] | null,
+        toLabel: (r: Record<string, unknown>) => string,
+      ): MasterBucket => {
+        const opts: { label: string; value: string }[] = [];
+        const raw = new Map<string, Record<string, unknown>>();
+        (rows ?? []).forEach((r) => {
+          const value = String(r.id);
+          const label = toLabel(r) || "(بدون نام)";
+          opts.push({ label, value });
+          raw.set(value, r);
+        });
+        opts.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+        return { options: opts, raw };
+      };
+
+      // Fire all four master fetches in parallel — they're independent.
+      const [cowsRes, spermsRes, feedsRes, medsRes] = await Promise.all([
+        supabase.from("cows").select("id, bodynumber, earnumber").order("bodynumber"),
+        // is_active matches the legacy sperms picker — inactive bulls hidden.
+        supabase.from("sperms").select("id, code, name").eq("is_active", true).order("code"),
+        supabase.from("feeds").select("id, name").order("name"),
+        supabase.from("medicines").select("id, name").order("name"),
+      ]);
+
+      setMasters({
+        cows: buildBucket(cowsRes.data as Record<string, unknown>[] | null, (c) => {
+          // Label: "<bodynumber> / <earnumber>" so operators can scan by پلاک.
+          const body = c.bodynumber ?? "";
+          const ear = c.earnumber ?? "";
+          if (body && ear) return `${body} / ${ear}`;
+          return String(body || ear || "");
+        }),
+        sperms: buildBucket(spermsRes.data as Record<string, unknown>[] | null, (s) =>
+          `${s.code ?? ""}${s.name ? " - " + s.name : ""}`.trim(),
+        ),
+        feeds: buildBucket(
+          feedsRes.data as Record<string, unknown>[] | null,
+          (f) => String(f.name ?? ""),
+        ),
+        medicines: buildBucket(
+          medsRes.data as Record<string, unknown>[] | null,
+          (m) => String(m.name ?? ""),
+        ),
+      });
+    })();
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Apply a master-table selection to a row. We delegate to the SELECTOR_CONFIG
+  // `apply` function so each product type controls which detail keys it
+  // populates (e.g. sperm sets sperm_id + bull_code + bull_name in one go).
+  // The previous detail bag is preserved so user-entered extras (batch_number,
+  // expire_date, …) survive a master-list change.
+  // -----------------------------------------------------------------------
+  const applyMasterSelection = (uid: string, product_type: ProductType, value: string) => {
+    const sel = SELECTOR_CONFIG[product_type];
+    if (!sel) return;
+    const raw = masters[sel.source].raw.get(value);
+    if (!raw) return;
+    const patch = sel.apply(raw);
+    setRows((prev) =>
+      prev.map((row) =>
+        row.uid === uid ? { ...row, details: { ...row.details, ...patch } } : row,
+      ),
+    );
+  };
 
   // -----------------------------------------------------------------------
   // Sales invoice auto-numbering.
@@ -466,16 +626,23 @@ export default function MixedInvoiceForm() {
 
         if (itemErr || !item) throw new Error(`ردیف ${i + 1}: ${itemErr?.message ?? "خطا"}`);
 
-        // 2b) detail insert. We project the per-key strings into typed
-        //     values: number fields → parseFloat, others verbatim. Keys
-        //     declared in DETAIL_CONFIG are guaranteed to exist on the
-        //     target table (we authored both at the same time).
+        // 2b) detail insert. We project ALL keys present in row.details
+        //     (both selector-assigned FK ids like cow_id/sperm_id and
+        //     operator-entered fields declared in DETAIL_CONFIG). Numeric
+        //     coercion is driven by either NUMERIC_DETAIL_KEYS (for FK ids
+        //     set by the master-table selector) or the field's declared
+        //     type in DETAIL_CONFIG. Keys starting with "_" are UI-only
+        //     (e.g. _display) and skipped.
         const detailPayload: Record<string, unknown> = { factor_item_id: item.id };
-        for (const f of cfg.fields) {
-          const raw = row.details[f.key];
+        const fieldTypes = new Map(cfg.fields.map((f) => [f.key, f.type] as const));
+        for (const [key, raw] of Object.entries(row.details)) {
+          if (key.startsWith("_")) continue;          // UI-only helper key
           if (raw === undefined || raw === "") continue; // leave NULL
-          detailPayload[f.key] = f.type === "number" ? num(raw) : raw;
+          const declaredType = fieldTypes.get(key);
+          const isNumeric = NUMERIC_DETAIL_KEYS.has(key) || declaredType === "number";
+          detailPayload[key] = isNumeric ? num(raw) : raw;
         }
+
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
           // map, so this dynamic .from() is safe.
@@ -644,12 +811,49 @@ export default function MixedInvoiceForm() {
                 </div>
               </div>
 
-              {/* per-product detail block. We render whatever fields the
-                  DETAIL_CONFIG declares for this product_type. */}
+              {/* per-product detail block. If this product_type has a
+                  master-list selector (livestock/sperm/feed/medicine), we
+                  render a searchable dropdown at the top — the operator
+                  picks the canonical record and its FK id + display fields
+                  are written into row.details automatically. Below the
+                  selector we render any extra editable fields declared in
+                  DETAIL_CONFIG. For product types without a master table
+                  (manure/milk/rental/services/other) we fall back to plain
+                  free-text inputs. */}
               <div className="pt-2 border-t border-border/60">
                 <div className="text-xs text-muted-foreground mb-2">
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
                 </div>
+
+                {(() => {
+                  // Render the master-table selector when one is defined.
+                  const sel = SELECTOR_CONFIG[row.product_type];
+                  if (!sel) return null;
+                  const bucket = masters[sel.source];
+                  const selectedValue = row.details[sel.primaryKey] ?? "";
+                  const display = row.details._display;
+                  return (
+                    <div className="mb-3">
+                      <SearchableSelect
+                        label={sel.label}
+                        options={bucket.options}
+                        value={selectedValue}
+                        onChange={(v) => applyMasterSelection(row.uid, row.product_type, v)}
+                        placeholder={
+                          bucket.options.length
+                            ? "جستجو و انتخاب..."
+                            : "در حال بارگذاری..."
+                        }
+                      />
+                      {display && (
+                        <div className="mt-1 text-xs text-primary">
+                          انتخاب‌شده: {display}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {cfg.fields.map((f) => (
                     <DynamicField
@@ -661,6 +865,7 @@ export default function MixedInvoiceForm() {
                   ))}
                 </div>
               </div>
+
             </div>
           );
         })}
