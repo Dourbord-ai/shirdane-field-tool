@@ -269,16 +269,10 @@ const SELECTOR_CONFIG: Partial<Record<ProductType, SelectorDef>> = {
       _display: `${s.code ?? ""}${s.name ? " - " + s.name : ""}`.trim(),
     }),
   },
-  feed: {
-    label: "انتخاب خوراک",
-    source: "feeds",
-    primaryKey: "feed_id",
-    apply: (f) => ({
-      feed_id: String(f.id),
-      feed_name: String(f.name ?? ""),
-      _display: String(f.name ?? ""),
-    }),
-  },
+  // NOTE: feed intentionally has NO entry here. The feed product type uses
+  // the bespoke <FeedProductPicker> (rich server-side search across 9
+  // Persian/English columns + nutritional info panel + verification banner)
+  // instead of the generic single-list dropdown — same approach as medicine.
   // NOTE: medicine intentionally has NO entry here. The medicine product
   // type uses the bespoke <MedicineProductPicker> (rich server-side search
   // across 7 Persian/English columns + verification banner + frequently
