@@ -329,6 +329,98 @@ export default function MixedInvoiceForm() {
   }, []);
 
   // -----------------------------------------------------------------------
+  // Master option lists for per-row selectors.
+  //
+  // We load each master table once on mount and keep:
+  //   - `options`: the {label, value} shape SearchableSelect expects
+  //   - `raw`:     a Map keyed by stringified id so we can look up the
+  //                full record when an option is picked and project it
+  //                into the row.details bag via SELECTOR_CONFIG.apply().
+  // -----------------------------------------------------------------------
+  type MasterBucket = {
+    options: { label: string; value: string }[];
+    raw: Map<string, Record<string, unknown>>;
+  };
+  const emptyBucket = (): MasterBucket => ({ options: [], raw: new Map() });
+  const [masters, setMasters] = useState<Record<MasterSource, MasterBucket>>({
+    cows: emptyBucket(),
+    sperms: emptyBucket(),
+    feeds: emptyBucket(),
+    medicines: emptyBucket(),
+  });
+
+  useEffect(() => {
+    (async () => {
+      // Build a bucket from a raw rowset + a label projector.
+      const buildBucket = (
+        rows: Record<string, unknown>[] | null,
+        toLabel: (r: Record<string, unknown>) => string,
+      ): MasterBucket => {
+        const opts: { label: string; value: string }[] = [];
+        const raw = new Map<string, Record<string, unknown>>();
+        (rows ?? []).forEach((r) => {
+          const value = String(r.id);
+          const label = toLabel(r) || "(بدون نام)";
+          opts.push({ label, value });
+          raw.set(value, r);
+        });
+        opts.sort((a, b) => a.label.localeCompare(b.label, "fa"));
+        return { options: opts, raw };
+      };
+
+      // Fire all four master fetches in parallel — they're independent.
+      const [cowsRes, spermsRes, feedsRes, medsRes] = await Promise.all([
+        supabase.from("cows").select("id, bodynumber, earnumber").order("bodynumber"),
+        // is_active matches the legacy sperms picker — inactive bulls hidden.
+        supabase.from("sperms").select("id, code, name").eq("is_active", true).order("code"),
+        supabase.from("feeds").select("id, name").order("name"),
+        supabase.from("medicines").select("id, name").order("name"),
+      ]);
+
+      setMasters({
+        cows: buildBucket(cowsRes.data as Record<string, unknown>[] | null, (c) => {
+          // Label: "<bodynumber> / <earnumber>" so operators can scan by پلاک.
+          const body = c.bodynumber ?? "";
+          const ear = c.earnumber ?? "";
+          if (body && ear) return `${body} / ${ear}`;
+          return String(body || ear || "");
+        }),
+        sperms: buildBucket(spermsRes.data as Record<string, unknown>[] | null, (s) =>
+          `${s.code ?? ""}${s.name ? " - " + s.name : ""}`.trim(),
+        ),
+        feeds: buildBucket(
+          feedsRes.data as Record<string, unknown>[] | null,
+          (f) => String(f.name ?? ""),
+        ),
+        medicines: buildBucket(
+          medsRes.data as Record<string, unknown>[] | null,
+          (m) => String(m.name ?? ""),
+        ),
+      });
+    })();
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Apply a master-table selection to a row. We delegate to the SELECTOR_CONFIG
+  // `apply` function so each product type controls which detail keys it
+  // populates (e.g. sperm sets sperm_id + bull_code + bull_name in one go).
+  // The previous detail bag is preserved so user-entered extras (batch_number,
+  // expire_date, …) survive a master-list change.
+  // -----------------------------------------------------------------------
+  const applyMasterSelection = (uid: string, product_type: ProductType, value: string) => {
+    const sel = SELECTOR_CONFIG[product_type];
+    if (!sel) return;
+    const raw = masters[sel.source].raw.get(value);
+    if (!raw) return;
+    const patch = sel.apply(raw);
+    setRows((prev) =>
+      prev.map((row) =>
+        row.uid === uid ? { ...row, details: { ...row.details, ...patch } } : row,
+      ),
+    );
+  };
+
+  // -----------------------------------------------------------------------
   // Sales invoice auto-numbering.
   //
   // Mirrors the legacy NewInvoice behavior: when invoice_type is a sale
