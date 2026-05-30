@@ -61,6 +61,14 @@ const RESULT_LABELS: Record<ResultValue, string> = {
   suspicious: "مشکوک",
 };
 
+// «مشکوک» فقط برای تست اولیه مجاز است. سایر انواع تست فقط مثبت/منفی دارند.
+const ALLOWED_RESULTS_BY_TYPE: Record<TestType, ResultValue[]> = {
+  initial: ["positive", "negative", "suspicious"],
+  final: ["positive", "negative"],
+  extra: ["positive", "negative"],
+  dry: ["positive", "negative"],
+};
+
 const STATUS_CODE_MAP: Record<TestType, Partial<Record<ResultValue, number>>> = {
   initial: { positive: 4, suspicious: 5, negative: 6 },
   final: { positive: 8, negative: 7 },
