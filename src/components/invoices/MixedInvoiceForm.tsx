@@ -261,6 +261,57 @@ export default function MixedInvoiceForm() {
   }, []);
 
   // -----------------------------------------------------------------------
+  // Sales invoice auto-numbering.
+  //
+  // Mirrors the legacy NewInvoice behavior: when invoice_type is a sale
+  // ("sell"), we read recent factors and propose the next integer above the
+  // current max. Purchase invoices keep the manual-entry behavior because
+  // the printed number comes from the supplier.
+  //
+  // Concurrency: the final guard is the `factors_sales_invoice_number_unique`
+  // partial unique index on the DB. The fetch below is a best-effort UX hint;
+  // if a concurrent operator burns our number, the insert will reject and we
+  // recover by re-fetching + retrying once inside handleSubmit.
+  // -----------------------------------------------------------------------
+  const isSale = invoiceType === "sell";
+
+  const fetchNextSalesInvoiceNumber = async (): Promise<string | null> => {
+    const { data: rows, error } = await supabase
+      .from("factors")
+      .select("invoice_number")
+      .in("invoice_type", ["sell", "retail_sell"])
+      .not("invoice_number", "is", null)
+      .order("id", { ascending: false })
+      .limit(500);
+    if (error) return null;
+    let max = 0;
+    (rows ?? []).forEach((r: { invoice_number: string | null }) => {
+      // Strip non-digits so e.g. "INV-1024" still contributes 1024.
+      const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
+      const n = parseInt(raw, 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  };
+
+  // Auto-fill on mount and whenever the operator flips into a sales mode.
+  // We never overwrite a number the user has already typed.
+  useEffect(() => {
+    if (!isSale) return;
+    if (invoiceNumber) return;
+    let cancelled = false;
+    (async () => {
+      const next = await fetchNextSalesInvoiceNumber();
+      if (cancelled || next === null) return;
+      setInvoiceNumber(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSale, invoiceNumber]);
+
+  // -----------------------------------------------------------------------
   // Row mutators. Each one returns a NEW array so React picks up the change.
   // -----------------------------------------------------------------------
   const addRow = () => setRows((r) => [...r, blankRow()]);
