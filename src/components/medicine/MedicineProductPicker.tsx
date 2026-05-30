@@ -222,44 +222,6 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
   // clicks the trigger button to open the search sheet.
   const [open, setOpen] = useState(false);
 
-  // Live search text + debounced query + result set.
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<MedicineProduct[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // Frequently-used chips: lazy-loaded the first time the sheet opens so we
-  // don't issue any DB calls until the operator actually needs the picker.
-  const [frequent, setFrequent] = useState<MedicineProduct[]>([]);
-  const frequentLoadedRef = useRef(false);
-
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Auto-focus the search input shortly after the sheet opens and lock body
-  // scroll so the underlying invoice form doesn't move under the sheet.
-  useEffect(() => {
-    if (!open) return;
-    const original = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const t = setTimeout(() => inputRef.current?.focus(), 120);
-
-    // Lazy-load the frequently-used chips once per component lifetime.
-    if (!frequentLoadedRef.current) {
-      frequentLoadedRef.current = true;
-      fetchFrequentlyUsed().then(setFrequent);
-    }
-    return () => {
-      document.body.style.overflow = original;
-      clearTimeout(t);
-    };
-  }, [open]);
-
-  // Close on Escape — standard a11y convention for modal sheets.
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [open]);
 
   // Live filter state — one entry per searchable column. We keep them in a
   // single object so the debounced effect can depend on the whole snapshot.
