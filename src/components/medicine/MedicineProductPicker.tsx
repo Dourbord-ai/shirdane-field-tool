@@ -413,23 +413,59 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
               </button>
             </div>
 
-            {/* Search bar */}
-            <div className="px-4 py-3 border-b border-border bg-muted/20">
-              <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-background border-2 border-border focus-within:border-primary transition-colors">
-                <Search className="w-5 h-5 text-muted-foreground shrink-0" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="جستجو در نام تجاری، ماده موثره، شرکت یا دسته‌بندی…"
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-                />
-                {query && (
-                  <button type="button" onClick={() => setQuery("")} aria-label="پاک کردن">
-                    <X className="w-4 h-4 text-muted-foreground" />
+            {/* ----------------- Per-field filter grid -----------------
+                Instead of one fuzzy search box, we expose a dedicated input
+                for every searchable column. This lets the operator narrow
+                the catalog using whatever attribute they actually remember
+                (commercial name in FA, ingredient in EN, company, …) and
+                combine multiple constraints at once. */}
+            <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] text-muted-foreground">
+                  هر فیلد را به‌تنهایی یا ترکیبی پر کنید — جستجو هم‌زمان روی همه فیلدها انجام می‌شود.
+                </div>
+                {anyFilterActive && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters(EMPTY_FILTERS)}
+                    className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    پاک کردن فیلترها
                   </button>
                 )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(Object.keys(FILTER_COLUMNS) as (keyof MedicineFilters)[]).map((k, idx) => (
+                  <div key={k} className="space-y-1">
+                    <label className="block text-[10px] text-muted-foreground px-1">
+                      {FILTER_LABELS[k]}
+                    </label>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border focus-within:border-primary transition-colors">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        // First field auto-focuses on open for fast typing.
+                        ref={idx === 0 ? firstInputRef : undefined}
+                        type="text"
+                        value={filters[k]}
+                        onChange={(e) => setFilter(k, e.target.value)}
+                        // English-only fields get an LTR placeholder hint.
+                        dir={k.endsWith("_en") ? "ltr" : "rtl"}
+                        placeholder={FILTER_LABELS[k]}
+                        className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 outline-none"
+                      />
+                      {filters[k] && (
+                        <button
+                          type="button"
+                          onClick={() => setFilter(k, "")}
+                          aria-label="پاک کردن"
+                        >
+                          <X className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
