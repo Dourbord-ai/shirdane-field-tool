@@ -1,35 +1,46 @@
 // =============================================================================
-// ChecksTab — the new «مدیریت چک‌ها» tab inside Finance.
+// ChecksTab — the «مدیریت چک‌ها» tab inside Finance.
 // -----------------------------------------------------------------------------
 // One self-contained component that renders:
-//   - KPI cards (totals + due-soon buckets)
-//   - five sub-sections: received, payable, checkbooks, due, bounced
+//   - KPI cards (totals + due-soon buckets) for operational checks
+//   - seven sub-sections: received, payable, guarantee, cancelled,
+//     checkbooks, due, bounced
 //   - shared reusable table for any list of checks
 //   - top-right buttons to open the registration dialogs
 // =============================================================================
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Plus, BookCopy, AlertTriangle, CalendarClock, Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import {
+  Plus, BookCopy, AlertTriangle, CalendarClock, Wallet,
+  ArrowDownToLine, ArrowUpFromLine, ShieldCheck, Ban,
+} from "lucide-react";
 import { useChecks, type CheckRow } from "@/hooks/useChecks";
 import { useCheckbooks, useCheckbookLeaves, type CheckbookRow } from "@/hooks/useCheckbooks";
 import StatusBadge from "./StatusBadge";
 import NewReceivedCheckDialog from "./NewReceivedCheckDialog";
 import NewPayableCheckDialog from "./NewPayableCheckDialog";
 import NewCheckbookDialog from "./NewCheckbookDialog";
+import NewGuaranteeCheckDialog from "./NewGuaranteeCheckDialog";
+import NewCancelledCheckDialog from "./NewCancelledCheckDialog";
 import CheckDetailDialog from "./CheckDetailDialog";
+import GuaranteeChecksTab from "./GuaranteeChecksTab";
+import CancelledChecksTab from "./CancelledChecksTab";
 import { partyLabel, bankLabel, LEAF_STATUS_LABEL } from "@/lib/checks";
 import { JalaliDateCell, MoneyCell } from "@/components/finance/atoms";
 import { formatMoney } from "@/lib/finance";
 
-// Sub-tabs configuration. Keeping it as a flat array makes adding/reordering
-// trivial without touching the render code.
+// Sub-tabs configuration — order matches the product spec exactly.
+// Operational tabs come first, then guarantee/cancelled, then management
+// utility tabs (checkbooks, due, bounced).
 const SUBTABS = [
-  { key: "received", label: "چک‌های دریافتی", icon: ArrowDownToLine },
-  { key: "payable", label: "چک‌های پرداختی", icon: ArrowUpFromLine },
+  { key: "received", label: "چک‌های دریافتنی", icon: ArrowDownToLine },
+  { key: "payable", label: "چک‌های پرداختنی", icon: ArrowUpFromLine },
+  { key: "guarantee", label: "چک‌های ضمانتی", icon: ShieldCheck },
+  { key: "cancelled", label: "چک‌های ابطالی", icon: Ban },
   { key: "checkbooks", label: "دسته‌چک‌ها", icon: BookCopy },
-  { key: "due", label: "سررسید", icon: CalendarClock },
-  { key: "bounced", label: "برگشتی / پرریسک", icon: AlertTriangle },
+  { key: "due", label: "سررسیدها", icon: CalendarClock },
+  { key: "bounced", label: "برگشتی‌ها", icon: AlertTriangle },
 ] as const;
 
 type SubTab = (typeof SUBTABS)[number]["key"];
@@ -39,54 +50,57 @@ export default function ChecksTab() {
   const [openReceived, setOpenReceived] = useState(false);
   const [openPayable, setOpenPayable] = useState(false);
   const [openCheckbook, setOpenCheckbook] = useState(false);
+  const [openGuarantee, setOpenGuarantee] = useState(false);
+  const [openCancelled, setOpenCancelled] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  // Fetch the full check list once — we filter client-side per sub-tab. The
-  // list is small enough in v1 that one query is the simplest path.
-  const { data: allChecks = [] } = useChecks();
+  // Fetch ONLY operational checks for the KPI/list views — guarantee and
+  // cancelled checks have their own dedicated tabs and must never leak into
+  // the received/payable/due/bounced sections per spec.
+  const { data: opChecks = [] } = useChecks({ category: "operational" });
 
-  // Bucket checks by direction + status for the KPI cards and the bounced
-  // section. Memoised so we don't recompute on every render.
+  // Bucket operational checks by direction + status for the KPI cards and
+  // the bounced section. Memoised to avoid recomputing on every render.
   const buckets = useMemo(() => {
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + 7);
-    const dueToday = allChecks.filter((c) => {
+    const dueToday = opChecks.filter((c) => {
       const d = c.due_date ? new Date(c.due_date) : null;
       return d && +d === +today;
     });
-    const dueThisWeek = allChecks.filter((c) => {
+    const dueThisWeek = opChecks.filter((c) => {
       const d = c.due_date ? new Date(c.due_date) : null;
       return d && d > today && d <= weekEnd;
     });
-    const overdue = allChecks.filter((c) => {
+    const overdue = opChecks.filter((c) => {
       const d = c.due_date ? new Date(c.due_date) : null;
-      const open = !["cleared","voided","lost"].includes(c.status);
+      const open = !["cleared", "voided", "lost"].includes(c.status);
       return open && d && d < today;
     });
-    const received = allChecks.filter((c) => c.direction === "received");
-    const payable = allChecks.filter((c) => c.direction === "payable");
-    const bounced = allChecks.filter((c) => c.status === "bounced");
-    const receivedSum = received.filter((c) => !["voided","bounced"].includes(c.status))
+    const received = opChecks.filter((c) => c.direction === "received");
+    const payable = opChecks.filter((c) => c.direction === "payable");
+    const bounced = opChecks.filter((c) => c.status === "bounced");
+    const receivedSum = received.filter((c) => !["voided", "bounced"].includes(c.status))
       .reduce((s, c) => s + Number(c.amount || 0), 0);
-    const payableSum = payable.filter((c) => !["voided","bounced","cleared"].includes(c.status))
+    const payableSum = payable.filter((c) => !["voided", "bounced", "cleared"].includes(c.status))
       .reduce((s, c) => s + Number(c.amount || 0), 0);
     return { dueToday, dueThisWeek, overdue, received, payable, bounced, receivedSum, payableSum };
-  }, [allChecks]);
+  }, [opChecks]);
 
-  // Rows shown in the currently selected sub-tab.
+  // Rows shown in the currently selected operational sub-tab.
   const visibleRows = useMemo(() => {
     switch (sub) {
       case "received": return buckets.received;
-      case "payable":  return buckets.payable;
-      case "due":      return [...buckets.overdue, ...buckets.dueToday, ...buckets.dueThisWeek];
-      case "bounced":  return buckets.bounced;
-      default:         return [];
+      case "payable": return buckets.payable;
+      case "due": return [...buckets.overdue, ...buckets.dueToday, ...buckets.dueThisWeek];
+      case "bounced": return buckets.bounced;
+      default: return [];
     }
   }, [sub, buckets]);
 
   return (
     <div className="space-y-4">
-      {/* Top KPI strip — five cards summarising the whole module at a glance. */}
+      {/* Top KPI strip — five cards summarising the operational module. */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <KPI title="چک‌های دریافتی باز" value={`${formatMoney(buckets.receivedSum)} ریال`} icon={ArrowDownToLine} tone="primary" />
         <KPI title="چک‌های پرداختی باز" value={`${formatMoney(buckets.payableSum)} ریال`} icon={ArrowUpFromLine} tone="muted" />
@@ -97,7 +111,7 @@ export default function ChecksTab() {
 
       {/* Sub-tabs — same visual style as the main Finance tab bar. */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="inline-flex gap-1 p-1 rounded-xl bg-muted/40 border">
+        <div className="inline-flex gap-1 p-1 rounded-xl bg-muted/40 border overflow-x-auto">
           {SUBTABS.map((t) => (
             <button
               key={t.key}
@@ -120,21 +134,36 @@ export default function ChecksTab() {
           {sub === "payable" && (
             <Button size="sm" onClick={() => setOpenPayable(true)}><Plus className="w-4 h-4" /> صدور چک پرداختی</Button>
           )}
+          {sub === "guarantee" && (
+            <Button size="sm" onClick={() => setOpenGuarantee(true)}><Plus className="w-4 h-4" /> ثبت چک ضمانتی</Button>
+          )}
+          {sub === "cancelled" && (
+            <Button size="sm" onClick={() => setOpenCancelled(true)}><Plus className="w-4 h-4" /> ثبت چک ابطالی</Button>
+          )}
           {sub === "checkbooks" && (
             <Button size="sm" onClick={() => setOpenCheckbook(true)}><Plus className="w-4 h-4" /> افزودن دسته‌چک</Button>
           )}
         </div>
       </div>
 
-      {/* Body — table or checkbooks list. */}
-      {sub === "checkbooks"
-        ? <CheckbooksSection />
-        : <ChecksTable rows={visibleRows} onOpen={(id) => setDetailId(id)} highlightOverdue={sub === "due"} />}
+      {/* Body — switches on sub-tab. Guarantee/cancelled have full custom
+          views with their own KPI strips; the rest share the table. */}
+      {sub === "checkbooks" ? (
+        <CheckbooksSection />
+      ) : sub === "guarantee" ? (
+        <GuaranteeChecksTab onOpenDetail={setDetailId} />
+      ) : sub === "cancelled" ? (
+        <CancelledChecksTab onOpenDetail={setDetailId} />
+      ) : (
+        <ChecksTable rows={visibleRows} onOpen={(id) => setDetailId(id)} highlightOverdue={sub === "due"} />
+      )}
 
       {/* Dialogs mounted once at the root so opening doesn't remount the tree. */}
       <NewReceivedCheckDialog open={openReceived} onOpenChange={setOpenReceived} />
       <NewPayableCheckDialog open={openPayable} onOpenChange={setOpenPayable} />
       <NewCheckbookDialog open={openCheckbook} onOpenChange={setOpenCheckbook} />
+      <NewGuaranteeCheckDialog open={openGuarantee} onOpenChange={setOpenGuarantee} />
+      <NewCancelledCheckDialog open={openCancelled} onOpenChange={setOpenCancelled} />
       <CheckDetailDialog checkId={detailId} onOpenChange={(o) => !o && setDetailId(null)} />
     </div>
   );
@@ -192,7 +221,7 @@ function ChecksTable({
       </div>
     );
   }
-  const today = new Date(); today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   return (
     <div className="rounded-lg border border-border bg-card overflow-x-auto">
       <table className="w-full text-sm border-collapse min-w-[820px]">
@@ -212,7 +241,7 @@ function ChecksTable({
         <tbody>
           {rows.map((c) => {
             const d = c.due_date ? new Date(c.due_date) : null;
-            const isOverdue = highlightOverdue && d && d < today && !["cleared","voided","lost"].includes(c.status);
+            const isOverdue = highlightOverdue && d && d < today && !["cleared", "voided", "lost"].includes(c.status);
             return (
               <tr key={c.id} className={cn("border-b border-border last:border-b-0 hover:bg-muted/20", isOverdue && "bg-destructive/5")}>
                 <Td className="font-bold">{c.check_number}</Td>
