@@ -33,6 +33,8 @@ interface Props {
 
 // Map a transition action → the matching check_event_type enum value. We need
 // this so the timeline shows a meaningful row, not just "status_change".
+// Guarantee actions write the dedicated event types added in the latest
+// migration so the audit log reads naturally.
 const ACTION_EVENT: Record<string, CheckEventType> = {
   deposit: "deposited_to_bank",
   transfer_to_party: "transferred_to_party",
@@ -41,6 +43,9 @@ const ACTION_EVENT: Record<string, CheckEventType> = {
   void: "voided",
   mark_lost: "marked_lost",
   deliver: "delivered",
+  return_guarantee: "guarantee_returned",
+  claim_guarantee: "guarantee_claimed",
+  expire_guarantee: "status_change",
 };
 
 export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
