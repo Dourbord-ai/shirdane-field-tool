@@ -359,6 +359,11 @@ export async function processDepositAI(
   log("candidates.count", { total: progress.total, identified: progress.identified_by_ai });
   push(`${progress.total} تراکنش آماده برای شناسایی`);
 
+  // Load our own bank identifiers ONCE per run so we can short-circuit any
+  // deposit whose verified number belongs to one of our own accounts (those
+  // are inter-bank transfers, not party receives).
+  const ownBankIdentifiers = await loadOwnBankIdentifiers();
+
   // 3) iterate sequentially — keeps DB load predictable and makes per-row
   //    failure isolation trivial (one try/catch per iteration).
   for (const tx of candidates) {
