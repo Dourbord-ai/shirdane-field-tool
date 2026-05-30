@@ -515,7 +515,10 @@ export default function MixedInvoiceForm() {
   // Changing a row's product_type clears its detail bag — fields differ per
   // type and stale keys would silently fail validation.
   const changeRowType = (uid: string, product_type: ProductType) =>
-    updateRow(uid, { product_type, details: {} });
+    // Also drop the bespoke-picker snapshots (medicine + feed) so a leftover
+    // FeedProduct from a previous selection doesn't get persisted when the
+    // operator switches the row to a different product type.
+    updateRow(uid, { product_type, details: {}, medicineProduct: null, feedProduct: null });
 
   // -----------------------------------------------------------------------
   // Totals (computed live). We sum row totals so the header stores a
