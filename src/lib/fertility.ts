@@ -33,6 +33,9 @@ export type FertilityEvent = {
   // tests: 3=initial, 4=final, 11=extra, 12=dry). Preferred source of truth
   // over metadata.test_type for classification in reports/lists.
   fertility_operation_id?: number | null;
+  // Structured FK to fertility_erotic_types.id for heat events. Preferred
+  // source of truth for the heat type label over metadata.erotic_type_label.
+  erotic_type_id?: number | null;
   notes: string | null;
   metadata: Record<string, unknown> | null;
   legacy_table_name: string | null;
