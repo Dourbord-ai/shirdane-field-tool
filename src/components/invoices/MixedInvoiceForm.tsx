@@ -811,12 +811,49 @@ export default function MixedInvoiceForm() {
                 </div>
               </div>
 
-              {/* per-product detail block. We render whatever fields the
-                  DETAIL_CONFIG declares for this product_type. */}
+              {/* per-product detail block. If this product_type has a
+                  master-list selector (livestock/sperm/feed/medicine), we
+                  render a searchable dropdown at the top — the operator
+                  picks the canonical record and its FK id + display fields
+                  are written into row.details automatically. Below the
+                  selector we render any extra editable fields declared in
+                  DETAIL_CONFIG. For product types without a master table
+                  (manure/milk/rental/services/other) we fall back to plain
+                  free-text inputs. */}
               <div className="pt-2 border-t border-border/60">
                 <div className="text-xs text-muted-foreground mb-2">
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
                 </div>
+
+                {(() => {
+                  // Render the master-table selector when one is defined.
+                  const sel = SELECTOR_CONFIG[row.product_type];
+                  if (!sel) return null;
+                  const bucket = masters[sel.source];
+                  const selectedValue = row.details[sel.primaryKey] ?? "";
+                  const display = row.details._display;
+                  return (
+                    <div className="mb-3">
+                      <SearchableSelect
+                        label={sel.label}
+                        options={bucket.options}
+                        value={selectedValue}
+                        onChange={(v) => applyMasterSelection(row.uid, row.product_type, v)}
+                        placeholder={
+                          bucket.options.length
+                            ? "جستجو و انتخاب..."
+                            : "در حال بارگذاری..."
+                        }
+                      />
+                      {display && (
+                        <div className="mt-1 text-xs text-primary">
+                          انتخاب‌شده: {display}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {cfg.fields.map((f) => (
                     <DynamicField
@@ -828,6 +865,7 @@ export default function MixedInvoiceForm() {
                   ))}
                 </div>
               </div>
+
             </div>
           );
         })}
