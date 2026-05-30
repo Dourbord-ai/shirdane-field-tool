@@ -53,6 +53,8 @@ import InseminationList from "./fertility-tabs/lists/InseminationList";
 import PregnancyTestList from "./fertility-tabs/lists/PregnancyTestList";
 import CalvingList from "./fertility-tabs/lists/CalvingList";
 import AbortionList from "./fertility-tabs/lists/AbortionList";
+import RinseList from "./fertility-tabs/lists/RinseList";
+import CleanTestList from "./fertility-tabs/lists/CleanTestList";
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
