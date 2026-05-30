@@ -1369,6 +1369,258 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_item_feed_details: {
+        Row: {
+          batch_number: string | null
+          created_at: string
+          dry_matter_pct: number | null
+          expire_date: string | null
+          factor_item_id: string
+          feed_id: number | null
+          feed_name: string | null
+          warehouse_id: number | null
+        }
+        Insert: {
+          batch_number?: string | null
+          created_at?: string
+          dry_matter_pct?: number | null
+          expire_date?: string | null
+          factor_item_id: string
+          feed_id?: number | null
+          feed_name?: string | null
+          warehouse_id?: number | null
+        }
+        Update: {
+          batch_number?: string | null
+          created_at?: string
+          dry_matter_pct?: number | null
+          expire_date?: string | null
+          factor_item_id?: string
+          feed_id?: number | null
+          feed_name?: string | null
+          warehouse_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_feed_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_livestock_details: {
+        Row: {
+          cow_id: number | null
+          created_at: string
+          delivery_cost: number | null
+          existence_status: number | null
+          factor_item_id: string
+          off_unit_price: number | null
+          payable_unit_price: number | null
+          vat: number | null
+          weight: number | null
+        }
+        Insert: {
+          cow_id?: number | null
+          created_at?: string
+          delivery_cost?: number | null
+          existence_status?: number | null
+          factor_item_id: string
+          off_unit_price?: number | null
+          payable_unit_price?: number | null
+          vat?: number | null
+          weight?: number | null
+        }
+        Update: {
+          cow_id?: number | null
+          created_at?: string
+          delivery_cost?: number | null
+          existence_status?: number | null
+          factor_item_id?: string
+          off_unit_price?: number | null
+          payable_unit_price?: number | null
+          vat?: number | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_livestock_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_manure_details: {
+        Row: {
+          created_at: string
+          destination: string | null
+          factor_item_id: string
+          manure_type: string | null
+          moisture_pct: number | null
+          source_location: string | null
+          vehicle_plate: string | null
+        }
+        Insert: {
+          created_at?: string
+          destination?: string | null
+          factor_item_id: string
+          manure_type?: string | null
+          moisture_pct?: number | null
+          source_location?: string | null
+          vehicle_plate?: string | null
+        }
+        Update: {
+          created_at?: string
+          destination?: string | null
+          factor_item_id?: string
+          manure_type?: string | null
+          moisture_pct?: number | null
+          source_location?: string | null
+          vehicle_plate?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_manure_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_medicine_details: {
+        Row: {
+          batch_number: string | null
+          created_at: string
+          expire_date: string | null
+          factor_item_id: string
+          manufacturer: string | null
+          medicine_id: number | null
+          medicine_name: string | null
+          warehouse_id: number | null
+          withdrawal_days: number | null
+        }
+        Insert: {
+          batch_number?: string | null
+          created_at?: string
+          expire_date?: string | null
+          factor_item_id: string
+          manufacturer?: string | null
+          medicine_id?: number | null
+          medicine_name?: string | null
+          warehouse_id?: number | null
+          withdrawal_days?: number | null
+        }
+        Update: {
+          batch_number?: string | null
+          created_at?: string
+          expire_date?: string | null
+          factor_item_id?: string
+          manufacturer?: string | null
+          medicine_id?: number | null
+          medicine_name?: string | null
+          warehouse_id?: number | null
+          withdrawal_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_medicine_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_service_details: {
+        Row: {
+          created_at: string
+          factor_item_id: string
+          hours: number | null
+          notes: string | null
+          provider_name: string | null
+          service_code: string | null
+          service_date: string | null
+          service_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          factor_item_id: string
+          hours?: number | null
+          notes?: string | null
+          provider_name?: string | null
+          service_code?: string | null
+          service_date?: string | null
+          service_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          factor_item_id?: string
+          hours?: number | null
+          notes?: string | null
+          provider_name?: string | null
+          service_code?: string | null
+          service_date?: string | null
+          service_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_service_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_sperm_details: {
+        Row: {
+          batch_number: string | null
+          breed: string | null
+          bull_code: string | null
+          bull_name: string | null
+          created_at: string
+          factor_item_id: string
+          production_date: string | null
+          sperm_id: number | null
+          tank_id: number | null
+        }
+        Insert: {
+          batch_number?: string | null
+          breed?: string | null
+          bull_code?: string | null
+          bull_name?: string | null
+          created_at?: string
+          factor_item_id: string
+          production_date?: string | null
+          sperm_id?: number | null
+          tank_id?: number | null
+        }
+        Update: {
+          batch_number?: string | null
+          breed?: string | null
+          bull_code?: string | null
+          bull_name?: string | null
+          created_at?: string
+          factor_item_id?: string
+          production_date?: string | null
+          sperm_id?: number | null
+          tank_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_sperm_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       factor_item_type: {
         Row: {
           category: string
@@ -1404,6 +1656,68 @@ export type Database = {
           name?: string | null
         }
         Relationships: []
+      }
+      factor_items: {
+        Row: {
+          account_code: string | null
+          cost_center: string | null
+          created_at: string
+          description: string | null
+          discount_amount: number
+          factor_id: string
+          id: string
+          product_type: string
+          quantity: number
+          row_number: number | null
+          tax_amount: number
+          total_amount: number
+          unit: string | null
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          account_code?: string | null
+          cost_center?: string | null
+          created_at?: string
+          description?: string | null
+          discount_amount?: number
+          factor_id: string
+          id?: string
+          product_type: string
+          quantity?: number
+          row_number?: number | null
+          tax_amount?: number
+          total_amount?: number
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Update: {
+          account_code?: string | null
+          cost_center?: string | null
+          created_at?: string
+          description?: string | null
+          discount_amount?: number
+          factor_id?: string
+          id?: string
+          product_type?: string
+          quantity?: number
+          row_number?: number | null
+          tax_amount?: number
+          total_amount?: number
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_items_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       factor_posting_attempts: {
         Row: {
