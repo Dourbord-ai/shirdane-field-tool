@@ -271,16 +271,11 @@ const SELECTOR_CONFIG: Partial<Record<ProductType, SelectorDef>> = {
       _display: String(f.name ?? ""),
     }),
   },
-  medicine: {
-    label: "انتخاب دارو",
-    source: "medicines",
-    primaryKey: "medicine_id",
-    apply: (m) => ({
-      medicine_id: String(m.id),
-      medicine_name: String(m.name ?? ""),
-      _display: String(m.name ?? ""),
-    }),
-  },
+  // NOTE: medicine intentionally has NO entry here. The medicine product
+  // type uses the bespoke <MedicineProductPicker> (rich server-side search
+  // across 7 Persian/English columns + verification banner + frequently
+  // used chips) instead of the generic single-list dropdown.
+
 };
 
 // Detail-bag keys that must be coerced to number before insert (FK ids).
