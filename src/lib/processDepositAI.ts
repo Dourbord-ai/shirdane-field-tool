@@ -218,7 +218,8 @@ async function setVerifyResult(
     | "verify_failed"
     | "party_not_found"
     | "posted"
-    | "posting_failed",
+    | "posting_failed"
+    | "own_bank_transfer",
   patch: { result?: unknown; error?: string | null } = {},
 ) {
   await supabase
@@ -230,6 +231,46 @@ async function setVerifyResult(
       ai_verified_at: new Date().toISOString(),
     })
     .eq("id", txId);
+}
+
+// ---------------------------------------------------------------------------
+// Own-bank identifier guard. Before treating a deposit as a party receive,
+// we MUST check whether ai_verify_payload.number matches one of OUR OWN
+// finance_banks identifiers (account_number / iban_number / card_number).
+// If it does, this is an inter-bank transfer between our own accounts —
+// it must NOT become a receive_identification and must NOT post to Sepidar.
+// It is left for the شناسایی تراکنش بین بانکی flow.
+// We load all bank identifiers once per run (small table) and compare on a
+// digits-only normalized form so "IR..." IBAN prefixes and dashes in card
+// numbers don't cause false negatives.
+// ---------------------------------------------------------------------------
+function normalizeIdentifier(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).replace(/\D+/g, "");
+}
+
+async function loadOwnBankIdentifiers(): Promise<Set<string>> {
+  const set = new Set<string>();
+  const { data, error } = await supabase
+    .from("finance_banks")
+    .select("account_number, iban_number, card_number")
+    .eq("is_deleted", false);
+  if (error) {
+    log("ownBanks.error", { error: error.message });
+    return set;
+  }
+  for (const row of (data ?? []) as Array<{
+    account_number: string | null;
+    iban_number: string | null;
+    card_number: string | null;
+  }>) {
+    for (const v of [row.account_number, row.iban_number, row.card_number]) {
+      const n = normalizeIdentifier(v);
+      if (n) set.add(n);
+    }
+  }
+  log("ownBanks.loaded", { count: set.size });
+  return set;
 }
 
 // ---------------------------------------------------------------------------
