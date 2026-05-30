@@ -396,6 +396,10 @@ function formatRial(n: number): string {
 
 export default function NewInvoice() {
   const navigate = useNavigate();
+  // Toggle between the legacy single-product form and the new normalized
+  // mixed-row form (factor_items + per-type detail tables). Defaults to the
+  // classic form so muscle memory is preserved for existing operators.
+  const [useMixedMode, setUseMixedMode] = useState(false);
   const [data, setData] = useState<InvoiceData>(initial);
   const [rows, setRows] = useState<ProductRow[]>([createRow()]);
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
