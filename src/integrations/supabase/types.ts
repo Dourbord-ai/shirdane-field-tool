@@ -2203,6 +2203,162 @@ export type Database = {
           },
         ]
       }
+      feed_products: {
+        Row: {
+          adf: number | null
+          ash: number | null
+          calcium: number | null
+          category_en: string | null
+          category_fa: string | null
+          chloride: number | null
+          commercial_product_name_en: string | null
+          commercial_product_name_fa: string | null
+          company_code: string | null
+          company_country: string | null
+          company_name_en: string | null
+          company_name_fa: string | null
+          created_at: string | null
+          crude_protein: number | null
+          dry_matter: number | null
+          fat: number | null
+          feed_code: string | null
+          feed_form: string | null
+          id: number
+          is_active: boolean | null
+          label_verification_status: string | null
+          lignin: number | null
+          magnesium: number | null
+          market_scope: string | null
+          me_mcal_kg: number | null
+          name_en: string | null
+          name_fa: string | null
+          ndf: number | null
+          nel_mcal_kg: number | null
+          notes: string | null
+          phosphorus: number | null
+          potassium: number | null
+          product_name_type: string | null
+          product_type: string | null
+          rdp: number | null
+          recommended_inclusion_max_percent: number | null
+          recommended_inclusion_min_percent: number | null
+          rup: number | null
+          sodium: number | null
+          source_confidence: string | null
+          source_system: string | null
+          starch: number | null
+          sugar: number | null
+          sulfur: number | null
+          target_group: string | null
+          updated_at: string | null
+          vitamin_a: number | null
+          vitamin_d: number | null
+          vitamin_e: number | null
+        }
+        Insert: {
+          adf?: number | null
+          ash?: number | null
+          calcium?: number | null
+          category_en?: string | null
+          category_fa?: string | null
+          chloride?: number | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_code?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
+          created_at?: string | null
+          crude_protein?: number | null
+          dry_matter?: number | null
+          fat?: number | null
+          feed_code?: string | null
+          feed_form?: string | null
+          id?: number
+          is_active?: boolean | null
+          label_verification_status?: string | null
+          lignin?: number | null
+          magnesium?: number | null
+          market_scope?: string | null
+          me_mcal_kg?: number | null
+          name_en?: string | null
+          name_fa?: string | null
+          ndf?: number | null
+          nel_mcal_kg?: number | null
+          notes?: string | null
+          phosphorus?: number | null
+          potassium?: number | null
+          product_name_type?: string | null
+          product_type?: string | null
+          rdp?: number | null
+          recommended_inclusion_max_percent?: number | null
+          recommended_inclusion_min_percent?: number | null
+          rup?: number | null
+          sodium?: number | null
+          source_confidence?: string | null
+          source_system?: string | null
+          starch?: number | null
+          sugar?: number | null
+          sulfur?: number | null
+          target_group?: string | null
+          updated_at?: string | null
+          vitamin_a?: number | null
+          vitamin_d?: number | null
+          vitamin_e?: number | null
+        }
+        Update: {
+          adf?: number | null
+          ash?: number | null
+          calcium?: number | null
+          category_en?: string | null
+          category_fa?: string | null
+          chloride?: number | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_code?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
+          created_at?: string | null
+          crude_protein?: number | null
+          dry_matter?: number | null
+          fat?: number | null
+          feed_code?: string | null
+          feed_form?: string | null
+          id?: number
+          is_active?: boolean | null
+          label_verification_status?: string | null
+          lignin?: number | null
+          magnesium?: number | null
+          market_scope?: string | null
+          me_mcal_kg?: number | null
+          name_en?: string | null
+          name_fa?: string | null
+          ndf?: number | null
+          nel_mcal_kg?: number | null
+          notes?: string | null
+          phosphorus?: number | null
+          potassium?: number | null
+          product_name_type?: string | null
+          product_type?: string | null
+          rdp?: number | null
+          recommended_inclusion_max_percent?: number | null
+          recommended_inclusion_min_percent?: number | null
+          rup?: number | null
+          sodium?: number | null
+          source_confidence?: string | null
+          source_system?: string | null
+          starch?: number | null
+          sugar?: number | null
+          sulfur?: number | null
+          target_group?: string | null
+          updated_at?: string | null
+          vitamin_a?: number | null
+          vitamin_d?: number | null
+          vitamin_e?: number | null
+        }
+        Relationships: []
+      }
       feeds: {
         Row: {
           id: number

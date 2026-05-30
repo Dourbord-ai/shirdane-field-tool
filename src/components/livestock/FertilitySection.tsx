@@ -45,6 +45,14 @@ import { existanceLabel, isFemaleCow } from "@/lib/cowPresence";
 // All math centralised in src/lib/fertility/* so dialogs/cards/tabs share logic.
 import { useFertilitySummary } from "@/hooks/useFertilitySummary";
 import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHeader";
+// Per-operation list tables — each one renders every field captured by the
+// matching Registration Dialog as a column, so users can audit a full record
+// without opening a modal/details view.
+import HeatList from "./fertility-tabs/lists/HeatList";
+import InseminationList from "./fertility-tabs/lists/InseminationList";
+import PregnancyTestList from "./fertility-tabs/lists/PregnancyTestList";
+import CalvingList from "./fertility-tabs/lists/CalvingList";
+import AbortionList from "./fertility-tabs/lists/AbortionList";
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
@@ -1005,11 +1013,12 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
           {/* Per-type tabs — each one shows the relevant TabInsightHeader chips
               above the list and enrichment chips on each card via enrichmentMap. */}
           <TabsContent value="heat">
+            {/* Insight chips above the table summarise cycle stats; the table
+                below replaces the old generic EventCard list and exposes
+                every field collected by HeatRegistrationDialog as a column. */}
             <TabInsightHeader tab="heat" summary={summary} />
-            <EventList
+            <HeatList
               events={byType.heat ?? []}
-              emptyText="رویداد فحلی ثبت نشده است"
-              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
@@ -1017,10 +1026,8 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
           </TabsContent>
           <TabsContent value="insemination">
             <TabInsightHeader tab="insemination" summary={summary} />
-            <EventList
+            <InseminationList
               events={byType.insemination ?? []}
-              emptyText="تلقیحی ثبت نشده است"
-              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
@@ -1028,10 +1035,8 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
           </TabsContent>
           <TabsContent value="pregnancy_test">
             <TabInsightHeader tab="pregnancy_test" summary={summary} />
-            <EventList
+            <PregnancyTestList
               events={byType.pregnancy_test ?? []}
-              emptyText="تست آبستنی ثبت نشده است"
-              enrichmentMap={enrichmentMap}
               onEdit={setEditEvent}
               onCancel={setCancelEvent}
               resolveUserName={resolveUserName}
@@ -1039,22 +1044,35 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
           </TabsContent>
 
           <TabsContent value="calving_abortion">
-            {/* Show calving header — most of these tabs land on a زایش flow first;
-                سقط chips overlap mostly so this is the right default. */}
+            {/* User requested separate full lists for calving vs abortion, so
+                we render two clearly-titled tables stacked vertically instead
+                of one merged list. Each table shows every field of its own
+                form (period, calf count, gender, condition for calving;
+                period, milking/dry status for abortion). */}
             <TabInsightHeader tab="calving" summary={summary} />
-            <EventList
-              events={[...(byType.calving ?? []), ...(byType.abortion ?? [])].sort((a, b) =>
-                (b.event_date ?? "").localeCompare(a.event_date ?? ""),
-              )}
-              emptyText="رویداد زایش یا سقط ثبت نشده است"
-              enrichmentMap={enrichmentMap}
-              onCreateCalves={setCalvesReviewEvent}
-              onEdit={setEditEvent}
-              onCancel={setCancelEvent}
-              resolveUserName={resolveUserName}
-              calfLiveMap={calfLiveMap}
-            />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">لیست زایش</h3>
+                <CalvingList
+                  events={byType.calving ?? []}
+                  onEdit={setEditEvent}
+                  onCancel={setCancelEvent}
+                  onCreateCalves={setCalvesReviewEvent}
+                  resolveUserName={resolveUserName}
+                />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">لیست سقط</h3>
+                <AbortionList
+                  events={byType.abortion ?? []}
+                  onEdit={setEditEvent}
+                  onCancel={setCancelEvent}
+                  resolveUserName={resolveUserName}
+                />
+              </div>
+            </div>
           </TabsContent>
+
 
           <TabsContent value="dry_off">
             <TabInsightHeader tab="dry_off" summary={summary} />
