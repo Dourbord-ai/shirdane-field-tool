@@ -5014,6 +5014,96 @@ export type Database = {
           },
         ]
       }
+      medicine_products: {
+        Row: {
+          category_en: string | null
+          category_fa: string | null
+          commercial_product_name_en: string | null
+          commercial_product_name_fa: string | null
+          company_code: string | null
+          company_country: string | null
+          company_name_en: string | null
+          company_name_fa: string | null
+          created_at: string | null
+          dosage_form: string | null
+          id: number
+          is_active: boolean | null
+          label_verification_status: string | null
+          market_scope: string | null
+          meat_withdrawal_days: number | null
+          medicine_code: string | null
+          milk_withdrawal_days: number | null
+          name_en: string | null
+          name_fa: string | null
+          notes: string | null
+          product_code: string | null
+          product_name_type: string | null
+          route_en: string | null
+          route_fa: string | null
+          source_confidence: string | null
+          strength_or_form: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          category_en?: string | null
+          category_fa?: string | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_code?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
+          created_at?: string | null
+          dosage_form?: string | null
+          id?: number
+          is_active?: boolean | null
+          label_verification_status?: string | null
+          market_scope?: string | null
+          meat_withdrawal_days?: number | null
+          medicine_code?: string | null
+          milk_withdrawal_days?: number | null
+          name_en?: string | null
+          name_fa?: string | null
+          notes?: string | null
+          product_code?: string | null
+          product_name_type?: string | null
+          route_en?: string | null
+          route_fa?: string | null
+          source_confidence?: string | null
+          strength_or_form?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          category_en?: string | null
+          category_fa?: string | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_code?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
+          created_at?: string | null
+          dosage_form?: string | null
+          id?: number
+          is_active?: boolean | null
+          label_verification_status?: string | null
+          market_scope?: string | null
+          meat_withdrawal_days?: number | null
+          medicine_code?: string | null
+          milk_withdrawal_days?: number | null
+          name_en?: string | null
+          name_fa?: string | null
+          notes?: string | null
+          product_code?: string | null
+          product_name_type?: string | null
+          route_en?: string | null
+          route_fa?: string | null
+          source_confidence?: string | null
+          strength_or_form?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       medicines: {
         Row: {
           id: number
