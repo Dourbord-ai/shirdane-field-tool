@@ -384,6 +384,26 @@ export async function processDepositAI(
         push();
         continue;
       }
+
+      // OWN-BANK GUARD — must run BEFORE claim/verify/party-match so that a
+      // deposit between our own accounts is never converted into a receive
+      // identification or posted to Sepidar. It belongs to the inter-bank
+      // transfer flow instead. We mark the row terminal so reruns skip it.
+      const normalizedPayloadNumber = normalizeIdentifier(payload.number);
+      if (
+        normalizedPayloadNumber &&
+        ownBankIdentifiers.has(normalizedPayloadNumber)
+      ) {
+        log("own_bank.skip", { txId: tx.id, number: payload.number });
+        await setVerifyResult(tx.id, "own_bank_transfer", {
+          result: { reason: "own_bank_identifier", number: payload.number },
+          error:
+            "این شماره متعلق به یکی از حساب‌های خود ماست — برای شناسایی تراکنش بین بانکی نگه داشته شد",
+        });
+        push(`انتقال بین بانکی — ${tx.id.slice(0, 8)}`);
+        continue;
+      }
+
       const claimed = await claim(tx.id);
       if (!claimed) {
         log("skip", { txId: tx.id, reason: "claim failed (race?)" });
