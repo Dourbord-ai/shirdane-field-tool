@@ -31,6 +31,10 @@ import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+// Reusable enterprise medicine picker (server-side search across the new
+// medicine_products catalog). Designed as a global component so it can later
+// power treatments / prescriptions / inventory the same way.
+import MedicineProductPicker, { MedicineProduct } from "@/components/medicine/MedicineProductPicker";
 
 // ---------------------------------------------------------------------------
 // Static option lists. These are intentionally local to the new form so
@@ -84,6 +88,11 @@ interface MixedRow {
   description: string;
   // Per-product detail bag. Keys vary per product_type — see renderRowDetails.
   details: Record<string, string>;
+  // Medicine-only snapshot of the chosen catalog row. We keep the FULL object
+  // here (rather than just the FK id) so the info panel can render
+  // synchronously and the save handler can emit every snapshot column
+  // without re-querying the catalog.
+  medicineProduct?: MedicineProduct | null;
 }
 
 // Helper: produce a fresh blank row for a given product_type. We default to
@@ -98,6 +107,7 @@ const blankRow = (product_type: ProductType = "livestock"): MixedRow => ({
   tax_amount: "0",
   description: "",
   details: {},
+  medicineProduct: null,
 });
 
 // ---------------------------------------------------------------------------
@@ -141,12 +151,15 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   medicine: {
     dbTable: "factor_item_medicine_details",
-    // medicine_id + medicine_name set by selector.
+    // The medicine itself is chosen through the rich MedicineProductPicker
+    // (rendered separately below). Every catalog-derived field — commercial
+    // name, active ingredient, company, country, dosage form, route,
+    // category, withdrawal periods — is snapshotted automatically from the
+    // selected medicine_products row, so the operator only enters the
+    // truly per-purchase fields (batch + expiry).
     fields: [
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "expire_date", label: "تاریخ انقضا", type: "date" },
-      { key: "manufacturer", label: "تولیدکننده", type: "text" },
-      { key: "withdrawal_days", label: "روز پرهیز", type: "number" },
     ],
   },
   sperm: {
@@ -258,16 +271,11 @@ const SELECTOR_CONFIG: Partial<Record<ProductType, SelectorDef>> = {
       _display: String(f.name ?? ""),
     }),
   },
-  medicine: {
-    label: "انتخاب دارو",
-    source: "medicines",
-    primaryKey: "medicine_id",
-    apply: (m) => ({
-      medicine_id: String(m.id),
-      medicine_name: String(m.name ?? ""),
-      _display: String(m.name ?? ""),
-    }),
-  },
+  // NOTE: medicine intentionally has NO entry here. The medicine product
+  // type uses the bespoke <MedicineProductPicker> (rich server-side search
+  // across 7 Persian/English columns + verification banner + frequently
+  // used chips) instead of the generic single-list dropdown.
+
 };
 
 // Detail-bag keys that must be coerced to number before insert (FK ids).
@@ -661,6 +669,37 @@ export default function MixedInvoiceForm() {
           detailPayload[key] = isNumeric ? num(raw) : raw;
         }
 
+        // Medicine-specific: snapshot every catalog-derived column from the
+        // chosen medicine_products row into factor_item_medicine_details, so
+        // the invoice line history stays correct even if the catalog row
+        // gets edited or deactivated later.
+        if (row.product_type === "medicine" && row.medicineProduct) {
+          const m = row.medicineProduct;
+          // medicine_name kept for backward compatibility with legacy code
+          // that reads the old text column (display fallback).
+          detailPayload.medicine_product_id = m.id;
+          detailPayload.medicine_name =
+            m.commercial_product_name_fa ?? m.commercial_product_name_en ?? null;
+          detailPayload.commercial_product_name_fa = m.commercial_product_name_fa;
+          detailPayload.commercial_product_name_en = m.commercial_product_name_en;
+          detailPayload.active_ingredient_fa = m.name_fa;
+          detailPayload.active_ingredient_en = m.name_en;
+          detailPayload.company_name_fa = m.company_name_fa;
+          detailPayload.company_name_en = m.company_name_en;
+          detailPayload.company_country = m.company_country;
+          detailPayload.dosage_form = m.dosage_form;
+          detailPayload.route_fa = m.route_fa;
+          detailPayload.category_fa = m.category_fa;
+          detailPayload.milk_withdrawal_days = m.milk_withdrawal_days;
+          detailPayload.meat_withdrawal_days = m.meat_withdrawal_days;
+          detailPayload.label_verification_status = m.label_verification_status;
+          // Legacy `manufacturer` column kept populated from the new
+          // company_name_fa so any existing reports continue to render.
+          if (!detailPayload.manufacturer) {
+            detailPayload.manufacturer = m.company_name_fa ?? m.company_name_en ?? null;
+          }
+        }
+
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
           // map, so this dynamic .from() is safe.
@@ -848,34 +887,48 @@ export default function MixedInvoiceForm() {
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
                 </div>
 
-                {(() => {
-                  // Render the master-table selector when one is defined.
-                  const sel = SELECTOR_CONFIG[row.product_type];
-                  if (!sel) return null;
-                  const bucket = masters[sel.source];
-                  const selectedValue = row.details[sel.primaryKey] ?? "";
-                  const display = row.details._display;
-                  return (
-                    <div className="mb-3">
-                      <SearchableSelect
-                        label={sel.label}
-                        options={bucket.options}
-                        value={selectedValue}
-                        onChange={(v) => applyMasterSelection(row.uid, row.product_type, v)}
-                        placeholder={
-                          bucket.options.length
-                            ? "جستجو و انتخاب..."
-                            : "در حال بارگذاری..."
-                        }
-                      />
-                      {display && (
-                        <div className="mt-1 text-xs text-primary">
-                          انتخاب‌شده: {display}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* Medicine product type → rich enterprise picker.
+                    All other "selectable" product types fall back to the
+                    generic <SearchableSelect> driven by SELECTOR_CONFIG. */}
+                {row.product_type === "medicine" ? (
+                  <div className="mb-3">
+                    <MedicineProductPicker
+                      value={row.medicineProduct?.id ?? null}
+                      selected={row.medicineProduct ?? null}
+                      onSelect={(m) => updateRow(row.uid, { medicineProduct: m })}
+                      onClear={() => updateRow(row.uid, { medicineProduct: null })}
+                    />
+                  </div>
+                ) : (
+                  (() => {
+                    // Render the generic master-table selector when one is defined.
+                    const sel = SELECTOR_CONFIG[row.product_type];
+                    if (!sel) return null;
+                    const bucket = masters[sel.source];
+                    const selectedValue = row.details[sel.primaryKey] ?? "";
+                    const display = row.details._display;
+                    return (
+                      <div className="mb-3">
+                        <SearchableSelect
+                          label={sel.label}
+                          options={bucket.options}
+                          value={selectedValue}
+                          onChange={(v) => applyMasterSelection(row.uid, row.product_type, v)}
+                          placeholder={
+                            bucket.options.length
+                              ? "جستجو و انتخاب..."
+                              : "در حال بارگذاری..."
+                          }
+                        />
+                        {display && (
+                          <div className="mt-1 text-xs text-primary">
+                            انتخاب‌شده: {display}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {cfg.fields.map((f) => (

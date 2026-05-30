@@ -1494,35 +1494,77 @@ export type Database = {
       }
       factor_item_medicine_details: {
         Row: {
+          active_ingredient_en: string | null
+          active_ingredient_fa: string | null
           batch_number: string | null
+          category_fa: string | null
+          commercial_product_name_en: string | null
+          commercial_product_name_fa: string | null
+          company_country: string | null
+          company_name_en: string | null
+          company_name_fa: string | null
           created_at: string
+          dosage_form: string | null
           expire_date: string | null
           factor_item_id: string
+          label_verification_status: string | null
           manufacturer: string | null
+          meat_withdrawal_days: number | null
           medicine_id: number | null
           medicine_name: string | null
+          medicine_product_id: number | null
+          milk_withdrawal_days: number | null
+          route_fa: string | null
           warehouse_id: number | null
           withdrawal_days: number | null
         }
         Insert: {
+          active_ingredient_en?: string | null
+          active_ingredient_fa?: string | null
           batch_number?: string | null
+          category_fa?: string | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
           created_at?: string
+          dosage_form?: string | null
           expire_date?: string | null
           factor_item_id: string
+          label_verification_status?: string | null
           manufacturer?: string | null
+          meat_withdrawal_days?: number | null
           medicine_id?: number | null
           medicine_name?: string | null
+          medicine_product_id?: number | null
+          milk_withdrawal_days?: number | null
+          route_fa?: string | null
           warehouse_id?: number | null
           withdrawal_days?: number | null
         }
         Update: {
+          active_ingredient_en?: string | null
+          active_ingredient_fa?: string | null
           batch_number?: string | null
+          category_fa?: string | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
           created_at?: string
+          dosage_form?: string | null
           expire_date?: string | null
           factor_item_id?: string
+          label_verification_status?: string | null
           manufacturer?: string | null
+          meat_withdrawal_days?: number | null
           medicine_id?: number | null
           medicine_name?: string | null
+          medicine_product_id?: number | null
+          milk_withdrawal_days?: number | null
+          route_fa?: string | null
           warehouse_id?: number | null
           withdrawal_days?: number | null
         }
@@ -1532,6 +1574,13 @@ export type Database = {
             columns: ["factor_item_id"]
             isOneToOne: true
             referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factor_item_medicine_details_medicine_product_id_fkey"
+            columns: ["medicine_product_id"]
+            isOneToOne: false
+            referencedRelation: "medicine_products"
             referencedColumns: ["id"]
           },
         ]
@@ -5848,6 +5897,8 @@ export type Database = {
         Returns: undefined
       }
       safe_text_to_date: { Args: { p_text: string }; Returns: string }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       submit_cow_factor: {
         Args: { p_details: Json; p_factor: Json }
         Returns: Json
