@@ -96,6 +96,10 @@ interface MixedRow {
   // synchronously and the save handler can emit every snapshot column
   // without re-querying the catalog.
   medicineProduct?: MedicineProduct | null;
+  // Feed-only snapshot — identical pattern to medicineProduct. Populated by
+  // <FeedProductPicker> when product_type === 'feed' and consumed by the
+  // save handler to snapshot every nutritional column onto the invoice line.
+  feedProduct?: FeedProduct | null;
 }
 
 // Helper: produce a fresh blank row for a given product_type. We default to
@@ -111,6 +115,7 @@ const blankRow = (product_type: ProductType = "livestock"): MixedRow => ({
   description: "",
   details: {},
   medicineProduct: null,
+  feedProduct: null,
 });
 
 // ---------------------------------------------------------------------------
