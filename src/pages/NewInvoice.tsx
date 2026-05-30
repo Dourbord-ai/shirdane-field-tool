@@ -14,6 +14,9 @@ import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
 import { toast } from "@/hooks/use-toast";
+// New normalized-mode form. Rendered when the user toggles into "mixed" mode
+// at the top of the page. See component file for details.
+import MixedInvoiceForm from "@/components/invoices/MixedInvoiceForm";
 // API service for the new .NET-backed "فاکتور دام" submission flow.
 // We import only what we need so tree-shaking can drop unused exports.
 import {
@@ -393,6 +396,10 @@ function formatRial(n: number): string {
 
 export default function NewInvoice() {
   const navigate = useNavigate();
+  // Toggle between the legacy single-product form and the new normalized
+  // mixed-row form (factor_items + per-type detail tables). Defaults to the
+  // classic form so muscle memory is preserved for existing operators.
+  const [useMixedMode, setUseMixedMode] = useState(false);
   const [data, setData] = useState<InvoiceData>(initial);
   const [rows, setRows] = useState<ProductRow[]>([createRow()]);
   const [milkRows, setMilkRows] = useState<MilkProductRow[]>([createMilkRow()]);
@@ -1482,9 +1489,38 @@ export default function NewInvoice() {
     );
   }
 
+  // -------------------------------------------------------------------
+  // Mixed (normalized) mode toggle.
+  // The legacy form below uses a SINGLE global `productType` per invoice.
+  // The new MixedInvoiceForm writes to factors + factor_items + per-type
+  // detail tables and supports per-row product_type. We render either one
+  // based on a local toggle so this page can serve both flows during the
+  // migration window without touching any of the legacy state above.
+  // -------------------------------------------------------------------
+  if (useMixedMode) {
+    return (
+      <div className="py-6 space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h1 className="text-heading text-foreground">ثبت فاکتور جدید (حالت ترکیبی)</h1>
+          <Button variant="outline" size="sm" onClick={() => setUseMixedMode(false)}>
+            بازگشت به فرم کلاسیک
+          </Button>
+        </div>
+        <MixedInvoiceForm />
+      </div>
+    );
+  }
+
   return (
     <div className="py-6 space-y-4 animate-fade-in">
-      <h1 className="text-heading text-foreground">ثبت فاکتور جدید</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-heading text-foreground">ثبت فاکتور جدید</h1>
+        <Button variant="outline" size="sm" onClick={() => setUseMixedMode(true)}>
+          حالت ترکیبی (جدید)
+        </Button>
+      </div>
+
+
 
       {/* Product Type */}
       <SearchableSelect
