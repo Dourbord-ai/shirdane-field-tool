@@ -473,7 +473,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
             <div className="flex-1 overflow-y-auto overscroll-contain">
               {/* Frequently used — only when no active query, so the chips
                   don't compete visually with live search results. */}
-              {!query && frequent.length > 0 && (
+              {!anyFilterActive && frequent.length > 0 && (
                 <div className="px-4 py-3 border-b border-border/60">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
                     <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -499,7 +499,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
                 <div className="py-10 text-center text-sm text-muted-foreground">در حال جستجو…</div>
               )}
 
-              {!loading && query && results.length === 0 && (
+              {!loading && anyFilterActive && results.length === 0 && (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   دارویی با این مشخصات یافت نشد
                 </div>
@@ -544,7 +544,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
               )}
 
               {/* Idle state (sheet open, no query, no chips loaded yet). */}
-              {!loading && !query && frequent.length === 0 && (
+              {!loading && !anyFilterActive && frequent.length === 0 && (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   برای شروع، عبارت موردنظر را تایپ کنید
                 </div>
