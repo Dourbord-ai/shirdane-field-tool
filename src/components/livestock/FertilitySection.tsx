@@ -55,6 +55,9 @@ import CalvingList from "./fertility-tabs/lists/CalvingList";
 import AbortionList from "./fertility-tabs/lists/AbortionList";
 import RinseList from "./fertility-tabs/lists/RinseList";
 import CleanTestList from "./fertility-tabs/lists/CleanTestList";
+// DryOffList — same table chrome as the other fertility lists so dry-off
+// rows render with identical columns, badges, RTL spacing, and Shamsi dates.
+import DryOffList from "./fertility-tabs/lists/DryOffList";
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
