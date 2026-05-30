@@ -269,6 +269,25 @@ export async function autoIdentifyTransaction(
     return { state: "no_identifier", message: "هیچ شناسه‌ای در توضیحات یافت نشد" };
   }
 
+  // OWN-BANK GUARD — if ANY extracted identifier matches one of our own
+  // finance_banks (account_number / iban_number / card_number), this is an
+  // inter-bank transfer between OUR accounts. It must NOT become a
+  // receive_identification and must NOT post to Sepidar — it's owned by the
+  // شناسایی تراکنش بین بانکی flow. We check before cache/verify/party match.
+  const ownBankHit = await matchOwnBankIdentifier(identifiers);
+  if (ownBankHit) {
+    await logStep(bankTransactionId, "own_bank_skip", true, {
+      candidates: identifiers,
+      message: `identifier ${ownBankHit} belongs to own finance_banks`,
+    });
+    return {
+      state: "needs_review",
+      message:
+        "این شماره متعلق به یکی از حساب‌های خود ماست — برای شناسایی تراکنش بین بانکی نگه داشته شد",
+      matched_identifier: ownBankHit,
+    };
+  }
+
   await logStep(bankTransactionId, "extract", true, { candidates: identifiers });
 
   // Walk identifiers in priority order (already enforced by extractIdentifiers):
