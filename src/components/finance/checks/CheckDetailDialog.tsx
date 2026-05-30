@@ -59,7 +59,9 @@ export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
     );
   }
 
-  const transitions = allowedTransitions(check.direction, check.status);
+  // allowedTransitions now takes category — guarantee checks use a different
+  // map, cancelled checks return [] (no actions allowed).
+  const transitions = allowedTransitions(check.direction, check.status, check.category);
 
   // Single helper that flips status + inserts an event. We keep them in one
   // function so the UI never updates one without the other.
