@@ -715,7 +715,12 @@ export default function MixedInvoiceForm() {
           <label className="block text-sm font-medium text-foreground">شماره فاکتور</label>
           <Input
             value={invoiceNumber}
-            onChange={(e) => setInvoiceNumber(e.target.value)}
+            onChange={(e) => {
+              // Manual edit by the operator → drop the auto-filled flag so
+              // type toggles don't blow their value away.
+              autoFilledRef.current = false;
+              setInvoiceNumber(e.target.value);
+            }}
             placeholder="مثلاً 1024"
           />
         </div>
