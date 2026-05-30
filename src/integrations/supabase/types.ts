@@ -1371,33 +1371,111 @@ export type Database = {
       }
       factor_item_feed_details: {
         Row: {
+          adf: number | null
           batch_number: string | null
+          calcium: number | null
+          category_en: string | null
+          category_fa: string | null
+          commercial_product_name_en: string | null
+          commercial_product_name_fa: string | null
+          company_country: string | null
+          company_name_en: string | null
+          company_name_fa: string | null
           created_at: string
+          crude_protein: number | null
+          dry_matter: number | null
           dry_matter_pct: number | null
           expire_date: string | null
           factor_item_id: string
+          fat: number | null
+          feed_code: string | null
+          feed_form: string | null
           feed_id: number | null
           feed_name: string | null
+          feed_product_id: number | null
+          label_verification_status: string | null
+          name_en: string | null
+          name_fa: string | null
+          ndf: number | null
+          nel_mcal_kg: number | null
+          phosphorus: number | null
+          product_type: string | null
+          recommended_inclusion_max_percent: number | null
+          recommended_inclusion_min_percent: number | null
+          starch: number | null
+          target_group: string | null
           warehouse_id: number | null
         }
         Insert: {
+          adf?: number | null
           batch_number?: string | null
+          calcium?: number | null
+          category_en?: string | null
+          category_fa?: string | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
           created_at?: string
+          crude_protein?: number | null
+          dry_matter?: number | null
           dry_matter_pct?: number | null
           expire_date?: string | null
           factor_item_id: string
+          fat?: number | null
+          feed_code?: string | null
+          feed_form?: string | null
           feed_id?: number | null
           feed_name?: string | null
+          feed_product_id?: number | null
+          label_verification_status?: string | null
+          name_en?: string | null
+          name_fa?: string | null
+          ndf?: number | null
+          nel_mcal_kg?: number | null
+          phosphorus?: number | null
+          product_type?: string | null
+          recommended_inclusion_max_percent?: number | null
+          recommended_inclusion_min_percent?: number | null
+          starch?: number | null
+          target_group?: string | null
           warehouse_id?: number | null
         }
         Update: {
+          adf?: number | null
           batch_number?: string | null
+          calcium?: number | null
+          category_en?: string | null
+          category_fa?: string | null
+          commercial_product_name_en?: string | null
+          commercial_product_name_fa?: string | null
+          company_country?: string | null
+          company_name_en?: string | null
+          company_name_fa?: string | null
           created_at?: string
+          crude_protein?: number | null
+          dry_matter?: number | null
           dry_matter_pct?: number | null
           expire_date?: string | null
           factor_item_id?: string
+          fat?: number | null
+          feed_code?: string | null
+          feed_form?: string | null
           feed_id?: number | null
           feed_name?: string | null
+          feed_product_id?: number | null
+          label_verification_status?: string | null
+          name_en?: string | null
+          name_fa?: string | null
+          ndf?: number | null
+          nel_mcal_kg?: number | null
+          phosphorus?: number | null
+          product_type?: string | null
+          recommended_inclusion_max_percent?: number | null
+          recommended_inclusion_min_percent?: number | null
+          starch?: number | null
+          target_group?: string | null
           warehouse_id?: number | null
         }
         Relationships: [
@@ -1406,6 +1484,13 @@ export type Database = {
             columns: ["factor_item_id"]
             isOneToOne: true
             referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factor_item_feed_details_feed_product_id_fkey"
+            columns: ["feed_product_id"]
+            isOneToOne: false
+            referencedRelation: "feed_products"
             referencedColumns: ["id"]
           },
         ]
