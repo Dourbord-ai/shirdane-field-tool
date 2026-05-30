@@ -850,9 +850,11 @@ export default function MixedInvoiceForm() {
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
                 </div>
 
-                {/* Medicine product type → rich enterprise picker.
-                    All other "selectable" product types fall back to the
-                    generic <SearchableSelect> driven by SELECTOR_CONFIG. */}
+                {/* Medicine + Feed product types use bespoke enterprise
+                    pickers (rich server-side search, info panel, verification
+                    banner). All other "selectable" product types fall back
+                    to the generic <SearchableSelect> driven by
+                    SELECTOR_CONFIG. */}
                 {row.product_type === "medicine" ? (
                   <div className="mb-3">
                     <MedicineProductPicker
@@ -860,6 +862,15 @@ export default function MixedInvoiceForm() {
                       selected={row.medicineProduct ?? null}
                       onSelect={(m) => updateRow(row.uid, { medicineProduct: m })}
                       onClear={() => updateRow(row.uid, { medicineProduct: null })}
+                    />
+                  </div>
+                ) : row.product_type === "feed" ? (
+                  <div className="mb-3">
+                    <FeedProductPicker
+                      value={row.feedProduct?.id ?? null}
+                      selected={row.feedProduct ?? null}
+                      onSelect={(f) => updateRow(row.uid, { feedProduct: f })}
+                      onClear={() => updateRow(row.uid, { feedProduct: null })}
                     />
                   </div>
                 ) : (
