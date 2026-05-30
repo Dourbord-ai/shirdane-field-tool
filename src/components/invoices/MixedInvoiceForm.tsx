@@ -88,6 +88,11 @@ interface MixedRow {
   description: string;
   // Per-product detail bag. Keys vary per product_type — see renderRowDetails.
   details: Record<string, string>;
+  // Medicine-only snapshot of the chosen catalog row. We keep the FULL object
+  // here (rather than just the FK id) so the info panel can render
+  // synchronously and the save handler can emit every snapshot column
+  // without re-querying the catalog.
+  medicineProduct?: MedicineProduct | null;
 }
 
 // Helper: produce a fresh blank row for a given product_type. We default to
@@ -102,6 +107,7 @@ const blankRow = (product_type: ProductType = "livestock"): MixedRow => ({
   tax_amount: "0",
   description: "",
   details: {},
+  medicineProduct: null,
 });
 
 // ---------------------------------------------------------------------------
