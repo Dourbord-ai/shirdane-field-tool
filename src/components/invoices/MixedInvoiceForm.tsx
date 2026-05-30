@@ -31,6 +31,10 @@ import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+// Reusable enterprise medicine picker (server-side search across the new
+// medicine_products catalog). Designed as a global component so it can later
+// power treatments / prescriptions / inventory the same way.
+import MedicineProductPicker, { MedicineProduct } from "@/components/medicine/MedicineProductPicker";
 
 // ---------------------------------------------------------------------------
 // Static option lists. These are intentionally local to the new form so
