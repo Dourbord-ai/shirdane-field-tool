@@ -576,9 +576,17 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
       }
       // Normalize legacy/alias event_type names so timeline renders consistently.
       // DB historically stores both `pregnancy_test` and `pregnancy_check` for the same concept.
+      // Similarly, legacy rows may have event_type='dry' while the new standard is 'dry_off'.
+      // We coalesce both legacy aliases to the canonical names so the UI tabs (which key off
+      // `dry_off` and `pregnancy_test`) display all historical + new records together.
       const normalized = ((data as any[]) ?? []).map((row) => ({
         ...row,
-        event_type: row.event_type === "pregnancy_check" ? "pregnancy_test" : row.event_type,
+        event_type:
+          row.event_type === "pregnancy_check"
+            ? "pregnancy_test"
+            : row.event_type === "dry"
+              ? "dry_off"
+              : row.event_type,
       })) as FertilityEvent[];
       // Temporary diagnostic logging — verifies pregnancy_check / pregnancy_test rows arrive.
       console.log("[FertilitySection] livestock_id=", livestockId, "events:", normalized);
