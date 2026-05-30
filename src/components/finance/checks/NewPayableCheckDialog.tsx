@@ -23,6 +23,7 @@ import { partyLabel, bankLabel } from "@/lib/checks";
 import { jalaliToGregorian } from "@/lib/jalali";
 import { parseMoney, formatMoney } from "@/lib/finance";
 import { toPersianDigits } from "@/lib/jalali";
+import { toPersianDigits } from "@/lib/jalali";
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void }
 
@@ -141,7 +142,7 @@ export default function NewPayableCheckDialog({ open, onOpenChange }: Props) {
               <SelectContent className="max-h-72">
                 {leaves.map((l) => (
                   <SelectItem key={l.id} value={l.id}>
-                    {toPersianDigitsSafe(String(l.serial_number))}
+                    {toPersianDigits(String(l.serial_number))}
                   </SelectItem>
                 ))}
                 {leaves.length === 0 && checkbookId && (
