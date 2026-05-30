@@ -1,0 +1,193 @@
+// =============================================================================
+// NewPayableCheckDialog
+// -----------------------------------------------------------------------------
+// Form to issue a check from one of our own checkbooks. Picking a leaf is
+// required so the DB trigger can flip that leaf to "issued" and prevent
+// reuse. Initial status is "issued"; party_effected_at is stamped by the
+// after-insert trigger.
+// =============================================================================
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import ShamsiDatePicker from "@/components/ShamsiDatePicker";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useInvalidateChecks } from "@/hooks/useChecks";
+import { useCheckbooks, useAvailableLeaves, useInvalidateCheckbooks } from "@/hooks/useCheckbooks";
+import { partyLabel, bankLabel } from "@/lib/checks";
+import { jalaliToGregorian } from "@/lib/jalali";
+import { parseMoney, formatMoney, toPersianDigitsSafe } from "@/lib/finance";
+
+interface Props { open: boolean; onOpenChange: (v: boolean) => void }
+
+function shamsiToISODate(s: string): string | null {
+  const m = s?.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return null;
+  const g = jalaliToGregorian(+m[1], +m[2], +m[3]);
+  return `${g.year}-${String(g.month).padStart(2, "0")}-${String(g.day).padStart(2, "0")}`;
+}
+
+export default function NewPayableCheckDialog({ open, onOpenChange }: Props) {
+  // Party list — payee/supplier for whom we are issuing the check.
+  const { data: parties = [] } = useQuery({
+    queryKey: ["finance_parties_for_check"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("finance_parties")
+        .select("id, first_name, last_name, company_name")
+        .eq("is_deleted", false)
+        .limit(500);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  // All our active checkbooks — only ones that still have at least one
+  // available leaf would make sense, but we let the user see all and pick.
+  const { data: checkbooks = [] } = useCheckbooks();
+  const [checkbookId, setCheckbookId] = useState<string>("");
+  const { data: leaves = [] } = useAvailableLeaves(checkbookId || null);
+
+  const [leafId, setLeafId] = useState<string>("");
+  const [partyId, setPartyId] = useState<string>("");
+  const [amount, setAmount] = useState("");
+  const [issueDate, setIssueDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const invalidateChecks = useInvalidateChecks();
+  const invalidateBooks = useInvalidateCheckbooks();
+
+  // Selected leaf object (for serial display). Memoised to avoid recompute.
+  const selectedLeaf = useMemo(
+    () => leaves.find((l) => l.id === leafId) ?? null,
+    [leaves, leafId],
+  );
+  const selectedBook = useMemo(
+    () => checkbooks.find((b) => b.id === checkbookId) ?? null,
+    [checkbooks, checkbookId],
+  );
+
+  useEffect(() => {
+    if (open) {
+      setCheckbookId(""); setLeafId(""); setPartyId(""); setAmount("");
+      setIssueDate(""); setDueDate(""); setDescription(""); setSaving(false);
+    }
+  }, [open]);
+
+  // Reset leaf selection whenever the checkbook changes so we never carry a
+  // leaf from another checkbook by accident.
+  useEffect(() => { setLeafId(""); }, [checkbookId]);
+
+  async function submit() {
+    const amt = parseMoney(amount);
+    if (!checkbookId || !leafId || !selectedLeaf || !selectedBook)
+      return toast.error("دسته‌چک و برگه را انتخاب کنید");
+    if (!partyId) return toast.error("طرف حساب را انتخاب کنید");
+    if (amt <= 0) return toast.error("مبلغ چک باید بزرگ‌تر از صفر باشد");
+    const due = shamsiToISODate(dueDate);
+    if (!due) return toast.error("تاریخ سررسید الزامی است");
+
+    setSaving(true);
+    const { error } = await supabase.from("finance_checks" as never).insert({
+      direction: "payable",
+      party_id: partyId,
+      amount: amt,
+      // The check number IS the leaf serial — keeps the two perfectly in sync.
+      check_number: String(selectedLeaf.serial_number),
+      sayad_number: null,
+      bank_id: selectedBook.bank_id,
+      bank_account_id: selectedBook.bank_account_id,
+      checkbook_leaf_id: leafId,
+      issue_date: shamsiToISODate(issueDate),
+      due_date: due,
+      status: "issued",
+      description: description.trim() || null,
+    } as never);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("چک پرداختی صادر شد");
+    invalidateChecks(); invalidateBooks();
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader><DialogTitle>صدور چک پرداختی</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>دسته‌چک</Label>
+            <Select value={checkbookId} onValueChange={setCheckbookId}>
+              <SelectTrigger><SelectValue placeholder="انتخاب دسته‌چک" /></SelectTrigger>
+              <SelectContent>
+                {checkbooks.filter((b) => b.is_active).map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.title} ({bankLabel(b.bank)})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>برگه (سریال)</Label>
+            <Select value={leafId} onValueChange={setLeafId} disabled={!checkbookId}>
+              <SelectTrigger><SelectValue placeholder={checkbookId ? "انتخاب برگه" : "ابتدا دسته‌چک"} /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {leaves.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {toPersianDigitsSafe(String(l.serial_number))}
+                  </SelectItem>
+                ))}
+                {leaves.length === 0 && checkbookId && (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">برگه آزاد موجود نیست</div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>طرف حساب (دریافت‌کننده چک)</Label>
+            <Select value={partyId} onValueChange={setPartyId}>
+              <SelectTrigger><SelectValue placeholder="انتخاب ذینفع" /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {parties.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{partyLabel(p)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>مبلغ (ریال)</Label>
+            <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" />
+            {amount && (
+              <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+                {formatMoney(parseMoney(amount))} ریال
+              </p>
+            )}
+          </div>
+          <div />
+          <div>
+            <Label>تاریخ صدور</Label>
+            <ShamsiDatePicker value={issueDate} onChange={setIssueDate} placeholder="انتخاب تاریخ" />
+          </div>
+          <div>
+            <Label>تاریخ سررسید</Label>
+            <ShamsiDatePicker value={dueDate} onChange={setDueDate} placeholder="انتخاب تاریخ" />
+          </div>
+          <div className="col-span-2">
+            <Label>توضیحات</Label>
+            <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>انصراف</Button>
+          <Button onClick={submit} disabled={saving}>{saving ? "در حال صدور…" : "صدور چک"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
