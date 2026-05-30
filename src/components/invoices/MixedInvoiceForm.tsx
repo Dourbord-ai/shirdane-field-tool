@@ -35,6 +35,9 @@ import { useNavigate } from "react-router-dom";
 // medicine_products catalog). Designed as a global component so it can later
 // power treatments / prescriptions / inventory the same way.
 import MedicineProductPicker, { MedicineProduct } from "@/components/medicine/MedicineProductPicker";
+// Same architecture as MedicineProductPicker: per-field server-side search
+// over feed_products, snapshot the full row into the invoice line on save.
+import FeedProductPicker, { FeedProduct } from "@/components/feed/FeedProductPicker";
 
 // ---------------------------------------------------------------------------
 // Static option lists. These are intentionally local to the new form so
@@ -93,6 +96,10 @@ interface MixedRow {
   // synchronously and the save handler can emit every snapshot column
   // without re-querying the catalog.
   medicineProduct?: MedicineProduct | null;
+  // Feed-only snapshot — identical pattern to medicineProduct. Populated by
+  // <FeedProductPicker> when product_type === 'feed' and consumed by the
+  // save handler to snapshot every nutritional column onto the invoice line.
+  feedProduct?: FeedProduct | null;
 }
 
 // Helper: produce a fresh blank row for a given product_type. We default to
@@ -108,6 +115,7 @@ const blankRow = (product_type: ProductType = "livestock"): MixedRow => ({
   description: "",
   details: {},
   medicineProduct: null,
+  feedProduct: null,
 });
 
 // ---------------------------------------------------------------------------
@@ -261,16 +269,10 @@ const SELECTOR_CONFIG: Partial<Record<ProductType, SelectorDef>> = {
       _display: `${s.code ?? ""}${s.name ? " - " + s.name : ""}`.trim(),
     }),
   },
-  feed: {
-    label: "انتخاب خوراک",
-    source: "feeds",
-    primaryKey: "feed_id",
-    apply: (f) => ({
-      feed_id: String(f.id),
-      feed_name: String(f.name ?? ""),
-      _display: String(f.name ?? ""),
-    }),
-  },
+  // NOTE: feed intentionally has NO entry here. The feed product type uses
+  // the bespoke <FeedProductPicker> (rich server-side search across 9
+  // Persian/English columns + nutritional info panel + verification banner)
+  // instead of the generic single-list dropdown — same approach as medicine.
   // NOTE: medicine intentionally has NO entry here. The medicine product
   // type uses the bespoke <MedicineProductPicker> (rich server-side search
   // across 7 Persian/English columns + verification banner + frequently
@@ -513,7 +515,10 @@ export default function MixedInvoiceForm() {
   // Changing a row's product_type clears its detail bag — fields differ per
   // type and stale keys would silently fail validation.
   const changeRowType = (uid: string, product_type: ProductType) =>
-    updateRow(uid, { product_type, details: {} });
+    // Also drop the bespoke-picker snapshots (medicine + feed) so a leftover
+    // FeedProduct from a previous selection doesn't get persisted when the
+    // operator switches the row to a different product type.
+    updateRow(uid, { product_type, details: {}, medicineProduct: null, feedProduct: null });
 
   // -----------------------------------------------------------------------
   // Totals (computed live). We sum row totals so the header stores a
@@ -700,6 +705,46 @@ export default function MixedInvoiceForm() {
           }
         }
 
+        // Feed-specific: snapshot every catalog-derived column from the
+        // chosen feed_products row into factor_item_feed_details. Same
+        // rationale as the medicine snapshot above — invoice lines must
+        // remain historically accurate even if feed_products is later
+        // edited or deactivated. The legacy `feed_name` column is also
+        // populated so older reports keep rendering a readable name.
+        if (row.product_type === "feed" && row.feedProduct) {
+          const f = row.feedProduct;
+          detailPayload.feed_product_id = f.id;
+          detailPayload.feed_code = f.feed_code;
+          detailPayload.feed_name =
+            f.commercial_product_name_fa ?? f.name_fa ?? f.commercial_product_name_en ?? f.name_en ?? null;
+          detailPayload.name_fa = f.name_fa;
+          detailPayload.name_en = f.name_en;
+          detailPayload.product_type = f.product_type;
+          detailPayload.category_fa = f.category_fa;
+          detailPayload.category_en = f.category_en;
+          detailPayload.company_name_fa = f.company_name_fa;
+          detailPayload.company_name_en = f.company_name_en;
+          detailPayload.company_country = f.company_country;
+          detailPayload.commercial_product_name_fa = f.commercial_product_name_fa;
+          detailPayload.commercial_product_name_en = f.commercial_product_name_en;
+          detailPayload.feed_form = f.feed_form;
+          detailPayload.target_group = f.target_group;
+          detailPayload.dry_matter = f.dry_matter;
+          detailPayload.crude_protein = f.crude_protein;
+          detailPayload.ndf = f.ndf;
+          detailPayload.adf = f.adf;
+          detailPayload.starch = f.starch;
+          detailPayload.fat = f.fat;
+          detailPayload.nel_mcal_kg = f.nel_mcal_kg;
+          detailPayload.calcium = f.calcium;
+          detailPayload.phosphorus = f.phosphorus;
+          detailPayload.recommended_inclusion_min_percent = f.recommended_inclusion_min_percent;
+          detailPayload.recommended_inclusion_max_percent = f.recommended_inclusion_max_percent;
+          detailPayload.label_verification_status = f.label_verification_status;
+        }
+
+
+
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
           // map, so this dynamic .from() is safe.
@@ -848,9 +893,11 @@ export default function MixedInvoiceForm() {
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
                 </div>
 
-                {/* Medicine product type → rich enterprise picker.
-                    All other "selectable" product types fall back to the
-                    generic <SearchableSelect> driven by SELECTOR_CONFIG. */}
+                {/* Medicine + Feed product types use bespoke enterprise
+                    pickers (rich server-side search, info panel, verification
+                    banner). All other "selectable" product types fall back
+                    to the generic <SearchableSelect> driven by
+                    SELECTOR_CONFIG. */}
                 {row.product_type === "medicine" ? (
                   <div className="mb-3">
                     <MedicineProductPicker
@@ -858,6 +905,15 @@ export default function MixedInvoiceForm() {
                       selected={row.medicineProduct ?? null}
                       onSelect={(m) => updateRow(row.uid, { medicineProduct: m })}
                       onClear={() => updateRow(row.uid, { medicineProduct: null })}
+                    />
+                  </div>
+                ) : row.product_type === "feed" ? (
+                  <div className="mb-3">
+                    <FeedProductPicker
+                      value={row.feedProduct?.id ?? null}
+                      selected={row.feedProduct ?? null}
+                      onSelect={(f) => updateRow(row.uid, { feedProduct: f })}
+                      onClear={() => updateRow(row.uid, { feedProduct: null })}
                     />
                   </div>
                 ) : (
