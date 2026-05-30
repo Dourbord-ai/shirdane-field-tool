@@ -6514,6 +6514,11 @@ export type Database = {
         | "bank_effect_posted"
         | "note"
         | "status_change"
+        | "voucher_posted"
+        | "voucher_reversed"
+        | "guarantee_claimed"
+        | "guarantee_returned"
+        | "cancelled"
       check_status:
         | "draft"
         | "received"
@@ -6526,6 +6531,11 @@ export type Database = {
         | "bounced"
         | "voided"
         | "lost"
+        | "active"
+        | "returned"
+        | "claimed"
+        | "expired"
+        | "cancelled"
       checkbook_leaf_status:
         | "available"
         | "issued"
@@ -6686,6 +6696,11 @@ export const Constants = {
         "bank_effect_posted",
         "note",
         "status_change",
+        "voucher_posted",
+        "voucher_reversed",
+        "guarantee_claimed",
+        "guarantee_returned",
+        "cancelled",
       ],
       check_status: [
         "draft",
@@ -6699,6 +6714,11 @@ export const Constants = {
         "bounced",
         "voided",
         "lost",
+        "active",
+        "returned",
+        "claimed",
+        "expired",
+        "cancelled",
       ],
       checkbook_leaf_status: [
         "available",
