@@ -40,7 +40,7 @@ export default function PregnancyTestList({ events, onEdit, onCancel, resolveUse
           <Th>تاریخ</Th>
           <Th>ساعت</Th>
           <Th>شماره تست</Th>
-          <Th>روش تست</Th>
+          
           <Th>نتیجه</Th>
           <Th>دامپزشک / ثبت‌کننده</Th>
           <Th>یادداشت</Th>
