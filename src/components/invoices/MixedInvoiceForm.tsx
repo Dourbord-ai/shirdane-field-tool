@@ -837,51 +837,12 @@ export default function MixedInvoiceForm() {
                 </Select>
               </div>
 
-              {/* shared factor_items fields */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <FieldNumber
-                  label="تعداد"
-                  value={row.quantity}
-                  onChange={(v) => updateRow(row.uid, { quantity: v })}
-                />
-                <FieldText
-                  label="واحد"
-                  value={row.unit}
-                  onChange={(v) => updateRow(row.uid, { unit: v })}
-                />
-                <FieldNumber
-                  label="قیمت واحد"
-                  value={row.unit_price}
-                  onChange={(v) => updateRow(row.uid, { unit_price: v })}
-                />
-                <FieldNumber
-                  label="تخفیف"
-                  value={row.discount_amount}
-                  onChange={(v) => updateRow(row.uid, { discount_amount: v })}
-                />
-                <FieldNumber
-                  label="مالیات ردیف"
-                  value={row.tax_amount}
-                  onChange={(v) => updateRow(row.uid, { tax_amount: v })}
-                />
-                <div className="col-span-2 md:col-span-3">
-                  <FieldText
-                    label="توضیح ردیف"
-                    value={row.description}
-                    onChange={(v) => updateRow(row.uid, { description: v })}
-                  />
-                </div>
-              </div>
-
-              {/* per-product detail block. If this product_type has a
-                  master-list selector (livestock/sperm/feed/medicine), we
-                  render a searchable dropdown at the top — the operator
-                  picks the canonical record and its FK id + display fields
-                  are written into row.details automatically. Below the
-                  selector we render any extra editable fields declared in
-                  DETAIL_CONFIG. For product types without a master table
-                  (manure/milk/rental/services/other) we fall back to plain
-                  free-text inputs. */}
+              {/* ---------------------------------------------------------
+                  Per-product item selector + extra detail fields.
+                  Rendered BEFORE the shared quantity/price block so the
+                  operator's mental flow is: pick type → pick the actual
+                  item → only then enter quantity/price for it.
+                  --------------------------------------------------------- */}
               <div className="pt-2 border-t border-border/60">
                 <div className="text-xs text-muted-foreground mb-2">
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
@@ -930,6 +891,7 @@ export default function MixedInvoiceForm() {
                   })()
                 )}
 
+                {/* Extra per-product fields (batch/expiry, weights, etc.). */}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {cfg.fields.map((f) => (
                     <DynamicField
@@ -940,6 +902,62 @@ export default function MixedInvoiceForm() {
                     />
                   ))}
                 </div>
+              </div>
+
+              {/* ---------------------------------------------------------
+                  Shared factor_items fields (quantity / unit / price /
+                  discount / tax / description) — moved BELOW the product
+                  picker so the operator only deals with pricing AFTER the
+                  actual item is locked in.
+                  --------------------------------------------------------- */}
+              <div className="pt-2 border-t border-border/60 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <FieldNumber
+                  label="تعداد"
+                  value={row.quantity}
+                  onChange={(v) => updateRow(row.uid, { quantity: v })}
+                />
+                <FieldText
+                  label="واحد"
+                  value={row.unit}
+                  onChange={(v) => updateRow(row.uid, { unit: v })}
+                />
+                <FieldNumber
+                  label="قیمت واحد"
+                  value={row.unit_price}
+                  onChange={(v) => updateRow(row.uid, { unit_price: v })}
+                />
+                <FieldNumber
+                  label="تخفیف"
+                  value={row.discount_amount}
+                  onChange={(v) => updateRow(row.uid, { discount_amount: v })}
+                />
+                <FieldNumber
+                  label="مالیات ردیف"
+                  value={row.tax_amount}
+                  onChange={(v) => updateRow(row.uid, { tax_amount: v })}
+                />
+                <div className="col-span-2 md:col-span-3">
+                  <FieldText
+                    label="توضیح ردیف"
+                    value={row.description}
+                    onChange={(v) => updateRow(row.uid, { description: v })}
+                  />
+                </div>
+              </div>
+
+              {/* Per-row total — computed live from quantity × unit_price
+                  minus discount plus tax. Helps the operator sanity-check
+                  before adding more rows. */}
+              <div className="pt-2 border-t border-border/60 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">جمع ردیف</span>
+                <span className="font-semibold text-foreground">
+                  {(
+                    (parseFloat(row.quantity || "0") || 0) *
+                      (parseFloat(row.unit_price || "0") || 0) -
+                    (parseFloat(row.discount_amount || "0") || 0) +
+                    (parseFloat(row.tax_amount || "0") || 0)
+                  ).toLocaleString("fa-IR")}
+                </span>
               </div>
 
             </div>
