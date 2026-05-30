@@ -20,10 +20,11 @@ import { useInvalidateCheckbooks } from "@/hooks/useCheckbooks";
 import StatusBadge from "./StatusBadge";
 import {
   allowedTransitions, DIRECTION_LABEL, EVENT_LABEL, partyLabel, bankLabel,
-  TERMINAL_STATUSES, type CheckStatus, type CheckEventType,
+  TERMINAL_STATUSES, CATEGORY_LABEL, CANCEL_REASON_LABEL,
+  type CheckStatus, type CheckEventType, type CancelReason,
 } from "@/lib/checks";
 import { JalaliDateCell, MoneyCell } from "@/components/finance/atoms";
-import { Clock } from "lucide-react";
+import { Clock, FileText, ShieldCheck, Ban } from "lucide-react";
 
 interface Props {
   checkId: string | null;
