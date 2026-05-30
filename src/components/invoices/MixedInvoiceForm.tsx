@@ -702,6 +702,46 @@ export default function MixedInvoiceForm() {
           }
         }
 
+        // Feed-specific: snapshot every catalog-derived column from the
+        // chosen feed_products row into factor_item_feed_details. Same
+        // rationale as the medicine snapshot above — invoice lines must
+        // remain historically accurate even if feed_products is later
+        // edited or deactivated. The legacy `feed_name` column is also
+        // populated so older reports keep rendering a readable name.
+        if (row.product_type === "feed" && row.feedProduct) {
+          const f = row.feedProduct;
+          detailPayload.feed_product_id = f.id;
+          detailPayload.feed_code = f.feed_code;
+          detailPayload.feed_name =
+            f.commercial_product_name_fa ?? f.name_fa ?? f.commercial_product_name_en ?? f.name_en ?? null;
+          detailPayload.name_fa = f.name_fa;
+          detailPayload.name_en = f.name_en;
+          detailPayload.product_type = f.product_type;
+          detailPayload.category_fa = f.category_fa;
+          detailPayload.category_en = f.category_en;
+          detailPayload.company_name_fa = f.company_name_fa;
+          detailPayload.company_name_en = f.company_name_en;
+          detailPayload.company_country = f.company_country;
+          detailPayload.commercial_product_name_fa = f.commercial_product_name_fa;
+          detailPayload.commercial_product_name_en = f.commercial_product_name_en;
+          detailPayload.feed_form = f.feed_form;
+          detailPayload.target_group = f.target_group;
+          detailPayload.dry_matter = f.dry_matter;
+          detailPayload.crude_protein = f.crude_protein;
+          detailPayload.ndf = f.ndf;
+          detailPayload.adf = f.adf;
+          detailPayload.starch = f.starch;
+          detailPayload.fat = f.fat;
+          detailPayload.nel_mcal_kg = f.nel_mcal_kg;
+          detailPayload.calcium = f.calcium;
+          detailPayload.phosphorus = f.phosphorus;
+          detailPayload.recommended_inclusion_min_percent = f.recommended_inclusion_min_percent;
+          detailPayload.recommended_inclusion_max_percent = f.recommended_inclusion_max_percent;
+          detailPayload.label_verification_status = f.label_verification_status;
+        }
+
+
+
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
           // map, so this dynamic .from() is safe.
