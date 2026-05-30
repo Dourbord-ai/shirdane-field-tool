@@ -66,7 +66,7 @@ export default function PregnancyTestList({ events, onEdit, onCancel, resolveUse
               <Td>{date}</Td>
               <Td>{time}</Td>
               <Td>{testNumber}</Td>
-              <Td>{method}</Td>
+              
               <Td>{result}</Td>
               <Td>{vet}</Td>
               <Td className="max-w-[240px] whitespace-pre-wrap">{e.notes}</Td>
