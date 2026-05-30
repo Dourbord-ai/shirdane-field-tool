@@ -45,6 +45,14 @@ import { existanceLabel, isFemaleCow } from "@/lib/cowPresence";
 // All math centralised in src/lib/fertility/* so dialogs/cards/tabs share logic.
 import { useFertilitySummary } from "@/hooks/useFertilitySummary";
 import TabInsightHeader, { type InsightTab } from "./fertility-tabs/TabInsightHeader";
+// Per-operation list tables — each one renders every field captured by the
+// matching Registration Dialog as a column, so users can audit a full record
+// without opening a modal/details view.
+import HeatList from "./fertility-tabs/lists/HeatList";
+import InseminationList from "./fertility-tabs/lists/InseminationList";
+import PregnancyTestList from "./fertility-tabs/lists/PregnancyTestList";
+import CalvingList from "./fertility-tabs/lists/CalvingList";
+import AbortionList from "./fertility-tabs/lists/AbortionList";
 import type { EnrichedEvent } from "@/lib/fertility/fertilityTimeline";
 import { formatShamsi } from "@/lib/dateDisplay";
 import { useLegacyUserNames } from "@/hooks/useLegacyUserNames";
