@@ -856,34 +856,48 @@ export default function MixedInvoiceForm() {
                   جزئیات اختصاصی ({PRODUCT_TYPES.find((p) => p.value === row.product_type)?.label})
                 </div>
 
-                {(() => {
-                  // Render the master-table selector when one is defined.
-                  const sel = SELECTOR_CONFIG[row.product_type];
-                  if (!sel) return null;
-                  const bucket = masters[sel.source];
-                  const selectedValue = row.details[sel.primaryKey] ?? "";
-                  const display = row.details._display;
-                  return (
-                    <div className="mb-3">
-                      <SearchableSelect
-                        label={sel.label}
-                        options={bucket.options}
-                        value={selectedValue}
-                        onChange={(v) => applyMasterSelection(row.uid, row.product_type, v)}
-                        placeholder={
-                          bucket.options.length
-                            ? "جستجو و انتخاب..."
-                            : "در حال بارگذاری..."
-                        }
-                      />
-                      {display && (
-                        <div className="mt-1 text-xs text-primary">
-                          انتخاب‌شده: {display}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* Medicine product type → rich enterprise picker.
+                    All other "selectable" product types fall back to the
+                    generic <SearchableSelect> driven by SELECTOR_CONFIG. */}
+                {row.product_type === "medicine" ? (
+                  <div className="mb-3">
+                    <MedicineProductPicker
+                      value={row.medicineProduct?.id ?? null}
+                      selected={row.medicineProduct ?? null}
+                      onSelect={(m) => updateRow(row.uid, { medicineProduct: m })}
+                      onClear={() => updateRow(row.uid, { medicineProduct: null })}
+                    />
+                  </div>
+                ) : (
+                  (() => {
+                    // Render the generic master-table selector when one is defined.
+                    const sel = SELECTOR_CONFIG[row.product_type];
+                    if (!sel) return null;
+                    const bucket = masters[sel.source];
+                    const selectedValue = row.details[sel.primaryKey] ?? "";
+                    const display = row.details._display;
+                    return (
+                      <div className="mb-3">
+                        <SearchableSelect
+                          label={sel.label}
+                          options={bucket.options}
+                          value={selectedValue}
+                          onChange={(v) => applyMasterSelection(row.uid, row.product_type, v)}
+                          placeholder={
+                            bucket.options.length
+                              ? "جستجو و انتخاب..."
+                              : "در حال بارگذاری..."
+                          }
+                        />
+                        {display && (
+                          <div className="mt-1 text-xs text-primary">
+                            انتخاب‌شده: {display}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {cfg.fields.map((f) => (
