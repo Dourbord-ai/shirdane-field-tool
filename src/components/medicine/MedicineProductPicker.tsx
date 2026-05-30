@@ -63,37 +63,81 @@ interface Props {
 }
 
 // ---------------------------------------------------------------------------
-// Server-side fuzzy search across 7 columns.
-// We use PostgREST's `.or()` filter with `ilike.*<q>*` on each column. The
-// trigram GIN indexes we added in the migration make this fast even at 10k+
-// rows. We cap results at 20 and never request more.
+// Server-side search with PER-FIELD filters (AND across columns).
 // ---------------------------------------------------------------------------
-async function searchMedicineProducts(q: string): Promise<MedicineProduct[]> {
-  // PostgREST treats commas as filter separators inside `.or()`, so any comma
-  // in the user's query would break the OR-list. We strip them defensively.
-  const safe = q.replace(/[,()]/g, " ").trim();
-  if (!safe) return [];
+// The operator gets one input per searchable column so they can narrow the
+// catalog using whatever attribute they actually remember (commercial name in
+// Persian, active ingredient in English, company, category, …). Each
+// non-empty filter becomes its own `ilike` predicate, AND-combined by
+// PostgREST. Trigram indexes on every column keep this fast at 10k+ rows.
+// ---------------------------------------------------------------------------
+export type MedicineFilters = {
+  commercial_fa: string;
+  commercial_en: string;
+  ingredient_fa: string;
+  ingredient_en: string;
+  company_fa: string;
+  company_en: string;
+  category_fa: string;
+};
 
-  // The 7 columns the user explicitly asked us to search over.
-  const cols = [
-    "commercial_product_name_fa",
-    "commercial_product_name_en",
-    "name_fa",
-    "name_en",
-    "company_name_fa",
-    "company_name_en",
-    "category_fa",
-  ];
-  const orFilter = cols.map((c) => `${c}.ilike.*${safe}*`).join(",");
+const EMPTY_FILTERS: MedicineFilters = {
+  commercial_fa: "",
+  commercial_en: "",
+  ingredient_fa: "",
+  ingredient_en: "",
+  company_fa: "",
+  company_en: "",
+  category_fa: "",
+};
 
-  const { data, error } = await supabase
+// Map UI filter keys → real DB column names. Keeping this map next to the
+// type ensures the input loop, the query builder, and downstream rendering
+// stay in lock-step (one place to edit when a column is added/renamed).
+const FILTER_COLUMNS: Record<keyof MedicineFilters, string> = {
+  commercial_fa: "commercial_product_name_fa",
+  commercial_en: "commercial_product_name_en",
+  ingredient_fa: "name_fa",
+  ingredient_en: "name_en",
+  company_fa: "company_name_fa",
+  company_en: "company_name_en",
+  category_fa: "category_fa",
+};
+
+// Persian labels shown above each per-field input.
+const FILTER_LABELS: Record<keyof MedicineFilters, string> = {
+  commercial_fa: "نام تجاری (فارسی)",
+  commercial_en: "نام تجاری (انگلیسی)",
+  ingredient_fa: "ماده موثره (فارسی)",
+  ingredient_en: "ماده موثره (انگلیسی)",
+  company_fa: "نام شرکت (فارسی)",
+  company_en: "نام شرکت (انگلیسی)",
+  category_fa: "دسته‌بندی",
+};
+
+async function searchMedicineProducts(filters: MedicineFilters): Promise<MedicineProduct[]> {
+  // Pick out only the filters the operator actually filled in. Commas and
+  // parens are stripped because they carry special meaning inside PostgREST
+  // filter expressions and would otherwise break the request.
+  const active = (Object.keys(FILTER_COLUMNS) as (keyof MedicineFilters)[])
+    .map((k) => ({ col: FILTER_COLUMNS[k], val: filters[k].replace(/[,()]/g, " ").trim() }))
+    .filter((f) => f.val.length > 0);
+
+  // No active filters → return nothing. We intentionally do NOT pull the
+  // whole catalog: the picker is meant to be driven by at least one filter.
+  if (active.length === 0) return [];
+
+  // Build the query incrementally. Stacking `.ilike()` calls produces an
+  // AND-combined predicate server-side — exactly the narrowing behaviour we
+  // want when the operator types into multiple boxes at once.
+  let q = supabase
     .from("medicine_products")
     .select(
       "id, commercial_product_name_fa, commercial_product_name_en, name_fa, name_en, company_name_fa, company_name_en, company_country, category_fa, dosage_form, route_fa, route_en, milk_withdrawal_days, meat_withdrawal_days, label_verification_status",
     )
-    .eq("is_active", true)
-    .or(orFilter)
-    .limit(20);
+    .eq("is_active", true);
+  for (const f of active) q = q.ilike(f.col, `%${f.val}%`);
+  const { data, error } = await q.limit(30);
 
   if (error) {
     // eslint-disable-next-line no-console
@@ -178,25 +222,34 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
   // clicks the trigger button to open the search sheet.
   const [open, setOpen] = useState(false);
 
-  // Live search text + debounced query + result set.
-  const [query, setQuery] = useState("");
+
+  // Live filter state — one entry per searchable column. We keep them in a
+  // single object so the debounced effect can depend on the whole snapshot.
+  const [filters, setFilters] = useState<MedicineFilters>(EMPTY_FILTERS);
   const [results, setResults] = useState<MedicineProduct[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // True when at least one filter has actual content. Drives whether we show
+  // the "frequently used" chips (only on a fully empty form) or the results.
+  const anyFilterActive = useMemo(
+    () => Object.values(filters).some((v) => v.trim().length > 0),
+    [filters],
+  );
 
   // Frequently-used chips: lazy-loaded the first time the sheet opens so we
   // don't issue any DB calls until the operator actually needs the picker.
   const [frequent, setFrequent] = useState<MedicineProduct[]>([]);
   const frequentLoadedRef = useRef(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus the search input shortly after the sheet opens and lock body
-  // scroll so the underlying invoice form doesn't move under the sheet.
+  // Auto-focus the first search input shortly after the sheet opens and
+  // lock body scroll so the underlying invoice form doesn't shift around.
   useEffect(() => {
     if (!open) return;
     const original = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const t = setTimeout(() => inputRef.current?.focus(), 120);
+    const t = setTimeout(() => firstInputRef.current?.focus(), 120);
 
     // Lazy-load the frequently-used chips once per component lifetime.
     if (!frequentLoadedRef.current) {
@@ -217,14 +270,13 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
     return () => document.removeEventListener("keydown", h);
   }, [open]);
 
-  // Debounced server-side search (300ms as required). We use a ref-stored
-  // request token so a slow request can't overwrite a fresher one.
+  // Debounced server-side search (300ms). A ref-stored request token ensures
+  // an in-flight slow response can never overwrite a fresher one.
   const tokenRef = useRef(0);
   useEffect(() => {
     if (!open) return;
-    const q = query.trim();
-    // Empty query → clear results immediately and skip the network call.
-    if (!q) {
+    // No filters at all → clear results immediately, skip the network call.
+    if (!anyFilterActive) {
       setResults([]);
       setLoading(false);
       return;
@@ -232,21 +284,25 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
     setLoading(true);
     const myToken = ++tokenRef.current;
     const t = setTimeout(async () => {
-      const rows = await searchMedicineProducts(q);
-      // Drop the response if a newer query has been issued in the meantime.
-      if (myToken !== tokenRef.current) return;
+      const rows = await searchMedicineProducts(filters);
+      if (myToken !== tokenRef.current) return; // a newer search has started
       setResults(rows);
       setLoading(false);
     }, 300);
     return () => clearTimeout(t);
-  }, [query, open]);
+  }, [filters, anyFilterActive, open]);
 
   // Helper invoked from both the chip strip and the search results list.
   const handlePick = (m: MedicineProduct) => {
     onSelect(m);
     setOpen(false);
-    setQuery("");
+    setFilters(EMPTY_FILTERS);
   };
+
+  // Update a single filter field by key — keeps the handler signature small
+  // inside the JSX loop below.
+  const setFilter = (k: keyof MedicineFilters, v: string) =>
+    setFilters((prev) => ({ ...prev, [k]: v }));
 
   // Title of the trigger button — shows the selected medicine when known,
   // otherwise prompts the operator to open the picker.
@@ -338,7 +394,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
             onClick={() => setOpen(false)}
           />
 
-          <div className="relative w-full sm:max-w-2xl sm:rounded-2xl bg-card shadow-2xl flex flex-col h-[92vh] sm:h-[85vh] rounded-t-3xl animate-slide-up overflow-hidden">
+          <div className="relative w-full sm:max-w-3xl sm:rounded-2xl bg-card shadow-2xl flex flex-col h-[92vh] sm:h-[85vh] rounded-t-3xl animate-slide-up overflow-hidden">
             {/* Drag handle — mobile UX cue. */}
             <div className="flex justify-center pt-3 pb-1 sm:hidden">
               <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
@@ -357,23 +413,59 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
               </button>
             </div>
 
-            {/* Search bar */}
-            <div className="px-4 py-3 border-b border-border bg-muted/20">
-              <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-background border-2 border-border focus-within:border-primary transition-colors">
-                <Search className="w-5 h-5 text-muted-foreground shrink-0" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="جستجو در نام تجاری، ماده موثره، شرکت یا دسته‌بندی…"
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-                />
-                {query && (
-                  <button type="button" onClick={() => setQuery("")} aria-label="پاک کردن">
-                    <X className="w-4 h-4 text-muted-foreground" />
+            {/* ----------------- Per-field filter grid -----------------
+                Instead of one fuzzy search box, we expose a dedicated input
+                for every searchable column. This lets the operator narrow
+                the catalog using whatever attribute they actually remember
+                (commercial name in FA, ingredient in EN, company, …) and
+                combine multiple constraints at once. */}
+            <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] text-muted-foreground">
+                  هر فیلد را به‌تنهایی یا ترکیبی پر کنید — جستجو هم‌زمان روی همه فیلدها انجام می‌شود.
+                </div>
+                {anyFilterActive && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters(EMPTY_FILTERS)}
+                    className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    پاک کردن فیلترها
                   </button>
                 )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(Object.keys(FILTER_COLUMNS) as (keyof MedicineFilters)[]).map((k, idx) => (
+                  <div key={k} className="space-y-1">
+                    <label className="block text-[10px] text-muted-foreground px-1">
+                      {FILTER_LABELS[k]}
+                    </label>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border focus-within:border-primary transition-colors">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        // First field auto-focuses on open for fast typing.
+                        ref={idx === 0 ? firstInputRef : undefined}
+                        type="text"
+                        value={filters[k]}
+                        onChange={(e) => setFilter(k, e.target.value)}
+                        // English-only fields get an LTR placeholder hint.
+                        dir={k.endsWith("_en") ? "ltr" : "rtl"}
+                        placeholder={FILTER_LABELS[k]}
+                        className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 outline-none"
+                      />
+                      {filters[k] && (
+                        <button
+                          type="button"
+                          onClick={() => setFilter(k, "")}
+                          aria-label="پاک کردن"
+                        >
+                          <X className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -381,7 +473,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
             <div className="flex-1 overflow-y-auto overscroll-contain">
               {/* Frequently used — only when no active query, so the chips
                   don't compete visually with live search results. */}
-              {!query && frequent.length > 0 && (
+              {!anyFilterActive && frequent.length > 0 && (
                 <div className="px-4 py-3 border-b border-border/60">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
                     <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -407,7 +499,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
                 <div className="py-10 text-center text-sm text-muted-foreground">در حال جستجو…</div>
               )}
 
-              {!loading && query && results.length === 0 && (
+              {!loading && anyFilterActive && results.length === 0 && (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   دارویی با این مشخصات یافت نشد
                 </div>
@@ -452,7 +544,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
               )}
 
               {/* Idle state (sheet open, no query, no chips loaded yet). */}
-              {!loading && !query && frequent.length === 0 && (
+              {!loading && !anyFilterActive && frequent.length === 0 && (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   برای شروع، عبارت موردنظر را تایپ کنید
                 </div>
@@ -461,7 +553,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
 
             {/* Footer */}
             <div className="px-5 py-2 border-t border-border bg-muted/20 text-[11px] text-muted-foreground text-center">
-              حداکثر ۲۰ نتیجه نمایش داده می‌شود — برای نتایج دقیق‌تر، جستجو را محدودتر کنید.
+              حداکثر ۳۰ نتیجه نمایش داده می‌شود — برای نتایج دقیق‌تر، جستجو را محدودتر کنید.
             </div>
           </div>
         </div>
