@@ -244,6 +244,50 @@ async function isSepidarAutoPostEnabled() {
 }
 
 // ----------------------------------------------------------------------------
+// Own-bank identifier guard. Loads all finance_banks identifiers and returns
+// the normalised value of the first identifier that matches one of OUR own
+// accounts (card / IBAN / account number). Returning a value means "this
+// deposit is between our own banks — do NOT auto-identify as a party
+// receive". We normalise to digits-only so "IR..." IBAN prefixes and any
+// dashes in card numbers don't break the comparison.
+// ----------------------------------------------------------------------------
+function normalizeDigits(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).replace(/\D+/g, "");
+}
+
+async function matchOwnBankIdentifier(
+  identifiers: ExtractedIdentifier[],
+): Promise<string | null> {
+  // Build the set of our own identifiers once per call. This table is tiny
+  // (one row per bank account) so the query cost is negligible.
+  const { data, error } = await supabase
+    .from("finance_banks")
+    .select("account_number, iban_number, card_number")
+    .eq("is_deleted", false);
+  if (error || !data) return null;
+
+  const own = new Set<string>();
+  for (const row of data as Array<{
+    account_number: string | null;
+    iban_number: string | null;
+    card_number: string | null;
+  }>) {
+    for (const v of [row.account_number, row.iban_number, row.card_number]) {
+      const n = normalizeDigits(v);
+      if (n) own.add(n);
+    }
+  }
+  if (own.size === 0) return null;
+
+  for (const ident of identifiers) {
+    const n = normalizeDigits(ident.normalized);
+    if (n && own.has(n)) return ident.normalized;
+  }
+  return null;
+}
+
+// ----------------------------------------------------------------------------
 // Public entry point.
 // Call this AFTER a transaction row has been inserted. We need the persisted
 // `bank_transaction_id` so the identifier rows and log entries can FK to it.
@@ -267,6 +311,25 @@ export async function autoIdentifyTransaction(
   if (!identifiers || identifiers.length === 0) {
     await logStep(bankTransactionId, "extract", false, { message: "no identifiers" });
     return { state: "no_identifier", message: "هیچ شناسه‌ای در توضیحات یافت نشد" };
+  }
+
+  // OWN-BANK GUARD — if ANY extracted identifier matches one of our own
+  // finance_banks (account_number / iban_number / card_number), this is an
+  // inter-bank transfer between OUR accounts. It must NOT become a
+  // receive_identification and must NOT post to Sepidar — it's owned by the
+  // شناسایی تراکنش بین بانکی flow. We check before cache/verify/party match.
+  const ownBankHit = await matchOwnBankIdentifier(identifiers);
+  if (ownBankHit) {
+    await logStep(bankTransactionId, "own_bank_skip", true, {
+      candidates: identifiers,
+      message: `identifier ${ownBankHit} belongs to own finance_banks`,
+    });
+    return {
+      state: "needs_review",
+      message:
+        "این شماره متعلق به یکی از حساب‌های خود ماست — برای شناسایی تراکنش بین بانکی نگه داشته شد",
+      matched_identifier: ownBankHit,
+    };
   }
 
   await logStep(bankTransactionId, "extract", true, { candidates: identifiers });

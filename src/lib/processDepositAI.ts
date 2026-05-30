@@ -218,7 +218,8 @@ async function setVerifyResult(
     | "verify_failed"
     | "party_not_found"
     | "posted"
-    | "posting_failed",
+    | "posting_failed"
+    | "own_bank_transfer",
   patch: { result?: unknown; error?: string | null } = {},
 ) {
   await supabase
@@ -230,6 +231,46 @@ async function setVerifyResult(
       ai_verified_at: new Date().toISOString(),
     })
     .eq("id", txId);
+}
+
+// ---------------------------------------------------------------------------
+// Own-bank identifier guard. Before treating a deposit as a party receive,
+// we MUST check whether ai_verify_payload.number matches one of OUR OWN
+// finance_banks identifiers (account_number / iban_number / card_number).
+// If it does, this is an inter-bank transfer between our own accounts —
+// it must NOT become a receive_identification and must NOT post to Sepidar.
+// It is left for the شناسایی تراکنش بین بانکی flow.
+// We load all bank identifiers once per run (small table) and compare on a
+// digits-only normalized form so "IR..." IBAN prefixes and dashes in card
+// numbers don't cause false negatives.
+// ---------------------------------------------------------------------------
+function normalizeIdentifier(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).replace(/\D+/g, "");
+}
+
+async function loadOwnBankIdentifiers(): Promise<Set<string>> {
+  const set = new Set<string>();
+  const { data, error } = await supabase
+    .from("finance_banks")
+    .select("account_number, iban_number, card_number")
+    .eq("is_deleted", false);
+  if (error) {
+    log("ownBanks.error", { error: error.message });
+    return set;
+  }
+  for (const row of (data ?? []) as Array<{
+    account_number: string | null;
+    iban_number: string | null;
+    card_number: string | null;
+  }>) {
+    for (const v of [row.account_number, row.iban_number, row.card_number]) {
+      const n = normalizeIdentifier(v);
+      if (n) set.add(n);
+    }
+  }
+  log("ownBanks.loaded", { count: set.size });
+  return set;
 }
 
 // ---------------------------------------------------------------------------
@@ -318,6 +359,11 @@ export async function processDepositAI(
   log("candidates.count", { total: progress.total, identified: progress.identified_by_ai });
   push(`${progress.total} تراکنش آماده برای شناسایی`);
 
+  // Load our own bank identifiers ONCE per run so we can short-circuit any
+  // deposit whose verified number belongs to one of our own accounts (those
+  // are inter-bank transfers, not party receives).
+  const ownBankIdentifiers = await loadOwnBankIdentifiers();
+
   // 3) iterate sequentially — keeps DB load predictable and makes per-row
   //    failure isolation trivial (one try/catch per iteration).
   for (const tx of candidates) {
@@ -338,6 +384,26 @@ export async function processDepositAI(
         push();
         continue;
       }
+
+      // OWN-BANK GUARD — must run BEFORE claim/verify/party-match so that a
+      // deposit between our own accounts is never converted into a receive
+      // identification or posted to Sepidar. It belongs to the inter-bank
+      // transfer flow instead. We mark the row terminal so reruns skip it.
+      const normalizedPayloadNumber = normalizeIdentifier(payload.number);
+      if (
+        normalizedPayloadNumber &&
+        ownBankIdentifiers.has(normalizedPayloadNumber)
+      ) {
+        log("own_bank.skip", { txId: tx.id, number: payload.number });
+        await setVerifyResult(tx.id, "own_bank_transfer", {
+          result: { reason: "own_bank_identifier", number: payload.number },
+          error:
+            "این شماره متعلق به یکی از حساب‌های خود ماست — برای شناسایی تراکنش بین بانکی نگه داشته شد",
+        });
+        push(`انتقال بین بانکی — ${tx.id.slice(0, 8)}`);
+        continue;
+      }
+
       const claimed = await claim(tx.id);
       if (!claimed) {
         log("skip", { txId: tx.id, reason: "claim failed (race?)" });
