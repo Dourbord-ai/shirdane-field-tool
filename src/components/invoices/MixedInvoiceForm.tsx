@@ -151,12 +151,15 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   medicine: {
     dbTable: "factor_item_medicine_details",
-    // medicine_id + medicine_name set by selector.
+    // The medicine itself is chosen through the rich MedicineProductPicker
+    // (rendered separately below). Every catalog-derived field — commercial
+    // name, active ingredient, company, country, dosage form, route,
+    // category, withdrawal periods — is snapshotted automatically from the
+    // selected medicine_products row, so the operator only enters the
+    // truly per-purchase fields (batch + expiry).
     fields: [
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "expire_date", label: "تاریخ انقضا", type: "date" },
-      { key: "manufacturer", label: "تولیدکننده", type: "text" },
-      { key: "withdrawal_days", label: "روز پرهیز", type: "number" },
     ],
   },
   sperm: {
