@@ -7,8 +7,18 @@
 // =============================================================================
 
 // ---- Domain enums (mirror the Postgres enums in the migration) -------------
+// Direction is the cash-flow side: a check we received vs. a check we issued.
 export type CheckDirection = "received" | "payable";
 
+// Category was added in the auto-posting migration. It tells the system
+// whether a check is a real financial instrument (operational) or just
+// a tracking record (guarantee/cancelled). Only `operational` checks
+// generate accounting vouchers.
+export type CheckCategory = "operational" | "guarantee" | "cancelled";
+
+// `active`, `returned`, `claimed`, `expired`, `cancelled` are the new statuses
+// reserved for guarantee and cancelled checks. Operational checks still use
+// the original lifecycle (received/issued/cleared/bounced/voided/lost).
 export type CheckStatus =
   | "draft"
   | "received"
@@ -20,8 +30,15 @@ export type CheckStatus =
   | "cleared"
   | "bounced"
   | "voided"
-  | "lost";
+  | "lost"
+  | "active"
+  | "returned"
+  | "claimed"
+  | "expired"
+  | "cancelled";
 
+// Events come from the DB enum and include new entries the voucher-posting
+// trigger writes (`voucher_posted`, `voucher_reversed`, etc.).
 export type CheckEventType =
   | "received"
   | "issued"
@@ -35,7 +52,12 @@ export type CheckEventType =
   | "party_effect_posted"
   | "bank_effect_posted"
   | "note"
-  | "status_change";
+  | "status_change"
+  | "voucher_posted"
+  | "voucher_reversed"
+  | "guarantee_claimed"
+  | "guarantee_returned"
+  | "cancelled";
 
 export type CheckbookLeafStatus =
   | "available"
@@ -52,6 +74,13 @@ export const DIRECTION_LABEL: Record<CheckDirection, string> = {
   payable: "پرداختی",
 };
 
+// Human-readable name for each category — used in headings and detail dialog.
+export const CATEGORY_LABEL: Record<CheckCategory, string> = {
+  operational: "عملیاتی",
+  guarantee: "ضمانتی",
+  cancelled: "ابطالی",
+};
+
 export const STATUS_LABEL: Record<CheckStatus, string> = {
   draft: "پیش‌نویس",
   received: "دریافت‌شده",
@@ -64,6 +93,12 @@ export const STATUS_LABEL: Record<CheckStatus, string> = {
   bounced: "برگشت خورده",
   voided: "ابطال شده",
   lost: "مفقود",
+  // Guarantee / cancelled lifecycle:
+  active: "فعال",
+  returned: "بازگشتی",
+  claimed: "ضبط شده",
+  expired: "منقضی",
+  cancelled: "ابطال",
 };
 
 export const EVENT_LABEL: Record<CheckEventType, string> = {
@@ -80,6 +115,11 @@ export const EVENT_LABEL: Record<CheckEventType, string> = {
   bank_effect_posted: "اثر بانک ثبت شد",
   note: "یادداشت",
   status_change: "تغییر وضعیت",
+  voucher_posted: "سند حسابداری صادر شد",
+  voucher_reversed: "سند حسابداری معکوس صادر شد",
+  guarantee_claimed: "چک ضمانتی ضبط شد",
+  guarantee_returned: "چک ضمانتی بازگشت داده شد",
+  cancelled: "ثبت ابطال",
 };
 
 export const LEAF_STATUS_LABEL: Record<CheckbookLeafStatus, string> = {
@@ -92,7 +132,9 @@ export const LEAF_STATUS_LABEL: Record<CheckbookLeafStatus, string> = {
 };
 
 // ---- Status colour tones (Tailwind classes on semantic tokens) -------------
-// We keep one mapping for table badges so colours stay consistent.
+// We keep one mapping for table badges so colours stay consistent. New
+// guarantee/cancelled statuses reuse the existing semantic palette so the
+// dark theme stays cohesive.
 export const STATUS_TONE: Record<CheckStatus, string> = {
   draft: "bg-muted text-muted-foreground",
   received: "bg-blue-500/15 text-blue-400 border-blue-500/30",
@@ -105,6 +147,11 @@ export const STATUS_TONE: Record<CheckStatus, string> = {
   bounced: "bg-destructive/15 text-destructive border-destructive/30",
   voided: "bg-muted text-muted-foreground border-border",
   lost: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  returned: "bg-muted text-muted-foreground border-border",
+  claimed: "bg-destructive/15 text-destructive border-destructive/30",
+  expired: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  cancelled: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 // ---- Allowed transitions ----------------------------------------------------
@@ -121,7 +168,10 @@ export type CheckAction =
   | "bounce"
   | "void"
   | "mark_lost"
-  | "deliver";
+  | "deliver"
+  | "return_guarantee"
+  | "claim_guarantee"
+  | "expire_guarantee";
 
 const RECEIVED_TX: Partial<Record<CheckStatus, Transition[]>> = {
   received: [
@@ -166,16 +216,57 @@ const PAYABLE_TX: Partial<Record<CheckStatus, Transition[]>> = {
   ],
 };
 
+// Guarantee checks share the same transitions for received and payable —
+// their lifecycle is independent of direction.
+const GUARANTEE_TX: Partial<Record<CheckStatus, Transition[]>> = {
+  active: [
+    { to: "returned", action: "return_guarantee", label: "بازگشت ضمانت" },
+    { to: "claimed", action: "claim_guarantee", label: "ضبط ضمانت" },
+    { to: "expired", action: "expire_guarantee", label: "ثبت انقضا" },
+    { to: "voided", action: "void", label: "ابطال" },
+  ],
+  returned: [
+    { to: "voided", action: "void", label: "ابطال" },
+  ],
+};
+
 export function allowedTransitions(
   direction: CheckDirection,
   status: CheckStatus,
+  category: CheckCategory = "operational",
 ): Transition[] {
+  // Cancelled checks are immutable; guarantee checks have their own map.
+  if (category === "cancelled") return [];
+  if (category === "guarantee") return GUARANTEE_TX[status] ?? [];
   const map = direction === "received" ? RECEIVED_TX : PAYABLE_TX;
   return map[status] ?? [];
 }
 
 // Terminal statuses can't be acted on further — used to disable buttons.
-export const TERMINAL_STATUSES: CheckStatus[] = ["cleared", "voided", "lost"];
+// We include the new guarantee/cancelled terminal states so detail dialog
+// hides actions automatically.
+export const TERMINAL_STATUSES: CheckStatus[] = [
+  "cleared", "voided", "lost",
+  "claimed", "expired", "cancelled",
+];
+
+// ---- Cancellation reasons ---------------------------------------------------
+// Mirrors the DB CHECK constraint on finance_checks.cancel_reason. The label
+// is shown in dropdowns and the detail dialog.
+export const CANCEL_REASONS = [
+  { value: "wrong_entry", label: "اشتباه در ثبت" },
+  { value: "wrong_amount", label: "اشتباه در مبلغ" },
+  { value: "wrong_beneficiary", label: "اشتباه در ذینفع" },
+  { value: "damaged", label: "چک مخدوش" },
+  { value: "lost", label: "چک مفقودی" },
+  { value: "replaced", label: "جایگزینی با چک جدید" },
+  { value: "other", label: "سایر" },
+] as const;
+
+export type CancelReason = (typeof CANCEL_REASONS)[number]["value"];
+
+export const CANCEL_REASON_LABEL: Record<CancelReason, string> =
+  Object.fromEntries(CANCEL_REASONS.map((r) => [r.value, r.label])) as Record<CancelReason, string>;
 
 // ---- Party / bank label helpers --------------------------------------------
 // Small pure functions so every screen formats parties and banks identically.

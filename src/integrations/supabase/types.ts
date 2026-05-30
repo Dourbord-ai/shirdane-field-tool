@@ -3401,6 +3401,9 @@ export type Database = {
           bank_account_id: string | null
           bank_effected_at: string | null
           bank_id: string | null
+          cancel_reason: string | null
+          cancelled_date: string | null
+          category: string
           check_number: string
           checkbook_leaf_id: string | null
           created_at: string
@@ -3408,20 +3411,28 @@ export type Database = {
           description: string | null
           direction: Database["public"]["Enums"]["check_direction"]
           due_date: string
+          expiry_date: string | null
+          guarantee_subject: string | null
           id: string
           issue_date: string | null
           party_effected_at: string | null
           party_id: string | null
           receive_date: string | null
+          related_contract: string | null
+          related_project: string | null
           sayad_number: string | null
           status: Database["public"]["Enums"]["check_status"]
           updated_at: string
+          voucher_id: string | null
         }
         Insert: {
           amount: number
           bank_account_id?: string | null
           bank_effected_at?: string | null
           bank_id?: string | null
+          cancel_reason?: string | null
+          cancelled_date?: string | null
+          category?: string
           check_number: string
           checkbook_leaf_id?: string | null
           created_at?: string
@@ -3429,20 +3440,28 @@ export type Database = {
           description?: string | null
           direction: Database["public"]["Enums"]["check_direction"]
           due_date: string
+          expiry_date?: string | null
+          guarantee_subject?: string | null
           id?: string
           issue_date?: string | null
           party_effected_at?: string | null
           party_id?: string | null
           receive_date?: string | null
+          related_contract?: string | null
+          related_project?: string | null
           sayad_number?: string | null
           status: Database["public"]["Enums"]["check_status"]
           updated_at?: string
+          voucher_id?: string | null
         }
         Update: {
           amount?: number
           bank_account_id?: string | null
           bank_effected_at?: string | null
           bank_id?: string | null
+          cancel_reason?: string | null
+          cancelled_date?: string | null
+          category?: string
           check_number?: string
           checkbook_leaf_id?: string | null
           created_at?: string
@@ -3450,14 +3469,19 @@ export type Database = {
           description?: string | null
           direction?: Database["public"]["Enums"]["check_direction"]
           due_date?: string
+          expiry_date?: string | null
+          guarantee_subject?: string | null
           id?: string
           issue_date?: string | null
           party_effected_at?: string | null
           party_id?: string | null
           receive_date?: string | null
+          related_contract?: string | null
+          related_project?: string | null
           sayad_number?: string | null
           status?: Database["public"]["Enums"]["check_status"]
           updated_at?: string
+          voucher_id?: string | null
         }
         Relationships: [
           {
@@ -3479,6 +3503,13 @@ export type Database = {
             columns: ["party_id"]
             isOneToOne: false
             referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_checks_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "finance_vouchers"
             referencedColumns: ["id"]
           },
         ]
@@ -6401,6 +6432,10 @@ export type Database = {
           id: string
           ord: number
         }[]
+      }
+      fn_finance_check_post_voucher: {
+        Args: { p_check_id: string; p_event: string }
+        Returns: string
       }
       fn_finance_recalc_payment_request: {
         Args: { p_request_id: string }

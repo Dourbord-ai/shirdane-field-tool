@@ -20,10 +20,11 @@ import { useInvalidateCheckbooks } from "@/hooks/useCheckbooks";
 import StatusBadge from "./StatusBadge";
 import {
   allowedTransitions, DIRECTION_LABEL, EVENT_LABEL, partyLabel, bankLabel,
-  TERMINAL_STATUSES, type CheckStatus, type CheckEventType,
+  TERMINAL_STATUSES, CATEGORY_LABEL, CANCEL_REASON_LABEL,
+  type CheckStatus, type CheckEventType, type CancelReason,
 } from "@/lib/checks";
 import { JalaliDateCell, MoneyCell } from "@/components/finance/atoms";
-import { Clock } from "lucide-react";
+import { Clock, FileText, ShieldCheck, Ban } from "lucide-react";
 
 interface Props {
   checkId: string | null;
@@ -32,6 +33,8 @@ interface Props {
 
 // Map a transition action → the matching check_event_type enum value. We need
 // this so the timeline shows a meaningful row, not just "status_change".
+// Guarantee actions write the dedicated event types added in the latest
+// migration so the audit log reads naturally.
 const ACTION_EVENT: Record<string, CheckEventType> = {
   deposit: "deposited_to_bank",
   transfer_to_party: "transferred_to_party",
@@ -40,6 +43,9 @@ const ACTION_EVENT: Record<string, CheckEventType> = {
   void: "voided",
   mark_lost: "marked_lost",
   deliver: "delivered",
+  return_guarantee: "guarantee_returned",
+  claim_guarantee: "guarantee_claimed",
+  expire_guarantee: "status_change",
 };
 
 export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
@@ -58,7 +64,9 @@ export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
     );
   }
 
-  const transitions = allowedTransitions(check.direction, check.status);
+  // allowedTransitions now takes category — guarantee checks use a different
+  // map, cancelled checks return [] (no actions allowed).
+  const transitions = allowedTransitions(check.direction, check.status, check.category);
 
   // Single helper that flips status + inserts an event. We keep them in one
   // function so the UI never updates one without the other.
@@ -85,11 +93,19 @@ export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
 
   return (
     <Dialog open={!!checkId} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             <span>چک {DIRECTION_LABEL[check.direction]} شماره {check.check_number}</span>
             <StatusBadge status={check.status} />
+            {/* Category chip — makes the type explicit when viewing a check
+                from any tab. Reuses the same pill styling as StatusBadge. */}
+            {check.category !== "operational" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border bg-muted/40 text-foreground border-border">
+                {check.category === "guarantee" ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
+                {CATEGORY_LABEL[check.category]}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -101,8 +117,32 @@ export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
           <InfoCell label="شماره صیاد" value={check.sayad_number || "—"} />
           <InfoCell label="تاریخ صدور" value={<JalaliDateCell value={check.issue_date} />} />
           <InfoCell label="تاریخ سررسید" value={<JalaliDateCell value={check.due_date} />} />
-          <InfoCell label="اثر طرف حساب" value={<JalaliDateCell value={check.party_effected_at} withTime />} />
-          <InfoCell label="اثر بانک" value={<JalaliDateCell value={check.bank_effected_at} withTime />} />
+          {/* Operational checks: show accounting effect timestamps. */}
+          {check.category === "operational" && (
+            <>
+              <InfoCell label="اثر طرف حساب" value={<JalaliDateCell value={check.party_effected_at} withTime />} />
+              <InfoCell label="اثر بانک" value={<JalaliDateCell value={check.bank_effected_at} withTime />} />
+            </>
+          )}
+          {/* Guarantee-specific metadata. */}
+          {check.category === "guarantee" && (
+            <>
+              <InfoCell label="تاریخ انقضا" value={<JalaliDateCell value={check.expiry_date} />} />
+              <InfoCell label="موضوع ضمانت" value={check.guarantee_subject || "—"} />
+              <InfoCell label="قرارداد مرتبط" value={check.related_contract || "—"} />
+              <InfoCell label="پروژه مرتبط" value={check.related_project || "—"} />
+            </>
+          )}
+          {/* Cancelled-specific metadata. */}
+          {check.category === "cancelled" && (
+            <>
+              <InfoCell label="تاریخ ابطال" value={<JalaliDateCell value={check.cancelled_date} />} />
+              <InfoCell
+                label="علت ابطال"
+                value={check.cancel_reason ? CANCEL_REASON_LABEL[check.cancel_reason as CancelReason] : "—"}
+              />
+            </>
+          )}
           {check.description && (
             <div className="col-span-full">
               <div className="text-xs text-muted-foreground mb-1">توضیحات</div>
@@ -111,7 +151,24 @@ export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
           )}
         </div>
 
+        {/* Accounting voucher link — only operational checks generate vouchers.
+            Guarantee/cancelled show a neutral note instead so the user
+            knows nothing was posted to the GL. */}
+        {check.category === "operational" ? (
+          check.voucher_id && (
+            <div className="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md p-2">
+              <FileText className="w-3.5 h-3.5 text-primary" />
+              <span>سند حسابداری ثبت چک به‌صورت خودکار صادر شده است.</span>
+            </div>
+          )
+        ) : (
+          <div className="text-xs text-muted-foreground bg-muted/30 rounded-md p-2">
+            این چک سند حسابداری ندارد و روی مانده طرف حساب یا بانک اثر نمی‌گذارد.
+          </div>
+        )}
+
         <Separator />
+
 
         {/* Action panel — buttons reflect ALLOWED_TRANSITIONS so users can't
             attempt invalid status changes (the DB guard would reject them
