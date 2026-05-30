@@ -261,6 +261,57 @@ export default function MixedInvoiceForm() {
   }, []);
 
   // -----------------------------------------------------------------------
+  // Sales invoice auto-numbering.
+  //
+  // Mirrors the legacy NewInvoice behavior: when invoice_type is a sale
+  // ("sell"), we read recent factors and propose the next integer above the
+  // current max. Purchase invoices keep the manual-entry behavior because
+  // the printed number comes from the supplier.
+  //
+  // Concurrency: the final guard is the `factors_sales_invoice_number_unique`
+  // partial unique index on the DB. The fetch below is a best-effort UX hint;
+  // if a concurrent operator burns our number, the insert will reject and we
+  // recover by re-fetching + retrying once inside handleSubmit.
+  // -----------------------------------------------------------------------
+  const isSale = invoiceType === "sell";
+
+  const fetchNextSalesInvoiceNumber = async (): Promise<string | null> => {
+    const { data: rows, error } = await supabase
+      .from("factors")
+      .select("invoice_number")
+      .in("invoice_type", ["sell", "retail_sell"])
+      .not("invoice_number", "is", null)
+      .order("id", { ascending: false })
+      .limit(500);
+    if (error) return null;
+    let max = 0;
+    (rows ?? []).forEach((r: { invoice_number: string | null }) => {
+      // Strip non-digits so e.g. "INV-1024" still contributes 1024.
+      const raw = String(r.invoice_number ?? "").replace(/\D/g, "");
+      const n = parseInt(raw, 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  };
+
+  // Auto-fill on mount and whenever the operator flips into a sales mode.
+  // We never overwrite a number the user has already typed.
+  useEffect(() => {
+    if (!isSale) return;
+    if (invoiceNumber) return;
+    let cancelled = false;
+    (async () => {
+      const next = await fetchNextSalesInvoiceNumber();
+      if (cancelled || next === null) return;
+      setInvoiceNumber(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSale, invoiceNumber]);
+
+  // -----------------------------------------------------------------------
   // Row mutators. Each one returns a NEW array so React picks up the change.
   // -----------------------------------------------------------------------
   const addRow = () => setRows((r) => [...r, blankRow()]);
@@ -336,25 +387,52 @@ export default function MixedInvoiceForm() {
       //    header so legacy code paths that branch on factors.product_type
       //    can recognize the new normalized invoices and skip per-product
       //    handling. (Existing factors retain their original value.)
-      const { data: factor, error: hdrErr } = await supabase
+      //
+      //    For sales invoices the DB has a partial unique index on
+      //    invoice_number. If a concurrent operator just claimed our
+      //    auto-suggested number, we recover ONCE: re-fetch the next number,
+      //    update local state so the UI reflects it, and retry the insert.
+      const buildHeader = (number: string | null) => ({
+        product_type: "mixed",
+        invoice_type: invoiceType,
+        factor_type_id: invoiceType === "buy" ? 1 : invoiceType === "sell" ? 2 : null,
+        invoice_date: isoDate,
+        invoice_number: number,
+        tax: tax === "yes" ? "دارد" : "ندارد",
+        finance_party_id: financePartyId || null,
+        discount: totals.discountSum,
+        shipping: 0,
+        tax_amount: totals.taxSum,
+        total_amount: totals.total,
+        payable_amount: totals.payable,
+        description: description || null,
+      });
+
+      let { data: factor, error: hdrErr } = await supabase
         .from("factors")
-        .insert({
-          product_type: "mixed",
-          invoice_type: invoiceType,
-          factor_type_id: invoiceType === "buy" ? 1 : invoiceType === "sell" ? 2 : null,
-          invoice_date: isoDate,
-          invoice_number: invoiceNumber || null,
-          tax: tax === "yes" ? "دارد" : "ندارد",
-          finance_party_id: financePartyId || null,
-          discount: totals.discountSum,
-          shipping: 0,
-          tax_amount: totals.taxSum,
-          total_amount: totals.total,
-          payable_amount: totals.payable,
-          description: description || null,
-        })
+        .insert(buildHeader(invoiceNumber || null))
         .select("id")
         .single();
+
+      // Duplicate-key recovery (sales only). We match the same regex the
+      // legacy form used so behavior is consistent.
+      if (
+        hdrErr &&
+        isSale &&
+        /factors_sales_invoice_number_unique|duplicate key/i.test(hdrErr.message ?? "")
+      ) {
+        const next = await fetchNextSalesInvoiceNumber();
+        if (next) {
+          setInvoiceNumber(next);
+          const retry = await supabase
+            .from("factors")
+            .insert(buildHeader(next))
+            .select("id")
+            .single();
+          factor = retry.data;
+          hdrErr = retry.error;
+        }
+      }
 
       if (hdrErr || !factor) throw hdrErr ?? new Error("factor insert failed");
 
