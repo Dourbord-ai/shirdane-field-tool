@@ -614,8 +614,6 @@ export default function MixedInvoiceForm() {
 
       if (hdrErr || !factor) throw hdrErr ?? new Error("factor insert failed");
 
-      if (hdrErr || !factor) throw hdrErr ?? new Error("factor insert failed");
-
       // 2) Per-row inserts. We loop sequentially so each error message is
       //    attributable to a specific row index, which is invaluable for
       //    debugging trigger violations.
