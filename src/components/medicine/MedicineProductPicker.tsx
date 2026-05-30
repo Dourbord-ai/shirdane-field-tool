@@ -63,37 +63,81 @@ interface Props {
 }
 
 // ---------------------------------------------------------------------------
-// Server-side fuzzy search across 7 columns.
-// We use PostgREST's `.or()` filter with `ilike.*<q>*` on each column. The
-// trigram GIN indexes we added in the migration make this fast even at 10k+
-// rows. We cap results at 20 and never request more.
+// Server-side search with PER-FIELD filters (AND across columns).
 // ---------------------------------------------------------------------------
-async function searchMedicineProducts(q: string): Promise<MedicineProduct[]> {
-  // PostgREST treats commas as filter separators inside `.or()`, so any comma
-  // in the user's query would break the OR-list. We strip them defensively.
-  const safe = q.replace(/[,()]/g, " ").trim();
-  if (!safe) return [];
+// The operator gets one input per searchable column so they can narrow the
+// catalog using whatever attribute they actually remember (commercial name in
+// Persian, active ingredient in English, company, category, …). Each
+// non-empty filter becomes its own `ilike` predicate, AND-combined by
+// PostgREST. Trigram indexes on every column keep this fast at 10k+ rows.
+// ---------------------------------------------------------------------------
+export type MedicineFilters = {
+  commercial_fa: string;
+  commercial_en: string;
+  ingredient_fa: string;
+  ingredient_en: string;
+  company_fa: string;
+  company_en: string;
+  category_fa: string;
+};
 
-  // The 7 columns the user explicitly asked us to search over.
-  const cols = [
-    "commercial_product_name_fa",
-    "commercial_product_name_en",
-    "name_fa",
-    "name_en",
-    "company_name_fa",
-    "company_name_en",
-    "category_fa",
-  ];
-  const orFilter = cols.map((c) => `${c}.ilike.*${safe}*`).join(",");
+const EMPTY_FILTERS: MedicineFilters = {
+  commercial_fa: "",
+  commercial_en: "",
+  ingredient_fa: "",
+  ingredient_en: "",
+  company_fa: "",
+  company_en: "",
+  category_fa: "",
+};
 
-  const { data, error } = await supabase
+// Map UI filter keys → real DB column names. Keeping this map next to the
+// type ensures the input loop, the query builder, and downstream rendering
+// stay in lock-step (one place to edit when a column is added/renamed).
+const FILTER_COLUMNS: Record<keyof MedicineFilters, string> = {
+  commercial_fa: "commercial_product_name_fa",
+  commercial_en: "commercial_product_name_en",
+  ingredient_fa: "name_fa",
+  ingredient_en: "name_en",
+  company_fa: "company_name_fa",
+  company_en: "company_name_en",
+  category_fa: "category_fa",
+};
+
+// Persian labels shown above each per-field input.
+const FILTER_LABELS: Record<keyof MedicineFilters, string> = {
+  commercial_fa: "نام تجاری (فارسی)",
+  commercial_en: "نام تجاری (انگلیسی)",
+  ingredient_fa: "ماده موثره (فارسی)",
+  ingredient_en: "ماده موثره (انگلیسی)",
+  company_fa: "نام شرکت (فارسی)",
+  company_en: "نام شرکت (انگلیسی)",
+  category_fa: "دسته‌بندی",
+};
+
+async function searchMedicineProducts(filters: MedicineFilters): Promise<MedicineProduct[]> {
+  // Pick out only the filters the operator actually filled in. Commas and
+  // parens are stripped because they carry special meaning inside PostgREST
+  // filter expressions and would otherwise break the request.
+  const active = (Object.keys(FILTER_COLUMNS) as (keyof MedicineFilters)[])
+    .map((k) => ({ col: FILTER_COLUMNS[k], val: filters[k].replace(/[,()]/g, " ").trim() }))
+    .filter((f) => f.val.length > 0);
+
+  // No active filters → return nothing. We intentionally do NOT pull the
+  // whole catalog: the picker is meant to be driven by at least one filter.
+  if (active.length === 0) return [];
+
+  // Build the query incrementally. Stacking `.ilike()` calls produces an
+  // AND-combined predicate server-side — exactly the narrowing behaviour we
+  // want when the operator types into multiple boxes at once.
+  let q = supabase
     .from("medicine_products")
     .select(
       "id, commercial_product_name_fa, commercial_product_name_en, name_fa, name_en, company_name_fa, company_name_en, company_country, category_fa, dosage_form, route_fa, route_en, milk_withdrawal_days, meat_withdrawal_days, label_verification_status",
     )
-    .eq("is_active", true)
-    .or(orFilter)
-    .limit(20);
+    .eq("is_active", true);
+  for (const f of active) q = q.ilike(f.col, `%${f.val}%`);
+  const { data, error } = await q.limit(30);
 
   if (error) {
     // eslint-disable-next-line no-console
