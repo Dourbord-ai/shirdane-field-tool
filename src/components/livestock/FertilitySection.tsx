@@ -1102,15 +1102,32 @@ export default function FertilitySection({ livestockId, latestStatus, isDry, onO
           </TabsContent>
 
           <TabsContent value="rinse_clean">
-            <EventList
-              events={[...(byType.rinse ?? []), ...(byType.clean_test ?? [])].sort((a, b) =>
-                (b.event_date ?? "").localeCompare(a.event_date ?? ""),
-              )}
-              emptyText="شستشو یا کلین تستی ثبت نشده است"
-              onEdit={setEditEvent}
-              onCancel={setCancelEvent}
-              resolveUserName={resolveUserName}
-            />
+            {/* Split into two dedicated tables so every form field of each
+                operation is visible directly (no shared/generic rows). */}
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">شستشو</h4>
+                <RinseList
+                  events={(byType.rinse ?? []).slice().sort((a, b) =>
+                    (b.event_date ?? "").localeCompare(a.event_date ?? ""),
+                  )}
+                  onEdit={setEditEvent}
+                  onCancel={setCancelEvent}
+                  resolveUserName={resolveUserName}
+                />
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">کلین تست</h4>
+                <CleanTestList
+                  events={(byType.clean_test ?? []).slice().sort((a, b) =>
+                    (b.event_date ?? "").localeCompare(a.event_date ?? ""),
+                  )}
+                  onEdit={setEditEvent}
+                  onCancel={setCancelEvent}
+                  resolveUserName={resolveUserName}
+                />
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="sync">
