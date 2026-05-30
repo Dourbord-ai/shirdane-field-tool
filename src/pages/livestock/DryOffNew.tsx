@@ -188,12 +188,16 @@ export default function DryOffNew() {
         .from("livestock_fertility_events" as any)
         .select("event_type, event_date, is_cancelled")
         .eq("livestock_id", selectedCow.id)
-        .in("event_type", ["dry_off", "calving"])
+        // Include legacy alias 'dry' for backwards compatibility — old rows in the
+        // database used event_type='dry' before we standardized on 'dry_off'. New
+        // inserts always use 'dry_off' (see the insert below).
+        .in("event_type", ["dry_off", "dry", "calving"])
         .order("event_date", { ascending: false })
         .limit(50);
       if (cancelled) return;
       const rows = ((data as any[]) ?? []).filter((r) => !r.is_cancelled);
-      const lastDry = rows.find((r) => r.event_type === "dry_off")?.event_date ?? null;
+      const lastDry =
+        rows.find((r) => r.event_type === "dry_off" || r.event_type === "dry")?.event_date ?? null;
       const lastCalv = rows.find((r) => r.event_type === "calving")?.event_date ?? null;
       const active =
         !!lastDry && (!lastCalv || new Date(lastDry).getTime() > new Date(lastCalv).getTime());
