@@ -1536,6 +1536,135 @@ export type Database = {
           },
         ]
       }
+      factor_item_milk_details: {
+        Row: {
+          buyer_company: string | null
+          created_at: string
+          description: string | null
+          factor_item_id: string
+          id: string
+          liters: number | null
+          milk_sample: number | null
+          price_per_kg: number | null
+          updated_at: string
+          weight_kg: number | null
+        }
+        Insert: {
+          buyer_company?: string | null
+          created_at?: string
+          description?: string | null
+          factor_item_id: string
+          id?: string
+          liters?: number | null
+          milk_sample?: number | null
+          price_per_kg?: number | null
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Update: {
+          buyer_company?: string | null
+          created_at?: string
+          description?: string | null
+          factor_item_id?: string
+          id?: string
+          liters?: number | null
+          milk_sample?: number | null
+          price_per_kg?: number | null
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_milk_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_other_details: {
+        Row: {
+          created_at: string
+          factor_item_id: string
+          id: string
+          item_name: string | null
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          factor_item_id: string
+          id?: string
+          item_name?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          factor_item_id?: string
+          id?: string
+          item_name?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_other_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factor_item_rental_details: {
+        Row: {
+          created_at: string
+          driver_name: string | null
+          end_date: string | null
+          factor_item_id: string
+          id: string
+          notes: string | null
+          purpose: string | null
+          start_date: string | null
+          updated_at: string
+          vehicle_plate: string | null
+        }
+        Insert: {
+          created_at?: string
+          driver_name?: string | null
+          end_date?: string | null
+          factor_item_id: string
+          id?: string
+          notes?: string | null
+          purpose?: string | null
+          start_date?: string | null
+          updated_at?: string
+          vehicle_plate?: string | null
+        }
+        Update: {
+          created_at?: string
+          driver_name?: string | null
+          end_date?: string | null
+          factor_item_id?: string
+          id?: string
+          notes?: string | null
+          purpose?: string | null
+          start_date?: string | null
+          updated_at?: string
+          vehicle_plate?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_item_rental_details_factor_item_id_fkey"
+            columns: ["factor_item_id"]
+            isOneToOne: true
+            referencedRelation: "factor_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       factor_item_service_details: {
         Row: {
           created_at: string
