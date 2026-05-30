@@ -261,14 +261,60 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
     return () => document.removeEventListener("keydown", h);
   }, [open]);
 
-  // Debounced server-side search (300ms as required). We use a ref-stored
-  // request token so a slow request can't overwrite a fresher one.
+  // Live filter state — one entry per searchable column. We keep them in a
+  // single object so the debounced effect can depend on the whole snapshot.
+  const [filters, setFilters] = useState<MedicineFilters>(EMPTY_FILTERS);
+  const [results, setResults] = useState<MedicineProduct[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // True when at least one filter has actual content. Drives whether we show
+  // the "frequently used" chips (only on a fully empty form) or the results.
+  const anyFilterActive = useMemo(
+    () => Object.values(filters).some((v) => v.trim().length > 0),
+    [filters],
+  );
+
+  // Frequently-used chips: lazy-loaded the first time the sheet opens so we
+  // don't issue any DB calls until the operator actually needs the picker.
+  const [frequent, setFrequent] = useState<MedicineProduct[]>([]);
+  const frequentLoadedRef = useRef(false);
+
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus the first search input shortly after the sheet opens and
+  // lock body scroll so the underlying invoice form doesn't shift around.
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const t = setTimeout(() => firstInputRef.current?.focus(), 120);
+
+    // Lazy-load the frequently-used chips once per component lifetime.
+    if (!frequentLoadedRef.current) {
+      frequentLoadedRef.current = true;
+      fetchFrequentlyUsed().then(setFrequent);
+    }
+    return () => {
+      document.body.style.overflow = original;
+      clearTimeout(t);
+    };
+  }, [open]);
+
+  // Close on Escape — standard a11y convention for modal sheets.
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [open]);
+
+  // Debounced server-side search (300ms). A ref-stored request token ensures
+  // an in-flight slow response can never overwrite a fresher one.
   const tokenRef = useRef(0);
   useEffect(() => {
     if (!open) return;
-    const q = query.trim();
-    // Empty query → clear results immediately and skip the network call.
-    if (!q) {
+    // No filters at all → clear results immediately, skip the network call.
+    if (!anyFilterActive) {
       setResults([]);
       setLoading(false);
       return;
@@ -276,21 +322,25 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
     setLoading(true);
     const myToken = ++tokenRef.current;
     const t = setTimeout(async () => {
-      const rows = await searchMedicineProducts(q);
-      // Drop the response if a newer query has been issued in the meantime.
-      if (myToken !== tokenRef.current) return;
+      const rows = await searchMedicineProducts(filters);
+      if (myToken !== tokenRef.current) return; // a newer search has started
       setResults(rows);
       setLoading(false);
     }, 300);
     return () => clearTimeout(t);
-  }, [query, open]);
+  }, [filters, anyFilterActive, open]);
 
   // Helper invoked from both the chip strip and the search results list.
   const handlePick = (m: MedicineProduct) => {
     onSelect(m);
     setOpen(false);
-    setQuery("");
+    setFilters(EMPTY_FILTERS);
   };
+
+  // Update a single filter field by key — keeps the handler signature small
+  // inside the JSX loop below.
+  const setFilter = (k: keyof MedicineFilters, v: string) =>
+    setFilters((prev) => ({ ...prev, [k]: v }));
 
   // Title of the trigger button — shows the selected medicine when known,
   // otherwise prompts the operator to open the picker.
