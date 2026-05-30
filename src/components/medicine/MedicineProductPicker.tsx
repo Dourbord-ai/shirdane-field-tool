@@ -394,7 +394,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
             onClick={() => setOpen(false)}
           />
 
-          <div className="relative w-full sm:max-w-2xl sm:rounded-2xl bg-card shadow-2xl flex flex-col h-[92vh] sm:h-[85vh] rounded-t-3xl animate-slide-up overflow-hidden">
+          <div className="relative w-full sm:max-w-3xl sm:rounded-2xl bg-card shadow-2xl flex flex-col h-[92vh] sm:h-[85vh] rounded-t-3xl animate-slide-up overflow-hidden">
             {/* Drag handle — mobile UX cue. */}
             <div className="flex justify-center pt-3 pb-1 sm:hidden">
               <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
@@ -553,7 +553,7 @@ export default function MedicineProductPicker({ value, selected, onSelect, onCle
 
             {/* Footer */}
             <div className="px-5 py-2 border-t border-border bg-muted/20 text-[11px] text-muted-foreground text-center">
-              حداکثر ۲۰ نتیجه نمایش داده می‌شود — برای نتایج دقیق‌تر، جستجو را محدودتر کنید.
+              حداکثر ۳۰ نتیجه نمایش داده می‌شود — برای نتایج دقیق‌تر، جستجو را محدودتر کنید.
             </div>
           </div>
         </div>
