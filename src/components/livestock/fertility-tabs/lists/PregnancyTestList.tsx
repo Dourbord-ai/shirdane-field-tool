@@ -17,6 +17,19 @@ interface Props {
 // Map the internal test_type code to the user-facing «test number» label the
 // form actually uses: تست اول / دوم / سوم / چهارم. This lives next to the
 // list because it is purely a presentation concern.
+// Mapping from the structured business key (fertility_operation_id) to the
+// user-facing «شماره تست» label. This is the PRIMARY source of truth.
+// 3=اولیه, 4=نهایی, 11=تکمیلی, 12=خشکی — defined by the dairy ops catalog.
+const OP_ID_LABELS: Record<number, string> = {
+  3: "تست اولیه",
+  4: "تست نهایی",
+  11: "تست تکمیلی",
+  12: "تست خشکی",
+};
+
+// Legacy fallback: older rows wrote the type only into metadata.test_type.
+// Kept for backward compatibility — never used when fertility_operation_id
+// is present.
 const TEST_NUMBER_LABELS: Record<string, string> = {
   initial: "تست اولیه",
   final: "تست نهایی",
