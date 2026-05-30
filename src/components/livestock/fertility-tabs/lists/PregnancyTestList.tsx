@@ -18,10 +18,10 @@ interface Props {
 // form actually uses: تست اول / دوم / سوم / چهارم. This lives next to the
 // list because it is purely a presentation concern.
 const TEST_NUMBER_LABELS: Record<string, string> = {
-  initial: "تست اول",
-  final: "تست دوم",
-  extra: "تست سوم",
-  dry: "تست چهارم (خشکی)",
+  initial: "تست اولیه",
+  final: "تست نهایی",
+  extra: "تست تکمیلی",
+  dry: "تست خشکی",
 };
 
 export default function PregnancyTestList({ events, onEdit, onCancel, resolveUserName }: Props) {
