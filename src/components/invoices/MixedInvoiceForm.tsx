@@ -626,16 +626,23 @@ export default function MixedInvoiceForm() {
 
         if (itemErr || !item) throw new Error(`ردیف ${i + 1}: ${itemErr?.message ?? "خطا"}`);
 
-        // 2b) detail insert. We project the per-key strings into typed
-        //     values: number fields → parseFloat, others verbatim. Keys
-        //     declared in DETAIL_CONFIG are guaranteed to exist on the
-        //     target table (we authored both at the same time).
+        // 2b) detail insert. We project ALL keys present in row.details
+        //     (both selector-assigned FK ids like cow_id/sperm_id and
+        //     operator-entered fields declared in DETAIL_CONFIG). Numeric
+        //     coercion is driven by either NUMERIC_DETAIL_KEYS (for FK ids
+        //     set by the master-table selector) or the field's declared
+        //     type in DETAIL_CONFIG. Keys starting with "_" are UI-only
+        //     (e.g. _display) and skipped.
         const detailPayload: Record<string, unknown> = { factor_item_id: item.id };
-        for (const f of cfg.fields) {
-          const raw = row.details[f.key];
+        const fieldTypes = new Map(cfg.fields.map((f) => [f.key, f.type] as const));
+        for (const [key, raw] of Object.entries(row.details)) {
+          if (key.startsWith("_")) continue;          // UI-only helper key
           if (raw === undefined || raw === "") continue; // leave NULL
-          detailPayload[f.key] = f.type === "number" ? num(raw) : raw;
+          const declaredType = fieldTypes.get(key);
+          const isNumeric = NUMERIC_DETAIL_KEYS.has(key) || declaredType === "number";
+          detailPayload[key] = isNumeric ? num(raw) : raw;
         }
+
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
           // map, so this dynamic .from() is safe.
