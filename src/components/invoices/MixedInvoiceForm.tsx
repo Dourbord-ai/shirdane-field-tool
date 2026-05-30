@@ -121,8 +121,8 @@ interface DetailFieldDef {
 const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldDef[] }> = {
   livestock: {
     dbTable: "factor_item_livestock_details",
+    // cow_id is set by the master-table selector below — not editable here.
     fields: [
-      { key: "cow_id", label: "شماره گاو", type: "text" },
       { key: "weight", label: "وزن (kg)", type: "number" },
       { key: "off_unit_price", label: "قیمت پایه", type: "number" },
       { key: "delivery_cost", label: "هزینه تحویل", type: "number" },
@@ -132,8 +132,8 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   feed: {
     dbTable: "factor_item_feed_details",
+    // feed_id + feed_name set by selector.
     fields: [
-      { key: "feed_name", label: "نام خوراک", type: "text" },
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "expire_date", label: "تاریخ انقضا", type: "date" },
       { key: "dry_matter_pct", label: "ماده خشک %", type: "number" },
@@ -141,8 +141,8 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   medicine: {
     dbTable: "factor_item_medicine_details",
+    // medicine_id + medicine_name set by selector.
     fields: [
-      { key: "medicine_name", label: "نام دارو", type: "text" },
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "expire_date", label: "تاریخ انقضا", type: "date" },
       { key: "manufacturer", label: "تولیدکننده", type: "text" },
@@ -151,9 +151,8 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
   },
   sperm: {
     dbTable: "factor_item_sperm_details",
+    // sperm_id + bull_code + bull_name set by selector.
     fields: [
-      { key: "bull_code", label: "کد گاو نر", type: "text" },
-      { key: "bull_name", label: "نام گاو نر", type: "text" },
       { key: "breed", label: "نژاد", type: "text" },
       { key: "batch_number", label: "شماره بچ", type: "text" },
       { key: "production_date", label: "تاریخ تولید", type: "date" },
@@ -209,6 +208,75 @@ const DETAIL_CONFIG: Record<ProductType, { dbTable: string; fields: DetailFieldD
     ],
   },
 };
+
+// ---------------------------------------------------------------------------
+// Master-table selector config (per row)
+// ---------------------------------------------------------------------------
+// For product types that have a master list (livestock, sperm, feed,
+// medicine), each row renders a searchable dropdown at the top of its
+// details block. Selecting an option writes the matching FK id (+ a few
+// display fields) into the row.details bag so they round-trip into the
+// matching factor_item_<type>_details table on save. Free-text entry is
+// available only as a fallback for product types without a master table.
+// ---------------------------------------------------------------------------
+type MasterSource = "cows" | "sperms" | "feeds" | "medicines";
+interface SelectorDef {
+  label: string;          // UI label above the dropdown
+  source: MasterSource;   // which master option list to render
+  primaryKey: string;     // the FK detail key (also used as the dropdown's value)
+  // Translate a master record into a partial detail bag patch.
+  apply: (raw: Record<string, unknown>) => Record<string, string>;
+}
+const SELECTOR_CONFIG: Partial<Record<ProductType, SelectorDef>> = {
+  livestock: {
+    label: "انتخاب دام (پلاک)",
+    source: "cows",
+    primaryKey: "cow_id",
+    apply: (c) => ({
+      cow_id: String(c.id),
+      _display: [c.bodynumber, c.earnumber].filter(Boolean).join(" / "),
+    }),
+  },
+  sperm: {
+    label: "انتخاب اسپرم",
+    source: "sperms",
+    primaryKey: "sperm_id",
+    apply: (s) => ({
+      sperm_id: String(s.id),
+      bull_code: String(s.code ?? ""),
+      bull_name: String(s.name ?? ""),
+      _display: `${s.code ?? ""}${s.name ? " - " + s.name : ""}`.trim(),
+    }),
+  },
+  feed: {
+    label: "انتخاب خوراک",
+    source: "feeds",
+    primaryKey: "feed_id",
+    apply: (f) => ({
+      feed_id: String(f.id),
+      feed_name: String(f.name ?? ""),
+      _display: String(f.name ?? ""),
+    }),
+  },
+  medicine: {
+    label: "انتخاب دارو",
+    source: "medicines",
+    primaryKey: "medicine_id",
+    apply: (m) => ({
+      medicine_id: String(m.id),
+      medicine_name: String(m.name ?? ""),
+      _display: String(m.name ?? ""),
+    }),
+  },
+};
+
+// Detail-bag keys that must be coerced to number before insert (FK ids).
+const NUMERIC_DETAIL_KEYS = new Set([
+  "cow_id",
+  "sperm_id",
+  "feed_id",
+  "medicine_id",
+]);
 
 // Numeric coercion helper used at save time. Empty string → null so the DB
 // stores NULL (rather than 0) for fields the operator left blank.
