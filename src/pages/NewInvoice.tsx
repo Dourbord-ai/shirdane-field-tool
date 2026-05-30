@@ -14,6 +14,9 @@ import { Plus, Trash2 } from "lucide-react";
 import FileAttachments, { PendingAttachment } from "@/components/FileAttachments";
 import AccountVerifyButton, { type PaymentMethod } from "@/components/AccountVerifyButton";
 import { toast } from "@/hooks/use-toast";
+// New normalized-mode form. Rendered when the user toggles into "mixed" mode
+// at the top of the page. See component file for details.
+import MixedInvoiceForm from "@/components/invoices/MixedInvoiceForm";
 // API service for the new .NET-backed "فاکتور دام" submission flow.
 // We import only what we need so tree-shaking can drop unused exports.
 import {
