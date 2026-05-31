@@ -1,0 +1,17 @@
+ALTER TABLE public.factors DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_feed_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_livestock_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_manure_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_medicine_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_milk_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_other_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_rental_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_service_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_item_sperm_details DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_attachments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_accounting_map DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_engine_config DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_engine_config_versions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_posting_attempts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.factor_state_transitions DISABLE ROW LEVEL SECURITY;

@@ -210,14 +210,12 @@ export async function validateFertilityOperation(
       return { isValid: true, message: "" };
 
     case "فحلی":
-      // Must be «عدم آبستن» — pregnancy_state = 'open'.
-      if (pregnancyState !== "open") {
-        return {
-          isValid: false,
-          message: "برای ثبت فحلی، وضعیت دام باید «عدم آبستن» باشد.",
-        };
-      }
+      // Per updated business rule: ثبت فحلی باید همیشه مجاز باشد
+      // (حتی برای دام‌های تلقیح‌شده یا با تست آبستنی اولیه مثبت).
+      // هیچ بلاک‌کنندهٔ سختی برای فحلی اعمال نمی‌کنیم؛ در صورت نیاز
+      // فقط هشدار غیرمسدودکننده در UI نمایش داده می‌شود.
       return { isValid: true, message: "" };
+
 
     case "سقط":
     case "زایش":
