@@ -104,12 +104,33 @@ async function markFailed(
 }
 
 // Default SP names per branch.
+//
+// For source_operation_type = 'finance_check' each voucher_type maps onto an
+// existing bridge SP — we deliberately do NOT add a new bridge.CreateCheckVoucher.
+// Checks reuse the same posting pipeline as receipts / payments / bank transfers.
 const DEFAULT_SP: Record<string, string> = {
   receive_identification: "bridge.CreateBankVoucher",
   payment_allocation: "bridge.CreatePaymentRequestVoucher",
   payment_request: "bridge.CreatePaymentRequestVoucher",
   bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
   party_transfer: "bridge.CreatePartyTransferVoucher",
+  // finance_check sub-types — resolved against existing bridge SPs:
+  check_register: "bridge.CreateBankVoucher",
+  check_deposit: "bridge.CreateSimpleInterBankTransferVoucher",
+  check_clear: "bridge.CreateSimpleInterBankTransferVoucher",
+  check_bounce: "bridge.CreateBankVoucher",
+};
+
+// Hard-coded Sepidar AccountIds for the standard چک معین accounts. Per project
+// spec these are the same across the install; per-tenant overrides can later
+// move to finance_sepidar_settings without touching this file.
+//   118 → چک‌های دریافتنی نزد صندوق      (notes receivable - cashbox)
+//   119 → چک‌های در جریان وصول            (notes receivable - in collection)
+//   194 → اسناد پرداختنی ریالی             (notes payable)
+const CHECK_ACCOUNT_IDS: Record<string, number> = {
+  notes_receivable_cashbox: 118,
+  notes_receivable_in_collection: 119,
+  notes_payable: 194,
 };
 
 // The SQL Server bridge procedure for party-to-party transfers is especially
