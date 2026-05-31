@@ -1139,13 +1139,21 @@ Deno.serve(async (req) => {
         // Debug log requested by the finance_check mapping spec — surfaces
         // every value the branch resolves so failures are immediately
         // diagnosable in the Edge Function logs.
+        // IMPORTANT: PartyDLRef must come from finance_parties.sepidar_dl_id
+        // (the actual ACC.DL.DLId primary key), NEVER from
+        // finance_parties.sepidar_dl_code (which is only the display code
+        // and would cause FK_VoucherItem_DLRef violations in Sepidar).
+        const partyRowRaw = (partyInfo.row ?? {}) as Record<string, unknown>;
         console.log("[sepidar-post-voucher][finance_check] party resolution", {
           voucher_id: voucherId,
+          account_type: String(partyLine.account_type ?? ""),
           party_item_id: (partyLine as Record<string, unknown>).id ?? null,
           party_id: partyInfo.partyId,
-          sepidar_party_id: partyInfo.sepidarPartyId,
-          sepidar_account_id: partyInfo.partyAccountSL,
-          sepidar_dl_id: partyInfo.partyDLRef,
+          PartyId: partyInfo.sepidarPartyId,
+          PartyAccountSLRef: partyInfo.partyAccountSL,
+          PartyDLRef: partyInfo.partyDLRef,
+          sepidar_dl_id: partyRowRaw.sepidar_dl_id ?? null,
+          sepidar_dl_code: partyRowRaw.sepidar_dl_code ?? null,
           party_row_found: !!partyInfo.row,
         });
 
@@ -1174,8 +1182,10 @@ Deno.serve(async (req) => {
 
         const req = pool.request();
         req.input("BankAccountSLRef", sql.Int, Number(meainAccount));
-        // معین چک‌ها تفصیلی ندارد → DLRef = 0
-        req.input("BankDLRef", sql.Int, 0);
+        // معین چک‌ها (118/119/194) تفصیلی ندارد. ارسال 0 باعث نقض
+        // FK_VoucherItem_DLRef می‌شود (DL با DLId=0 وجود ندارد). باید NULL ارسال شود
+        // تا سپیدار سطر VoucherItem را بدون DL ثبت کند.
+        req.input("BankDLRef", sql.Int, null);
         req.input("PartyId", sql.Int, Number(partyInfo.sepidarPartyId));
         req.input("PartyAccountSLRef", sql.Int, Number(partyInfo.partyAccountSL));
         req.input("RequestType", sql.Int, requestType);
@@ -1197,11 +1207,11 @@ Deno.serve(async (req) => {
           logParams: {
             mode: "check_party_meain",
             voucherType: vType,
-            BankAccountSLRef: meainAccount, BankDLRef: 0,
+            BankAccountSLRef: meainAccount, BankDLRef: null,
             PartyId: partyInfo.sepidarPartyId,
             PartyAccountSLRef: partyInfo.partyAccountSL,
-            // PartyDLRef is resolved but not sent to bridge.CreateBankVoucher
-            // (the SP signature does not accept it). Logged for traceability.
+            // bridge.CreateBankVoucher derives party DL from PartyId server-side,
+            // so PartyDLRef is logged for traceability but not sent as a param.
             PartyDLRef_resolved: partyInfo.partyDLRef,
             RequestType: requestType, Amount: amount,
             VoucherDate: baseDate.toISOString(), Description: description,
@@ -1218,7 +1228,9 @@ Deno.serve(async (req) => {
         if (at in CHECK_ACCOUNT_IDS || (line.sepidar_account_id != null && line.bank_id == null)) {
           const acc = meainAccountId(line);
           if (acc == null) return null;
-          return { accountSL: acc, dlRef: 0, name: at };
+          // معین چک‌ها تفصیلی ندارد → DLRef باید NULL باشد (نه 0)
+          // تا FK_VoucherItem_DLRef نقض نشود.
+          return { accountSL: acc, dlRef: null as number | null, name: at };
         }
         if (at === "bank") {
           const info = await resolveBankLine(line);
@@ -1233,11 +1245,23 @@ Deno.serve(async (req) => {
       if (!fromLeg || !toLeg)
         return { ok: false, message: "نگاشت حساب چک در سپیدار ناقص است." };
 
+      // Debug log for the inter-bank/معین transfer branch (check_deposit/check_clear).
+      console.log("[sepidar-post-voucher][finance_check] interbank resolution", {
+        voucher_id: voucherId,
+        voucherType: vType,
+        from_account_type: String(creditLine.account_type ?? ""),
+        to_account_type: String(debitLine.account_type ?? ""),
+        FromBankAccountSLRef: fromLeg.accountSL,
+        FromBankDLRef: fromLeg.dlRef,
+        ToBankAccountSLRef: toLeg.accountSL,
+        ToBankDLRef: toLeg.dlRef,
+      });
+
       const req = pool.request();
       req.input("FromBankAccountSLRef", sql.Int, Number(fromLeg.accountSL));
-      req.input("FromBankDLRef", sql.Int, Number(fromLeg.dlRef));
+      req.input("FromBankDLRef", sql.Int, fromLeg.dlRef == null ? null : Number(fromLeg.dlRef));
       req.input("ToBankAccountSLRef", sql.Int, Number(toLeg.accountSL));
-      req.input("ToBankDLRef", sql.Int, Number(toLeg.dlRef));
+      req.input("ToBankDLRef", sql.Int, toLeg.dlRef == null ? null : Number(toLeg.dlRef));
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, baseDate);
       req.input("Description", sql.NVarChar(500), description);
