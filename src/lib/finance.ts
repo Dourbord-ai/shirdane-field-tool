@@ -411,13 +411,41 @@ export async function syncPartyToSepidar(partyId: string): Promise<SepidarPartyR
   } as never);
 
   if (response.sepidar_sync_status === "synced") {
+    // CRITICAL — `sepidar_account_id` on finance_parties is NOT the per-party
+    // AccountSLRef that Sepidar's CreateBeneficiary returns. Our accounting
+    // architecture posts every customer/supplier voucher line (invoices,
+    // receipts, payments, finance vouchers, check vouchers) against ONE
+    // standard party ledger account (default 193 — "حسابهای پرداختنی تجاری").
+    // Storing the per-party SLRef the SP returns (e.g. 463) breaks Sepidar
+    // posting with FK_VoucherItem_AccountSLRef.
+    //
+    // We therefore IGNORE whatever sepidar_account_id the SP returned and
+    // always persist the standard ledger account from
+    // finance_sepidar_settings.sepidar_party_account_sl_ref, falling back to
+    // the documented constant 193 if no setting is configured yet.
+    const STANDARD_PARTY_LEDGER_FALLBACK = 193;
+    let standardPartyAccountId: number = STANDARD_PARTY_LEDGER_FALLBACK;
+    try {
+      const { data: settings } = await supabase
+        .from("finance_sepidar_settings")
+        .select("sepidar_party_account_sl_ref")
+        .limit(1)
+        .maybeSingle();
+      const cfg = (settings as { sepidar_party_account_sl_ref?: number | null } | null)
+        ?.sepidar_party_account_sl_ref;
+      if (typeof cfg === "number" && cfg > 0) standardPartyAccountId = cfg;
+    } catch {
+      // Settings table read failure is non-fatal — fall back to 193.
+    }
+
     await supabase
       .from("finance_parties")
       .update({
         sepidar_party_id: response.sepidar_party_id,
         sepidar_dl_id: response.sepidar_dl_id,
         sepidar_dl_code: response.sepidar_dl_code,
-        sepidar_account_id: response.sepidar_account_id,
+        // Standard party ledger account, NOT the SP-returned per-party SLRef.
+        sepidar_account_id: standardPartyAccountId,
         sepidar_full_name: response.sepidar_full_name,
         sepidar_sync_status: "synced",
         approval_status: "synced_to_sepidar",
