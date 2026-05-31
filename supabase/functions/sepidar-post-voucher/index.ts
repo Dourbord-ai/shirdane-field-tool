@@ -1077,17 +1077,40 @@ Deno.serve(async (req) => {
         };
       }
 
-      // Helper: resolve a party line into { sepidarPartyId, partyAccountSL, name }.
+      // Helper: resolve a party line into Sepidar mapping.
+      //
+      // For finance_check vouchers, party mapping MUST come from the
+      // party_account voucher item -> finance_voucher_items.party_id ->
+      // finance_parties row. We deliberately do NOT touch the check row or
+      // source_operation_id when resolving the party — the voucher item is
+      // the single source of truth.
       async function resolvePartyLine(line: Item) {
-        const partyId = line.party_id as string | null;
-        if (!partyId) return { sepidarPartyId: null as number | null, partyAccountSL: null as number | null, name: "" };
-        const { data: pr } = await sb
+        const partyId = (line.party_id as string | null) ?? null;
+        if (!partyId) {
+          return {
+            sepidarPartyId: null as number | null,
+            partyAccountSL: null as number | null,
+            partyDLRef: null as number | null,
+            name: "",
+            partyId: null as string | null,
+            row: null as Record<string, unknown> | null,
+          };
+        }
+        const { data: pr, error: pErr } = await sb
           .from("finance_parties").select("*").eq("id", partyId).maybeSingle();
+        if (pErr) {
+          console.warn("[sepidar-post-voucher][finance_check] finance_parties fetch error", {
+            voucher_id: voucherId, party_id: partyId, error: pErr.message,
+          });
+        }
         const p = (pr as Record<string, unknown> | null) ?? {};
         return {
           sepidarPartyId: (p.sepidar_party_id ?? null) as number | null,
           partyAccountSL: ((p.party_account_sl_ref ?? p.sepidar_account_id) ?? null) as number | null,
+          partyDLRef: (p.sepidar_dl_id ?? null) as number | null,
           name: resolvePartyDisplayName(p),
+          partyId,
+          row: pr as Record<string, unknown> | null,
         };
       }
 
@@ -1112,8 +1135,34 @@ Deno.serve(async (req) => {
 
       if (partyLine && meainLineWithParty) {
         const partyInfo = await resolvePartyLine(partyLine);
+
+        // Debug log requested by the finance_check mapping spec — surfaces
+        // every value the branch resolves so failures are immediately
+        // diagnosable in the Edge Function logs.
+        console.log("[sepidar-post-voucher][finance_check] party resolution", {
+          voucher_id: voucherId,
+          party_item_id: (partyLine as Record<string, unknown>).id ?? null,
+          party_id: partyInfo.partyId,
+          sepidar_party_id: partyInfo.sepidarPartyId,
+          sepidar_account_id: partyInfo.partyAccountSL,
+          sepidar_dl_id: partyInfo.partyDLRef,
+          party_row_found: !!partyInfo.row,
+        });
+
+        if (!partyInfo.partyId)
+          return {
+            ok: false,
+            message:
+              "ردیف طرف حساب سند چک فاقد party_id است. " +
+              "لطفاً ردیف finance_voucher_items مرتبط با account_type=party_account را بررسی کنید.",
+          };
         if (partyInfo.sepidarPartyId == null)
-          return { ok: false, message: "نگاشت طرف حساب در سپیدار انجام نشده (sepidar_party_id)." };
+          return {
+            ok: false,
+            message:
+              `نگاشت طرف حساب در سپیدار انجام نشده (sepidar_party_id خالی است). ` +
+              `party_id=${partyInfo.partyId} ، رکورد طرف حساب ${partyInfo.row ? "بارگذاری شد" : "یافت نشد"}.`,
+          };
         if (partyInfo.partyAccountSL == null)
           return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده." };
         const meainAccount = meainAccountId(meainLineWithParty);
