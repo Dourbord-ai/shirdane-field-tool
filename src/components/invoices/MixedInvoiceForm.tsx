@@ -705,71 +705,174 @@ export default function MixedInvoiceForm() {
           }
         }
 
-        // Feed-specific: snapshot ONLY a fixed, explicit allowlist of fields
-        // from the chosen feed_products row into factor_item_feed_details.
-        //
-        // CRITICAL: We never spread the feed_products object and never
-        // dynamically copy all its keys. The schema (this allowlist) drives
-        // the payload — NOT the feed_products table. If feed_products grows
-        // new columns later, the insert payload here stays the same unless
-        // we explicitly add the key below. This prevents PostgREST errors
-        // like "column category_en not found" when the detail table's
-        // schema is a subset of the master table.
+        // Feed-specific: snapshot ONLY fields that physically exist on the
+        // factor_item_feed_details table. The schema (allowlist below) is the
+        // single source of truth — we NEVER spread row.feedProduct or any
+        // master-table object directly. This prevents PostgREST errors like
+        // "column category_en/feed_product_id not found" when the master
+        // feed_products table has columns the detail table does not.
         if (row.product_type === "feed" && row.feedProduct) {
           const f = row.feedProduct as unknown as Record<string, unknown>;
 
-          // FK back to the master catalog row (always safe to send).
-          detailPayload.feed_product_id = f.id;
-
           // Legacy display column: derive a single readable feed_name from
           // the best available name on the master row.
-          detailPayload.feed_name =
+          const feedName =
             (f.commercial_product_name_fa as string | null) ??
             (f.name_fa as string | null) ??
             (f.commercial_product_name_en as string | null) ??
             (f.name_en as string | null) ??
             null;
 
-          // Approved snapshot columns. Keep this list aligned with the
-          // factor_item_feed_details DB schema. Anything not listed is
-          // intentionally dropped from the payload.
-          const FEED_SNAPSHOT_FIELDS = [
+          // Approved snapshot columns — must exactly match the columns that
+          // physically exist in public.factor_item_feed_details. Anything
+          // not listed here is intentionally dropped from the payload.
+          const FACTOR_ITEM_FEED_DETAIL_ALLOWED_COLUMNS = [
+            "factor_item_id",
+            "feed_id",
+            "feed_name",
+            "batch_number",
+            "expire_date",
+            "dry_matter_pct",
+            "warehouse_id",
+            "created_at",
             "feed_code",
-            "name_fa",
             "name_en",
+            "name_fa",
             "product_type",
-            "category_fa",
             "category_en",
-            "company_name_fa",
+            "category_fa",
+            "company_code",
             "company_name_en",
+            "company_name_fa",
             "company_country",
-            "commercial_product_name_fa",
             "commercial_product_name_en",
+            "commercial_product_name_fa",
+            "product_name_type",
             "feed_form",
             "target_group",
-            "dry_matter",
-            "crude_protein",
-            "ndf",
-            "adf",
-            "starch",
-            "fat",
-            "nel_mcal_kg",
-            "calcium",
-            "phosphorus",
             "recommended_inclusion_min_percent",
             "recommended_inclusion_max_percent",
+            "dry_matter",
+            "crude_protein",
+            "rup",
+            "rdp",
+            "ndf",
+            "adf",
+            "lignin",
+            "starch",
+            "sugar",
+            "fat",
+            "ash",
+            "nel_mcal_kg",
+            "me_mcal_kg",
+            "calcium",
+            "phosphorus",
+            "magnesium",
+            "potassium",
+            "sodium",
+            "chloride",
+            "sulfur",
+            "vitamin_a",
+            "vitamin_d",
+            "vitamin_e",
+            "source_system",
             "label_verification_status",
+            "source_confidence",
+            "market_scope",
+            "is_active",
+            "notes",
+            "updated_at",
           ] as const;
 
-          // Copy ONLY the approved snapshot fields — explicit, never spread.
-          for (const key of FEED_SNAPSHOT_FIELDS) {
-            if (f[key] !== undefined) {
-              detailPayload[key] = f[key] as never;
-            }
+          // Build raw payload: existing detailPayload (factor_item_id + any
+          // operator-entered fields like feed_id/batch_number/etc) merged
+          // with the master-row snapshot fields. We deliberately list each
+          // snapshot key — no spreads.
+          const rawFeedPayload: Record<string, unknown> = {
+            ...detailPayload,
+            feed_name: detailPayload.feed_name ?? feedName,
+            feed_code: f.feed_code,
+            name_fa: f.name_fa,
+            name_en: f.name_en,
+            product_type: f.product_type,
+            category_fa: f.category_fa,
+            category_en: f.category_en,
+            company_code: f.company_code,
+            company_name_fa: f.company_name_fa,
+            company_name_en: f.company_name_en,
+            company_country: f.company_country,
+            commercial_product_name_fa: f.commercial_product_name_fa,
+            commercial_product_name_en: f.commercial_product_name_en,
+            product_name_type: f.product_name_type,
+            feed_form: f.feed_form,
+            target_group: f.target_group,
+            recommended_inclusion_min_percent: f.recommended_inclusion_min_percent,
+            recommended_inclusion_max_percent: f.recommended_inclusion_max_percent,
+            dry_matter: f.dry_matter,
+            crude_protein: f.crude_protein,
+            rup: f.rup,
+            rdp: f.rdp,
+            ndf: f.ndf,
+            adf: f.adf,
+            lignin: f.lignin,
+            starch: f.starch,
+            sugar: f.sugar,
+            fat: f.fat,
+            ash: f.ash,
+            nel_mcal_kg: f.nel_mcal_kg,
+            me_mcal_kg: f.me_mcal_kg,
+            calcium: f.calcium,
+            phosphorus: f.phosphorus,
+            magnesium: f.magnesium,
+            potassium: f.potassium,
+            sodium: f.sodium,
+            chloride: f.chloride,
+            sulfur: f.sulfur,
+            vitamin_a: f.vitamin_a,
+            vitamin_d: f.vitamin_d,
+            vitamin_e: f.vitamin_e,
+            source_system: f.source_system,
+            label_verification_status: f.label_verification_status,
+            source_confidence: f.source_confidence,
+            market_scope: f.market_scope,
+            is_active: f.is_active,
+            notes: f.notes,
+          };
+
+          // Allowlist filter: drop anything not in the table, and drop
+          // undefined values so we don't accidentally null out columns.
+          const safeFeedPayload = Object.fromEntries(
+            Object.entries(rawFeedPayload).filter(
+              ([key, value]) =>
+                (FACTOR_ITEM_FEED_DETAIL_ALLOWED_COLUMNS as readonly string[]).includes(key) &&
+                value !== undefined,
+            ),
+          );
+
+          // If nothing useful beyond factor_item_id survives, skip the
+          // detail insert entirely — factors + factor_items already saved,
+          // and the snapshot is optional per product spec.
+          const usefulKeys = Object.keys(safeFeedPayload).filter(
+            (k) => k !== "factor_item_id",
+          );
+          if (usefulKeys.length === 0) {
+            continue;
           }
+
+          const { error: detErr } = await supabase
+            .from("factor_item_feed_details")
+            .insert(safeFeedPayload as never);
+
+          // Detail snapshot is optional — log but do not fail the factor.
+          if (detErr) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[factor_item_feed_details] row ${i + 1} snapshot skipped:`,
+              detErr.message,
+            );
+          }
+          continue;
         }
-
-
 
         const { error: detErr } = await supabase
           // Detail table names are validated against the static DETAIL_CONFIG
@@ -779,6 +882,7 @@ export default function MixedInvoiceForm() {
 
         if (detErr) throw new Error(`ردیف ${i + 1} (جزئیات): ${detErr.message}`);
       }
+
 
       toast({ title: "فاکتور با موفقیت ثبت شد" });
       navigate("/invoices");
