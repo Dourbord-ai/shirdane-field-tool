@@ -885,31 +885,37 @@ function BatchMode({ onBack }: { onBack: () => void }) {
   }, [lines]);
 
   // Submit every filled cell. Rows that fail validation/lookup are kept in place
-  // and visually flagged so the operator can fix and retry.
+  // and visually flagged so the operator can fix and retry. We deliberately use
+  // an "update-if-exists, otherwise insert" flow so that the active-row partial
+  // unique index (livestock_id, record_date, period) WHERE NOT is_cancelled
+  // can never silently drop a cow with a duplicate 23505 error.
   async function submitAll(endShift: boolean) {
     if (submitting) return;
     setSubmitting(true);
     const date = todayIso();
-    const seenInBatch = new Set<number>(); // dedup within this submission
     let successCount = 0;
     let totalKg = 0;
     const errors: string[] = [];
+    // Collect every cow we *intended* to submit (by earnumber) so we can
+    // diff against what really landed in the DB after the round-trip.
+    const submitted: Array<{ tag: string; num: number; livestock_id: number; amt: number; li: number; ci: number }> = [];
+    const seenInBatch = new Set<number>();
 
-    // Snapshot lines so we can mutate fresh state at the end
     const snap = lines.map((l) => ({ ...l, cells: l.cells.map((c) => ({ ...c })) }));
 
+    // -- Pass 1: validate cells and resolve cows ----------------------------
     for (let li = 0; li < snap.length; li++) {
       for (let ci = 0; ci < snap[li].cells.length; ci++) {
         const cell = snap[li].cells[ci];
         const tag = cell.ear.trim();
         const amt = parseFloat(cell.amount.replace(",", "."));
-        if (!tag && !cell.amount) continue; // skip blank cells silently
+        if (!tag && !cell.amount) continue;
         if (!tag || !amt || amt <= 0) {
           errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: ناقص یا منفی`);
           continue;
         }
         if (amt > 40) {
-          errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: بیش از ۴۰ کیلو`);
+          errors.push(`گوش ${toPersianDigits(tag)}: بیش از ۴۰ کیلو`);
           continue;
         }
         const num = Number(tag.replace(/[^\d]/g, ""));
@@ -917,10 +923,9 @@ function BatchMode({ onBack }: { onBack: () => void }) {
           errors.push(`خط ${toPersianDigits(li + 1)} ردیف ${toPersianDigits(ci + 1)}: شماره گوش نامعتبر`);
           continue;
         }
-        // Look up cow by ear tag; reject if not female / not in herd
         const { data: cow, error: lookupErr } = await (supabase as any)
           .from("cows")
-          .select("id, sex, existancestatus")
+          .select("id, sex, existancestatus, earnumber")
           .eq("earnumber", num)
           .limit(1)
           .maybeSingle();
@@ -937,31 +942,77 @@ function BatchMode({ onBack }: { onBack: () => void }) {
           continue;
         }
         seenInBatch.add(Number(cow.id));
-        // Same insert payload as SingleMode → same table, same columns
-        const { error: insErr } = await (supabase as any).from("livestock_milk_records").insert({
-          livestock_id: Number(cow.id),
-          milk_amount: amt,
-          record_date: date,
-          period,
-          registered_user_id: null, // ستون bigint است؛ userId از نوع UUID رشته‌ای است و باعث خطای 22P02 می‌شود
-        });
-        if (insErr) {
-          // برای دیباگ، به جای پیام کلی، کد و متن خطای واقعی PostgREST را نمایش می‌دهیم
-          // تا تفاوت بین unique-violation، RLS، NOT NULL، تایپ نامعتبر (22P02) و… مشخص باشد.
-          const detail = `${insErr.code ?? "?"} ${insErr.message ?? ""}`.trim();
-          errors.push(
-            insErr.code === "23505"
-              ? `گوش ${toPersianDigits(tag)}: قبلاً ثبت شده`
-              : `گوش ${toPersianDigits(tag)}: ${detail}`,
-          );
-          // برای ردیابی دقیق در Console (شامل details/hint)
-          console.error("[bulk milk insert] failed", { tag, num, payload: { livestock_id: Number(cow.id), milk_amount: amt, record_date: date, period }, insErr });
-          continue;
-        }
-        successCount++;
-        totalKg += amt;
-        // Clear the cell on success so the operator sees what's left to fix
-        snap[li].cells[ci] = { ear: "", amount: "" };
+        submitted.push({ tag, num: Number(cow.earnumber), livestock_id: Number(cow.id), amt, li, ci });
+      }
+    }
+
+    // -- Pass 2: upsert (update-if-exists, else insert) per cow -------------
+    // We can't use PostgREST .upsert with a *partial* unique index, so we do
+    // an explicit select → update-or-insert. This guarantees every entered
+    // cow either ends up saved or shows up in the failure list.
+    for (const row of submitted) {
+      const { data: existing, error: selErr } = await (supabase as any)
+        .from("livestock_milk_records")
+        .select("id")
+        .eq("livestock_id", row.livestock_id)
+        .eq("record_date", date)
+        .eq("period", period)
+        .eq("is_cancelled", false)
+        .limit(1)
+        .maybeSingle();
+      if (selErr) {
+        errors.push(`گوش ${toPersianDigits(row.tag)}: ${selErr.code ?? "?"} ${selErr.message ?? ""}`);
+        console.error("[bulk milk lookup] failed", { row, selErr });
+        continue;
+      }
+
+      let opErr: any = null;
+      if (existing?.id) {
+        const { error } = await (supabase as any)
+          .from("livestock_milk_records")
+          .update({ milk_amount: row.amt, earnumber: row.num, is_cancelled: false })
+          .eq("id", existing.id);
+        opErr = error;
+      } else {
+        const { error } = await (supabase as any)
+          .from("livestock_milk_records")
+          .insert({
+            livestock_id: row.livestock_id,
+            earnumber: row.num,
+            milk_amount: row.amt,
+            record_date: date,
+            period,
+            is_cancelled: false,
+            registered_user_id: null,
+          });
+        opErr = error;
+      }
+      if (opErr) {
+        const detail = `${opErr.code ?? "?"} ${opErr.message ?? ""}`.trim();
+        errors.push(`گوش ${toPersianDigits(row.tag)}: ${detail}`);
+        console.error("[bulk milk save] failed", { row, opErr });
+        continue;
+      }
+      successCount++;
+      totalKg += row.amt;
+      snap[row.li].cells[row.ci] = { ear: "", amount: "" };
+    }
+
+    // -- Pass 3: re-query and diff submitted vs persisted -------------------
+    if (submitted.length) {
+      const ids = submitted.map((r) => r.livestock_id);
+      const { data: persisted } = await (supabase as any)
+        .from("livestock_milk_records")
+        .select("livestock_id, earnumber")
+        .in("livestock_id", ids)
+        .eq("record_date", date)
+        .eq("period", period)
+        .eq("is_cancelled", false);
+      const persistedIds = new Set<number>((persisted || []).map((r: any) => Number(r.livestock_id)));
+      const missing = submitted.filter((r) => !persistedIds.has(r.livestock_id));
+      if (missing.length) {
+        const list = missing.map((m) => toPersianDigits(m.num)).join("، ");
+        errors.push(`ذخیره نشد: ${list}`);
       }
     }
 
@@ -970,12 +1021,10 @@ function BatchMode({ onBack }: { onBack: () => void }) {
 
     if (successCount > 0) toast.success(`${toPersianDigits(successCount)} رکورد ثبت شد`);
     if (errors.length) {
-      // Show only the first few to avoid swamping the screen
-      toast.error(errors.slice(0, 3).join(" • ") + (errors.length > 3 ? " …" : ""));
+      toast.error(errors.slice(0, 5).join(" • ") + (errors.length > 5 ? " …" : ""));
     }
 
     if (endShift) {
-      // Shift end: show summary screen and reset to two empty lines for next time
       setShiftSummary({ count: successCount, total: totalKg });
       setLines([emptyLine(), emptyLine()]);
       localStorage.removeItem(BATCH_QUEUE_KEY);

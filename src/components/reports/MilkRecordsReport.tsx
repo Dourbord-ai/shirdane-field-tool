@@ -128,7 +128,7 @@ export default function MilkRecordsReport() {
       // Step 1 — Find cows that produced milk on the reference date.
       let todayQ = supabase
         .from("livestock_milk_records")
-        .select("livestock_id, milk_amount, period")
+        .select("livestock_id, earnumber, milk_amount, period")
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") todayQ = todayQ.eq("period", Number(session));
@@ -137,18 +137,26 @@ export default function MilkRecordsReport() {
 
       // Per-cow total for today (sums across sessions if session = "all").
       const todayByCow = new Map<number, number>();
+      // Snapshot earnumber from the record itself (the column we just added),
+      // so "شماره گاو" never shows internal IDs even for legacy rows.
+      const earByCow = new Map<number, string>();
       for (const r of todayRows || []) {
         const id = Number(r.livestock_id);
         todayByCow.set(id, (todayByCow.get(id) || 0) + Number(r.milk_amount || 0));
+        if ((r as any).earnumber != null && !earByCow.has(id)) {
+          earByCow.set(id, String((r as any).earnumber));
+        }
       }
       const cowIds = Array.from(todayByCow.keys());
 
-      // Animal numbers (denormalised onto alerts table later).
-      const numbers = new Map<number, string>();
-      if (cowIds.length) {
-        const { data: items } = await supabase
-          .from("livestock_items").select("id, animal_number").in("id", cowIds as any);
-        for (const it of items || []) numbers.set(Number(it.id), String(it.animal_number ?? it.id));
+      // Resolve ear numbers from the canonical `cows` table for any cow whose
+      // snapshot is still missing (only legacy rows can hit this branch).
+      const numbers = new Map<number, string>(earByCow);
+      const missingIds = cowIds.filter((id) => !numbers.has(id));
+      if (missingIds.length) {
+        const { data: cows } = await supabase
+          .from("cows").select("id, earnumber").in("id", missingIds as any);
+        for (const c of cows || []) numbers.set(Number(c.id), String((c as any).earnumber ?? c.id));
       }
 
       // Step 2 — Pull historic records for those cows in a 120-day window
