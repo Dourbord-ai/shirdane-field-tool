@@ -705,42 +705,68 @@ export default function MixedInvoiceForm() {
           }
         }
 
-        // Feed-specific: snapshot every catalog-derived column from the
-        // chosen feed_products row into factor_item_feed_details. Same
-        // rationale as the medicine snapshot above — invoice lines must
-        // remain historically accurate even if feed_products is later
-        // edited or deactivated. The legacy `feed_name` column is also
-        // populated so older reports keep rendering a readable name.
+        // Feed-specific: snapshot ONLY a fixed, explicit allowlist of fields
+        // from the chosen feed_products row into factor_item_feed_details.
+        //
+        // CRITICAL: We never spread the feed_products object and never
+        // dynamically copy all its keys. The schema (this allowlist) drives
+        // the payload — NOT the feed_products table. If feed_products grows
+        // new columns later, the insert payload here stays the same unless
+        // we explicitly add the key below. This prevents PostgREST errors
+        // like "column category_en not found" when the detail table's
+        // schema is a subset of the master table.
         if (row.product_type === "feed" && row.feedProduct) {
-          const f = row.feedProduct;
+          const f = row.feedProduct as unknown as Record<string, unknown>;
+
+          // FK back to the master catalog row (always safe to send).
           detailPayload.feed_product_id = f.id;
-          detailPayload.feed_code = f.feed_code;
+
+          // Legacy display column: derive a single readable feed_name from
+          // the best available name on the master row.
           detailPayload.feed_name =
-            f.commercial_product_name_fa ?? f.name_fa ?? f.commercial_product_name_en ?? f.name_en ?? null;
-          detailPayload.name_fa = f.name_fa;
-          detailPayload.name_en = f.name_en;
-          detailPayload.product_type = f.product_type;
-          detailPayload.category_fa = f.category_fa;
-          detailPayload.category_en = f.category_en;
-          detailPayload.company_name_fa = f.company_name_fa;
-          detailPayload.company_name_en = f.company_name_en;
-          detailPayload.company_country = f.company_country;
-          detailPayload.commercial_product_name_fa = f.commercial_product_name_fa;
-          detailPayload.commercial_product_name_en = f.commercial_product_name_en;
-          detailPayload.feed_form = f.feed_form;
-          detailPayload.target_group = f.target_group;
-          detailPayload.dry_matter = f.dry_matter;
-          detailPayload.crude_protein = f.crude_protein;
-          detailPayload.ndf = f.ndf;
-          detailPayload.adf = f.adf;
-          detailPayload.starch = f.starch;
-          detailPayload.fat = f.fat;
-          detailPayload.nel_mcal_kg = f.nel_mcal_kg;
-          detailPayload.calcium = f.calcium;
-          detailPayload.phosphorus = f.phosphorus;
-          detailPayload.recommended_inclusion_min_percent = f.recommended_inclusion_min_percent;
-          detailPayload.recommended_inclusion_max_percent = f.recommended_inclusion_max_percent;
-          detailPayload.label_verification_status = f.label_verification_status;
+            (f.commercial_product_name_fa as string | null) ??
+            (f.name_fa as string | null) ??
+            (f.commercial_product_name_en as string | null) ??
+            (f.name_en as string | null) ??
+            null;
+
+          // Approved snapshot columns. Keep this list aligned with the
+          // factor_item_feed_details DB schema. Anything not listed is
+          // intentionally dropped from the payload.
+          const FEED_SNAPSHOT_FIELDS = [
+            "feed_code",
+            "name_fa",
+            "name_en",
+            "product_type",
+            "category_fa",
+            "category_en",
+            "company_name_fa",
+            "company_name_en",
+            "company_country",
+            "commercial_product_name_fa",
+            "commercial_product_name_en",
+            "feed_form",
+            "target_group",
+            "dry_matter",
+            "crude_protein",
+            "ndf",
+            "adf",
+            "starch",
+            "fat",
+            "nel_mcal_kg",
+            "calcium",
+            "phosphorus",
+            "recommended_inclusion_min_percent",
+            "recommended_inclusion_max_percent",
+            "label_verification_status",
+          ] as const;
+
+          // Copy ONLY the approved snapshot fields — explicit, never spread.
+          for (const key of FEED_SNAPSHOT_FIELDS) {
+            if (f[key] !== undefined) {
+              detailPayload[key] = f[key] as never;
+            }
+          }
         }
 
 
