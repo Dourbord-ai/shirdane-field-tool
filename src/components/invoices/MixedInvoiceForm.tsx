@@ -716,7 +716,7 @@ export default function MixedInvoiceForm() {
         // like "column category_en not found" when the detail table's
         // schema is a subset of the master table.
         if (row.product_type === "feed" && row.feedProduct) {
-          const f = row.feedProduct as Record<string, unknown>;
+          const f = row.feedProduct as unknown as Record<string, unknown>;
 
           // FK back to the master catalog row (always safe to send).
           detailPayload.feed_product_id = f.id;
