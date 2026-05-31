@@ -1200,6 +1200,9 @@ Deno.serve(async (req) => {
             BankAccountSLRef: meainAccount, BankDLRef: 0,
             PartyId: partyInfo.sepidarPartyId,
             PartyAccountSLRef: partyInfo.partyAccountSL,
+            // PartyDLRef is resolved but not sent to bridge.CreateBankVoucher
+            // (the SP signature does not accept it). Logged for traceability.
+            PartyDLRef_resolved: partyInfo.partyDLRef,
             RequestType: requestType, Amount: amount,
             VoucherDate: baseDate.toISOString(), Description: description,
             Creator: creator,
