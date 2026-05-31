@@ -5312,6 +5312,7 @@ export type Database = {
           cancelled_user_id: number | null
           created_at: string
           description: string | null
+          earnumber: number | null
           id: number
           is_cancelled: boolean
           livestock_id: number
@@ -5328,6 +5329,7 @@ export type Database = {
           cancelled_user_id?: number | null
           created_at?: string
           description?: string | null
+          earnumber?: number | null
           id?: number
           is_cancelled?: boolean
           livestock_id: number
@@ -5344,6 +5346,7 @@ export type Database = {
           cancelled_user_id?: number | null
           created_at?: string
           description?: string | null
+          earnumber?: number | null
           id?: number
           is_cancelled?: boolean
           livestock_id?: number
