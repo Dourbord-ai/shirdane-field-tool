@@ -114,11 +114,16 @@ const DEFAULT_SP: Record<string, string> = {
   payment_request: "bridge.CreatePaymentRequestVoucher",
   bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
   party_transfer: "bridge.CreatePartyTransferVoucher",
-  // finance_check sub-types — resolved against existing bridge SPs:
-  check_register: "bridge.CreateBankVoucher",
-  check_deposit: "bridge.CreateSimpleInterBankTransferVoucher",
-  check_clear: "bridge.CreateSimpleInterBankTransferVoucher",
-  check_bounce: "bridge.CreateBankVoucher",
+  // finance_check sub-types — all routed through the new generic SP. The
+  // bank-account معین ids (118/119/194) are NOT real bank accounts and have
+  // no BankDLRef, so bridge.CreateBankVoucher cannot post them. The generic
+  // SP takes raw debit/credit AccountSLRef + DLRef pairs which we build from
+  // the actual finance_voucher_items rows.
+  finance_check: "bridge.CreateGenericFinanceVoucher",
+  check_register: "bridge.CreateGenericFinanceVoucher",
+  check_deposit: "bridge.CreateGenericFinanceVoucher",
+  check_clear: "bridge.CreateGenericFinanceVoucher",
+  check_bounce: "bridge.CreateGenericFinanceVoucher",
 };
 
 // Hard-coded Sepidar AccountIds for the standard چک معین accounts. Per project
