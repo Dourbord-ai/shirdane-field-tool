@@ -104,12 +104,33 @@ async function markFailed(
 }
 
 // Default SP names per branch.
+//
+// For source_operation_type = 'finance_check' each voucher_type maps onto an
+// existing bridge SP — we deliberately do NOT add a new bridge.CreateCheckVoucher.
+// Checks reuse the same posting pipeline as receipts / payments / bank transfers.
 const DEFAULT_SP: Record<string, string> = {
   receive_identification: "bridge.CreateBankVoucher",
   payment_allocation: "bridge.CreatePaymentRequestVoucher",
   payment_request: "bridge.CreatePaymentRequestVoucher",
   bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
   party_transfer: "bridge.CreatePartyTransferVoucher",
+  // finance_check sub-types — resolved against existing bridge SPs:
+  check_register: "bridge.CreateBankVoucher",
+  check_deposit: "bridge.CreateSimpleInterBankTransferVoucher",
+  check_clear: "bridge.CreateSimpleInterBankTransferVoucher",
+  check_bounce: "bridge.CreateBankVoucher",
+};
+
+// Hard-coded Sepidar AccountIds for the standard چک معین accounts. Per project
+// spec these are the same across the install; per-tenant overrides can later
+// move to finance_sepidar_settings without touching this file.
+//   118 → چک‌های دریافتنی نزد صندوق      (notes receivable - cashbox)
+//   119 → چک‌های در جریان وصول            (notes receivable - in collection)
+//   194 → اسناد پرداختنی ریالی             (notes payable)
+const CHECK_ACCOUNT_IDS: Record<string, number> = {
+  notes_receivable_cashbox: 118,
+  notes_receivable_in_collection: 119,
+  notes_payable: 194,
 };
 
 // The SQL Server bridge procedure for party-to-party transfers is especially
@@ -988,6 +1009,202 @@ Deno.serve(async (req) => {
           VoucherDate: date.toISOString(),
           Creator: creator,
           ...descs,
+        },
+      };
+    }
+
+    // ---------- 5) finance_check -> existing bridge SPs ----------------------
+    // Check vouchers reuse the same posting pipeline as receipts / payments /
+    // bank transfers. We do NOT create a new bridge SP. Each check voucher is
+    // already materialised as a 2-line finance_voucher_items row pair with
+    // stable account_type strings (party_account / bank /
+    // notes_receivable_cashbox / notes_receivable_in_collection / notes_payable).
+    // We classify the two lines and route to:
+    //   - bridge.CreateBankVoucher                       when one leg is party
+    //   - bridge.CreateSimpleInterBankTransferVoucher    when both legs are bank/معین
+    //
+    // Only party_account lines carry party_id; معین (118/119/194) and bank
+    // lines intentionally have party_id = NULL. This is by design — do NOT
+    // treat missing party_id on non-party lines as an error.
+    if (sOp === "finance_check" || branch.startsWith("check_")) {
+      // Re-use the already-loaded items array.
+      type Item = Record<string, unknown>;
+      const itemRows = (items as Item[]) ?? [];
+      if (itemRows.length < 2) {
+        return { ok: false, message: "ردیف‌های سند چک کامل نیست (حداقل دو ردیف لازم است)." };
+      }
+
+      // Identify debit and credit lines.
+      const debitLine = itemRows.find((r) => Number(r.debit ?? 0) > 0) as Item | undefined;
+      const creditLine = itemRows.find((r) => Number(r.credit ?? 0) > 0) as Item | undefined;
+      if (!debitLine || !creditLine) {
+        return { ok: false, message: "ردیف بدهکار/بستانکار سند چک پیدا نشد." };
+      }
+      const amount = Number(debitLine.debit ?? creditLine.credit ?? 0);
+      if (!(amount > 0)) {
+        return { ok: false, message: "مبلغ سند چک نامعتبر است." };
+      }
+
+      // Load check for description context (optional — never blocking).
+      const { data: checkRow } = await sb
+        .from("finance_checks").select("*").eq("id", sourceId).maybeSingle();
+      const ch = (checkRow as Record<string, unknown> | null) ?? {};
+      const checkNumber = String((ch as Record<string, unknown>).check_number ?? "");
+      const baseDate = toSqlDate(vRow.voucher_date);
+
+      // Helper: resolve Sepidar account id for a معین line. Per spec these are
+      // fixed: 118 / 119 / 194. Items may also carry a sepidar_account_id
+      // override — prefer the explicit value when set, otherwise the constant.
+      function meainAccountId(line: Item): number | null {
+        const explicit = line.sepidar_account_id as number | null | undefined;
+        if (explicit != null) return Number(explicit);
+        const at = String(line.account_type ?? "");
+        if (at in CHECK_ACCOUNT_IDS) return CHECK_ACCOUNT_IDS[at];
+        return null;
+      }
+
+      // Helper: resolve a bank line into { accountSL, dlRef, name }.
+      async function resolveBankLine(line: Item) {
+        const bankId = line.bank_id as string | null;
+        if (!bankId) return { accountSL: null as number | null, dlRef: null as number | null, name: "" };
+        const { data: bk } = await sb
+          .from("finance_banks").select("*").eq("id", bankId).maybeSingle();
+        const b = (bk as Record<string, unknown> | null) ?? {};
+        return {
+          accountSL: (b.sepidar_account_id ?? null) as number | null,
+          dlRef: (b.sepidar_dl_id ?? null) as number | null,
+          name: resolveBankDisplayName(b),
+        };
+      }
+
+      // Helper: resolve a party line into { sepidarPartyId, partyAccountSL, name }.
+      async function resolvePartyLine(line: Item) {
+        const partyId = line.party_id as string | null;
+        if (!partyId) return { sepidarPartyId: null as number | null, partyAccountSL: null as number | null, name: "" };
+        const { data: pr } = await sb
+          .from("finance_parties").select("*").eq("id", partyId).maybeSingle();
+        const p = (pr as Record<string, unknown> | null) ?? {};
+        return {
+          sepidarPartyId: (p.sepidar_party_id ?? null) as number | null,
+          partyAccountSL: ((p.party_account_sl_ref ?? p.sepidar_account_id) ?? null) as number | null,
+          name: resolvePartyDisplayName(p),
+        };
+      }
+
+      const debitType = String(debitLine.account_type ?? "");
+      const creditType = String(creditLine.account_type ?? "");
+      const description = firstNonEmpty(
+        vRow.description, vRow.title,
+        checkNumber ? `سند چک شماره ${checkNumber}` : null,
+      );
+
+      // ---- A) party_account + معین  →  bridge.CreateBankVoucher --------------
+      // (covers check_register and check_bounce)
+      const partyLine =
+        debitType === "party_account" ? debitLine :
+        creditType === "party_account" ? creditLine : null;
+      const meainLineWithParty =
+        partyLine === debitLine
+          ? (creditType in CHECK_ACCOUNT_IDS ? creditLine : null)
+          : partyLine === creditLine
+          ? (debitType in CHECK_ACCOUNT_IDS ? debitLine : null)
+          : null;
+
+      if (partyLine && meainLineWithParty) {
+        const partyInfo = await resolvePartyLine(partyLine);
+        if (partyInfo.sepidarPartyId == null)
+          return { ok: false, message: "نگاشت طرف حساب در سپیدار انجام نشده (sepidar_party_id)." };
+        if (partyInfo.partyAccountSL == null)
+          return { ok: false, message: "نگاشت حساب معین طرف حساب در سپیدار انجام نشده." };
+        const meainAccount = meainAccountId(meainLineWithParty);
+        if (meainAccount == null)
+          return { ok: false, message: `نگاشت حساب معین چک پیدا نشد (${meainLineWithParty.account_type}).` };
+
+        // RequestType: party on debit side = پرداخت (1), party on credit side = دریافت (2).
+        const requestType = partyLine === debitLine ? 1 : 2;
+
+        const req = pool.request();
+        req.input("BankAccountSLRef", sql.Int, Number(meainAccount));
+        // معین چک‌ها تفصیلی ندارد → DLRef = 0
+        req.input("BankDLRef", sql.Int, 0);
+        req.input("PartyId", sql.Int, Number(partyInfo.sepidarPartyId));
+        req.input("PartyAccountSLRef", sql.Int, Number(partyInfo.partyAccountSL));
+        req.input("RequestType", sql.Int, requestType);
+        req.input("Amount", sql.Decimal(18, 2), amount);
+        req.input("VoucherDate", sql.DateTime, baseDate);
+        req.input("Description", sql.NVarChar(sql.MAX), description);
+        req.input("Description1", sql.NVarChar(sql.MAX), description);
+        req.input("Description2", sql.NVarChar(sql.MAX), description);
+        req.input("Creator", sql.Int, creator);
+
+        return {
+          ok: true,
+          request: req,
+          paramNames: [
+            "BankAccountSLRef","BankDLRef","PartyId","PartyAccountSLRef",
+            "RequestType","Amount","VoucherDate","Description",
+            "Description1","Description2","Creator",
+          ],
+          logParams: {
+            mode: "check_party_meain",
+            voucherType: vType,
+            BankAccountSLRef: meainAccount, BankDLRef: 0,
+            PartyId: partyInfo.sepidarPartyId,
+            PartyAccountSLRef: partyInfo.partyAccountSL,
+            RequestType: requestType, Amount: amount,
+            VoucherDate: baseDate.toISOString(), Description: description,
+            Creator: creator,
+          },
+        };
+      }
+
+      // ---- B) bank/معین ↔ bank/معین  →  CreateSimpleInterBankTransferVoucher -
+      // (covers check_deposit and check_clear)
+      // From = credit side (money out), To = debit side (money in).
+      async function resolveLegFromMeainOrBank(line: Item) {
+        const at = String(line.account_type ?? "");
+        if (at in CHECK_ACCOUNT_IDS || (line.sepidar_account_id != null && line.bank_id == null)) {
+          const acc = meainAccountId(line);
+          if (acc == null) return null;
+          return { accountSL: acc, dlRef: 0, name: at };
+        }
+        if (at === "bank") {
+          const info = await resolveBankLine(line);
+          if (info.accountSL == null || info.dlRef == null) return null;
+          return info;
+        }
+        return null;
+      }
+
+      const fromLeg = await resolveLegFromMeainOrBank(creditLine);
+      const toLeg = await resolveLegFromMeainOrBank(debitLine);
+      if (!fromLeg || !toLeg)
+        return { ok: false, message: "نگاشت حساب چک در سپیدار ناقص است." };
+
+      const req = pool.request();
+      req.input("FromBankAccountSLRef", sql.Int, Number(fromLeg.accountSL));
+      req.input("FromBankDLRef", sql.Int, Number(fromLeg.dlRef));
+      req.input("ToBankAccountSLRef", sql.Int, Number(toLeg.accountSL));
+      req.input("ToBankDLRef", sql.Int, Number(toLeg.dlRef));
+      req.input("Amount", sql.Decimal(18, 2), amount);
+      req.input("VoucherDate", sql.DateTime, baseDate);
+      req.input("Description", sql.NVarChar(500), description);
+      req.input("Creator", sql.Int, creator);
+
+      return {
+        ok: true,
+        request: req,
+        paramNames: [
+          "FromBankAccountSLRef","FromBankDLRef","ToBankAccountSLRef",
+          "ToBankDLRef","Amount","VoucherDate","Description","Creator",
+        ],
+        logParams: {
+          mode: "check_bank_meain_transfer",
+          voucherType: vType,
+          FromBankAccountSLRef: fromLeg.accountSL, FromBankDLRef: fromLeg.dlRef,
+          ToBankAccountSLRef: toLeg.accountSL, ToBankDLRef: toLeg.dlRef,
+          Amount: amount, VoucherDate: baseDate.toISOString(),
+          Description: description, Creator: creator,
         },
       };
     }
