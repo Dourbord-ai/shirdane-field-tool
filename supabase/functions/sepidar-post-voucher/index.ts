@@ -1228,7 +1228,9 @@ Deno.serve(async (req) => {
         if (at in CHECK_ACCOUNT_IDS || (line.sepidar_account_id != null && line.bank_id == null)) {
           const acc = meainAccountId(line);
           if (acc == null) return null;
-          return { accountSL: acc, dlRef: 0, name: at };
+          // معین چک‌ها تفصیلی ندارد → DLRef باید NULL باشد (نه 0)
+          // تا FK_VoucherItem_DLRef نقض نشود.
+          return { accountSL: acc, dlRef: null as number | null, name: at };
         }
         if (at === "bank") {
           const info = await resolveBankLine(line);
@@ -1243,11 +1245,23 @@ Deno.serve(async (req) => {
       if (!fromLeg || !toLeg)
         return { ok: false, message: "نگاشت حساب چک در سپیدار ناقص است." };
 
+      // Debug log for the inter-bank/معین transfer branch (check_deposit/check_clear).
+      console.log("[sepidar-post-voucher][finance_check] interbank resolution", {
+        voucher_id: voucherId,
+        voucherType: vType,
+        from_account_type: String(creditLine.account_type ?? ""),
+        to_account_type: String(debitLine.account_type ?? ""),
+        FromBankAccountSLRef: fromLeg.accountSL,
+        FromBankDLRef: fromLeg.dlRef,
+        ToBankAccountSLRef: toLeg.accountSL,
+        ToBankDLRef: toLeg.dlRef,
+      });
+
       const req = pool.request();
       req.input("FromBankAccountSLRef", sql.Int, Number(fromLeg.accountSL));
-      req.input("FromBankDLRef", sql.Int, Number(fromLeg.dlRef));
+      req.input("FromBankDLRef", sql.Int, fromLeg.dlRef == null ? null : Number(fromLeg.dlRef));
       req.input("ToBankAccountSLRef", sql.Int, Number(toLeg.accountSL));
-      req.input("ToBankDLRef", sql.Int, Number(toLeg.dlRef));
+      req.input("ToBankDLRef", sql.Int, toLeg.dlRef == null ? null : Number(toLeg.dlRef));
       req.input("Amount", sql.Decimal(18, 2), amount);
       req.input("VoucherDate", sql.DateTime, baseDate);
       req.input("Description", sql.NVarChar(500), description);
