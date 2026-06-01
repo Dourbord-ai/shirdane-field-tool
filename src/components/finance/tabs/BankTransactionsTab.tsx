@@ -1561,6 +1561,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   partyName={receiveByTx[t.id]?.party_id ? partyNames[receiveByTx[t.id]!.party_id!] || null : null}
                   autoState={deriveAutoState(t, identByTx[t.id], receiveByTx[t.id])}
                 />
+                {/* Mobile mirror of the desktop "اطلاعات شناسایی" column. */}
+                <div className="mt-2"><AiVerifyCell tx={t} /></div>
+
+
 
 
                 <div className="mt-2 flex gap-1 flex-wrap">
