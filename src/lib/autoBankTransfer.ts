@@ -134,14 +134,14 @@ export interface AutoBankTransferInput {
 }
 
 // Match window — bank-side timestamps frequently drift by a few hours
-// between source and destination. 48h is generous; tighten later if we
-// see false multi-matches in production.
-const MATCH_WINDOW_HOURS = 48;
+// between source and destination. 24h keeps false multi-matches low while
+// still catching same-day and next-day posting drift.
+const MATCH_WINDOW_HOURS = 24;
 // Aggressive window — used when the caller has independent confirmation
 // (e.g. own-bank identifier hit) that the deposit IS an internal transfer.
-// We widen to 7 days to catch cross-day posting drift, and resolve ambiguity
-// by picking the withdraw row closest in time instead of bailing out.
-const AGGRESSIVE_MATCH_WINDOW_HOURS = 24 * 7;
+// Tied to the same 24h window as normal mode so repeated identical transfers
+// across multiple days do not create ambiguous matches.
+const AGGRESSIVE_MATCH_WINDOW_HOURS = 24;
 
 // ----------------------------------------------------------------------------
 // Public entry point. Returns a "no_match" outcome (zero side-effects) if
