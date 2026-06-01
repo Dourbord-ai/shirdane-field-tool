@@ -110,7 +110,7 @@ async function fetchInternal(
       ? new Date(r.finance_vouchers.voucher_date).getTime()
       : null;
     if (fromTs && d != null && d < fromTs) {
-      opening += (r.debit || 0) - (r.credit || 0);
+      opening += (r.credit || 0) - (r.debit || 0);
       continue;
     }
     if (toTs && d != null && d > toTs) continue;
@@ -131,7 +131,7 @@ async function fetchInternal(
   const rows: StatementRow[] = inRange.map((r) => {
     const debit = r.debit || 0;
     const credit = r.credit || 0;
-    bal += debit - credit;
+    bal += credit - debit;
     const v = r.finance_vouchers;
     return {
       id: r.id,
@@ -212,7 +212,7 @@ async function fetchSepidar(
     const rows: StatementRow[] = list.map((r, i) => {
       const debit = num(pick(r, "Debit", "debit"));
       const credit = num(pick(r, "Credit", "credit"));
-      bal += debit - credit;
+      bal += credit - debit;
       const dateRaw = pick<string>(r, "VoucherDate", "voucher_date", "Date");
       return {
         id: `sep-${i}`,
