@@ -110,8 +110,15 @@ async function markFailed(
 // Checks reuse the same posting pipeline as receipts / payments / bank transfers.
 const DEFAULT_SP: Record<string, string> = {
   receive_identification: "bridge.CreateBankVoucher",
-  payment_allocation: "bridge.CreatePaymentRequestVoucher",
-  payment_request: "bridge.CreatePaymentRequestVoucher",
+  // Payment posting now goes through bridge.CreateBankVoucher (same SP used
+  // by receive_identification and by the standalone sepidar-create-payment-voucher).
+  // The previous bridge.CreatePaymentRequestVoucher did not accept a bank leg,
+  // so Sepidar wrote the bank-side VoucherItem with an empty DLRef. By using
+  // CreateBankVoucher we explicitly send BankAccountSLRef + BankDLRef built
+  // from finance_banks.sepidar_account_id / sepidar_dl_id, matching the
+  // receive flow exactly.
+  payment_allocation: "bridge.CreateBankVoucher",
+  payment_request: "bridge.CreateBankVoucher",
   bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
   party_transfer: "bridge.CreatePartyTransferVoucher",
   // finance_check sub-types — all routed through the new generic SP. The
@@ -776,6 +783,37 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ---------------------------------------------------------------
+      // Bank-leg resolution for bridge.CreateBankVoucher.
+      //
+      // Why this block exists:
+      //   The payment branch previously called bridge.CreatePaymentRequestVoucher
+      //   which does NOT take a bank pair, so Sepidar created the bank-side
+      //   VoucherItem with an empty DLRef. We now route through
+      //   bridge.CreateBankVoucher (same SP as the receive_identification
+      //   branch above) which REQUIRES BankAccountSLRef + BankDLRef.
+      //
+      //   `bankRow` was already resolved above (alloc.bank_id → priRow.bank_id
+      //   → prRow.bank_id → bank_transaction). Here we just enforce that a
+      //   bank was actually found and that it has the Sepidar mappings.
+      // ---------------------------------------------------------------
+      if (!bankRow) {
+        return {
+          ok: false,
+          message:
+            "حساب بانکی مرتبط با درخواست پرداخت یافت نشد؛ امکان ثبت سند بانکی در سپیدار وجود ندارد.",
+        };
+      }
+      // `as number | null` — finance_banks columns are nullable; we re-validate
+      // below with the exact same Persian wording used in the receive branch
+      // so the operator sees a consistent error UX across receive/payment.
+      const bankAccSL = (bankRow as Record<string, unknown>).sepidar_account_id as number | null;
+      const bankDL = (bankRow as Record<string, unknown>).sepidar_dl_id as number | null;
+      if (bankAccSL == null)
+        return { ok: false, message: "نگاشت حساب معین بانک در سپیدار انجام نشده (sepidar_account_id بانک)." };
+      if (bankDL == null)
+        return { ok: false, message: "نگاشت تفصیلی بانک در سپیدار انجام نشده (sepidar_dl_id بانک)." };
+
       // Pick the most specific "item" row available to feed the description tail.
       const itemRow = (priRow ?? a ?? prRow ?? {}) as Record<string, unknown>;
       const partyName = resolvePartyDisplayName(partyRow);
@@ -795,10 +833,20 @@ Deno.serve(async (req) => {
         source_operation_type: sOp || vType,
         partyName,
         bankName,
+        // Surface the bank-leg values in logs so we can confirm at runtime
+        // that CreateBankVoucher is being fed a non-empty BankDLRef.
+        BankAccountSLRef: bankAccSL,
+        BankDLRef: bankDL,
         ...descs,
       });
 
       const req = pool.request();
+      // Bank-side leg — required by bridge.CreateBankVoucher. Without these
+      // two inputs the SP would either reject the call or (as observed before
+      // this fix) silently post a bank VoucherItem with an empty DLRef.
+      req.input("BankAccountSLRef", sql.Int, Number(bankAccSL));
+      req.input("BankDLRef", sql.Int, Number(bankDL));
+      // Party-side leg — unchanged.
       req.input("PartyId", sql.Int, Number(sepPartyId));
       req.input("PartyAccountSLRef", sql.Int, Number(sepPartyAcc));
       req.input("RequestType", sql.Int, requestTypeCode);
@@ -812,7 +860,12 @@ Deno.serve(async (req) => {
       return {
         ok: true,
         request: req,
+        // paramNames must list every bound input in the exact order the SP
+        // expects them to appear in execution logs; BankAccountSLRef/BankDLRef
+        // are listed first to mirror the receive_identification branch.
         paramNames: [
+          "BankAccountSLRef",
+          "BankDLRef",
           "PartyId",
           "PartyAccountSLRef",
           "RequestType",
@@ -824,6 +877,8 @@ Deno.serve(async (req) => {
           "Creator",
         ],
         logParams: {
+          BankAccountSLRef: bankAccSL,
+          BankDLRef: bankDL,
           PartyId: sepPartyId,
           PartyAccountSLRef: sepPartyAcc,
           RequestType: requestTypeCode,
