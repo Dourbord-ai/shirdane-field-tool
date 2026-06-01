@@ -1465,6 +1465,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     <td className="p-2 font-mono text-xs">{t.reference_number || t.tracking_number || "—"}</td>
                     <td className="p-2 text-xs">{t.source_type || "—"}</td>
                     <td className="p-2"><FinanceStatusBadge status={t.assignment_status} /></td>
+                    <td className="p-2 align-top"><AiVerifyCell tx={t} /></td>
                     <td className="p-2">
                       <div className="flex gap-1 flex-wrap items-center">
                         {t.assignment_status === "unassigned" && t.transaction_type === "deposit" && (
