@@ -279,7 +279,7 @@ function StatementTable({
                 {kind === "sepidar" && <td className="p-2">{r.dlTitle || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.slCode || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2">{r.slTitle || "—"}</td>}
-                {kind === "sepidar" && <td className="p-2 text-xs">{r.issuerEntityName || "—"}</td>}
+                {/* Issuer cell hidden — see header note above */}
                 {kind === "internal" && <td className="p-2 text-xs text-muted-foreground">{r.source || "—"}</td>}
               </tr>
             ))}
