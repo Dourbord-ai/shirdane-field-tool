@@ -262,7 +262,7 @@ function StatementTable({
               {kind === "sepidar" && <th className="p-2 text-right">عنوان معین</th>}
               {kind === "sepidar" && <th className="p-2 text-right">کد تفصیل</th>}
               {kind === "sepidar" && <th className="p-2 text-right">عنوان تفصیل</th>}
-              {kind === "sepidar" && <th className="p-2 text-right">صادرکننده</th>}
+              {/* Issuer column intentionally hidden from display (data still kept in model + Excel export) */}
               {kind === "internal" && <th className="p-2 text-right">منبع</th>}
             </tr>
           </thead>
@@ -279,13 +279,13 @@ function StatementTable({
                 {kind === "sepidar" && <td className="p-2">{r.dlTitle || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.slCode || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2">{r.slTitle || "—"}</td>}
-                {kind === "sepidar" && <td className="p-2 text-xs">{r.issuerEntityName || "—"}</td>}
+                {/* Issuer cell hidden — see header note above */}
                 {kind === "internal" && <td className="p-2 text-xs text-muted-foreground">{r.source || "—"}</td>}
               </tr>
             ))}
             {!slice.length && (
               <tr>
-                <td colSpan={kind === "sepidar" ? 11 : 7} className="p-6 text-center text-sm text-muted-foreground">
+                <td colSpan={kind === "sepidar" ? 10 : 7} className="p-6 text-center text-sm text-muted-foreground">
                   ردیفی یافت نشد
                 </td>
               </tr>
