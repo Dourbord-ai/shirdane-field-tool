@@ -262,7 +262,7 @@ function StatementTable({
               {kind === "sepidar" && <th className="p-2 text-right">عنوان معین</th>}
               {kind === "sepidar" && <th className="p-2 text-right">کد تفصیل</th>}
               {kind === "sepidar" && <th className="p-2 text-right">عنوان تفصیل</th>}
-              {kind === "sepidar" && <th className="p-2 text-right">صادرکننده</th>}
+              {/* Issuer column intentionally hidden from display (data still kept in model + Excel export) */}
               {kind === "internal" && <th className="p-2 text-right">منبع</th>}
             </tr>
           </thead>
