@@ -170,7 +170,7 @@ export async function autoMatchBankTransfer(
 
   // --- Step 1: candidate search --------------------------------------------
   // Build the time window around the deposit's timestamp. Aggressive mode
-  // widens to 7 days for own-bank-confirmed internal transfers.
+  // uses the same 24h window as normal mode.
   const windowHours = opts.aggressive
     ? AGGRESSIVE_MATCH_WINDOW_HOURS
     : MATCH_WINDOW_HOURS;
