@@ -88,6 +88,108 @@ interface Tx {
   imported_file_path: string | null;
   original_file_name: string | null;
   imported_file_name: string | null;
+  // n8n cardinfo enrichment fields — loaded as part of `select("*")`.
+  // We keep them loosely typed because the JSONB payloads vary by source.
+  ai_verify_status?: string | null;
+  ai_verify_error?: string | null;
+  ai_verify_payload?: Record<string, unknown> | null;
+  ai_verified_result?: Record<string, unknown> | null;
+}
+
+// ---------------------------------------------------------------------------
+// Persian text cleanup — strips invisible bidi/control chars and collapses
+// whitespace. Used by the "اطلاعات شناسایی" column before rendering names
+// returned by the n8n cardinfo webhook (data sometimes contains ZWNJ etc.).
+// ---------------------------------------------------------------------------
+const cleanPersianText = (value?: string | null) =>
+  String(value || "")
+    .replace(/[\u200c\u200d\u200e\u200f\u202a-\u202e]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+// ---------------------------------------------------------------------------
+// AiVerifyCell — renders the "اطلاعات شناسایی" column for a single tx.
+// Pure presentational; never mutates the row. Follows the priority order
+// agreed with the operator (see request spec).
+// ---------------------------------------------------------------------------
+function AiVerifyCell({ tx }: { tx: Tx }) {
+  // Coerce JSONB blobs into plain records so we can index safely below.
+  const result = (tx.ai_verified_result || {}) as Record<string, unknown>;
+  const payload = (tx.ai_verify_payload || {}) as Record<string, unknown>;
+  const status = tx.ai_verify_status || "";
+
+  const rawName = typeof result.name === "string" ? result.name : "";
+  const rawBank = typeof result.bankName === "string" ? result.bankName : "";
+  const name = cleanPersianText(rawName);
+  const bankName = cleanPersianText(rawBank);
+  const hasValidVerified =
+    result.ok === true && !!name && rawName !== "FunctionsHttpError";
+
+  // Small badge factory so all variants share the same compact styling.
+  const Badge = ({
+    tone,
+    children,
+  }: {
+    tone: "ok" | "warn" | "err" | "info" | "muted";
+    children: React.ReactNode;
+  }) => {
+    const toneCls = {
+      ok: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      warn: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      err: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+      info: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+      muted: "border-border bg-muted/40 text-muted-foreground",
+    }[tone];
+    return (
+      <span
+        dir="rtl"
+        className={`inline-flex flex-col items-start max-w-[200px] rounded-md border px-2 py-1 text-[11px] leading-tight ${toneCls}`}
+      >
+        {children}
+      </span>
+    );
+  };
+
+  // Priority 1: valid verified result.
+  if (hasValidVerified) {
+    return (
+      <Badge tone="ok">
+        <span className="font-bold truncate max-w-[180px]">{name}</span>
+        {bankName && <span className="opacity-80 truncate max-w-[180px]">{bankName}</span>}
+      </Badge>
+    );
+  }
+
+  // Priority 2: explicit verification error from the function/response.
+  const isHttpErr = rawName === "FunctionsHttpError";
+  const hasMsg = typeof result.message === "string" && (result.message as string).length > 0;
+  if (isHttpErr || hasMsg) {
+    return <Badge tone="err">خطا در استعلام</Badge>;
+  }
+
+  // Priority 3: regex-parsed identifier, no verification yet.
+  const hasResult = Object.keys(result).length > 0;
+  if (!hasResult && status === "parsed_by_regex") {
+    const num = typeof payload.number === "string" ? payload.number : "";
+    return (
+      <Badge tone="info">
+        <span>شناسه استخراج شد</span>
+        {num && <span className="font-mono opacity-80 truncate max-w-[180px]">{num}</span>}
+      </Badge>
+    );
+  }
+
+  // Priority 4-7: status-driven fallbacks.
+  if (status === "verify_failed") return <Badge tone="err">خطا در شناسایی</Badge>;
+  if (status === "party_not_found") {
+    // Spec: if verified result is actually valid, prefer showing it.
+    // (Handled above by Priority 1 — here we know it's not valid.)
+    return <Badge tone="warn">طرف حساب یافت نشد</Badge>;
+  }
+  if (status === "no_identifier") return <Badge tone="muted">شناسه یافت نشد</Badge>;
+  if (status === "pending") return <Badge tone="info">در انتظار بررسی</Badge>;
+
+  return <span className="text-xs text-muted-foreground">—</span>;
 }
 
 interface BankRef { id: string; title: string | null; bank_name: string | null }
