@@ -11,8 +11,8 @@
 //       - same amount
 //       - opposite direction (deposit ↔ withdraw)
 //       - DIFFERENT bank
-//       - close transaction date/time (we use a configurable window;
-//         default ±48h to be safe with bank-side posting delays)
+  //       - close transaction date/time (we use a configurable window;
+  //         default ±24h to reduce false multi-matches)
 //       - not already assigned to another operation
 //       - not already linked into another active transfer
 //   2. If EXACTLY ONE candidate is found → call the SECURITY DEFINER RPC
