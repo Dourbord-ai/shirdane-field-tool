@@ -285,7 +285,7 @@ function StatementTable({
             ))}
             {!slice.length && (
               <tr>
-                <td colSpan={kind === "sepidar" ? 11 : 7} className="p-6 text-center text-sm text-muted-foreground">
+                <td colSpan={kind === "sepidar" ? 10 : 7} className="p-6 text-center text-sm text-muted-foreground">
                   ردیفی یافت نشد
                 </td>
               </tr>
