@@ -110,8 +110,15 @@ async function markFailed(
 // Checks reuse the same posting pipeline as receipts / payments / bank transfers.
 const DEFAULT_SP: Record<string, string> = {
   receive_identification: "bridge.CreateBankVoucher",
-  payment_allocation: "bridge.CreatePaymentRequestVoucher",
-  payment_request: "bridge.CreatePaymentRequestVoucher",
+  // Payment posting now goes through bridge.CreateBankVoucher (same SP used
+  // by receive_identification and by the standalone sepidar-create-payment-voucher).
+  // The previous bridge.CreatePaymentRequestVoucher did not accept a bank leg,
+  // so Sepidar wrote the bank-side VoucherItem with an empty DLRef. By using
+  // CreateBankVoucher we explicitly send BankAccountSLRef + BankDLRef built
+  // from finance_banks.sepidar_account_id / sepidar_dl_id, matching the
+  // receive flow exactly.
+  payment_allocation: "bridge.CreateBankVoucher",
+  payment_request: "bridge.CreateBankVoucher",
   bank_transfer: "bridge.CreateSimpleInterBankTransferVoucher",
   party_transfer: "bridge.CreatePartyTransferVoucher",
   // finance_check sub-types — all routed through the new generic SP. The
