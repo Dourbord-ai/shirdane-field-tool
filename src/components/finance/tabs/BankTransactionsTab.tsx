@@ -883,6 +883,21 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                     <TooltipContent>{busyTooltip}</TooltipContent>
                   )}
                 </Tooltip>
+
+                {/* شناسایی کارت اینفو — fires the dedicated n8n cardinfo
+                    webhook. Independent of the other sweeps (it only kicks
+                    off enrichment on the n8n side; the table refresh below
+                    surfaces any results the webhook persists). */}
+                <Button
+                  onClick={runCardInfo}
+                  disabled={cardInfoRunning}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {cardInfoRunning
+                    ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                    : <Link2 className="w-4 h-4 ml-1" />}
+                  {cardInfoRunning ? "در حال ارسال…" : "شناسایی کارت اینفو"}
+                </Button>
               </TooltipProvider>
             );
           })()}
