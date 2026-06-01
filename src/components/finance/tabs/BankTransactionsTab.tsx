@@ -1422,6 +1422,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   <th className="p-2 font-bold">مرجع</th>
                   <th className="p-2 font-bold">منبع</th>
                   <th className="p-2 font-bold">وضعیت</th>
+                  <th className="p-2 font-bold">اطلاعات شناسایی</th>
                   <th className="p-2"></th>
                 </tr>
               </thead>
