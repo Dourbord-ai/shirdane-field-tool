@@ -439,6 +439,40 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     }
   }
 
+  // ---------------------------------------------------------------------
+  // "شناسایی کارت اینفو" — fires the dedicated n8n enrichment webhook.
+  // This ONLY starts the enrichment workflow on the n8n side; it must not
+  // touch assignment_status / assigned_operation_* / vouchers / receive
+  // or payment rows / transaction descriptions. The webhook itself is the
+  // sole authority for writing back the ai_verify_* columns.
+  // ---------------------------------------------------------------------
+  const [cardInfoRunning, setCardInfoRunning] = useState(false);
+  async function runCardInfo() {
+    if (cardInfoRunning) return;
+    setCardInfoRunning(true);
+    try {
+      // Minimal POST — no auth header; n8n endpoint is public per spec.
+      // We do NOT read the response body; success = HTTP 2xx.
+      const res = await fetch("https://dcn8n.dourbord.ir/webhook/cardinfo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "lovable_finance_bank_transactions",
+          requestedAt: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success("فرآیند شناسایی کارت/حساب هوشیار شروع شد.");
+      // Refresh the table so any rows already enriched by a previous run
+      // pick up their latest ai_verify_* state.
+      void load();
+    } catch (e) {
+      toastFinanceError(toast, e);
+    } finally {
+      setCardInfoRunning(false);
+    }
+  }
+
 
 
 
