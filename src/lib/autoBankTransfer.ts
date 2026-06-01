@@ -11,8 +11,8 @@
 //       - same amount
 //       - opposite direction (deposit ↔ withdraw)
 //       - DIFFERENT bank
-//       - close transaction date/time (we use a configurable window;
-//         default ±48h to be safe with bank-side posting delays)
+  //       - close transaction date/time (we use a configurable window;
+  //         default ±24h to reduce false multi-matches)
 //       - not already assigned to another operation
 //       - not already linked into another active transfer
 //   2. If EXACTLY ONE candidate is found → call the SECURITY DEFINER RPC
@@ -134,14 +134,14 @@ export interface AutoBankTransferInput {
 }
 
 // Match window — bank-side timestamps frequently drift by a few hours
-// between source and destination. 48h is generous; tighten later if we
-// see false multi-matches in production.
-const MATCH_WINDOW_HOURS = 48;
+// between source and destination. 24h keeps false multi-matches low while
+// still catching same-day and next-day posting drift.
+const MATCH_WINDOW_HOURS = 24;
 // Aggressive window — used when the caller has independent confirmation
 // (e.g. own-bank identifier hit) that the deposit IS an internal transfer.
-// We widen to 7 days to catch cross-day posting drift, and resolve ambiguity
-// by picking the withdraw row closest in time instead of bailing out.
-const AGGRESSIVE_MATCH_WINDOW_HOURS = 24 * 7;
+// Tied to the same 24h window as normal mode so repeated identical transfers
+// across multiple days do not create ambiguous matches.
+const AGGRESSIVE_MATCH_WINDOW_HOURS = 24;
 
 // ----------------------------------------------------------------------------
 // Public entry point. Returns a "no_match" outcome (zero side-effects) if
@@ -170,7 +170,7 @@ export async function autoMatchBankTransfer(
 
   // --- Step 1: candidate search --------------------------------------------
   // Build the time window around the deposit's timestamp. Aggressive mode
-  // widens to 7 days for own-bank-confirmed internal transfers.
+  // uses the same 24h window as normal mode.
   const windowHours = opts.aggressive
     ? AGGRESSIVE_MATCH_WINDOW_HOURS
     : MATCH_WINDOW_HOURS;
