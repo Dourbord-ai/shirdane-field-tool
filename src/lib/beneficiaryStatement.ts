@@ -210,8 +210,8 @@ async function fetchSepidar(
 
     let bal = 0;
     const rows: StatementRow[] = list.map((r, i) => {
-      const debit = num(pick(r, "Debit", "debit"));
-      const credit = num(pick(r, "Credit", "credit"));
+      const debit = num(pick(r, "Debit", "debit", "DebitAmount", "debitAmount"));
+      const credit = num(pick(r, "Credit", "credit", "CreditAmount", "creditAmount"));
       bal += credit - debit;
       const dateRaw = pick<string>(r, "VoucherDate", "voucher_date", "Date");
       return {

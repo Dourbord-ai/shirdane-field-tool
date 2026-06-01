@@ -58,24 +58,6 @@ Deno.serve(async (req) => {
     const result = await request.execute("bridge.GetBeneficiaryStatement");
     const rows = (result.recordset as Record<string, unknown>[]) || [];
     console.log("[sepidar-statement] ok rows=", rows.length);
-    // TEMP DIAGNOSTIC: log first-row column keys + a sanitized peek at numeric
-    // fields so we can confirm the actual Debit/Credit column names returned by
-    // bridge.GetBeneficiaryStatement. No descriptions or personal data logged.
-    if (rows.length) {
-      const first = rows[0];
-      const keys = Object.keys(first);
-      // Build a key->type/value preview limited to plausible amount fields
-      // (any key containing debit/credit/amount/bedeh/bestan, case-insensitive).
-      const amountLike: Record<string, { type: string; sample: unknown }> = {};
-      for (const k of keys) {
-        if (/debit|credit|amount|bedeh|bestan|dr$|cr$/i.test(k)) {
-          const v = first[k];
-          amountLike[k] = { type: typeof v, sample: v };
-        }
-      }
-      console.log("[sepidar-statement] first row keys=", keys);
-      console.log("[sepidar-statement] amount-like fields=", amountLike);
-    }
 
     return json({
       success: true,
