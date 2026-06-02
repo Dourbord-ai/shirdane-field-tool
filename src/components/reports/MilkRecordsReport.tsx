@@ -115,6 +115,44 @@ export default function MilkRecordsReport() {
   const baselineN = BASELINE_N[baseline];
 
   // -------------------------------------------------------------------------
+  // Cow filter resolver
+  //
+  // `livestock_milk_records.earnumber` is an INTEGER column, so the original
+  // `.ilike("earnumber", "%1410%")` silently matched zero rows (ilike on int
+  // returns nothing) — that's why every chart/table went blank as soon as
+  // the user typed a cow number. We now resolve the cow filter to a list of
+  // `livestock_id`s by querying the canonical `cows` table (earnumber is
+  // bigint there too, so we partial-match client-side as the cow set is
+  // bounded). All downstream queries then use `.in("livestock_id", ids)`.
+  // -------------------------------------------------------------------------
+  const cowFilterTrim = cowFilter.trim();
+  const matchedCowIdsQ = useQuery({
+    queryKey: ["milk-cow-filter-ids", cowFilterTrim],
+    enabled: cowFilterTrim.length > 0,
+    queryFn: async () => {
+      // Pull (id, earnumber) — typical herds are well under the 1000 default
+      // limit — and filter as text so partial searches like "141" still hit
+      // "1410", "1411", … (earnumber is bigint, ilike isn't usable).
+      const { data, error } = await supabase
+        .from("cows")
+        .select("id, earnumber")
+        .limit(5000);
+      if (error) throw error;
+      const needle = cowFilterTrim;
+      return (data || [])
+        .filter((c: any) => String(c.earnumber ?? "").includes(needle))
+        .map((c: any) => Number(c.id));
+    },
+  });
+  // Treat "filter typed but resolver still loading" as not-ready so the
+  // downstream queries wait instead of running against an empty id set and
+  // blanking the UI prematurely.
+  const cowFilterActive = cowFilterTrim.length > 0;
+  const cowIdsForFilter: number[] = cowFilterActive ? (matchedCowIdsQ.data ?? []) : [];
+  const cowFilterReady = !cowFilterActive || matchedCowIdsQ.data !== undefined;
+  const cowFilterNoMatch = cowFilterActive && cowFilterReady && cowIdsForFilter.length === 0;
+
+  // -------------------------------------------------------------------------
   // Q-CORE — One wide fetch that powers KPIs, top-10, and per-cow alerts.
   //
   // We pull every record from the previous 120 days for cows that have at
