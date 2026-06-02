@@ -123,7 +123,9 @@ export default function MilkRecordsReport() {
   // the payload bounded. Slicing per-cow happens in JS.
   // -------------------------------------------------------------------------
   const core = useQuery({
-    queryKey: ["milk-core", date, session, baseline],
+    // NEW: include cowFilter in the key so KPIs/herd totals/alerts/top-10
+    // all re-fetch when the user searches by ear number.
+    queryKey: ["milk-core", date, session, baseline, cowFilter],
     queryFn: async () => {
       // Step 1 — Find cows that produced milk on the reference date.
       let todayQ = supabase
@@ -132,8 +134,12 @@ export default function MilkRecordsReport() {
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") todayQ = todayQ.eq("period", Number(session));
+      // Apply cow filter at DB level: limits everything (KPIs, charts, alerts)
+      // to the searched ear number. Empty filter ⇒ full herd as before.
+      if (cowFilter.trim()) todayQ = todayQ.ilike("earnumber", `%${cowFilter.trim()}%`);
       const { data: todayRows, error: e1 } = await todayQ;
       if (e1) throw e1;
+
 
       // Per-cow total for today (sums across sessions if session = "all").
       const todayByCow = new Map<number, number>();
@@ -272,8 +278,11 @@ export default function MilkRecordsReport() {
   // Trend chart query (unchanged behaviour: daily totals over [rangeFrom..date])
   // -------------------------------------------------------------------------
   const trend = useQuery({
-    queryKey: ["milk-trend", rangeFrom, date, session],
+    // Includes cowFilter so the daily-trend chart re-fetches per cow search.
+    queryKey: ["milk-trend", rangeFrom, date, session, cowFilter],
     queryFn: async () => {
+      // Pull all sessions in the range; we split into 5 series client-side:
+      // morning(1) / noon(2) / evening(3) / daily total / daily average.
       let q = supabase
         .from("livestock_milk_records")
         .select("record_date, milk_amount, period")
@@ -281,32 +290,60 @@ export default function MilkRecordsReport() {
         .lte("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") q = q.eq("period", Number(session));
+      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
       const { data, error } = await q;
       if (error) throw error;
-      const byDay = new Map<string, number>();
+
+      // Build per-day, per-session aggregates. Map<day, Map<period, kg>>.
+      const byDayPeriod = new Map<string, Map<number, number>>();
       for (const r of data || []) {
-        byDay.set(r.record_date, (byDay.get(r.record_date) || 0) + Number(r.milk_amount || 0));
+        const d = r.record_date as string;
+        const p = Number(r.period);
+        const amt = Number(r.milk_amount || 0);
+        if (!byDayPeriod.has(d)) byDayPeriod.set(d, new Map());
+        const inner = byDayPeriod.get(d)!;
+        inner.set(p, (inner.get(p) || 0) + amt);
       }
+
       const days: string[] = [];
-      const values: number[] = [];
+      const morning: (number | null)[] = [];
+      const noon: (number | null)[] = [];
+      const evening: (number | null)[] = [];
+      const total: number[] = [];
+      const avg: number[] = [];
       for (let i = 0; i < range; i++) {
         const d = isoLocal(addDays(new Date(rangeFrom), i));
         days.push(d);
-        values.push(Number((byDay.get(d) || 0).toFixed(1)));
+        const inner = byDayPeriod.get(d);
+        // Missing session → null so the line breaks instead of dropping to 0.
+        const m = inner?.has(1) ? Number((inner.get(1) || 0).toFixed(1)) : null;
+        const n = inner?.has(2) ? Number((inner.get(2) || 0).toFixed(1)) : null;
+        const e = inner?.has(3) ? Number((inner.get(3) || 0).toFixed(1)) : null;
+        morning.push(m);
+        noon.push(n);
+        evening.push(e);
+        // Daily total: sum of sessions present (missing counts as 0).
+        const sumVals = [m, n, e].filter((x): x is number => x !== null);
+        const t = sumVals.reduce((a, b) => a + b, 0);
+        total.push(Number(t.toFixed(1)));
+        // Daily average across sessions that actually had data.
+        avg.push(sumVals.length > 0 ? Number((t / sumVals.length).toFixed(1)) : 0);
       }
-      return { days, values };
+      return { days, morning, noon, evening, total, avg };
     },
   });
 
   // Session breakdown for the selected day (always shows all 3 sessions).
   const sessionBreakdown = useQuery({
-    queryKey: ["milk-session", date],
+    queryKey: ["milk-session", date, cowFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("livestock_milk_records")
         .select("milk_amount, period")
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
+      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
+      const { data, error } = await q;
       if (error) throw error;
       const acc: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
       for (const r of data || []) acc[Number(r.period)] = (acc[Number(r.period)] || 0) + Number(r.milk_amount || 0);
@@ -314,6 +351,7 @@ export default function MilkRecordsReport() {
       return { values: acc, total };
     },
   });
+
 
   // -------------------------------------------------------------------------
   // Derived: top-10 cows (sorted by today desc) and the alerts list.
@@ -408,14 +446,41 @@ export default function MilkRecordsReport() {
   // -------------------------------------------------------------------------
   const trendOption = useMemo(() => {
     const days = trend.data?.days || [];
-    const values = trend.data?.values || [];
+    // Five series: morning / noon / evening-night / daily total / daily avg.
+    // Each missing session is null so the line gracefully gaps instead of
+    // dropping the whole chart.
+    const morning = trend.data?.morning || [];
+    const noon = trend.data?.noon || [];
+    const evening = trend.data?.evening || [];
+    const total = trend.data?.total || [];
+    const avg = trend.data?.avg || [];
+    const NAME_MORNING = "صبح";
+    const NAME_NOON = "ظهر";
+    const NAME_EVENING = "عصر / شب";
+    const NAME_TOTAL = "مجموع روزانه";
+    const NAME_AVG = "میانگین روزانه";
     return {
-      grid: { left: 48, right: 16, top: 24, bottom: 56 },
+      // Extra bottom padding because the legend now sits above the slider.
+      grid: { left: 48, right: 16, top: 48, bottom: 64 },
+      // Legend gives each of the 5 lines its own toggleable label.
+      legend: {
+        top: 4,
+        textStyle: { color: "#cbd5e1" },
+        data: [NAME_MORNING, NAME_NOON, NAME_EVENING, NAME_TOTAL, NAME_AVG],
+      },
       tooltip: {
         trigger: "axis",
+        // Multi-series tooltip: show every line's value for the hovered day.
         formatter: (params: any) => {
-          const p = params?.[0]; if (!p) return "";
-          return `${formatShamsi(p.axisValue)}<br/><b>${toPersianDigits(p.data)}</b> kg`;
+          if (!params?.length) return "";
+          const head = `${formatShamsi(params[0].axisValue)}`;
+          const body = params
+            .map((p: any) => {
+              const v = p.data == null ? "—" : `${toPersianDigits(p.data)} kg`;
+              return `<div style="display:flex;justify-content:space-between;gap:8px;"><span>${p.marker}${p.seriesName}</span><b>${v}</b></div>`;
+            })
+            .join("");
+          return `${head}${body}`;
         },
       },
       xAxis: {
@@ -431,23 +496,54 @@ export default function MilkRecordsReport() {
         { type: "inside" },
         { type: "slider", height: 18, bottom: 12, borderColor: "transparent" },
       ],
-      series: [{
-        name: "تولید روزانه", type: "line", smooth: true, symbol: "circle", symbolSize: 6,
-        data: values,
-        lineStyle: { width: 3, color: "#57D364" },
-        itemStyle: { color: "#57D364" },
-        areaStyle: {
-          color: {
-            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(87,211,100,0.35)" },
-              { offset: 1, color: "rgba(87,211,100,0.0)" },
-            ],
+      series: [
+        // Per-session lines — match the colors already used in the session
+        // bar chart so the visual language stays consistent across the page.
+        {
+          name: NAME_MORNING, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: morning, connectNulls: false,
+          lineStyle: { width: 2, color: SESSION_COLORS[1] },
+          itemStyle: { color: SESSION_COLORS[1] },
+        },
+        {
+          name: NAME_NOON, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: noon, connectNulls: false,
+          lineStyle: { width: 2, color: SESSION_COLORS[2] },
+          itemStyle: { color: SESSION_COLORS[2] },
+        },
+        {
+          name: NAME_EVENING, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: evening, connectNulls: false,
+          lineStyle: { width: 2, color: SESSION_COLORS[3] },
+          itemStyle: { color: SESSION_COLORS[3] },
+        },
+        // Daily total — strongest line + soft area to anchor the chart visually.
+        {
+          name: NAME_TOTAL, type: "line", smooth: true, symbol: "circle", symbolSize: 6,
+          data: total,
+          lineStyle: { width: 3, color: "#57D364" },
+          itemStyle: { color: "#57D364" },
+          areaStyle: {
+            color: {
+              type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(87,211,100,0.25)" },
+                { offset: 1, color: "rgba(87,211,100,0.0)" },
+              ],
+            },
           },
         },
-      }],
+        // Daily average — dashed so it reads as a derived/reference metric.
+        {
+          name: NAME_AVG, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: avg,
+          lineStyle: { width: 2, color: "#f472b6", type: "dashed" },
+          itemStyle: { color: "#f472b6" },
+        },
+      ],
     };
   }, [trend.data]);
+
 
   const sessionOption = useMemo(() => {
     const v = sessionBreakdown.data?.values || { 1: 0, 2: 0, 3: 0 };
@@ -687,16 +783,22 @@ export default function MilkRecordsReport() {
             <span className="text-xs text-muted-foreground">
               مرجع: {formatShamsi(date)} • آستانه {toPersianDigits(threshold)}٪ • {BASELINE_LABEL[baseline]}
             </span>
-            <Button
-              size="sm"
-              variant="default"
-              disabled={alerts.length === 0 || persistAlerts.isPending}
-              onClick={() => persistAlerts.mutate()}
-              className="gap-1"
-            >
-              <Save className="w-4 h-4" />
-              ثبت هشدارها برای پیامک
-            </Button>
+            {/* SMS alert persistence button hidden per product request.
+                Backend table / mutation / logic intentionally preserved so
+                it can be re-enabled later without code archaeology. */}
+            {false && (
+              <Button
+                size="sm"
+                variant="default"
+                disabled={alerts.length === 0 || persistAlerts.isPending}
+                onClick={() => persistAlerts.mutate()}
+                className="gap-1"
+              >
+                <Save className="w-4 h-4" />
+                ثبت هشدارها برای پیامک
+              </Button>
+            )}
+
           </div>
         </div>
 
