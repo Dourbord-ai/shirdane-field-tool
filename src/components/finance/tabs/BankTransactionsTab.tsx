@@ -94,6 +94,13 @@ interface Tx {
   ai_verify_error?: string | null;
   ai_verify_payload?: Record<string, unknown> | null;
   ai_verified_result?: Record<string, unknown> | null;
+  // Normalized display fields written back by the cardinfo workflow. These
+  // are the *primary* source for the "اطلاعات شناسایی" column because they
+  // are already cleaned/standardized server-side (no ZWNJ, no bank-name
+  // variants), so the UI just needs to render them.
+  match_name?: string | null;
+  match_bank_name?: string | null;
+
 }
 
 // ---------------------------------------------------------------------------
