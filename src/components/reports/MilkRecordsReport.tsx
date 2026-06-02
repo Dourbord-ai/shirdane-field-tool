@@ -388,14 +388,21 @@ export default function MilkRecordsReport() {
 
   // Session breakdown for the selected day (always shows all 3 sessions).
   const sessionBreakdown = useQuery({
-    queryKey: ["milk-session", date, cowFilter],
+    queryKey: ["milk-session", date, cowFilterTrim, cowIdsForFilter.join(",")],
+    enabled: cowFilterReady,
     queryFn: async () => {
+      // Empty result when the searched cow number doesn't exist — keeps the
+      // session-breakdown widget consistent with the rest of the page.
+      if (cowFilterNoMatch) {
+        return { values: { 1: 0, 2: 0, 3: 0 } as Record<number, number>, total: 0 };
+      }
       let q = supabase
         .from("livestock_milk_records")
         .select("milk_amount, period")
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
-      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
+      // Cow filter via livestock_id (resolved from cows.earnumber).
+      if (cowFilterActive) q = q.in("livestock_id", cowIdsForFilter as any);
       const { data, error } = await q;
       if (error) throw error;
       const acc: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
