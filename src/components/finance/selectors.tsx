@@ -164,6 +164,7 @@ export function TransactionSelector({
   const [txs, setTxs] = useState<Tx[]>([]);
   const [banks, setBanks] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Tx | null>(null);
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     // Defense-in-depth: we always exclude any transaction that already has
