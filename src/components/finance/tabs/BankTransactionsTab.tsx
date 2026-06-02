@@ -446,20 +446,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (cardInfoRunning) return;
     setCardInfoRunning(true);
     try {
-      // Minimal POST — no auth header; n8n endpoint is public per spec.
-      // We do NOT read the response body; success = HTTP 2xx.
+      // Spec change: this endpoint is now triggered via a plain GET — no
+      // body, no custom headers. n8n decides what to enrich based on its
+      // own internal queue. We only treat HTTP 2xx as success.
       const res = await fetch("https://dcn8n.dourbord.ir/webhook/cardinfo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "lovable_finance_bank_transactions",
-          requestedAt: new Date().toISOString(),
-        }),
+        method: "GET",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success("فرآیند شناسایی کارت/حساب هوشیار شروع شد.");
-      // Refresh the table so any rows already enriched by a previous run
-      // pick up their latest ai_verify_* state.
+      // Refetch the transactions list so newly written match_name /
+      // match_bank_name values become visible in the table & mobile cards.
       void load();
     } catch (e) {
       toastFinanceError(toast, e);
@@ -467,6 +463,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setCardInfoRunning(false);
     }
   }
+
 
 
 
