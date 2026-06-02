@@ -115,6 +115,44 @@ export default function MilkRecordsReport() {
   const baselineN = BASELINE_N[baseline];
 
   // -------------------------------------------------------------------------
+  // Cow filter resolver
+  //
+  // `livestock_milk_records.earnumber` is an INTEGER column, so the original
+  // `.ilike("earnumber", "%1410%")` silently matched zero rows (ilike on int
+  // returns nothing) — that's why every chart/table went blank as soon as
+  // the user typed a cow number. We now resolve the cow filter to a list of
+  // `livestock_id`s by querying the canonical `cows` table (earnumber is
+  // bigint there too, so we partial-match client-side as the cow set is
+  // bounded). All downstream queries then use `.in("livestock_id", ids)`.
+  // -------------------------------------------------------------------------
+  const cowFilterTrim = cowFilter.trim();
+  const matchedCowIdsQ = useQuery({
+    queryKey: ["milk-cow-filter-ids", cowFilterTrim],
+    enabled: cowFilterTrim.length > 0,
+    queryFn: async () => {
+      // Pull (id, earnumber) — typical herds are well under the 1000 default
+      // limit — and filter as text so partial searches like "141" still hit
+      // "1410", "1411", … (earnumber is bigint, ilike isn't usable).
+      const { data, error } = await supabase
+        .from("cows")
+        .select("id, earnumber")
+        .limit(5000);
+      if (error) throw error;
+      const needle = cowFilterTrim;
+      return (data || [])
+        .filter((c: any) => String(c.earnumber ?? "").includes(needle))
+        .map((c: any) => Number(c.id));
+    },
+  });
+  // Treat "filter typed but resolver still loading" as not-ready so the
+  // downstream queries wait instead of running against an empty id set and
+  // blanking the UI prematurely.
+  const cowFilterActive = cowFilterTrim.length > 0;
+  const cowIdsForFilter: number[] = cowFilterActive ? (matchedCowIdsQ.data ?? []) : [];
+  const cowFilterReady = !cowFilterActive || matchedCowIdsQ.data !== undefined;
+  const cowFilterNoMatch = cowFilterActive && cowFilterReady && cowIdsForFilter.length === 0;
+
+  // -------------------------------------------------------------------------
   // Q-CORE — One wide fetch that powers KPIs, top-10, and per-cow alerts.
   //
   // We pull every record from the previous 120 days for cows that have at
@@ -125,8 +163,16 @@ export default function MilkRecordsReport() {
   const core = useQuery({
     // NEW: include cowFilter in the key so KPIs/herd totals/alerts/top-10
     // all re-fetch when the user searches by ear number.
-    queryKey: ["milk-core", date, session, baseline, cowFilter],
+    queryKey: ["milk-core", date, session, baseline, cowFilterTrim, cowIdsForFilter.join(",")],
+    // Wait for the cow-id resolver before firing, otherwise we'd briefly
+    // render an "empty" report while the filter is still resolving.
+    enabled: cowFilterReady,
     queryFn: async () => {
+      // Short-circuit when the searched cow number has no match — avoids a
+      // pointless round-trip and lets the UI show "no records" cleanly.
+      if (cowFilterNoMatch) {
+        return { perCow: [], todayTotal: 0, baseTotal: 0, change: 0, avg: 0, cowCount: 0 };
+      }
       // Step 1 — Find cows that produced milk on the reference date.
       let todayQ = supabase
         .from("livestock_milk_records")
@@ -134,9 +180,9 @@ export default function MilkRecordsReport() {
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") todayQ = todayQ.eq("period", Number(session));
-      // Apply cow filter at DB level: limits everything (KPIs, charts, alerts)
-      // to the searched ear number. Empty filter ⇒ full herd as before.
-      if (cowFilter.trim()) todayQ = todayQ.ilike("earnumber", `%${cowFilter.trim()}%`);
+      // Apply cow filter via livestock_id (resolved from the cows table) —
+      // ilike on the integer earnumber column never matched anything.
+      if (cowFilterActive) todayQ = todayQ.in("livestock_id", cowIdsForFilter as any);
       const { data: todayRows, error: e1 } = await todayQ;
       if (e1) throw e1;
 
@@ -279,8 +325,14 @@ export default function MilkRecordsReport() {
   // -------------------------------------------------------------------------
   const trend = useQuery({
     // Includes cowFilter so the daily-trend chart re-fetches per cow search.
-    queryKey: ["milk-trend", rangeFrom, date, session, cowFilter],
+    queryKey: ["milk-trend", rangeFrom, date, session, cowFilterTrim, cowIdsForFilter.join(",")],
+    enabled: cowFilterReady,
     queryFn: async () => {
+      // If the searched cow number isn't in the herd, return an empty shape
+      // so the trend chart renders cleanly with no data instead of erroring.
+      if (cowFilterNoMatch) {
+        return { days: [], morning: [], noon: [], evening: [], total: [], avg: [] };
+      }
       // Pull all sessions in the range; we split into 5 series client-side:
       // morning(1) / noon(2) / evening(3) / daily total / daily average.
       let q = supabase
@@ -290,7 +342,8 @@ export default function MilkRecordsReport() {
         .lte("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") q = q.eq("period", Number(session));
-      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
+      // Cow filter: resolve via livestock_id (earnumber is bigint → ilike no-op).
+      if (cowFilterActive) q = q.in("livestock_id", cowIdsForFilter as any);
       const { data, error } = await q;
       if (error) throw error;
 
@@ -335,14 +388,21 @@ export default function MilkRecordsReport() {
 
   // Session breakdown for the selected day (always shows all 3 sessions).
   const sessionBreakdown = useQuery({
-    queryKey: ["milk-session", date, cowFilter],
+    queryKey: ["milk-session", date, cowFilterTrim, cowIdsForFilter.join(",")],
+    enabled: cowFilterReady,
     queryFn: async () => {
+      // Empty result when the searched cow number doesn't exist — keeps the
+      // session-breakdown widget consistent with the rest of the page.
+      if (cowFilterNoMatch) {
+        return { values: { 1: 0, 2: 0, 3: 0 } as Record<number, number>, total: 0 };
+      }
       let q = supabase
         .from("livestock_milk_records")
         .select("milk_amount, period")
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
-      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
+      // Cow filter via livestock_id (resolved from cows.earnumber).
+      if (cowFilterActive) q = q.in("livestock_id", cowIdsForFilter as any);
       const { data, error } = await q;
       if (error) throw error;
       const acc: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
@@ -713,6 +773,15 @@ export default function MilkRecordsReport() {
           </div>
         </div>
       </GlobalCard>
+
+      {/* ---------- Cow-not-found banner ---------- */}
+      {/* Surface a clear message when the user's ear-number search doesn't  */}
+      {/* match any cow, instead of silently rendering empty charts/tables.  */}
+      {cowFilterNoMatch && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 px-4 py-3 text-sm font-bold">
+          رکوردی برای گاو «{toPersianDigits(cowFilterTrim)}» یافت نشد.
+        </div>
+      )}
 
       {/* ---------- KPI cards ---------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
