@@ -325,8 +325,14 @@ export default function MilkRecordsReport() {
   // -------------------------------------------------------------------------
   const trend = useQuery({
     // Includes cowFilter so the daily-trend chart re-fetches per cow search.
-    queryKey: ["milk-trend", rangeFrom, date, session, cowFilter],
+    queryKey: ["milk-trend", rangeFrom, date, session, cowFilterTrim, cowIdsForFilter.join(",")],
+    enabled: cowFilterReady,
     queryFn: async () => {
+      // If the searched cow number isn't in the herd, return an empty shape
+      // so the trend chart renders cleanly with no data instead of erroring.
+      if (cowFilterNoMatch) {
+        return { days: [], morning: [], noon: [], evening: [], total: [], avg: [] };
+      }
       // Pull all sessions in the range; we split into 5 series client-side:
       // morning(1) / noon(2) / evening(3) / daily total / daily average.
       let q = supabase
@@ -336,7 +342,8 @@ export default function MilkRecordsReport() {
         .lte("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") q = q.eq("period", Number(session));
-      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
+      // Cow filter: resolve via livestock_id (earnumber is bigint → ilike no-op).
+      if (cowFilterActive) q = q.in("livestock_id", cowIdsForFilter as any);
       const { data, error } = await q;
       if (error) throw error;
 
