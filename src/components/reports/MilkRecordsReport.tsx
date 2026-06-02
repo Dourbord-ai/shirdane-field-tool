@@ -783,16 +783,22 @@ export default function MilkRecordsReport() {
             <span className="text-xs text-muted-foreground">
               مرجع: {formatShamsi(date)} • آستانه {toPersianDigits(threshold)}٪ • {BASELINE_LABEL[baseline]}
             </span>
-            <Button
-              size="sm"
-              variant="default"
-              disabled={alerts.length === 0 || persistAlerts.isPending}
-              onClick={() => persistAlerts.mutate()}
-              className="gap-1"
-            >
-              <Save className="w-4 h-4" />
-              ثبت هشدارها برای پیامک
-            </Button>
+            {/* SMS alert persistence button hidden per product request.
+                Backend table / mutation / logic intentionally preserved so
+                it can be re-enabled later without code archaeology. */}
+            {false && (
+              <Button
+                size="sm"
+                variant="default"
+                disabled={alerts.length === 0 || persistAlerts.isPending}
+                onClick={() => persistAlerts.mutate()}
+                className="gap-1"
+              >
+                <Save className="w-4 h-4" />
+                ثبت هشدارها برای پیامک
+              </Button>
+            )}
+
           </div>
         </div>
 
