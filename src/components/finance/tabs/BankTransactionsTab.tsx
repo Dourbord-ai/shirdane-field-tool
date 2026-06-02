@@ -94,6 +94,13 @@ interface Tx {
   ai_verify_error?: string | null;
   ai_verify_payload?: Record<string, unknown> | null;
   ai_verified_result?: Record<string, unknown> | null;
+  // Normalized display fields written back by the cardinfo workflow. These
+  // are the *primary* source for the "اطلاعات شناسایی" column because they
+  // are already cleaned/standardized server-side (no ZWNJ, no bank-name
+  // variants), so the UI just needs to render them.
+  match_name?: string | null;
+  match_bank_name?: string | null;
+
 }
 
 // ---------------------------------------------------------------------------
@@ -113,84 +120,72 @@ const cleanPersianText = (value?: string | null) =>
 // agreed with the operator (see request spec).
 // ---------------------------------------------------------------------------
 function AiVerifyCell({ tx }: { tx: Tx }) {
-  // Coerce JSONB blobs into plain records so we can index safely below.
-  const result = (tx.ai_verified_result || {}) as Record<string, unknown>;
-  const payload = (tx.ai_verify_payload || {}) as Record<string, unknown>;
-  const status = tx.ai_verify_status || "";
-
-  const rawName = typeof result.name === "string" ? result.name : "";
-  const rawBank = typeof result.bankName === "string" ? result.bankName : "";
-  const name = cleanPersianText(rawName);
-  const bankName = cleanPersianText(rawBank);
-  const hasValidVerified =
-    result.ok === true && !!name && rawName !== "FunctionsHttpError";
+  // ---------------------------------------------------------------------
+  // Source of truth (per latest product spec):
+  //   • finance_bank_transactions.match_name        → owner full name
+  //   • finance_bank_transactions.match_bank_name   → owning bank label
+  // These two columns are normalized by the cardinfo workflow before they
+  // are persisted, so the UI does NOT need to dig into ai_verified_result
+  // anymore. We still run them through cleanPersianText() as a defensive
+  // pass to drop any stray ZWNJ / control characters or double spaces that
+  // may slip through legacy rows.
+  // ---------------------------------------------------------------------
+  const name = cleanPersianText(tx.match_name);
+  const bankName = cleanPersianText(tx.match_bank_name);
 
   // Small badge factory so all variants share the same compact styling.
+  // Kept inside the component to avoid leaking styling outside this cell.
   const Badge = ({
     tone,
     children,
   }: {
-    tone: "ok" | "warn" | "err" | "info" | "muted";
+    tone: "ok" | "muted";
     children: React.ReactNode;
   }) => {
     const toneCls = {
       ok: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-      warn: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-      err: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
-      info: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
       muted: "border-border bg-muted/40 text-muted-foreground",
     }[tone];
     return (
       <span
         dir="rtl"
-        className={`inline-flex flex-col items-start max-w-[200px] rounded-md border px-2 py-1 text-[11px] leading-tight ${toneCls}`}
+        className={`inline-flex items-center max-w-[240px] rounded-md border px-2 py-1 text-[11px] leading-tight ${toneCls}`}
       >
         {children}
       </span>
     );
   };
 
-  // Priority 1: valid verified result.
-  if (hasValidVerified) {
+  // Build the display text based on which fields are present. The spec
+  // requires exactly this priority/format — do not reorder the branches.
+  if (name && bankName) {
+    // Both available → "{name} - {bank}".
     return (
       <Badge tone="ok">
-        <span className="font-bold truncate max-w-[180px]">{name}</span>
-        {bankName && <span className="opacity-80 truncate max-w-[180px]">{bankName}</span>}
+        <span className="font-bold truncate">{name} - {bankName}</span>
       </Badge>
     );
   }
-
-  // Priority 2: explicit verification error from the function/response.
-  const isHttpErr = rawName === "FunctionsHttpError";
-  const hasMsg = typeof result.message === "string" && (result.message as string).length > 0;
-  if (isHttpErr || hasMsg) {
-    return <Badge tone="err">خطا در استعلام</Badge>;
-  }
-
-  // Priority 3: regex-parsed identifier, no verification yet.
-  const hasResult = Object.keys(result).length > 0;
-  if (!hasResult && status === "parsed_by_regex") {
-    const num = typeof payload.number === "string" ? payload.number : "";
+  if (name) {
+    // Only the owner name resolved.
     return (
-      <Badge tone="info">
-        <span>شناسه استخراج شد</span>
-        {num && <span className="font-mono opacity-80 truncate max-w-[180px]">{num}</span>}
+      <Badge tone="ok">
+        <span className="font-bold truncate">{name}</span>
       </Badge>
     );
   }
-
-  // Priority 4-7: status-driven fallbacks.
-  if (status === "verify_failed") return <Badge tone="err">خطا در شناسایی</Badge>;
-  if (status === "party_not_found") {
-    // Spec: if verified result is actually valid, prefer showing it.
-    // (Handled above by Priority 1 — here we know it's not valid.)
-    return <Badge tone="warn">طرف حساب یافت نشد</Badge>;
+  if (bankName) {
+    // Only the bank label resolved (rare, but spec-required fallback).
+    return (
+      <Badge tone="ok">
+        <span className="font-bold truncate">{bankName}</span>
+      </Badge>
+    );
   }
-  if (status === "no_identifier") return <Badge tone="muted">شناسه یافت نشد</Badge>;
-  if (status === "pending") return <Badge tone="info">در انتظار بررسی</Badge>;
-
-  return <span className="text-xs text-muted-foreground">—</span>;
+  // Nothing yet — workflow hasn't enriched this row.
+  return <Badge tone="muted">در انتظار شناسایی</Badge>;
 }
+
 
 interface BankRef { id: string; title: string | null; bank_name: string | null }
 
@@ -451,20 +446,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (cardInfoRunning) return;
     setCardInfoRunning(true);
     try {
-      // Minimal POST — no auth header; n8n endpoint is public per spec.
-      // We do NOT read the response body; success = HTTP 2xx.
+      // Spec change: this endpoint is now triggered via a plain GET — no
+      // body, no custom headers. n8n decides what to enrich based on its
+      // own internal queue. We only treat HTTP 2xx as success.
       const res = await fetch("https://dcn8n.dourbord.ir/webhook/cardinfo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "lovable_finance_bank_transactions",
-          requestedAt: new Date().toISOString(),
-        }),
+        method: "GET",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success("فرآیند شناسایی کارت/حساب هوشیار شروع شد.");
-      // Refresh the table so any rows already enriched by a previous run
-      // pick up their latest ai_verify_* state.
+      // Refetch the transactions list so newly written match_name /
+      // match_bank_name values become visible in the table & mobile cards.
       void load();
     } catch (e) {
       toastFinanceError(toast, e);
@@ -472,6 +463,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setCardInfoRunning(false);
     }
   }
+
 
 
 
