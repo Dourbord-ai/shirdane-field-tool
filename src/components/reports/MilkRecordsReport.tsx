@@ -278,8 +278,11 @@ export default function MilkRecordsReport() {
   // Trend chart query (unchanged behaviour: daily totals over [rangeFrom..date])
   // -------------------------------------------------------------------------
   const trend = useQuery({
-    queryKey: ["milk-trend", rangeFrom, date, session],
+    // Includes cowFilter so the daily-trend chart re-fetches per cow search.
+    queryKey: ["milk-trend", rangeFrom, date, session, cowFilter],
     queryFn: async () => {
+      // Pull all sessions in the range; we split into 5 series client-side:
+      // morning(1) / noon(2) / evening(3) / daily total / daily average.
       let q = supabase
         .from("livestock_milk_records")
         .select("record_date, milk_amount, period")
@@ -287,32 +290,60 @@ export default function MilkRecordsReport() {
         .lte("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") q = q.eq("period", Number(session));
+      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
       const { data, error } = await q;
       if (error) throw error;
-      const byDay = new Map<string, number>();
+
+      // Build per-day, per-session aggregates. Map<day, Map<period, kg>>.
+      const byDayPeriod = new Map<string, Map<number, number>>();
       for (const r of data || []) {
-        byDay.set(r.record_date, (byDay.get(r.record_date) || 0) + Number(r.milk_amount || 0));
+        const d = r.record_date as string;
+        const p = Number(r.period);
+        const amt = Number(r.milk_amount || 0);
+        if (!byDayPeriod.has(d)) byDayPeriod.set(d, new Map());
+        const inner = byDayPeriod.get(d)!;
+        inner.set(p, (inner.get(p) || 0) + amt);
       }
+
       const days: string[] = [];
-      const values: number[] = [];
+      const morning: (number | null)[] = [];
+      const noon: (number | null)[] = [];
+      const evening: (number | null)[] = [];
+      const total: number[] = [];
+      const avg: number[] = [];
       for (let i = 0; i < range; i++) {
         const d = isoLocal(addDays(new Date(rangeFrom), i));
         days.push(d);
-        values.push(Number((byDay.get(d) || 0).toFixed(1)));
+        const inner = byDayPeriod.get(d);
+        // Missing session → null so the line breaks instead of dropping to 0.
+        const m = inner?.has(1) ? Number((inner.get(1) || 0).toFixed(1)) : null;
+        const n = inner?.has(2) ? Number((inner.get(2) || 0).toFixed(1)) : null;
+        const e = inner?.has(3) ? Number((inner.get(3) || 0).toFixed(1)) : null;
+        morning.push(m);
+        noon.push(n);
+        evening.push(e);
+        // Daily total: sum of sessions present (missing counts as 0).
+        const sumVals = [m, n, e].filter((x): x is number => x !== null);
+        const t = sumVals.reduce((a, b) => a + b, 0);
+        total.push(Number(t.toFixed(1)));
+        // Daily average across sessions that actually had data.
+        avg.push(sumVals.length > 0 ? Number((t / sumVals.length).toFixed(1)) : 0);
       }
-      return { days, values };
+      return { days, morning, noon, evening, total, avg };
     },
   });
 
   // Session breakdown for the selected day (always shows all 3 sessions).
   const sessionBreakdown = useQuery({
-    queryKey: ["milk-session", date],
+    queryKey: ["milk-session", date, cowFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("livestock_milk_records")
         .select("milk_amount, period")
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
+      if (cowFilter.trim()) q = q.ilike("earnumber", `%${cowFilter.trim()}%`);
+      const { data, error } = await q;
       if (error) throw error;
       const acc: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
       for (const r of data || []) acc[Number(r.period)] = (acc[Number(r.period)] || 0) + Number(r.milk_amount || 0);
@@ -320,6 +351,7 @@ export default function MilkRecordsReport() {
       return { values: acc, total };
     },
   });
+
 
   // -------------------------------------------------------------------------
   // Derived: top-10 cows (sorted by today desc) and the alerts list.
