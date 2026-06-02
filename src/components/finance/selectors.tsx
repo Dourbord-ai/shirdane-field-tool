@@ -259,20 +259,52 @@ export function TransactionSelector({
           <span className="text-muted-foreground">{placeholder}</span>
         )}
       </button>
-      {open && (
+      {open && (() => {
+        // Normalize Persian/Arabic digits to ASCII so searching "1000" matches "۱۰۰۰".
+        const toAscii = (s: string) =>
+          s.replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+           .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+        const needle = toAscii(q).trim().toLowerCase();
+        // Filter the loaded transactions by bank name (نام), description (شرح),
+        // reference number, or any numeric amount (عدد).
+        const filtered = !needle ? txs : txs.filter((t) => {
+          const bankName = (banks[t.bank_id || ""] || "").toLowerCase();
+          const desc = toAscii(t.description || "").toLowerCase();
+          const ref = toAscii(t.reference_number || "").toLowerCase();
+          const amount = String(t.deposit_amount || t.withdraw_amount || "");
+          return (
+            bankName.includes(needle) ||
+            desc.includes(needle) ||
+            ref.includes(needle) ||
+            amount.includes(needle)
+          );
+        });
+        return (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           <div className="bg-card rounded-xl border shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="font-bold">{placeholder}</h3>
+            <div className="p-4 border-b flex items-center justify-between gap-2">
+              <h3 className="font-bold whitespace-nowrap">{placeholder}</h3>
               <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
+            {/* Search input — filters by نام بانک / شرح / عدد (مبلغ یا شماره مرجع) */}
+            <div className="p-3 border-b">
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="جستجو نام بانک، شرح یا عدد"
+                  autoFocus
+                />
+              </div>
+            </div>
             <div className="overflow-y-auto p-2 flex-1">
-              {txs.length === 0 && (
+              {filtered.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">رسیدی یافت نشد</p>
               )}
-              {txs.map((t) => (
+              {filtered.map((t) => (
                 <button
                   key={t.id}
                   className="w-full text-right p-3 hover:bg-secondary rounded-lg flex flex-col gap-1 border-b border-border"
@@ -280,6 +312,7 @@ export function TransactionSelector({
                     setSelected(t);
                     onChange(t.id, t);
                     setOpen(false);
+                    setQ("");
                   }}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -298,7 +331,8 @@ export function TransactionSelector({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </>
   );
 }
