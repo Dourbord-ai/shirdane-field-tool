@@ -446,14 +446,41 @@ export default function MilkRecordsReport() {
   // -------------------------------------------------------------------------
   const trendOption = useMemo(() => {
     const days = trend.data?.days || [];
-    const values = trend.data?.values || [];
+    // Five series: morning / noon / evening-night / daily total / daily avg.
+    // Each missing session is null so the line gracefully gaps instead of
+    // dropping the whole chart.
+    const morning = trend.data?.morning || [];
+    const noon = trend.data?.noon || [];
+    const evening = trend.data?.evening || [];
+    const total = trend.data?.total || [];
+    const avg = trend.data?.avg || [];
+    const NAME_MORNING = "صبح";
+    const NAME_NOON = "ظهر";
+    const NAME_EVENING = "عصر / شب";
+    const NAME_TOTAL = "مجموع روزانه";
+    const NAME_AVG = "میانگین روزانه";
     return {
-      grid: { left: 48, right: 16, top: 24, bottom: 56 },
+      // Extra bottom padding because the legend now sits above the slider.
+      grid: { left: 48, right: 16, top: 48, bottom: 64 },
+      // Legend gives each of the 5 lines its own toggleable label.
+      legend: {
+        top: 4,
+        textStyle: { color: "#cbd5e1" },
+        data: [NAME_MORNING, NAME_NOON, NAME_EVENING, NAME_TOTAL, NAME_AVG],
+      },
       tooltip: {
         trigger: "axis",
+        // Multi-series tooltip: show every line's value for the hovered day.
         formatter: (params: any) => {
-          const p = params?.[0]; if (!p) return "";
-          return `${formatShamsi(p.axisValue)}<br/><b>${toPersianDigits(p.data)}</b> kg`;
+          if (!params?.length) return "";
+          const head = `${formatShamsi(params[0].axisValue)}`;
+          const body = params
+            .map((p: any) => {
+              const v = p.data == null ? "—" : `${toPersianDigits(p.data)} kg`;
+              return `<div style="display:flex;justify-content:space-between;gap:8px;"><span>${p.marker}${p.seriesName}</span><b>${v}</b></div>`;
+            })
+            .join("");
+          return `${head}${body}`;
         },
       },
       xAxis: {
@@ -469,23 +496,54 @@ export default function MilkRecordsReport() {
         { type: "inside" },
         { type: "slider", height: 18, bottom: 12, borderColor: "transparent" },
       ],
-      series: [{
-        name: "تولید روزانه", type: "line", smooth: true, symbol: "circle", symbolSize: 6,
-        data: values,
-        lineStyle: { width: 3, color: "#57D364" },
-        itemStyle: { color: "#57D364" },
-        areaStyle: {
-          color: {
-            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(87,211,100,0.35)" },
-              { offset: 1, color: "rgba(87,211,100,0.0)" },
-            ],
+      series: [
+        // Per-session lines — match the colors already used in the session
+        // bar chart so the visual language stays consistent across the page.
+        {
+          name: NAME_MORNING, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: morning, connectNulls: false,
+          lineStyle: { width: 2, color: SESSION_COLORS[1] },
+          itemStyle: { color: SESSION_COLORS[1] },
+        },
+        {
+          name: NAME_NOON, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: noon, connectNulls: false,
+          lineStyle: { width: 2, color: SESSION_COLORS[2] },
+          itemStyle: { color: SESSION_COLORS[2] },
+        },
+        {
+          name: NAME_EVENING, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: evening, connectNulls: false,
+          lineStyle: { width: 2, color: SESSION_COLORS[3] },
+          itemStyle: { color: SESSION_COLORS[3] },
+        },
+        // Daily total — strongest line + soft area to anchor the chart visually.
+        {
+          name: NAME_TOTAL, type: "line", smooth: true, symbol: "circle", symbolSize: 6,
+          data: total,
+          lineStyle: { width: 3, color: "#57D364" },
+          itemStyle: { color: "#57D364" },
+          areaStyle: {
+            color: {
+              type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(87,211,100,0.25)" },
+                { offset: 1, color: "rgba(87,211,100,0.0)" },
+              ],
+            },
           },
         },
-      }],
+        // Daily average — dashed so it reads as a derived/reference metric.
+        {
+          name: NAME_AVG, type: "line", smooth: true, symbol: "circle", symbolSize: 5,
+          data: avg,
+          lineStyle: { width: 2, color: "#f472b6", type: "dashed" },
+          itemStyle: { color: "#f472b6" },
+        },
+      ],
     };
   }, [trend.data]);
+
 
   const sessionOption = useMemo(() => {
     const v = sessionBreakdown.data?.values || { 1: 0, 2: 0, 3: 0 };
