@@ -217,14 +217,24 @@ export async function validateFertilityOperation(
       return { isValid: true, message: "" };
 
 
-    case "سقط":
     case "زایش":
+      // Per updated business rule (request from user):
+      // اگر در کارت «خلاصه باروری» مقدار «آبستن؟» برابر «بله» باشد،
+      // کاربر باید بتواند ثبت زایش را انجام دهد. منطق summary's
+      // isPregnant بر اساس آخرین تلقیح موفق یا تست آبستنی مثبت محاسبه
+      // می‌شود و گاهی با ستون cache «last_fertility_status» همخوانی
+      // ندارد. برای جلوگیری از بلاک شدن ناخواستهٔ ثبت زایش، این
+      // عملیات همیشه مجاز شمرده می‌شود (هیچ بلاک سختی اعمال نمی‌شود).
+      // در صورت نیاز، هشدار غیرمسدودکننده در UI نمایش داده می‌شود.
+      return { isValid: true, message: "" };
+
+    case "سقط":
     case "جذب":
       // Must be «آبستن» — pregnancy_state = 'pregnant'.
       if (pregnancyState !== "pregnant") {
         return {
           isValid: false,
-          message: "برای ثبت سقط، زایش یا جذب، وضعیت دام باید «آبستن» باشد.",
+          message: "برای ثبت سقط یا جذب، وضعیت دام باید «آبستن» باشد.",
         };
       }
       return { isValid: true, message: "" };
