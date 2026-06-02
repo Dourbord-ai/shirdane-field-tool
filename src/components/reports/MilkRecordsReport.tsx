@@ -163,8 +163,16 @@ export default function MilkRecordsReport() {
   const core = useQuery({
     // NEW: include cowFilter in the key so KPIs/herd totals/alerts/top-10
     // all re-fetch when the user searches by ear number.
-    queryKey: ["milk-core", date, session, baseline, cowFilter],
+    queryKey: ["milk-core", date, session, baseline, cowFilterTrim, cowIdsForFilter.join(",")],
+    // Wait for the cow-id resolver before firing, otherwise we'd briefly
+    // render an "empty" report while the filter is still resolving.
+    enabled: cowFilterReady,
     queryFn: async () => {
+      // Short-circuit when the searched cow number has no match — avoids a
+      // pointless round-trip and lets the UI show "no records" cleanly.
+      if (cowFilterNoMatch) {
+        return { perCow: [], todayTotal: 0, baseTotal: 0, change: 0, avg: 0, cowCount: 0 };
+      }
       // Step 1 — Find cows that produced milk on the reference date.
       let todayQ = supabase
         .from("livestock_milk_records")
@@ -172,9 +180,9 @@ export default function MilkRecordsReport() {
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") todayQ = todayQ.eq("period", Number(session));
-      // Apply cow filter at DB level: limits everything (KPIs, charts, alerts)
-      // to the searched ear number. Empty filter ⇒ full herd as before.
-      if (cowFilter.trim()) todayQ = todayQ.ilike("earnumber", `%${cowFilter.trim()}%`);
+      // Apply cow filter via livestock_id (resolved from the cows table) —
+      // ilike on the integer earnumber column never matched anything.
+      if (cowFilterActive) todayQ = todayQ.in("livestock_id", cowIdsForFilter as any);
       const { data: todayRows, error: e1 } = await todayQ;
       if (e1) throw e1;
 
