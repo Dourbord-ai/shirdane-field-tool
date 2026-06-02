@@ -123,7 +123,9 @@ export default function MilkRecordsReport() {
   // the payload bounded. Slicing per-cow happens in JS.
   // -------------------------------------------------------------------------
   const core = useQuery({
-    queryKey: ["milk-core", date, session, baseline],
+    // NEW: include cowFilter in the key so KPIs/herd totals/alerts/top-10
+    // all re-fetch when the user searches by ear number.
+    queryKey: ["milk-core", date, session, baseline, cowFilter],
     queryFn: async () => {
       // Step 1 — Find cows that produced milk on the reference date.
       let todayQ = supabase
@@ -132,8 +134,12 @@ export default function MilkRecordsReport() {
         .eq("record_date", date)
         .or("is_cancelled.is.null,is_cancelled.eq.false");
       if (session !== "all") todayQ = todayQ.eq("period", Number(session));
+      // Apply cow filter at DB level: limits everything (KPIs, charts, alerts)
+      // to the searched ear number. Empty filter ⇒ full herd as before.
+      if (cowFilter.trim()) todayQ = todayQ.ilike("earnumber", `%${cowFilter.trim()}%`);
       const { data: todayRows, error: e1 } = await todayQ;
       if (e1) throw e1;
+
 
       // Per-cow total for today (sums across sessions if session = "all").
       const todayByCow = new Map<number, number>();
