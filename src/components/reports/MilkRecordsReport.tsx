@@ -774,6 +774,15 @@ export default function MilkRecordsReport() {
         </div>
       </GlobalCard>
 
+      {/* ---------- Cow-not-found banner ---------- */}
+      {/* Surface a clear message when the user's ear-number search doesn't  */}
+      {/* match any cow, instead of silently rendering empty charts/tables.  */}
+      {cowFilterNoMatch && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 px-4 py-3 text-sm font-bold">
+          رکوردی برای گاو «{toPersianDigits(cowFilterTrim)}» یافت نشد.
+        </div>
+      )}
+
       {/* ---------- KPI cards ---------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPIWidget
