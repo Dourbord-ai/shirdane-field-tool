@@ -24,7 +24,25 @@ import { jalaliToGregorian } from "@/lib/jalali";
 import { parseMoney, formatMoney } from "@/lib/finance";
 import { toPersianDigits } from "@/lib/jalali";
 
-interface Props { open: boolean; onOpenChange: (v: boolean) => void }
+// -----------------------------------------------------------------------------
+// Phase 8 addition: optional `seed` to pre-fill the form when the dialog is
+// launched from a settlement item, and optional `onCreated` to receive the
+// inserted check's id so the caller can link it (settlement → check link).
+// Behaviour with no seed / no onCreated is unchanged — the dialog still works
+// stand-alone exactly as it did before.
+// -----------------------------------------------------------------------------
+interface CheckSeed {
+  partyId?: string;
+  amount?: number;
+  dueDateISO?: string; // YYYY-MM-DD Gregorian — converted to Shamsi inside.
+  description?: string;
+}
+interface Props {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  seed?: CheckSeed;
+  onCreated?: (checkId: string) => void | Promise<void>;
+}
 
 function shamsiToISODate(s: string): string | null {
   const m = s?.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
