@@ -16,7 +16,7 @@ import { toast } from "sonner";
 // The legacy `transaction_jalali_date` text column is unused (100% NULL),
 // so filtering against it was effectively hiding every result.
 import ShamsiDatePicker from "@/components/ShamsiDatePicker";
-import { jalaliRangeToGregorianRange } from "@/lib/dateUtils";
+import { jalaliRangeToGregorianRange, jalaliToGregorianDate, gregorianDateToJalali } from "@/lib/dateUtils";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
   PAYMENT_AMOUNT_TYPES,
