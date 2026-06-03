@@ -13,6 +13,9 @@
  */
 
 import { useEffect, useState } from "react";
+// Task 1: import digit normalizer so a Persian/Arabic-keyed national id is
+// stored in ASCII form (matches what validateDetails expects).
+import { toEnDigits } from "@/lib/digits";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
