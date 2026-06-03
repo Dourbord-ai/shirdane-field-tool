@@ -359,9 +359,28 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   const [typeCode, setTypeCode] = useState<number | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // Phase 4: every NEW item starts with explicit Phase-3 lifecycle defaults
+  // so the form is honest about what the user must pick. payment_method is
+  // intentionally empty (no default) to force a conscious choice — there is
+  // no sensible silent default among bank/cashbox/check/barter/deferred.
+  // settlement_subject_type defaults to 'main_invoice' (the most common
+  // case). execution_priority defaults to 3 (عادی) as required by the
+  // Phase-4 spec; execution_status is always 'pending' for new items and is
+  // therefore set later in the RPC payload, not on this row.
   const [items, setItems] = useState<PRItem[]>([
-    { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "" },
+    {
+      party_id: null,
+      amount: 0,
+      amount_type_code: 1,
+      amount_type: "creditor",
+      description: "",
+      payment_method: "",
+      settlement_subject_type: "main_invoice",
+      due_date: "",
+      execution_priority: 3,
+    },
   ]);
+
   const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
   const [partySepidarIds, setPartySepidarIds] = useState<Record<string, number | null>>({});
   const [sepidarBalances, setSepidarBalances] = useState<Record<string, { loading: boolean; balance: number | null; error: string | null }>>({});
