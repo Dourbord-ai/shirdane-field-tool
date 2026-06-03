@@ -25,12 +25,32 @@ import {
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
 import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+// Phase 4: item-level lifecycle metadata (payment method, what the item pays
+// for, due date, execution status/priority). Pre-Phase-3 rows carry
+// `payment_method = 'legacy'` and must be displayed as read-only — any edit
+// attempt surfaces a Persian warning instead of mutating the row.
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS_FA,
+  SETTLEMENT_SUBJECT_TYPES,
+  SETTLEMENT_SUBJECT_LABELS_FA,
+  EXECUTION_PRIORITIES,
+  EXECUTION_PRIORITY_LABELS_FA,
+  isLegacyItem,
+  labelForPaymentMethod,
+  labelForSubjectType,
+  labelForExecutionPriority,
+  type PaymentMethod,
+  type SettlementSubjectType,
+  type ExecutionPriority,
+} from "@/lib/finance/settlementItemTypes";
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
 // parties that exist locally but aren't in Sepidar's beneficiary view. Rows
 // without a sepidar_party_id are shown disabled with a clear warning rather
 // than dropped from the list.
 import { LocalPartyBeneficiarySelector, type LocalPartyBeneficiary } from "@/components/finance/LocalPartyBeneficiarySelector";
+
 
 interface PR {
   id: string;
