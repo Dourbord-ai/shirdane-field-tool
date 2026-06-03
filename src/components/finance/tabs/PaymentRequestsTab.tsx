@@ -577,7 +577,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           <div className="rounded-lg border">
             <div className="p-2 border-b bg-muted/40 flex justify-between items-center">
               <span className="font-bold text-sm">آیتم‌ها</span>
-              <Button size="sm" variant="ghost" onClick={() => setItems([...items, { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "" }])}>
+              <Button size="sm" variant="ghost" onClick={() => setItems([...items, { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "", payment_method: "", settlement_subject_type: "main_invoice", due_date: "", execution_priority: 3 }])}>
                 <Plus className="w-3 h-3 ml-1" /> افزودن
               </Button>
             </div>
