@@ -98,7 +98,18 @@ interface PRItem {
   beneficiary_name?: string | null;
   beneficiary_type?: string | null;
   beneficiary_balance_snapshot?: number | null;
+  // --- Phase 4 lifecycle fields (NEW items only) -------------------------
+  // The user MUST explicitly choose payment_method + subject_type for every
+  // new item. due_date is also required. execution_status defaults to
+  // 'pending'; execution_priority defaults to 3 (عادی) but can be changed.
+  // Legacy rows (created before Phase 3) carry payment_method='legacy' and
+  // are never re-written by this dialog.
+  payment_method?: PaymentMethod | "";
+  settlement_subject_type?: SettlementSubjectType | "";
+  due_date?: string; // ISO yyyy-mm-dd in Gregorian (DB stores `date` column)
+  execution_priority?: ExecutionPriority;
 }
+
 
 export default function PaymentRequestsTab() {
   const [requests, setRequests] = useState<PR[]>([]);
