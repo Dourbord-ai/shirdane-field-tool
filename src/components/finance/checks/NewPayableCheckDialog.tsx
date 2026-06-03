@@ -122,25 +122,39 @@ export default function NewPayableCheckDialog({ open, onOpenChange, seed, onCrea
     if (!due) return toast.error("تاریخ سررسید الزامی است");
 
     setSaving(true);
-    const { error } = await supabase.from("finance_checks" as never).insert({
-      direction: "payable",
-      party_id: partyId,
-      amount: amt,
-      // The check number IS the leaf serial — keeps the two perfectly in sync.
-      check_number: String(selectedLeaf.serial_number),
-      sayad_number: null,
-      bank_id: selectedBook.bank_id,
-      bank_account_id: selectedBook.bank_account_id,
-      checkbook_leaf_id: leafId,
-      issue_date: shamsiToISODate(issueDate),
-      due_date: due,
-      status: "issued",
-      description: description.trim() || null,
-    } as never);
+    // Phase 8: we need the inserted check's id so the caller can link it to
+    // a settlement item. .select("id").single() returns the row after insert.
+    const { data: inserted, error } = await supabase
+      .from("finance_checks" as never)
+      .insert({
+        direction: "payable",
+        party_id: partyId,
+        amount: amt,
+        // The check number IS the leaf serial — keeps the two perfectly in sync.
+        check_number: String(selectedLeaf.serial_number),
+        sayad_number: null,
+        bank_id: selectedBook.bank_id,
+        bank_account_id: selectedBook.bank_account_id,
+        checkbook_leaf_id: leafId,
+        issue_date: shamsiToISODate(issueDate),
+        due_date: due,
+        status: "issued",
+        description: description.trim() || null,
+      } as never)
+      .select("id")
+      .single();
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("چک پرداختی صادر شد");
     invalidateChecks(); invalidateBooks();
+    // Fire onCreated BEFORE closing so the caller has a chance to surface
+    // its own follow-up toast (e.g. "linked to settlement item") without
+    // a flicker. Errors inside onCreated are caught so they never block
+    // the dialog from closing.
+    if (onCreated && inserted && (inserted as { id?: string }).id) {
+      try { await onCreated((inserted as { id: string }).id); }
+      catch (e) { /* caller handles its own errors */ console.error(e); }
+    }
     onOpenChange(false);
   }
 
