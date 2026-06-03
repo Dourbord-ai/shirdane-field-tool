@@ -36,7 +36,19 @@ export interface BankTransferDetails {
   destination_bank_name?: string;
   transfer_type?: "card_to_card" | "paya" | "satna" | "bank_transfer";
   payment_note?: string;
+  // ---- Phase 6B additions: registered-account snapshot ------------------
+  // When a user picks a verified account from `finance_party_accounts` the
+  // picker snapshots its identifying fields here so:
+  //   1. The picker doesn't have to re-fetch when rendering the read view.
+  //   2. Phase 6B enforces that only `verification_status='verified'` rows
+  //      can be selected — recorded as `account_verification_status`.
+  //   3. Future deletes/disables of the party account row don't retroactively
+  //      change the historical settlement payload.
+  party_account_id?: string;
+  account_verification_status?: "verified"; // Phase 6B only allows 'verified'
+  verified_at?: string;
 }
+
 
 export interface CheckDetails {
   payee_name?: string;
@@ -113,13 +125,27 @@ export function validateDetails(
     !d[key] || String(d[key]).trim() === "" ? `${label} الزامی است.` : null;
 
   switch (method) {
-    case "bank_transfer":
+    case "bank_transfer": {
+      // Phase 6B: branch by mode. If a `party_account_id` is present we are
+      // in "registered account" mode — the snapshot fields are already
+      // copied from the verified account row, so we only need to ensure the
+      // verification stamp is 'verified' and the user picked a transfer type.
+      if (d.party_account_id) {
+        if (d.account_verification_status !== "verified") {
+          return "حساب انتخاب‌شده تأیید نشده است؛ ابتدا در پروفایل ذینفع آن را استعلام کنید.";
+        }
+        return req("transfer_type", "نوع انتقال");
+      }
+      // Manual mode — same Phase 5 rules. (Verification of manual entries is
+      // deferred to a later phase; the UI warns the user.)
       return (
         req("declared_account_owner_name", "نام صاحب حساب اعلام‌شده") ||
         req("account_identifier_type", "نوع شناسه حساب") ||
         req("account_identifier_value", "شماره حساب/کارت/شبا") ||
         req("transfer_type", "نوع انتقال")
       );
+    }
+
     case "check":
       // check_number is intentionally NOT required at request stage.
       return req("payee_name", "نام دریافت‌کننده چک") || req("check_reason", "بابت");
@@ -164,8 +190,13 @@ export function summarizeDetails(method: string | null | undefined, raw: unknown
       const tType = pick("transfer_type");
       const idLabel = (ACCOUNT_IDENTIFIER_TYPE_LABELS_FA as Record<string, string>)[idType] || idType || "";
       const tLabel = (TRANSFER_TYPE_LABELS_FA as Record<string, string>)[tType] || tType || "";
-      return [owner, idValue && `${idLabel}: ${idValue}`, bank, tLabel].filter(Boolean).join(" — ") || "—";
+      // Phase 6B: append a Persian tag when the row was filled from a
+      // registered party account so reviewers can tell at a glance.
+      const fromRegistered = pick("party_account_id") ? "حساب ثبت‌شده ذینفع" : "";
+      return [owner, idValue && `${idLabel}: ${idValue}`, bank, tLabel, fromRegistered]
+        .filter(Boolean).join(" — ") || "—";
     }
+
     case "check": {
       return [pick("payee_name"), pick("check_reason"), pick("suggested_bank_name")]
         .filter(Boolean).join(" — ") || "—";
