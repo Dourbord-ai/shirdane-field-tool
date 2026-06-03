@@ -126,6 +126,13 @@ interface PRItem {
   // server-side COALESCE stays predictable.
   details?: SettlementItemDetails;
 
+  // Phase 7B: when this item was seeded from a factor_related_costs row,
+  // we carry that row id here so the server-side RPC can (a) persist it on
+  // finance_payment_request_items.source_related_cost_id and (b) back-fill
+  // factor_related_costs.settlement_request_item_id atomically. This is the
+  // ONLY mechanism we use to link a cost to the item it generated — we
+  // never match by amount/description, which is unsafe.
+  source_related_cost_id?: string | null;
 }
 
 
