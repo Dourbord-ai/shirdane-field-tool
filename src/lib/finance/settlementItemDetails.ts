@@ -52,6 +52,12 @@ export interface BankTransferDetails {
 
 export interface CheckDetails {
   payee_name?: string;
+  // Task 1: National / legal ID of the cheque payee. Required for any NEW or
+  // RE-SAVED check item (10 digits for natural persons, 11 for legal entities).
+  // Legacy rows created before this field existed remain viewable; validation
+  // only fires when the form is submitted (create or edit), so historical
+  // rows are NOT retroactively invalidated until the user re-saves them.
+  payee_national_id?: string;
   check_reason?: string;
   check_description?: string;
   suggested_bank_id?: string;
