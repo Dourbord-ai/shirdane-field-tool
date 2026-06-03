@@ -108,6 +108,11 @@ interface PRItem {
   settlement_subject_type?: SettlementSubjectType | "";
   due_date?: string; // ISO yyyy-mm-dd in Gregorian (DB stores `date` column)
   execution_priority?: ExecutionPriority;
+  // Phase 5: method-specific fields stored on the row as jsonb. Empty object
+  // for items whose method does not need extra metadata; never null so the
+  // server-side COALESCE stays predictable.
+  details?: SettlementItemDetails;
+
 }
 
 
