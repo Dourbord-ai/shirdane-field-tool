@@ -1111,6 +1111,14 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
             </div>
           )}
 
+
+
+          {/* Phase 8: per-request progress summary. Pure component derived
+              from the already-loaded items list — no extra fetch. Shows
+              count chips per execution-status bucket plus the three monetary
+              KPIs (total commitment / executed / remaining). */}
+          <SettlementRequestProgressSummary items={items} />
+
           {/* Items table */}
           <div className="rounded-xl border divide-y">
             {items.map((i, idx) => {
