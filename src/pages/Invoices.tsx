@@ -1483,12 +1483,12 @@ export default function Invoices() {
         // and join in memory so a single map() builds the display rows
         // regardless of how many product types the operator mixed.
         // -----------------------------------------------------------------
-        const sb = supabase as unknown as {
+        // Cast the typed supabase client to a loose shape so we can hit
+        // dynamic detail-table names that are not in the generated types yet.
+        const sbAny = supabase as unknown as {
           from: (t: string) => {
             select: (s: string) => {
-              eq: (c: string, v: string) => Promise<{ data: unknown }> & {
-                order?: (c: string, opts?: { ascending: boolean }) => Promise<{ data: unknown }>;
-              };
+              in: (c: string, v: string[]) => Promise<{ data: unknown }>;
             };
           };
         };
