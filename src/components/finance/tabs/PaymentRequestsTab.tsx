@@ -1264,6 +1264,24 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
                     </Button>
                   )}
+
+                  {/* Phase 8: per-item execution panel. The panel itself
+                      no-ops for legacy rows (renders a tiny "read-only"
+                      banner) so we don't need to guard here. After any
+                      successful action we call reload() so the progress
+                      summary and status badges refresh. */}
+                  <SettlementItemExecutionPanel
+                    item={{
+                      id: i.id,
+                      party_id: i.party_id,
+                      amount: Number(i.amount || 0),
+                      payment_method: i.payment_method,
+                      due_date: i.due_date,
+                      description: i.description,
+                      execution_status: i.execution_status,
+                    }}
+                    onChanged={reload}
+                  />
                 </div>
               );
             })}
