@@ -3855,8 +3855,12 @@ export type Database = {
           confirmed_amount: number | null
           created_at: string
           description: string | null
+          details: Json | null
           dl_code: string | null
           dl_ref: string | null
+          due_date: string | null
+          execution_priority: number | null
+          execution_status: string | null
           id: string
           is_deleted: boolean | null
           legacy_id: number | null
@@ -3864,8 +3868,14 @@ export type Database = {
           paid_amount: number
           paid_transaction_id: string | null
           party_id: string | null
+          payment_method: string
           payment_request_id: string | null
           remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
           status: string | null
           updated_at: string
           voucher_id: string | null
@@ -3882,8 +3892,12 @@ export type Database = {
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
+          details?: Json | null
           dl_code?: string | null
           dl_ref?: string | null
+          due_date?: string | null
+          execution_priority?: number | null
+          execution_status?: string | null
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
@@ -3891,8 +3905,14 @@ export type Database = {
           paid_amount?: number
           paid_transaction_id?: string | null
           party_id?: string | null
+          payment_method: string
           payment_request_id?: string | null
           remaining_amount?: number | null
+          settlement_group_key?: string | null
+          settlement_subject_title?: string | null
+          settlement_subject_type?: string | null
+          source_factor_id?: string | null
+          source_related_cost_id?: string | null
           status?: string | null
           updated_at?: string
           voucher_id?: string | null
@@ -3909,8 +3929,12 @@ export type Database = {
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
+          details?: Json | null
           dl_code?: string | null
           dl_ref?: string | null
+          due_date?: string | null
+          execution_priority?: number | null
+          execution_status?: string | null
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
@@ -3918,8 +3942,14 @@ export type Database = {
           paid_amount?: number
           paid_transaction_id?: string | null
           party_id?: string | null
+          payment_method?: string
           payment_request_id?: string | null
           remaining_amount?: number | null
+          settlement_group_key?: string | null
+          settlement_subject_title?: string | null
+          settlement_subject_type?: string | null
+          source_factor_id?: string | null
+          source_related_cost_id?: string | null
           status?: string | null
           updated_at?: string
           voucher_id?: string | null
@@ -3944,6 +3974,13 @@ export type Database = {
             columns: ["payment_request_id"]
             isOneToOne: false
             referencedRelation: "finance_payment_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_fpri_source_factor"
+            columns: ["source_factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
             referencedColumns: ["id"]
           },
         ]
