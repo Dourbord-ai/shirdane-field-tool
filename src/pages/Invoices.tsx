@@ -1426,22 +1426,9 @@ export default function Invoices() {
     return chips;
   }, [appliedFilters, partyOptions, removeFilterDim]);
 
-  const handleSelect = async (id: string) => {
-    if (selectedId === id) {
-      setSelectedId(null);
-      setSelectedItems([]);
-      setSelectedMilkItems([]);
-      setSelectedFeedItems([]);
-      setSelectedMedicineItems([]);
-      setSelectedLivestockItems([]);
-      setSelectedWageItems([]);
-      setSelectedDailyWorkerItems([]);
-      setSelectedRentalItems([]);
-      setSelectedMixedItems([]);
-      setDetailError(null);
-      return;
-    }
-    setSelectedId(id);
+  // Reset all per-type item state. Used both by close-modal and by
+  // prev/next navigation so each new factor renders against a clean slate.
+  const resetSelectedItems = () => {
     setSelectedItems([]);
     setSelectedMilkItems([]);
     setSelectedFeedItems([]);
@@ -1452,7 +1439,20 @@ export default function Invoices() {
     setSelectedRentalItems([]);
     setSelectedMixedItems([]);
     setDetailError(null);
+  };
+
+  const handleSelect = async (id: string) => {
+    // Toggle off when the same row is clicked again — keeps the legacy
+    // "click row to collapse" gesture working alongside the new modal.
+    if (selectedId === id) {
+      setSelectedId(null);
+      resetSelectedItems();
+      return;
+    }
+    setSelectedId(id);
+    resetSelectedItems();
     setDetailLoading(true);
+
 
     try {
       // The RPC row only includes the fields the list/filter needs. The detail
