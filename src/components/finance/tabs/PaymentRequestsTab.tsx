@@ -56,6 +56,12 @@ import {
   type SettlementItemDetails,
 } from "@/lib/finance/settlementItemDetails";
 import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetailsForm";
+// Phase 8: execution layer — request-level progress summary (with monetary
+// KPIs) at the top of the detail view, and a per-item execution panel that
+// routes by payment_method. Both are pure components that work off the
+// already-loaded items list and reload via the existing `reload()` helper.
+import SettlementRequestProgressSummary from "@/components/finance/SettlementRequestProgressSummary";
+import SettlementItemExecutionPanel from "@/components/finance/SettlementItemExecutionPanel";
 
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
@@ -938,6 +944,13 @@ interface PRItemFull {
   // Phase 5: method-specific jsonb. Supabase returns Json | null; we accept
   // unknown and let the summarizer narrow safely.
   details?: unknown;
+  // Phase 8: execution lifecycle metadata. These are optional because legacy
+  // rows carry NULLs; the execution panel only renders for non-legacy rows.
+  executed_at?: string | null;
+  executed_by?: string | null;
+  closure_reason?: string | null;
+  on_hold_reason?: string | null;
+  execution_note?: string | null;
 
 }
 
@@ -1098,6 +1111,14 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
             </div>
           )}
 
+
+
+          {/* Phase 8: per-request progress summary. Pure component derived
+              from the already-loaded items list — no extra fetch. Shows
+              count chips per execution-status bucket plus the three monetary
+              KPIs (total commitment / executed / remaining). */}
+          <SettlementRequestProgressSummary items={items} />
+
           {/* Items table */}
           <div className="rounded-xl border divide-y">
             {items.map((i, idx) => {
@@ -1243,6 +1264,24 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
                     </Button>
                   )}
+
+                  {/* Phase 8: per-item execution panel. The panel itself
+                      no-ops for legacy rows (renders a tiny "read-only"
+                      banner) so we don't need to guard here. After any
+                      successful action we call reload() so the progress
+                      summary and status badges refresh. */}
+                  <SettlementItemExecutionPanel
+                    item={{
+                      id: i.id,
+                      party_id: i.party_id,
+                      amount: Number(i.amount || 0),
+                      payment_method: i.payment_method,
+                      due_date: i.due_date,
+                      description: i.description,
+                      execution_status: i.execution_status,
+                    }}
+                    onChanged={reload}
+                  />
                 </div>
               );
             })}

@@ -21,10 +21,29 @@ import { useInvalidateChecks } from "@/hooks/useChecks";
 import { useCheckbooks, useAvailableLeaves, useInvalidateCheckbooks } from "@/hooks/useCheckbooks";
 import { partyLabel, bankLabel } from "@/lib/checks";
 import { jalaliToGregorian } from "@/lib/jalali";
+import { gregorianDateToJalali } from "@/lib/dateUtils";
 import { parseMoney, formatMoney } from "@/lib/finance";
 import { toPersianDigits } from "@/lib/jalali";
 
-interface Props { open: boolean; onOpenChange: (v: boolean) => void }
+// -----------------------------------------------------------------------------
+// Phase 8 addition: optional `seed` to pre-fill the form when the dialog is
+// launched from a settlement item, and optional `onCreated` to receive the
+// inserted check's id so the caller can link it (settlement → check link).
+// Behaviour with no seed / no onCreated is unchanged — the dialog still works
+// stand-alone exactly as it did before.
+// -----------------------------------------------------------------------------
+interface CheckSeed {
+  partyId?: string;
+  amount?: number;
+  dueDateISO?: string; // YYYY-MM-DD Gregorian — converted to Shamsi inside.
+  description?: string;
+}
+interface Props {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  seed?: CheckSeed;
+  onCreated?: (checkId: string) => void | Promise<void>;
+}
 
 function shamsiToISODate(s: string): string | null {
   const m = s?.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
@@ -33,7 +52,7 @@ function shamsiToISODate(s: string): string | null {
   return `${g.year}-${String(g.month).padStart(2, "0")}-${String(g.day).padStart(2, "0")}`;
 }
 
-export default function NewPayableCheckDialog({ open, onOpenChange }: Props) {
+export default function NewPayableCheckDialog({ open, onOpenChange, seed, onCreated }: Props) {
   // Party list — payee/supplier for whom we are issuing the check.
   const { data: parties = [] } = useQuery({
     queryKey: ["finance_parties_for_check"],
@@ -75,10 +94,19 @@ export default function NewPayableCheckDialog({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (open) {
-      setCheckbookId(""); setLeafId(""); setPartyId(""); setAmount("");
-      setIssueDate(""); setDueDate(""); setDescription(""); setSaving(false);
+      setCheckbookId(""); setLeafId(""); setSaving(false);
+      // Phase 8: when launched from a settlement item we pre-fill party,
+      // amount, due date and description so the operator only has to pick
+      // the checkbook + leaf. With no seed the form is empty (legacy use).
+      setPartyId(seed?.partyId ?? "");
+      setAmount(seed?.amount != null ? String(seed.amount) : "");
+      setIssueDate("");
+      // Convert the Gregorian ISO seed date back to Jalali so the picker
+      // can display it. dateUtils.gregorianDateToJalali returns YYYY/MM/DD.
+      setDueDate(seed?.dueDateISO ? (gregorianDateToJalali(seed.dueDateISO) || "") : "");
+      setDescription(seed?.description ?? "");
     }
-  }, [open]);
+  }, [open, seed?.partyId, seed?.amount, seed?.dueDateISO, seed?.description]);
 
   // Reset leaf selection whenever the checkbook changes so we never carry a
   // leaf from another checkbook by accident.
@@ -94,25 +122,39 @@ export default function NewPayableCheckDialog({ open, onOpenChange }: Props) {
     if (!due) return toast.error("تاریخ سررسید الزامی است");
 
     setSaving(true);
-    const { error } = await supabase.from("finance_checks" as never).insert({
-      direction: "payable",
-      party_id: partyId,
-      amount: amt,
-      // The check number IS the leaf serial — keeps the two perfectly in sync.
-      check_number: String(selectedLeaf.serial_number),
-      sayad_number: null,
-      bank_id: selectedBook.bank_id,
-      bank_account_id: selectedBook.bank_account_id,
-      checkbook_leaf_id: leafId,
-      issue_date: shamsiToISODate(issueDate),
-      due_date: due,
-      status: "issued",
-      description: description.trim() || null,
-    } as never);
+    // Phase 8: we need the inserted check's id so the caller can link it to
+    // a settlement item. .select("id").single() returns the row after insert.
+    const { data: inserted, error } = await supabase
+      .from("finance_checks" as never)
+      .insert({
+        direction: "payable",
+        party_id: partyId,
+        amount: amt,
+        // The check number IS the leaf serial — keeps the two perfectly in sync.
+        check_number: String(selectedLeaf.serial_number),
+        sayad_number: null,
+        bank_id: selectedBook.bank_id,
+        bank_account_id: selectedBook.bank_account_id,
+        checkbook_leaf_id: leafId,
+        issue_date: shamsiToISODate(issueDate),
+        due_date: due,
+        status: "issued",
+        description: description.trim() || null,
+      } as never)
+      .select("id")
+      .single();
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("چک پرداختی صادر شد");
     invalidateChecks(); invalidateBooks();
+    // Fire onCreated BEFORE closing so the caller has a chance to surface
+    // its own follow-up toast (e.g. "linked to settlement item") without
+    // a flicker. Errors inside onCreated are caught so they never block
+    // the dialog from closing.
+    if (onCreated && inserted && (inserted as { id?: string }).id) {
+      try { await onCreated((inserted as { id: string }).id); }
+      catch (e) { /* caller handles its own errors */ console.error(e); }
+    }
     onOpenChange(false);
   }
 

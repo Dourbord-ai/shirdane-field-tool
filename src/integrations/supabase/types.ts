@@ -4002,6 +4002,7 @@ export type Database = {
           beneficiary_name: string | null
           beneficiary_snapshot_at: string | null
           beneficiary_type: string | null
+          closure_reason: string | null
           confirmed_amount: number | null
           created_at: string
           description: string | null
@@ -4009,12 +4010,16 @@ export type Database = {
           dl_code: string | null
           dl_ref: string | null
           due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
           execution_priority: number | null
           execution_status: string | null
           id: string
           is_deleted: boolean | null
           legacy_id: number | null
           legacy_request_type_code: number | null
+          on_hold_reason: string | null
           paid_amount: number
           paid_transaction_id: string | null
           party_id: string | null
@@ -4039,6 +4044,7 @@ export type Database = {
           beneficiary_name?: string | null
           beneficiary_snapshot_at?: string | null
           beneficiary_type?: string | null
+          closure_reason?: string | null
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
@@ -4046,12 +4052,16 @@ export type Database = {
           dl_code?: string | null
           dl_ref?: string | null
           due_date?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          execution_note?: string | null
           execution_priority?: number | null
           execution_status?: string | null
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          on_hold_reason?: string | null
           paid_amount?: number
           paid_transaction_id?: string | null
           party_id?: string | null
@@ -4076,6 +4086,7 @@ export type Database = {
           beneficiary_name?: string | null
           beneficiary_snapshot_at?: string | null
           beneficiary_type?: string | null
+          closure_reason?: string | null
           confirmed_amount?: number | null
           created_at?: string
           description?: string | null
@@ -4083,12 +4094,16 @@ export type Database = {
           dl_code?: string | null
           dl_ref?: string | null
           due_date?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          execution_note?: string | null
           execution_priority?: number | null
           execution_status?: string | null
           id?: string
           is_deleted?: boolean | null
           legacy_id?: number | null
           legacy_request_type_code?: number | null
+          on_hold_reason?: string | null
           paid_amount?: number
           paid_transaction_id?: string | null
           party_id?: string | null
@@ -4535,6 +4550,53 @@ export type Database = {
             columns: ["voucher_id"]
             isOneToOne: false
             referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_settlement_item_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event_type: string
+          from_status: string | null
+          id: string
+          item_id: string
+          note: string | null
+          payload: Json
+          request_id: string
+          to_status: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          from_status?: string | null
+          id?: string
+          item_id: string
+          note?: string | null
+          payload?: Json
+          request_id: string
+          to_status?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          item_id?: string
+          note?: string | null
+          payload?: Json
+          request_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_settlement_item_events_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payment_request_items"
             referencedColumns: ["id"]
           },
         ]
@@ -6616,12 +6678,170 @@ export type Database = {
         }
         Returns: string
       }
+      cancel_settlement_item: {
+        Args: { p_item_id: string; p_reason: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       ensure_app_users_for_hr_users: {
         Args: { _default_password_hash?: string }
         Returns: {
           created_username: string
           hr_user_id: number
         }[]
+      }
+      execute_settlement_item: {
+        Args: {
+          p_item_id: string
+          p_method: string
+          p_note?: string
+          p_payload?: Json
+        }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      extend_settlement_item_due_date: {
+        Args: { p_item_id: string; p_new_due_date: string; p_note?: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       finance_bank_tx_bulk_insert: {
         Args: { payloads: Json }
@@ -6664,6 +6884,108 @@ export type Database = {
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean
+      }
+      hold_settlement_item: {
+        Args: { p_item_id: string; p_reason: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      link_settlement_item_to_check: {
+        Args: { p_check_id: string; p_item_id: string; p_note?: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       list_factors_filtered: {
         Args: {
@@ -6723,6 +7045,159 @@ export type Database = {
       recompute_party_balance: {
         Args: { p_party_id: string }
         Returns: undefined
+      }
+      reject_settlement_item: {
+        Args: { p_item_id: string; p_reason: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      reopen_settlement_item: {
+        Args: { p_item_id: string; p_reason: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      resume_settlement_item: {
+        Args: { p_item_id: string }
+        Returns: {
+          amount: number | null
+          amount_type: string | null
+          amount_type_code: number | null
+          beneficiary_balance_snapshot: number | null
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          beneficiary_snapshot_at: string | null
+          beneficiary_type: string | null
+          closure_reason: string | null
+          confirmed_amount: number | null
+          created_at: string
+          description: string | null
+          details: Json | null
+          dl_code: string | null
+          dl_ref: string | null
+          due_date: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_note: string | null
+          execution_priority: number | null
+          execution_status: string | null
+          id: string
+          is_deleted: boolean | null
+          legacy_id: number | null
+          legacy_request_type_code: number | null
+          on_hold_reason: string | null
+          paid_amount: number
+          paid_transaction_id: string | null
+          party_id: string | null
+          payment_method: string
+          payment_request_id: string | null
+          remaining_amount: number | null
+          settlement_group_key: string | null
+          settlement_subject_title: string | null
+          settlement_subject_type: string | null
+          source_factor_id: string | null
+          source_related_cost_id: string | null
+          status: string | null
+          updated_at: string
+          voucher_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "finance_payment_request_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       safe_text_to_date: { Args: { p_text: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
