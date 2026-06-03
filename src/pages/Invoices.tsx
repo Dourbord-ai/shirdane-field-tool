@@ -661,6 +661,7 @@ function InvoiceDetail({
   wageItems,
   dailyWorkerItems,
   rentalItems,
+  mixedItems,
   loading,
   errorMsg,
   onClose,
@@ -675,6 +676,9 @@ function InvoiceDetail({
   wageItems: WageItemRow[];
   dailyWorkerItems: DailyWorkerItemRow[];
   rentalItems: RentalItemRow[];
+  // Rows for factors.product_type === 'mixed' (new MixedInvoiceForm flow).
+  // Each row may be a different product_type — see MixedItemsSection.
+  mixedItems: MixedItemRow[];
   loading: boolean;
   errorMsg: string | null;
   onClose: () => void;
