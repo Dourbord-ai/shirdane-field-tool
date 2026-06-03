@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronDown, FileText, Plus, X, Loader2 } from "lucide-react";
+import { ChevronDown, FileText, Plus, X, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toPersianDigits } from "@/lib/jalali";
 // Universal Shamsi formatter — accepts ISO, Date, or pre-formatted Shamsi
 // strings and always returns "YYYY/MM/DD" in Persian digits. Used to keep
@@ -691,18 +692,13 @@ function InvoiceDetail({
 
   return (
     <div className="animate-fade-in">
-      <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-card overflow-hidden">
-        <div className="bg-primary/5 border-b border-primary/10 p-4 flex items-center justify-between">
+      <div className="rounded-2xl bg-card overflow-hidden">
+        <div className="border-b border-border p-3 mb-2">
           <h2 className="text-body-lg font-bold text-primary">جزئیات فاکتور</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center transition-all duration-200 hover:bg-secondary hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)]"
-          >
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
         </div>
 
-        <div className="p-5 space-y-1">
+        <div className="p-1 space-y-1">
+
           <div className="flex items-center gap-2 mb-3">
             <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold">
               {productLabels[factor.product_type] || factor.product_type}
@@ -1425,22 +1421,9 @@ export default function Invoices() {
     return chips;
   }, [appliedFilters, partyOptions, removeFilterDim]);
 
-  const handleSelect = async (id: string) => {
-    if (selectedId === id) {
-      setSelectedId(null);
-      setSelectedItems([]);
-      setSelectedMilkItems([]);
-      setSelectedFeedItems([]);
-      setSelectedMedicineItems([]);
-      setSelectedLivestockItems([]);
-      setSelectedWageItems([]);
-      setSelectedDailyWorkerItems([]);
-      setSelectedRentalItems([]);
-      setSelectedMixedItems([]);
-      setDetailError(null);
-      return;
-    }
-    setSelectedId(id);
+  // Reset all per-type item state. Used both by close-modal and by
+  // prev/next navigation so each new factor renders against a clean slate.
+  const resetSelectedItems = () => {
     setSelectedItems([]);
     setSelectedMilkItems([]);
     setSelectedFeedItems([]);
@@ -1451,7 +1434,20 @@ export default function Invoices() {
     setSelectedRentalItems([]);
     setSelectedMixedItems([]);
     setDetailError(null);
+  };
+
+  const handleSelect = async (id: string) => {
+    // Toggle off when the same row is clicked again — keeps the legacy
+    // "click row to collapse" gesture working alongside the new modal.
+    if (selectedId === id) {
+      setSelectedId(null);
+      resetSelectedItems();
+      return;
+    }
+    setSelectedId(id);
+    resetSelectedItems();
     setDetailLoading(true);
+
 
     try {
       // The RPC row only includes the fields the list/filter needs. The detail
@@ -1739,7 +1735,23 @@ export default function Invoices() {
   };
 
   const selectedFactor = factors.find((f) => f.id === selectedId);
+  // Index of the open factor inside the currently filtered/sorted list — drives
+  // the Previous / Next buttons inside the detail modal so the operator can
+  // browse without scrolling back to the row, and without losing their place.
+  const selectedIndex = selectedFactor
+    ? factors.findIndex((f) => f.id === selectedId)
+    : -1;
+  const prevFactor = selectedIndex > 0 ? factors[selectedIndex - 1] : null;
+  const nextFactor =
+    selectedIndex >= 0 && selectedIndex < factors.length - 1
+      ? factors[selectedIndex + 1]
+      : null;
+  const closeDetail = () => {
+    setSelectedId(null);
+    resetSelectedItems();
+  };
   const activeFiltersExist = hasActiveFilters(appliedFilters);
+
 
   return (
     <div className="py-6 space-y-4 animate-fade-in">
@@ -1781,36 +1793,78 @@ export default function Invoices() {
         </div>
       )}
 
-      {selectedFactor && (
-        <InvoiceDetail
-          factor={selectedFactor}
-          items={selectedItems}
-          milkItems={selectedMilkItems}
-          feedItems={selectedFeedItems}
-          medicineItems={selectedMedicineItems}
-          livestockItems={selectedLivestockItems}
-          wageItems={selectedWageItems}
-          dailyWorkerItems={selectedDailyWorkerItems}
-          rentalItems={selectedRentalItems}
-          mixedItems={selectedMixedItems}
-          loading={detailLoading}
-          errorMsg={detailError}
-          onChanged={fetchFactors}
-          onClose={() => {
-            setSelectedId(null);
-            setSelectedItems([]);
-            setSelectedMilkItems([]);
-            setSelectedFeedItems([]);
-            setSelectedMedicineItems([]);
-            setSelectedLivestockItems([]);
-            setSelectedWageItems([]);
-            setSelectedDailyWorkerItems([]);
-            setSelectedRentalItems([]);
-            setSelectedMixedItems([]);
-            setDetailError(null);
-          }}
-        />
-      )}
+      {/* Detail modal — replaces the legacy inline top-of-page panel so the
+          user keeps their scroll position when opening a row. On desktop it
+          renders as a centered max-w-3xl dialog; on mobile we expand it to
+          ~95vw / 95vh which gives a near full-screen sheet feel without
+          requiring a separate Sheet component. */}
+      <Dialog
+        open={!!selectedFactor}
+        onOpenChange={(open) => {
+          if (!open) closeDetail();
+        }}
+      >
+        <DialogContent
+          dir="rtl"
+          className="max-w-3xl w-[95vw] max-h-[90vh] overflow-hidden p-0 gap-0 flex flex-col"
+        >
+          {selectedFactor && (
+            <>
+              {/* Scrollable body — keeps the prev/next bar pinned at the bottom. */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <InvoiceDetail
+                  factor={selectedFactor}
+                  items={selectedItems}
+                  milkItems={selectedMilkItems}
+                  feedItems={selectedFeedItems}
+                  medicineItems={selectedMedicineItems}
+                  livestockItems={selectedLivestockItems}
+                  wageItems={selectedWageItems}
+                  dailyWorkerItems={selectedDailyWorkerItems}
+                  rentalItems={selectedRentalItems}
+                  mixedItems={selectedMixedItems}
+                  loading={detailLoading}
+                  errorMsg={detailError}
+                  onChanged={fetchFactors}
+                  onClose={closeDetail}
+                />
+              </div>
+
+              {/* Prev / Next navigation bar — follows the current filtered &
+                  sorted factors list order so it matches what the operator
+                  sees in the table. Buttons are disabled at the boundaries. */}
+              <div className="flex items-center justify-between gap-2 border-t border-border bg-card px-4 py-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!prevFactor || detailLoading}
+                  onClick={() => prevFactor && handleSelect(prevFactor.id)}
+                  className="gap-1"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  فاکتور قبلی
+                </Button>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {selectedIndex >= 0
+                    ? `${toPersianDigits(String(selectedIndex + 1))} / ${toPersianDigits(String(factors.length))}`
+                    : ""}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!nextFactor || detailLoading}
+                  onClick={() => nextFactor && handleSelect(nextFactor.id)}
+                  className="gap-1"
+                >
+                  فاکتور بعدی
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
 
       {/* Result count + loading + error states */}
       {errorMsg && (
