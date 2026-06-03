@@ -177,7 +177,7 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
               {checkbooks
                 .filter((cb) => !d.suggested_bank_id || cb.bank_id === d.suggested_bank_id)
                 .map((cb) => (
-                  <option key={cb.id} value={cb.id}>{cb.series_label || cb.id.slice(0, 8)}</option>
+                  <option key={cb.id} value={cb.id}>{cb.title || cb.id.slice(0, 8)}</option>
                 ))}
             </select>
           </div>
