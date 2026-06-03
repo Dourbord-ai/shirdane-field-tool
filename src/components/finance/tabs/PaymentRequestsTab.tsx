@@ -126,6 +126,13 @@ interface PRItem {
   // server-side COALESCE stays predictable.
   details?: SettlementItemDetails;
 
+  // Phase 7B: when this item was seeded from a factor_related_costs row,
+  // we carry that row id here so the server-side RPC can (a) persist it on
+  // finance_payment_request_items.source_related_cost_id and (b) back-fill
+  // factor_related_costs.settlement_request_item_id atomically. This is the
+  // ONLY mechanism we use to link a cost to the item it generated — we
+  // never match by amount/description, which is unsafe.
+  source_related_cost_id?: string | null;
 }
 
 
@@ -433,6 +440,10 @@ function PRDialog({
         due_date: "",
         execution_priority: 3,
         details: {},
+        // Phase 7B: preserve the source related-cost id so submit() can
+        // forward it to the RPC. The seller row has no related_cost_id and
+        // will simply stay null (no back-fill happens for it).
+        source_related_cost_id: di.source?.related_cost_id ?? null,
       }));
     }
     return [
@@ -608,6 +619,11 @@ function PRDialog({
         // Phase 5: method-specific payload. Always send an object — never
         // null — so the RPC's COALESCE keeps the column non-null.
         details: i.details ?? {},
+        // Phase 7B: forward the related-cost row id (if this item was seeded
+        // from one) so the RPC can persist it on the new item AND back-fill
+        // factor_related_costs.settlement_request_item_id in the same
+        // transaction. Seller rows / manually-added rows send null.
+        source_related_cost_id: i.source_related_cost_id ?? null,
 
       }));
 

@@ -2094,6 +2094,13 @@ export type Database = {
             referencedRelation: "finance_parties"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "frc_settlement_request_item_id_fkey"
+            columns: ["settlement_request_item_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payment_request_items"
+            referencedColumns: ["id"]
+          },
         ]
       }
       factor_state_transitions: {
@@ -4124,6 +4131,13 @@ export type Database = {
             columns: ["source_factor_id"]
             isOneToOne: false
             referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fpri_source_related_cost_id_fkey"
+            columns: ["source_related_cost_id"]
+            isOneToOne: false
+            referencedRelation: "factor_related_costs"
             referencedColumns: ["id"]
           },
         ]
