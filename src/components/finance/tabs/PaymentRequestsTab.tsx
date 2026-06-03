@@ -453,6 +453,20 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       );
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
+    // Phase 4 hard guards: every NEW item MUST explicitly declare its
+    // payment_method, settlement_subject_type, and due_date. We never let
+    // the dialog silently fall back to a default for these because that
+    // would defeat the whole point of separating new items from legacy
+    // rows. The dialog only ever creates NEW items (never updates legacy
+    // ones), so these checks are safe to enforce unconditionally.
+    const missingMethod = items.findIndex((i) => !i.payment_method);
+    if (missingMethod >= 0) return toast.error(`ردیف ${missingMethod + 1}: روش پرداخت را انتخاب کنید.`);
+    const missingSubject = items.findIndex((i) => !i.settlement_subject_type);
+    if (missingSubject >= 0) return toast.error(`ردیف ${missingSubject + 1}: موضوع تسویه را انتخاب کنید.`);
+    const missingDue = items.findIndex((i) => !i.due_date);
+    if (missingDue >= 0) return toast.error(`ردیف ${missingDue + 1}: تاریخ سررسید الزامی است.`);
+
+
     // Validate creditor balance for amount_type_code = 1 using the snapshot
     // captured at selection time.
     for (let idx = 0; idx < items.length; idx++) {
