@@ -77,6 +77,10 @@ export interface ExecPanelItem {
   due_date?: string | null;
   description?: string | null;
   execution_status?: string | null;
+  // Task 1: optional method-specific payload (matches finance_payment_request_items.details).
+  // Typed loosely so this panel stays decoupled from PRItemFull; we only
+  // read a couple of fields (payee_name, payee_national_id) for check seeding.
+  details?: Record<string, unknown> | null;
 }
 
 interface Props {
