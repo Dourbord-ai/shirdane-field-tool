@@ -815,6 +815,8 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         paymentMethod={it.payment_method as string}
                         value={it.details || {}}
                         onChange={(next) => updateItem(idx, { details: next })}
+                        // Phase 6B: scope verified-account lookup to the row's party.
+                        partyId={it.party_id}
                       />
                     )}
                     <Input placeholder="توضیحات" value={it.description}
