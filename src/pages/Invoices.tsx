@@ -29,6 +29,9 @@ import FactorFilters, {
 // wall-clock ISO timestamp so we can compare it against the timestamptz
 // `factors.invoice_date` column on the server.
 import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
+// Phase 7: structured related costs panel embedded inside the invoice
+// detail view. Self-contained — pulls and writes its own rows.
+import RelatedCostsSection from "@/components/finance/RelatedCostsSection";
 
 interface FactorRow {
   id: string;
