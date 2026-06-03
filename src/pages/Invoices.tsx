@@ -1522,7 +1522,7 @@ export default function Invoices() {
           await Promise.all(
             detailTables.map(async (tbl) => {
               try {
-                const { data } = await (sb as unknown as { from: (t: string) => { select: (s: string) => { in: (c: string, v: string[]) => Promise<{ data: unknown }> } } })
+                const { data } = await sbAny
                   .from(tbl)
                   .select("*")
                   .in("factor_item_id", itemIds);
