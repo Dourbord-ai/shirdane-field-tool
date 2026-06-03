@@ -44,7 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { JalaliDatePicker } from "@/components/JalaliDatePicker";
+import DatePicker from "@/components/DatePicker";
 
 import {
   useDashboardUniverse,
@@ -164,20 +164,18 @@ function FiltersBar({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Date range — uses the existing Jalali picker so the rest of the
             app's date semantics (Tehran timezone, no drift) is preserved. */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground">از تاریخ سررسید</label>
-          <JalaliDatePicker
-            value={value.fromDate ?? ""}
-            onChange={(iso) => onChange({ ...value, fromDate: iso || undefined })}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground">تا تاریخ سررسید</label>
-          <JalaliDatePicker
-            value={value.toDate ?? ""}
-            onChange={(iso) => onChange({ ...value, toDate: iso || undefined })}
-          />
-        </div>
+        <DatePicker
+          label="از تاریخ سررسید"
+          value={value.fromDate ?? null}
+          onChange={(iso) => onChange({ ...value, fromDate: iso || undefined })}
+          clearable
+        />
+        <DatePicker
+          label="تا تاریخ سررسید"
+          value={value.toDate ?? null}
+          onChange={(iso) => onChange({ ...value, toDate: iso || undefined })}
+          clearable
+        />
       </div>
 
       <div className="space-y-2">
