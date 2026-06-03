@@ -1740,7 +1740,23 @@ export default function Invoices() {
   };
 
   const selectedFactor = factors.find((f) => f.id === selectedId);
+  // Index of the open factor inside the currently filtered/sorted list — drives
+  // the Previous / Next buttons inside the detail modal so the operator can
+  // browse without scrolling back to the row, and without losing their place.
+  const selectedIndex = selectedFactor
+    ? factors.findIndex((f) => f.id === selectedId)
+    : -1;
+  const prevFactor = selectedIndex > 0 ? factors[selectedIndex - 1] : null;
+  const nextFactor =
+    selectedIndex >= 0 && selectedIndex < factors.length - 1
+      ? factors[selectedIndex + 1]
+      : null;
+  const closeDetail = () => {
+    setSelectedId(null);
+    resetSelectedItems();
+  };
   const activeFiltersExist = hasActiveFilters(appliedFilters);
+
 
   return (
     <div className="py-6 space-y-4 animate-fade-in">
