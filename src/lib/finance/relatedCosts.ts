@@ -153,7 +153,8 @@ export async function upsertRelatedCost(input: RelatedCostInput): Promise<void> 
   } else {
     const { error } = await supabase
       .from("factor_related_costs")
-      .insert(clean as never);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .insert(clean as any);
     if (error) throw error;
   }
 }
