@@ -259,6 +259,11 @@ export default function SettlementItemExecutionPanel({ item, onChanged }: Props)
             amount: item.amount,
             dueDateISO: item.due_date ?? undefined,
             description: item.description ?? undefined,
+            // Task 1: forward payee identity (name + national id) from the
+            // settlement item's details jsonb so the operator can verify the
+            // recipient inside the cheque dialog without re-typing.
+            payeeName: (item.details as Record<string, unknown> | null | undefined)?.payee_name as string | undefined,
+            payeeNationalId: (item.details as Record<string, unknown> | null | undefined)?.payee_national_id as string | undefined,
           }}
           onCreated={async (checkId) => {
             // Link runs in its own try/catch — if linking fails we surface a
