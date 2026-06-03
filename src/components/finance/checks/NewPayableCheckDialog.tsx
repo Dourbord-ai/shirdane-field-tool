@@ -37,6 +37,13 @@ interface CheckSeed {
   amount?: number;
   dueDateISO?: string; // YYYY-MM-DD Gregorian — converted to Shamsi inside.
   description?: string;
+  // Task 1: when launched from a settlement item we pass the payee national
+  // id so the operator can verify the recipient before issuing the cheque.
+  // This is display-only inside the dialog (read-only chip) — no DB column
+  // is added on `finance_checks` in this task; check-module redesign is
+  // explicitly out of scope.
+  payeeName?: string;
+  payeeNationalId?: string;
 }
 interface Props {
   open: boolean;
@@ -203,6 +210,20 @@ export default function NewPayableCheckDialog({ open, onOpenChange, seed, onCrea
               </SelectContent>
             </Select>
           </div>
+          {/* Task 1: read-only display of the payee national id seeded from
+              the settlement item. Rendered only when a seed value is present
+              so stand-alone use of the dialog is visually unchanged. We do
+              NOT persist this to finance_checks (out of scope) — the value
+              already lives on the linked settlement item's details jsonb. */}
+          {seed?.payeeNationalId && (
+            <div className="col-span-2 rounded-md border border-border bg-muted/30 p-2 text-xs">
+              <div className="text-[11px] text-muted-foreground">شناسه ملی گیرنده (از درخواست تسویه)</div>
+              <div className="tabular-nums font-medium text-foreground">
+                {toPersianDigits(seed.payeeNationalId)}
+                {seed.payeeName ? <span className="text-muted-foreground"> — {seed.payeeName}</span> : null}
+              </div>
+            </div>
+          )}
           <div>
             <Label>مبلغ (ریال)</Label>
             <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" />

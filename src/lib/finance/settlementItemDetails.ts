@@ -52,6 +52,12 @@ export interface BankTransferDetails {
 
 export interface CheckDetails {
   payee_name?: string;
+  // Task 1: National / legal ID of the cheque payee. Required for any NEW or
+  // RE-SAVED check item (10 digits for natural persons, 11 for legal entities).
+  // Legacy rows created before this field existed remain viewable; validation
+  // only fires when the form is submitted (create or edit), so historical
+  // rows are NOT retroactively invalidated until the user re-saves them.
+  payee_national_id?: string;
   check_reason?: string;
   check_description?: string;
   suggested_bank_id?: string;
@@ -146,9 +152,24 @@ export function validateDetails(
       );
     }
 
-    case "check":
-      // check_number is intentionally NOT required at request stage.
-      return req("payee_name", "نام دریافت‌کننده چک") || req("check_reason", "بابت");
+    case "check": {
+      // Task 1: payee_national_id is now required alongside the existing
+      // payee_name + check_reason fields. We also enforce a light format
+      // check (digits-only, length 10 = natural person / 11 = legal entity)
+      // so that the value passed downstream to the check module is usable
+      // as-is. Persian/Arabic digits are normalized in the form before
+      // they ever reach this validator, so here we can assume ASCII.
+      const required = req("payee_name", "نام دریافت‌کننده چک")
+        || req("payee_national_id", "کد ملی / شناسه ملی گیرنده چک")
+        || req("check_reason", "بابت");
+      if (required) return required;
+      const nid = String(d.payee_national_id ?? "").trim();
+      // Only digits, length must be 10 (کد ملی) or 11 (شناسه ملی حقوقی).
+      if (!/^\d+$/.test(nid) || (nid.length !== 10 && nid.length !== 11)) {
+        return "کد ملی / شناسه ملی گیرنده چک باید فقط رقم و با طول ۱۰ یا ۱۱ باشد.";
+      }
+      return null;
+    }
     case "cashbox":
       // cashbox_id is required only if a cashbox table is wired; for now we
       // accept either id or name to keep the form usable.
@@ -198,8 +219,21 @@ export function summarizeDetails(method: string | null | undefined, raw: unknown
     }
 
     case "check": {
-      return [pick("payee_name"), pick("check_reason"), pick("suggested_bank_name")]
-        .filter(Boolean).join(" — ") || "—";
+      // Task 1: surface the payee national id in the one-line summary so
+      // reviewers can verify the recipient at a glance. We render it as a
+      // separate `شناسه:` segment, but ONLY when present — legacy rows
+      // (no payee_national_id) keep their old two-segment summary so they
+      // continue to render cleanly without spurious empty separators.
+      const payee = pick("payee_name");
+      const nid = pick("payee_national_id");
+      const reason = pick("check_reason");
+      const bank = pick("suggested_bank_name");
+      return [
+        payee && `در وجه: ${payee}`,
+        nid && `شناسه: ${nid}`,
+        reason && `بابت: ${reason}`,
+        bank,
+      ].filter(Boolean).join(" — ") || "—";
     }
     case "cashbox": {
       return [pick("recipient_name"), pick("cashbox_name") || pick("cashbox_id")]

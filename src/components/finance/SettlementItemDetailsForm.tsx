@@ -13,6 +13,9 @@
  */
 
 import { useEffect, useState } from "react";
+// Task 1: import digit normalizer so a Persian/Arabic-keyed national id is
+// stored in ASCII form (matches what validateDetails expects).
+import { toEnDigits } from "@/lib/digits";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -378,6 +381,22 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
           <div className="space-y-1">
             <Label className="text-[11px]">نام دریافت‌کننده چک <span className="text-destructive">*</span></Label>
             <Input value={d.payee_name || ""} onChange={(e) => onChange(patch(value, "payee_name", e.target.value))} />
+          </div>
+          {/* Task 1: کد ملی / شناسه ملی گیرنده چک — required for any new or
+              re-saved check item. Persian/Arabic digits are converted to ASCII
+              before being written to `details` so the validator (which checks
+              /^\d+$/ and length 10|11) works regardless of keyboard locale.
+              `inputMode="numeric"` opens the digit keypad on mobile, and
+              maxLength=11 prevents over-typing past the legal-entity length. */}
+          <div className="space-y-1">
+            <Label className="text-[11px]">کد ملی / شناسه ملی گیرنده چک <span className="text-destructive">*</span></Label>
+            <Input
+              value={d.payee_national_id || ""}
+              inputMode="numeric"
+              maxLength={11}
+              placeholder="۱۰ رقم (شخص حقیقی) یا ۱۱ رقم (شخص حقوقی)"
+              onChange={(e) => onChange(patch(value, "payee_national_id", toEnDigits(e.target.value)))}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-[11px]">بابت <span className="text-destructive">*</span></Label>

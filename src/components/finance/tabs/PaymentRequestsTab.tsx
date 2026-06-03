@@ -1279,6 +1279,9 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       due_date: i.due_date,
                       description: i.description,
                       execution_status: i.execution_status,
+                      // Task 1: forward `details` so the exec panel can seed
+                      // the cheque dialog with payee name + national id.
+                      details: (i.details as Record<string, unknown> | null | undefined) ?? null,
                     }}
                     onChanged={reload}
                   />
