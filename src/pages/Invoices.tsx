@@ -175,15 +175,43 @@ interface RentalItemRow {
   description: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// MixedItemRow — display-only shape for factors saved via MixedInvoiceForm
+// (factors.product_type = 'mixed'). Each row pairs a `factor_items` row with
+// its matching `factor_item_<type>_details` snapshot. The detail bag is kept
+// loose so we don't have to mirror nine different detail-table schemas — the
+// renderer picks the few keys it knows per product_type and otherwise falls
+// back to the shared factor_items fields.
+// ---------------------------------------------------------------------------
+interface MixedItemRow {
+  id: string;                 // factor_items.id
+  row_number: number | null;
+  product_type: string;
+  quantity: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  discount_amount: number | null;
+  tax_amount: number | null;
+  total_amount: number | null;
+  description: string | null;
+  // Per-type detail bag (possibly empty). Renderer reads e.g. details.feed_name
+  details: Record<string, unknown>;
+  // Resolved human label for master-table FKs (cow plaque, sperm code…)
+  display_label: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
   feed: "خوراک",
   medicine: "دارو",
   livestock: "دام",
-  // Manure (کود دامی): single product_type — direction (خرید/فروش) is shown
-  // via the separate invoice_type badge, identical to the خوراک treatment.
   manure: "کود دامی",
+  // 'mixed' = factors created via MixedInvoiceForm (multi-product-type rows
+  // in a single header). Dedicated badge so operators recognize the new flow.
+  mixed: "ترکیبی",
+  services: "خدمات",
+  rental: "کرایه",
   other: "سایر",
 };
 
