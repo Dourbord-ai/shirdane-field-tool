@@ -26,12 +26,27 @@ import {
   TRANSFER_TYPE_LABELS_FA,
   type SettlementItemDetails,
 } from "@/lib/finance/settlementItemDetails";
+// Phase 6B: reuse the helpers from Phase 6A so masking / labelling stays
+// consistent with the party-profile bank-accounts tab. We only import the
+// pure helpers (no React) — the picker UI lives inline in this file.
+import {
+  ACCOUNT_TYPE_LABEL_FA as PARTY_ACCOUNT_TYPE_LABEL_FA,
+  maskAccountValue,
+  type PartyAccount,
+} from "@/lib/finance/partyAccounts";
+import { Star, ShieldAlert } from "lucide-react";
 
 interface Props {
   paymentMethod: string;
   value: SettlementItemDetails;
   onChange: (next: SettlementItemDetails) => void;
+  // Phase 6B: needed for bank_transfer to fetch this party's verified
+  // accounts. Optional so other call-sites (e.g. older items without a
+  // party_id selected yet) keep compiling — when missing the picker hides
+  // its "registered account" mode and falls back to manual-only entry.
+  partyId?: string | null;
 }
+
 
 // Tiny helper: produce a copy with one key changed. Keeps the parent's
 // immutability contract intact without forcing every callsite to spread.
