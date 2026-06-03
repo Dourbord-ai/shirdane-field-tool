@@ -55,9 +55,10 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
         .then(({ data }) => setBanks(data || []));
       void supabase
         .from("finance_checkbooks")
-        .select("id,series_label,bank_id")
-        .eq("is_deleted", false)
+        .select("id,title,bank_id,is_active")
+        .eq("is_active", true)
         .then(({ data }) => setCheckbooks((data as never[]) || []));
+
     }
     if (paymentMethod === "barter") {
       // Lightweight party list for the barter counterparty picker. We cap to
