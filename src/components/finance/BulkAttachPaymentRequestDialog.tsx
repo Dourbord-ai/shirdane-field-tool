@@ -342,7 +342,7 @@ export default function BulkAttachPaymentRequestDialog({ transactions, onClose, 
         {/* Sticky header so the close button and title stay visible while
             the user scrolls through the long PR / progress lists. */}
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card z-10">
-          <h3 className="font-bold">اتصال گروهی به درخواست پرداخت</h3>
+          <h3 className="font-bold">اتصال گروهی به درخواست تسویه</h3>
           <Button size="icon" variant="ghost" onClick={close} disabled={running}>
             <X className="w-4 h-4" />
           </Button>
@@ -386,7 +386,7 @@ export default function BulkAttachPaymentRequestDialog({ transactions, onClose, 
                 )}
                 {!loadingPRs && filteredPRs.length === 0 && (
                   <div className="p-4 text-sm text-muted-foreground text-center">
-                    درخواست پرداخت قابل اتصال یافت نشد
+                    درخواست تسویه قابل اتصال یافت نشد
                   </div>
                 )}
                 {filteredPRs.map((r) => {

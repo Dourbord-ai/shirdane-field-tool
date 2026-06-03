@@ -367,8 +367,8 @@ export async function processWithdrawAI(
           step: "pick_item",
           message:
             pick.reason === "ambiguous"
-              ? "چند درخواست پرداخت باز با همین مبلغ — نیاز به تخصیص دستی"
-              : "درخواست پرداخت بازی با مبلغ یکسان برای این طرف یافت نشد",
+              ? "چند درخواست تسویه باز با همین مبلغ — نیاز به تخصیص دستی"
+              : "درخواست تسویه بازی با مبلغ یکسان برای این طرف یافت نشد",
         });
         continue; // finally handles processed++ / push()
       }

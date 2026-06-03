@@ -326,7 +326,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       // top-level catch only handles unexpected transport failures.
       const final = await autoProcessUnassigned((p) => setAutoProgress(p));
       toast.success(
-        `پردازش پایان یافت — بررسی‌شده: ${final.processed}/${final.total} · کاندید کارمزد: ${final.bank_fees_classified} · درخواست پرداخت ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
+        `پردازش پایان یافت — بررسی‌شده: ${final.processed}/${final.total} · کاندید کارمزد: ${final.bank_fees_classified} · درخواست تسویه ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
       );
       void load();
     } catch (e) {
@@ -346,7 +346,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     try {
       const final = await processBankFees((p) => setFeesProgress(p));
       toast.success(
-        `شناسایی کارمزد — کل بررسی‌شده: ${final.checked}/${final.total} · کاندید کارمزد: ${final.fee_candidates} · درخواست‌های پرداخت ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
+        `شناسایی کارمزد — کل بررسی‌شده: ${final.checked}/${final.total} · کاندید کارمزد: ${final.fee_candidates} · درخواست‌های تسویه ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
       );
       void load();
     } catch (e) {
@@ -1083,7 +1083,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <div className="text-base font-bold text-amber-700">{feesProgress.fee_candidates}</div>
             </div>
             <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2">
-              <div className="text-[10px] text-blue-700">درخواست‌های پرداخت ایجادشده</div>
+              <div className="text-[10px] text-blue-700">درخواست‌های تسویه ایجادشده</div>
               <div className="text-base font-bold text-blue-700">{feesProgress.payment_requests_created}</div>
             </div>
             <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
@@ -1139,7 +1139,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <div className="text-base font-bold text-amber-700">{autoProgress.bank_fees_classified}</div>
             </div>
             <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2">
-              <div className="text-[10px] text-blue-700">درخواست‌های پرداخت ایجادشده</div>
+              <div className="text-[10px] text-blue-700">درخواست‌های تسویه ایجادشده</div>
               <div className="text-base font-bold text-blue-700">{autoProgress.payment_requests_created}</div>
             </div>
             <div className="rounded-md border border-primary/40 bg-primary/10 p-2">
@@ -1335,7 +1335,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       {/* ---- Bulk-attach action bar ------------------------------------
           Appears only when at least one row is selected. Mirrors common
           spreadsheet/email UX: shows the selection count, total amount,
-          a primary "اتصال به درخواست پرداخت" CTA, and a clear-selection
+          a primary "اتصال به درخواست تسویه" CTA, and a clear-selection
           escape hatch. Sticky-positioned on mobile so it stays in reach
           even after the operator scrolls the long tx list. --------- */}
       {selectedIds.size > 0 && (
@@ -1356,7 +1356,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setOpenBulkAttach(true)}>
               <Link2 className="w-4 h-4 ml-1" />
-              اتصال به درخواست پرداخت
+              اتصال به درخواست تسویه
             </Button>
             <Button size="sm" variant="ghost" onClick={clearSelection}>
               <X className="w-4 h-4 ml-1" /> پاک کردن انتخاب
@@ -1471,7 +1471,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                             flow from this row without leaving the screen. */}
                         {((t.assignment_status === "unassigned" && t.transaction_type === "withdraw") ||
                           (t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate")) && (
-                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های پرداخت")}>
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های تسویه")}>
                             <ArrowUpFromLine className="w-3 h-3 ml-1" /> ثبت پرداخت
                           </Button>
                         )}

@@ -215,7 +215,7 @@ export default function BeneficiariesStatusReport() {
               <tr>
                 <th className="text-right p-2"><SortHeader k="display_name">نام ذینفع</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="balance">وضعیت حساب</SortHeader></th>
-                <th className="text-right p-2"><SortHeader k="request_balance">درخواست پرداخت تایید شده</SortHeader></th>
+                <th className="text-right p-2"><SortHeader k="request_balance">درخواست تسویه تایید شده</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="status">وضعیت</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="approval_status">تایید</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="sepidar_sync_status">سپیدار</SortHeader></th>
