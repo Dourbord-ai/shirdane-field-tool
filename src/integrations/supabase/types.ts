@@ -3670,6 +3670,74 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_party_accounts: {
+        Row: {
+          account_title: string | null
+          account_type: string
+          account_value: string
+          created_at: string
+          declared_owner_name: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          is_deleted: boolean
+          party_id: string
+          raw_response: Json
+          updated_at: string
+          verification_status: string
+          verified_at: string | null
+          verified_bank_name: string | null
+          verified_by: string | null
+          verified_owner_name: string | null
+        }
+        Insert: {
+          account_title?: string | null
+          account_type: string
+          account_value: string
+          created_at?: string
+          declared_owner_name: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          is_deleted?: boolean
+          party_id: string
+          raw_response?: Json
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_bank_name?: string | null
+          verified_by?: string | null
+          verified_owner_name?: string | null
+        }
+        Update: {
+          account_title?: string | null
+          account_type?: string
+          account_value?: string
+          created_at?: string
+          declared_owner_name?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          is_deleted?: boolean
+          party_id?: string
+          raw_response?: Json
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_bank_name?: string | null
+          verified_by?: string | null
+          verified_owner_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_party_accounts_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_party_transfers: {
         Row: {
           amount: number | null
@@ -6488,6 +6556,21 @@ export type Database = {
       fn_finance_request_approved_payable: {
         Args: { p_request_id: string }
         Returns: number
+      }
+      fn_fpa_find_duplicates: {
+        Args: {
+          _account_type: string
+          _account_value: string
+          _exclude_party_id?: string
+        }
+        Returns: {
+          account_id: string
+          declared_owner_name: string
+          party_full_name: string
+          party_id: string
+          verification_status: string
+          verified_owner_name: string
+        }[]
       }
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
