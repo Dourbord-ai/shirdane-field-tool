@@ -1327,6 +1327,7 @@ export default function Invoices() {
       setSelectedWageItems([]);
       setSelectedDailyWorkerItems([]);
       setSelectedRentalItems([]);
+      setSelectedMixedItems([]);
       setDetailError(null);
       return;
     }
@@ -1339,6 +1340,7 @@ export default function Invoices() {
     setSelectedWageItems([]);
     setSelectedDailyWorkerItems([]);
     setSelectedRentalItems([]);
+    setSelectedMixedItems([]);
     setDetailError(null);
     setDetailLoading(true);
 
