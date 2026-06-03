@@ -1146,6 +1146,19 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                     </div>
                   )}
 
+                  {/* Phase 5 method-specific summary. Rendered only for
+                      non-legacy items (legacy rows already show a separate
+                      read-only banner above). The text is built by
+                      `summarizeDetails` so the formatting stays consistent
+                      with the new-request form. */}
+                  {!isLegacyItem(i) && i.payment_method && (
+                    <div className="rounded bg-muted/30 border border-dashed px-2 py-1 text-[11px] flex items-start gap-2">
+                      <span className="text-muted-foreground shrink-0">جزئیات روش:</span>
+                      <span className="break-words">{summarizeDetails(i.payment_method, i.details)}</span>
+                    </div>
+                  )}
+
+
                   {isRejected && (
                     <div className="text-[11px] text-red-700 dark:text-red-300">
                       این آیتم رد شده است و در محاسبات پرداخت لحاظ نمی‌شود.
