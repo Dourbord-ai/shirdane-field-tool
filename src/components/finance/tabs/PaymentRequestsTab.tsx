@@ -503,6 +503,10 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       // Beneficiary/snapshot columns don't exist in the table yet, so we
       // omit them from the RPC payload to avoid 42703 errors. The server
       // RPC sets paid_amount=0 and remaining_amount=amount on insert.
+      // Phase 4: include the new lifecycle columns so the RPC can write them
+      // on INSERT. execution_status is hard-coded to 'pending' for every
+      // new item (executors flip it later). execution_priority defaults to
+      // 3 (عادی) but the user can override per-row before saving.
       const itemsPayload = items.map((i) => ({
         party_id: i.party_id,
         amount: i.amount,
@@ -510,7 +514,13 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
         amount_type: i.amount_type,
         description: i.description,
         status: "pending_approval",
+        payment_method: i.payment_method,
+        settlement_subject_type: i.settlement_subject_type,
+        due_date: i.due_date,
+        execution_status: "pending",
+        execution_priority: i.execution_priority ?? 3,
       }));
+
 
       // Temporary logging to make payload inspection trivial in DevTools.
       // eslint-disable-next-line no-console
