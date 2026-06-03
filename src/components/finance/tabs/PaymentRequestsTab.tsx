@@ -1027,6 +1027,18 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         {getPaymentAmountTypeLabel(i.amount_type_code)}
                       </span>
+                      {/* Phase 4 legacy badge — pre-Phase-3 items carry
+                          payment_method='legacy' and must be visually
+                          marked as read-only. The Persian wording is fixed
+                          by spec: «قدیمی / فقط نمایش». */}
+                      {isLegacyItem(i) && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-amber-400/60 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                          title="این آیتم مربوط به ساختار قبلی است و فقط قابل مشاهده است."
+                        >
+                          قدیمی / فقط نمایش
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1048,11 +1060,43 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <MoneyCell value={isRejected ? 0 : remaining} className="text-[11px]" />
                     </div>
                   </div>
+
+                  {/* Phase 4 metadata strip — shows the new lifecycle fields
+                      for NEW items. For legacy rows we render a single
+                      explanatory line instead of fake/empty cells, so the
+                      missing data isn't confusing. */}
+                  {isLegacyItem(i) ? (
+                    <div className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-300/40 rounded px-2 py-1">
+                      این آیتم مربوط به ساختار قبلی است و برای جلوگیری از تغییر ناخواسته فقط قابل مشاهده است.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">روش پرداخت</span>
+                        <span>{labelForPaymentMethod(i.payment_method)}</span>
+                      </div>
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">موضوع</span>
+                        <span>{labelForSubjectType(i.settlement_subject_type)}</span>
+                      </div>
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">سررسید</span>
+                        {/* Convert Gregorian DB date back to Jalali for display. */}
+                        <span dir="ltr">{gregorianDateToJalali(i.due_date) || "—"}</span>
+                      </div>
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">اولویت</span>
+                        <span>{labelForExecutionPriority(i.execution_priority)}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {isRejected && (
                     <div className="text-[11px] text-red-700 dark:text-red-300">
                       این آیتم رد شده است و در محاسبات پرداخت لحاظ نمی‌شود.
                     </div>
                   )}
+
                   {canAllocate && (
                     <Button size="sm" variant="outline" className="w-full" onClick={() => setAllocItem(i)}>
                       <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
