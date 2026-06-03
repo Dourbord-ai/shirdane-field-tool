@@ -214,7 +214,7 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
               className="bg-secondary/40 rounded-lg p-3 flex flex-col gap-1 text-sm"
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
                     {COST_CATEGORY_LABEL[r.cost_category]}
                   </span>
@@ -226,8 +226,66 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       بدون پرداخت
                     </span>
                   )}
+                  {/* Phase 7B: settlement link-back status badge.
+                      - When `settlement_request_item_id` IS NULL we show the
+                        neutral "no settlement yet" badge so the operator
+                        knows this row is eligible to be drafted.
+                      - When it's set, we show a positive badge + a small
+                        link button that navigates to the payment-requests
+                        tab. We intentionally don't try to deep-link to the
+                        exact parent request here (would require an extra
+                        fetch per row); the navigate is enough for now. */}
+                  {r.payment_required && (
+                    r.settlement_request_item_id ? (
+                      <span className="px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[10px] font-bold inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        آیتم تسویه ایجاد شده
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground text-[10px]">
+                        تسویه ایجاد نشده
+                      </span>
+                    )
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  {/* Open-in-settlement shortcut. We resolve the parent
+                      payment_request_id on click (one tiny SELECT) and then
+                      navigate to the finance settlement-requests tab.
+                      Resolving on click avoids N extra queries on render. */}
+                  {r.settlement_request_item_id && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { data, error } = await supabase
+                            .from("finance_payment_request_items")
+                            .select("payment_request_id")
+                            .eq("id", r.settlement_request_item_id as string)
+                            .maybeSingle();
+                          if (error) throw error;
+                          // Stash the target request id so PaymentRequestsTab
+                          // could pick it up later if it grows a deep-link
+                          // handler; for now we just navigate to the tab.
+                          if (data?.payment_request_id) {
+                            try {
+                              sessionStorage.setItem(
+                                "finance:focus_payment_request_id",
+                                String(data.payment_request_id),
+                              );
+                            } catch { /* ignore quota errors */ }
+                          }
+                          navigate("/finance#payment-requests");
+                        } catch {
+                          toast.error("امکان باز کردن درخواست تسویه نبود");
+                        }
+                      }}
+                      className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-primary"
+                      aria-label="مشاهده در درخواست تسویه"
+                      title="مشاهده در درخواست تسویه"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => openEdit(r)}
                     className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
