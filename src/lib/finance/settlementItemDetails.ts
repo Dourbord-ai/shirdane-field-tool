@@ -152,9 +152,24 @@ export function validateDetails(
       );
     }
 
-    case "check":
-      // check_number is intentionally NOT required at request stage.
-      return req("payee_name", "نام دریافت‌کننده چک") || req("check_reason", "بابت");
+    case "check": {
+      // Task 1: payee_national_id is now required alongside the existing
+      // payee_name + check_reason fields. We also enforce a light format
+      // check (digits-only, length 10 = natural person / 11 = legal entity)
+      // so that the value passed downstream to the check module is usable
+      // as-is. Persian/Arabic digits are normalized in the form before
+      // they ever reach this validator, so here we can assume ASCII.
+      const required = req("payee_name", "نام دریافت‌کننده چک")
+        || req("payee_national_id", "کد ملی / شناسه ملی گیرنده چک")
+        || req("check_reason", "بابت");
+      if (required) return required;
+      const nid = String(d.payee_national_id ?? "").trim();
+      // Only digits, length must be 10 (کد ملی) or 11 (شناسه ملی حقوقی).
+      if (!/^\d+$/.test(nid) || (nid.length !== 10 && nid.length !== 11)) {
+        return "کد ملی / شناسه ملی گیرنده چک باید فقط رقم و با طول ۱۰ یا ۱۱ باشد.";
+      }
+      return null;
+    }
     case "cashbox":
       // cashbox_id is required only if a cashbox table is wired; for now we
       // accept either id or name to keep the form usable.
