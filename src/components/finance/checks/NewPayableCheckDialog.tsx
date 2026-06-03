@@ -37,6 +37,13 @@ interface CheckSeed {
   amount?: number;
   dueDateISO?: string; // YYYY-MM-DD Gregorian — converted to Shamsi inside.
   description?: string;
+  // Task 1: when launched from a settlement item we pass the payee national
+  // id so the operator can verify the recipient before issuing the cheque.
+  // This is display-only inside the dialog (read-only chip) — no DB column
+  // is added on `finance_checks` in this task; check-module redesign is
+  // explicitly out of scope.
+  payeeName?: string;
+  payeeNationalId?: string;
 }
 interface Props {
   open: boolean;
