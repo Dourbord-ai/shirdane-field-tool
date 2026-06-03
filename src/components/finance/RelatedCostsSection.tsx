@@ -10,10 +10,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadsheet } from "lucide-react";
+import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadsheet, Link2, CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { supabase } from "@/integrations/supabase/client";
 
 import {
   COST_CATEGORY_LABEL,
