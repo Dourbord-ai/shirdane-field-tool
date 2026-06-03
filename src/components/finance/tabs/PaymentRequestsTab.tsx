@@ -938,6 +938,13 @@ interface PRItemFull {
   // Phase 5: method-specific jsonb. Supabase returns Json | null; we accept
   // unknown and let the summarizer narrow safely.
   details?: unknown;
+  // Phase 8: execution lifecycle metadata. These are optional because legacy
+  // rows carry NULLs; the execution panel only renders for non-legacy rows.
+  executed_at?: string | null;
+  executed_by?: string | null;
+  closure_reason?: string | null;
+  on_hold_reason?: string | null;
+  execution_note?: string | null;
 
 }
 
