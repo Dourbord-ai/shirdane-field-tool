@@ -15,6 +15,7 @@ import PartiesTab from "@/components/finance/tabs/PartiesTab";
 import VouchersTab from "@/components/finance/tabs/VouchersTab";
 import SepidarSettingsTab from "@/components/finance/tabs/SepidarSettingsTab";
 import FinanceReportsTab from "@/components/finance/tabs/FinanceReportsTab";
+import SettlementDashboardTab from "@/components/finance/tabs/SettlementDashboardTab";
 
 
 const TABS = [
@@ -22,6 +23,7 @@ const TABS = [
   { key: "banks", label: "بانک‌ها", icon: Building2 },
   { key: "transactions", label: "تراکنش‌های بانکی", icon: ArrowRightLeft },
   { key: "payment-requests", label: "درخواست‌های تسویه", icon: ClipboardList },
+  { key: "settlement-dashboard", label: "داشبورد تسویه", icon: BarChart3 },
   { key: "receive-id", label: "شناسایی دریافت", icon: ArrowDownToLine },
   { key: "bank-transfer", label: "انتقال بین بانکی", icon: ArrowLeftRight },
   { key: "party-transfer", label: "انتقال بین ذینفع", icon: Repeat },
@@ -77,6 +79,7 @@ export default function Finance() {
         {tab === "banks" && <BanksTab onViewTransactions={(id) => { setBankFilter(id); changeTab("transactions"); }} />}
         {tab === "transactions" && <BankTransactionsTab initialBankId={bankFilter} />}
         {tab === "payment-requests" && <PaymentRequestsTab />}
+        {tab === "settlement-dashboard" && <SettlementDashboardTab />}
         {tab === "receive-id" && <ReceiveIdentificationTab />}
         {tab === "bank-transfer" && <BankTransferTab />}
         {tab === "party-transfer" && <PartyTransferTab />}
