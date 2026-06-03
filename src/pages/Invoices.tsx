@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronDown, FileText, Plus, X, Loader2 } from "lucide-react";
+import { ChevronDown, FileText, Plus, X, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toPersianDigits } from "@/lib/jalali";
 // Universal Shamsi formatter — accepts ISO, Date, or pre-formatted Shamsi
 // strings and always returns "YYYY/MM/DD" in Persian digits. Used to keep
