@@ -391,6 +391,11 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       settlement_subject_type: "main_invoice",
       due_date: "",
       execution_priority: 3,
+      // Phase 5: start with empty details — the per-method sub-form is only
+      // rendered after the user picks a payment_method, and patches this
+      // object in place via `onChange`.
+      details: {},
+
     },
   ]);
 
