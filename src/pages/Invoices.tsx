@@ -692,18 +692,13 @@ function InvoiceDetail({
 
   return (
     <div className="animate-fade-in">
-      <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-card overflow-hidden">
-        <div className="bg-primary/5 border-b border-primary/10 p-4 flex items-center justify-between">
+      <div className="rounded-2xl bg-card overflow-hidden">
+        <div className="border-b border-border p-3 mb-2">
           <h2 className="text-body-lg font-bold text-primary">جزئیات فاکتور</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center transition-all duration-200 hover:bg-secondary hover:shadow-[0_2px_12px_-2px_hsl(142_50%_36%/0.15)]"
-          >
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
         </div>
 
-        <div className="p-5 space-y-1">
+        <div className="p-1 space-y-1">
+
           <div className="flex items-center gap-2 mb-3">
             <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold">
               {productLabels[factor.product_type] || factor.product_type}
