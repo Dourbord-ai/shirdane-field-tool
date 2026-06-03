@@ -147,7 +147,8 @@ export async function upsertRelatedCost(input: RelatedCostInput): Promise<void> 
     const { id, ...rest } = clean as { id: string } & Record<string, unknown>;
     const { error } = await supabase
       .from("factor_related_costs")
-      .update(rest)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update(rest as any)
       .eq("id", id);
     if (error) throw error;
   } else {
