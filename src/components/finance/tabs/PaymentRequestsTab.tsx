@@ -516,7 +516,11 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
         status: "pending_approval",
         payment_method: i.payment_method,
         settlement_subject_type: i.settlement_subject_type,
-        due_date: i.due_date,
+        // due_date is collected as a Jalali "YYYY/MM/DD" string from the
+        // Shamsi picker; the DB column is Gregorian `date`. We convert at
+        // payload-build time so the wire format matches the column type.
+        due_date: jalaliToGregorianDate(i.due_date || "") || "",
+
         execution_status: "pending",
         execution_priority: i.execution_priority ?? 3,
       }));
