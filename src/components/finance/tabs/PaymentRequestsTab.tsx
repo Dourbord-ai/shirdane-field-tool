@@ -25,6 +25,11 @@ import {
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
 import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+// Phase 7: consume a settlement-draft handed off by the invoice page. The
+// invoice's "ثبت درخواست تسویه" button stashes a draft (party_id + amount +
+// description per row) into sessionStorage and navigates here; we read it
+// once on PRDialog open so the operator can review and submit.
+import { consumeSettlementDraft, type SettlementDraft } from "@/lib/finance/relatedCosts";
 // Phase 4: item-level lifecycle metadata (payment method, what the item pays
 // for, due date, execution status/priority). Pre-Phase-3 rows carry
 // `payment_method = 'legacy'` and must be displayed as read-only — any edit
