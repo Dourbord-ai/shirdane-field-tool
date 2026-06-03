@@ -93,10 +93,19 @@ export default function NewPayableCheckDialog({ open, onOpenChange, seed, onCrea
 
   useEffect(() => {
     if (open) {
-      setCheckbookId(""); setLeafId(""); setPartyId(""); setAmount("");
-      setIssueDate(""); setDueDate(""); setDescription(""); setSaving(false);
+      setCheckbookId(""); setLeafId(""); setSaving(false);
+      // Phase 8: when launched from a settlement item we pre-fill party,
+      // amount, due date and description so the operator only has to pick
+      // the checkbook + leaf. With no seed the form is empty (legacy use).
+      setPartyId(seed?.partyId ?? "");
+      setAmount(seed?.amount != null ? String(seed.amount) : "");
+      setIssueDate("");
+      // Convert the Gregorian ISO seed date back to Jalali so the picker
+      // can display it. dateUtils.gregorianDateToJalali returns YYYY/MM/DD.
+      setDueDate(seed?.dueDateISO ? (gregorianDateToJalali(seed.dueDateISO) || "") : "");
+      setDescription(seed?.description ?? "");
     }
-  }, [open]);
+  }, [open, seed?.partyId, seed?.amount, seed?.dueDateISO, seed?.description]);
 
   // Reset leaf selection whenever the checkbook changes so we never carry a
   // leaf from another checkbook by accident.
