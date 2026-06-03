@@ -54,7 +54,7 @@ function patch<T extends object>(prev: T, key: string, v: unknown): T {
   return { ...prev, [key]: v } as T;
 }
 
-export default function SettlementItemDetailsForm({ paymentMethod, value, onChange }: Props) {
+export default function SettlementItemDetailsForm({ paymentMethod, value, onChange, partyId }: Props) {
   // Local lookups for selectors. We fetch once per mounted form; the dialog
   // remounts on each row addition so this is cheap enough.
   const [banks, setBanks] = useState<{ id: string; title: string | null; bank_name: string | null }[]>([]);
