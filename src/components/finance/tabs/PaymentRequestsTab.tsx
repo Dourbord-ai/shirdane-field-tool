@@ -386,7 +386,13 @@ export default function PaymentRequestsTab() {
         )}
       </div>
 
-      {open && <PRDialog onClose={() => setOpen(false)} onDone={() => { setOpen(false); void load(); }} />}
+      {open && (
+        <PRDialog
+          seedDraft={seedDraft}
+          onClose={() => { setOpen(false); setSeedDraft(null); }}
+          onDone={() => { setOpen(false); setSeedDraft(null); void load(); }}
+        />
+      )}
       {detail && <PRDetail pr={detail} onClose={() => { setDetail(null); void load(); }} />}
     </div>
   );
