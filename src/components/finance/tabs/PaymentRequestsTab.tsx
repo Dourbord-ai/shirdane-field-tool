@@ -164,6 +164,25 @@ export default function PaymentRequestsTab() {
   // a non-null voucher_id and consult it in the client-side filter.
   const [requestsWithVoucher, setRequestsWithVoucher] = useState<Set<string>>(new Set());
 
+  // Phase 7 hand-off: when the invoice page navigates here with a stashed
+  // settlement draft (sessionStorage), and when the URL hash is the one we
+  // route to (#payment-requests), auto-open PRDialog so the operator lands
+  // straight on the editor. We DO NOT consume the storage here — PRDialog
+  // is the consumer; we only peek.
+  const [seedDraft, setSeedDraft] = useState<SettlementDraft | null>(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("finance:pr_seed_draft_v1");
+      if (!raw) return;
+      // Peek (don't remove) — PRDialog calls consumeSettlementDraft() to
+      // both read and clear the storage atomically when it mounts.
+      setSeedDraft(JSON.parse(raw) as SettlementDraft);
+      setOpen(true);
+    } catch {
+      // Ignore — operator can still open the dialog manually.
+    }
+  }, []);
+
   // Refetch whenever any SERVER-side filter changes. paymentFilter is now
   // server-side too (it maps to numeric column predicates), so it joins the
   // dependency list. Local-only filters (search, voucher presence) stay out.
