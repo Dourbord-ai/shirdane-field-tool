@@ -377,7 +377,7 @@ async function processOneFeeTx(
       const err = e as { code?: string; message?: string; details?: string; hint?: string };
       const msg =
         [err.message, err.details, err.hint].filter(Boolean).join(" | ") ||
-        "خطا در ثبت درخواست پرداخت کارمزد";
+        "خطا در ثبت درخواست تسویه کارمزد";
       await audit(tx.id, "fee.pr.create.failed", false, msg, {
         code: err.code, details: err.details, hint: err.hint,
       });
@@ -431,7 +431,7 @@ async function processOneFeeTx(
       .order("created_at", { ascending: true })
       .limit(1);
     if (itemsErr || !items || items.length === 0) {
-      const msg = itemsErr?.message || "آیتم درخواست پرداخت پیدا نشد.";
+      const msg = itemsErr?.message || "آیتم درخواست تسویه پیدا نشد.";
       await audit(tx.id, "fee.pr.item.lookup.failed", false, msg, { prId });
       return {
         ok: false, prId, voucherId: null, sepidarVoucherId: null,

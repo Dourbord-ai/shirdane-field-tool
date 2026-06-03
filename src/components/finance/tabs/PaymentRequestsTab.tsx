@@ -183,10 +183,22 @@ export default function PaymentRequestsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-lg font-bold">درخواست‌های پرداخت</h2>
-        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+      <div className="flex items-start justify-between flex-wrap gap-2">
+        {/*
+          Phase 2 rename: the module is now framed as «درخواست تسویه».
+          A single درخواست تسویه is a PARENT container that can hold multiple
+          executable settlement items (bank transfer, check, cashbox, …).
+          The underlying tables/routes are unchanged in this phase.
+        */}
+        <div>
+          <h2 className="text-lg font-bold">درخواست‌های تسویه</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            هر درخواست می‌تواند شامل چندین آیتم اجرایی (انتقال بانکی، چک، صندوق و …) باشد.
+          </p>
+        </div>
+        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست تسویه جدید</Button>
       </div>
+
 
       {/* Filter toolbar — search + type + status + voucher + payment.
           All filters compose: server-side ones refetch, client-side ones
@@ -460,7 +472,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-card rounded-t-2xl sm:rounded-2xl border shadow-lg w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card">
-          <h3 className="font-bold">درخواست پرداخت جدید</h3>
+          <h3 className="font-bold">درخواست تسویه جدید</h3>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="w-4 h-4" /></Button>
         </div>
         <div className="p-4 space-y-3">
@@ -742,7 +754,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
       <div className="bg-card border-l shadow-lg w-full max-w-2xl h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card z-10">
           <div>
-            <h3 className="font-bold">{pr.title || "درخواست پرداخت"}</h3>
+            <h3 className="font-bold">{pr.title || "درخواست تسویه"}</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">{getPaymentRequestTypeLabel(pr.legacy_request_type_code)}</p>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {/* Approval status badge */}

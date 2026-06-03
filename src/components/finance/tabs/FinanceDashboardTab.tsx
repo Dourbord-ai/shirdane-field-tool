@@ -117,9 +117,9 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
     { label: "تراکنش‌های در حال تخصیص", value: kpi.assigningTx, type: "count" as const, icon: AlertCircle, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("transactions") },
     { label: "درخواست‌های شناسایی در انتظار تایید", value: kpi.pendingReceiveId, type: "count" as const, icon: ClipboardList, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("receive-id") },
     { label: "تراکنش‌های تخصیص نشده", value: kpi.unassignedTx, type: "count" as const, icon: AlertCircle, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("transactions") },
-    { label: "درخواست‌های پرداخت باز", value: kpi.openRequests, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
-    { label: "درخواست‌های پرداخت تایید‌شده اما پرداخت‌نشده", value: kpi.approvedNotPaid, type: "count" as const, icon: ClipboardList, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("payment-requests") },
-    { label: "درخواست‌های پرداخت ناقص", value: kpi.partiallyPaid, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
+    { label: "درخواست‌های تسویه باز", value: kpi.openRequests, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
+    { label: "درخواست‌های تسویه تایید‌شده اما پرداخت‌نشده", value: kpi.approvedNotPaid, type: "count" as const, icon: ClipboardList, tone: "from-amber-500 to-orange-600", onClick: () => onTabChange("payment-requests") },
+    { label: "درخواست‌های تسویه ناقص", value: kpi.partiallyPaid, type: "count" as const, icon: ClipboardList, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("payment-requests") },
     { label: "تراکنش‌های برداشت در حال تخصیص", value: kpi.withdrawAssigning, type: "count" as const, icon: TrendingDown, tone: "from-blue-500 to-indigo-600", onClick: () => onTabChange("transactions") },
     { label: "خطاهای ثبت سند پرداخت", value: kpi.paymentSyncErrors, type: "count" as const, icon: AlertTriangle, tone: "from-red-500 to-pink-600", onClick: () => onTabChange("payment-requests") },
     { label: "مانده بدهکار ذینفعان", value: kpi.partiesDebit, type: "money" as const, icon: TrendingDown, tone: "from-red-500 to-rose-600", onClick: () => onTabChange("parties") },
@@ -130,7 +130,7 @@ export default function FinanceDashboardTab({ onTabChange }: { onTabChange: (tab
 
   const quick = [
     { label: "آپلود فایل تراکنش", icon: Upload, tab: "transactions" },
-    { label: "درخواست پرداخت جدید", icon: Plus, tab: "payment-requests" },
+    { label: "درخواست تسویه جدید", icon: Plus, tab: "payment-requests" },
     { label: "شناسایی دریافت", icon: ArrowDownToLine, tab: "receive-id" },
     { label: "انتقال بین بانکی", icon: ArrowLeftRight, tab: "bank-transfer" },
     { label: "انتقال بین ذینفع", icon: ArrowLeftRight, tab: "party-transfer" },

@@ -341,7 +341,7 @@ export function LocalPartyBeneficiarySelector({
                     {disabled && (
                       <div className="flex items-center gap-1 text-[11px] text-amber-600">
                         <AlertCircle className="w-3.5 h-3.5" />
-                        برای استفاده در درخواست پرداخت، ابتدا این طرف حساب با سپیدار همگام‌سازی شود.
+                        برای استفاده در درخواست تسویه، ابتدا این طرف حساب با سپیدار همگام‌سازی شود.
                       </div>
                     )}
                   </button>

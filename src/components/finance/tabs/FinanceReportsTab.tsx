@@ -302,7 +302,7 @@ export default function FinanceReportsTab() {
                 <th className="text-right p-2"><SortHeader k="debtor">بدهکار</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="creditor">بستانکار</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="balance">مانده</SortHeader></th>
-                <th className="text-right p-2"><SortHeader k="request_balance">درخواست پرداخت تایید شده</SortHeader></th>
+                <th className="text-right p-2"><SortHeader k="request_balance">درخواست تسویه تایید شده</SortHeader></th>
               </tr>
               {/* Per-column filter row — empty string means no filter. */}
               <tr className="border-b">

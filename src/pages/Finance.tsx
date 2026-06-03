@@ -21,7 +21,7 @@ const TABS = [
   { key: "dashboard", label: "داشبورد مالی", icon: LayoutDashboard },
   { key: "banks", label: "بانک‌ها", icon: Building2 },
   { key: "transactions", label: "تراکنش‌های بانکی", icon: ArrowRightLeft },
-  { key: "payment-requests", label: "درخواست‌های پرداخت", icon: ClipboardList },
+  { key: "payment-requests", label: "درخواست‌های تسویه", icon: ClipboardList },
   { key: "receive-id", label: "شناسایی دریافت", icon: ArrowDownToLine },
   { key: "bank-transfer", label: "انتقال بین بانکی", icon: ArrowLeftRight },
   { key: "party-transfer", label: "انتقال بین ذینفع", icon: Repeat },
