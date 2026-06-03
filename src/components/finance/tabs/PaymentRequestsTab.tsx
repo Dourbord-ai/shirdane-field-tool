@@ -484,6 +484,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     const missingDue = items.findIndex((i) => !i.due_date);
     if (missingDue >= 0) return toast.error(`ردیف ${missingDue + 1}: تاریخ سررسید الزامی است.`);
 
+    // Phase 5: per-method details validation. Each method has its own list of
+    // required fields (defined centrally in `validateDetails`). We surface
+    // the first failure with a row-number prefix so the user can locate it.
+    for (let i = 0; i < items.length; i++) {
+      const err = validateDetails(items[i].payment_method as string, items[i].details);
+      if (err) return toast.error(`ردیف ${i + 1}: ${err}`);
+    }
+
+
 
     // Validate creditor balance for amount_type_code = 1 using the snapshot
     // captured at selection time.
