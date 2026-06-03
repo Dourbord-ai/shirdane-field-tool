@@ -175,15 +175,43 @@ interface RentalItemRow {
   description: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// MixedItemRow — display-only shape for factors saved via MixedInvoiceForm
+// (factors.product_type = 'mixed'). Each row pairs a `factor_items` row with
+// its matching `factor_item_<type>_details` snapshot. The detail bag is kept
+// loose so we don't have to mirror nine different detail-table schemas — the
+// renderer picks the few keys it knows per product_type and otherwise falls
+// back to the shared factor_items fields.
+// ---------------------------------------------------------------------------
+interface MixedItemRow {
+  id: string;                 // factor_items.id
+  row_number: number | null;
+  product_type: string;
+  quantity: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  discount_amount: number | null;
+  tax_amount: number | null;
+  total_amount: number | null;
+  description: string | null;
+  // Per-type detail bag (possibly empty). Renderer reads e.g. details.feed_name
+  details: Record<string, unknown>;
+  // Resolved human label for master-table FKs (cow plaque, sperm code…)
+  display_label: string | null;
+}
+
 const productLabels: Record<string, string> = {
   sperm: "اسپرم",
   milk: "شیر",
   feed: "خوراک",
   medicine: "دارو",
   livestock: "دام",
-  // Manure (کود دامی): single product_type — direction (خرید/فروش) is shown
-  // via the separate invoice_type badge, identical to the خوراک treatment.
   manure: "کود دامی",
+  // 'mixed' = factors created via MixedInvoiceForm (multi-product-type rows
+  // in a single header). Dedicated badge so operators recognize the new flow.
+  mixed: "ترکیبی",
+  services: "خدمات",
+  rental: "کرایه",
   other: "سایر",
 };
 
@@ -633,6 +661,7 @@ function InvoiceDetail({
   wageItems,
   dailyWorkerItems,
   rentalItems,
+  mixedItems,
   loading,
   errorMsg,
   onClose,
@@ -647,6 +676,9 @@ function InvoiceDetail({
   wageItems: WageItemRow[];
   dailyWorkerItems: DailyWorkerItemRow[];
   rentalItems: RentalItemRow[];
+  // Rows for factors.product_type === 'mixed' (new MixedInvoiceForm flow).
+  // Each row may be a different product_type — see MixedItemsSection.
+  mixedItems: MixedItemRow[];
   loading: boolean;
   errorMsg: string | null;
   onClose: () => void;
@@ -999,14 +1031,119 @@ function InvoiceDetail({
               </p>
             </>
           )}
-          {/* Generic "no items" fallback for non-services / non-manure types
-              when the dedicated query returned zero rows. */}
+
+          {/* Line items for MIXED factors (new MixedInvoiceForm flow). Each
+              factor_items row may use a different product_type, so we render
+              one card per row and switch the per-row body by product_type.
+              Rows are sorted by row_number client-side fallback. */}
+          {factor.product_type === "mixed" && mixedItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور ترکیبی:</p>
+              {mixedItems.map((it, idx) => {
+                const d = it.details || {};
+                // Per-row product label — falls back to raw key for unknown
+                // types so we never render an empty badge.
+                const typeLabel = productLabels[it.product_type] || it.product_type;
+                return (
+                  <div key={it.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        ردیف {toPersianDigits(String(it.row_number ?? idx + 1))}
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                          {typeLabel}
+                        </span>
+                        {it.display_label && (
+                          <span className="font-medium text-foreground">
+                            {toPersianDigits(it.display_label)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Per-type detail snippets. We render only the few fields
+                        that are most useful at a glance — full snapshot is
+                        always in the DB. */}
+                    {it.product_type === "livestock" && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">وزن × قیمت پایه</span>
+                        <span className="text-foreground">
+                          {toPersianDigits(String((d.weight as number | null) ?? 0))} × {formatRial((d.off_unit_price as number | null) ?? 0)}
+                        </span>
+                      </div>
+                    )}
+                    {it.product_type === "feed" && (
+                      <>
+                        {d.batch_number ? (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">شماره بچ</span>
+                            <span className="text-foreground">{toPersianDigits(String(d.batch_number))}</span>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                    {it.product_type === "medicine" && d.batch_number ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">شماره بچ</span>
+                        <span className="text-foreground">{toPersianDigits(String(d.batch_number))}</span>
+                      </div>
+                    ) : null}
+                    {it.product_type === "manure" && d.vehicle_plate ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">پلاک خودرو</span>
+                        <span className="text-foreground">{toPersianDigits(String(d.vehicle_plate))}</span>
+                      </div>
+                    ) : null}
+
+                    {/* Shared factor_items fields — quantity × unit_price → total. */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">تعداد × قیمت واحد</span>
+                      <span className="text-foreground">
+                        {toPersianDigits(String(it.quantity ?? 0))}
+                        {it.unit ? ` ${it.unit}` : ""} × {formatRial(it.unit_price ?? 0)}
+                      </span>
+                    </div>
+                    {(it.discount_amount || 0) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">تخفیف</span>
+                        <span className="text-foreground">{formatRial(it.discount_amount || 0)}</span>
+                      </div>
+                    )}
+                    {(it.tax_amount || 0) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">مالیات</span>
+                        <span className="text-foreground">{formatRial(it.tax_amount || 0)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-bold">
+                      <span className="text-muted-foreground">جمع ردیف</span>
+                      <span className="text-foreground">{formatRial(it.total_amount || 0)}</span>
+                    </div>
+                    {it.description && (
+                      <div className="text-xs text-muted-foreground border-t border-border pt-1.5 mt-1.5">
+                        {it.description}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {/* Generic "no items" fallback. Only shown when the dedicated query
+              for this product_type successfully returned ZERO rows — never
+              when the query simply hasn't loaded yet (handled by `loading`)
+              or failed (handled by `errorMsg`). Mixed factors are included
+              so operators see a clear message instead of a blank panel. */}
           {!loading && !errorMsg && (
             (factor.product_type === "sperm" && items.length === 0) ||
             (factor.product_type === "milk" && milkItems.length === 0) ||
             (factor.product_type === "feed" && feedItems.length === 0) ||
             (factor.product_type === "medicine" && medicineItems.length === 0) ||
-            (factor.product_type === "livestock" && livestockItems.length === 0)
+            (factor.product_type === "livestock" && livestockItems.length === 0) ||
+            (factor.product_type === "mixed" && mixedItems.length === 0)
           ) && (
             <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
               ردیف اقلامی برای این فاکتور یافت نشد.
@@ -1117,6 +1254,10 @@ export default function Invoices() {
   const [selectedWageItems, setSelectedWageItems] = useState<WageItemRow[]>([]);
   const [selectedDailyWorkerItems, setSelectedDailyWorkerItems] = useState<DailyWorkerItemRow[]>([]);
   const [selectedRentalItems, setSelectedRentalItems] = useState<RentalItemRow[]>([]);
+  // Mixed-factor rows (factors.product_type='mixed'). One entry per factor_items
+  // row, hydrated with the matching factor_item_<type>_details snapshot and a
+  // resolved human label for master-table FKs.
+  const [selectedMixedItems, setSelectedMixedItems] = useState<MixedItemRow[]>([]);
   // Loading flag drives the spinner + "empty" message inside the detail panel.
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -1295,6 +1436,7 @@ export default function Invoices() {
       setSelectedWageItems([]);
       setSelectedDailyWorkerItems([]);
       setSelectedRentalItems([]);
+      setSelectedMixedItems([]);
       setDetailError(null);
       return;
     }
@@ -1307,6 +1449,7 @@ export default function Invoices() {
     setSelectedWageItems([]);
     setSelectedDailyWorkerItems([]);
     setSelectedRentalItems([]);
+    setSelectedMixedItems([]);
     setDetailError(null);
     setDetailLoading(true);
 
@@ -1440,6 +1583,151 @@ export default function Invoices() {
         setSelectedDailyWorkerItems((dwRes.data as DailyWorkerItemRow[]) || []);
         setSelectedRentalItems((rentalRes.data as RentalItemRow[]) || []);
         setSelectedMedicineItems((examRes.data as MedicineItemRow[]) || []);
+      } else if (pt === "mixed") {
+        // -----------------------------------------------------------------
+        // Mixed factor — created by MixedInvoiceForm. The header lives in
+        // `factors` with product_type='mixed'; each line is a `factor_items`
+        // row whose per-type fields live in `factor_item_<type>_details`
+        // keyed by factor_item_id. We fetch all detail tables in parallel
+        // and join in memory so a single map() builds the display rows
+        // regardless of how many product types the operator mixed.
+        // -----------------------------------------------------------------
+        // Cast the typed supabase client to a loose shape so we can hit
+        // dynamic detail-table names that are not in the generated types yet.
+        const sbAny = supabase as unknown as {
+          from: (t: string) => {
+            select: (s: string) => {
+              in: (c: string, v: string[]) => Promise<{ data: unknown }>;
+            };
+          };
+        };
+        const itemsRes = await supabase
+          .from("factor_items")
+          .select("*")
+          .eq("factor_id", id)
+          .order("row_number", { ascending: true });
+        const itemRows = (itemsRes.data as Array<Record<string, unknown>> | null) || [];
+        const itemIds = itemRows.map((r) => String(r.id));
+
+        // Fan-out detail fetches. Each detail table is keyed by
+        // factor_item_id which is unique per row, so `.in(...)` returns at
+        // most one record per item. We tolerate missing tables (legacy DBs)
+        // by swallowing errors per fetch — the row still renders using the
+        // shared factor_items fields if its detail snapshot is absent.
+        const detailTables = [
+          "factor_item_livestock_details",
+          "factor_item_feed_details",
+          "factor_item_medicine_details",
+          "factor_item_sperm_details",
+          "factor_item_milk_details",
+          "factor_item_manure_details",
+          "factor_item_service_details",
+          "factor_item_rental_details",
+          "factor_item_other_details",
+        ] as const;
+
+        const detailByItem = new Map<string, Record<string, unknown>>();
+        if (itemIds.length > 0) {
+          await Promise.all(
+            detailTables.map(async (tbl) => {
+              try {
+                const { data } = await sbAny
+                  .from(tbl)
+                  .select("*")
+                  .in("factor_item_id", itemIds);
+                for (const row of ((data as Array<Record<string, unknown>> | null) || [])) {
+                  detailByItem.set(String(row.factor_item_id), row);
+                }
+              } catch {
+                // Detail table missing or RLS denied — ignore, fall back to shared fields.
+              }
+            }),
+          );
+        }
+
+        // Resolve cow labels for livestock rows (cow_id is an internal bigint
+        // we must not show to operators — prefer bodynumber / tag_number /
+        // earnumber, exactly like the single-product livestock branch above).
+        const cowIds = Array.from(
+          new Set(
+            itemRows
+              .map((r) => detailByItem.get(String(r.id))?.cow_id)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v)),
+          ),
+        ) as number[];
+        const cowLabelMap = new Map<string, string>();
+        if (cowIds.length > 0) {
+          const { data: cows } = await supabase
+            .from("cows")
+            .select("id, bodynumber, tag_number, earnumber")
+            .in("id", cowIds);
+          for (const c of ((cows as Array<Record<string, unknown>> | null) || [])) {
+            const label =
+              (c.bodynumber != null && String(c.bodynumber).trim()) ||
+              (c.tag_number != null && String(c.tag_number).trim()) ||
+              (c.earnumber != null && String(c.earnumber).trim()) ||
+              "دام بدون پلاک";
+            cowLabelMap.set(String(c.id), String(label));
+          }
+        }
+
+        const mixedRows: MixedItemRow[] = itemRows.map((r) => {
+          const det = detailByItem.get(String(r.id)) || {};
+          const pType = String(r.product_type ?? "other");
+          // Build a friendly per-row label so the operator sees the master
+          // record (cow plaque, feed/medicine commercial name, sperm code…)
+          // instead of a UUID. Each branch reads the columns that branch's
+          // detail table is known to have.
+          let label: string | null = null;
+          if (pType === "livestock" && det.cow_id != null) {
+            label = cowLabelMap.get(String(det.cow_id)) ?? "دام بدون پلاک";
+          } else if (pType === "feed") {
+            label =
+              (det.commercial_product_name_fa as string | null) ||
+              (det.name_fa as string | null) ||
+              (det.feed_name as string | null) ||
+              (det.feed_code as string | null) ||
+              null;
+          } else if (pType === "medicine") {
+            label =
+              (det.commercial_product_name_fa as string | null) ||
+              (det.medicine_name as string | null) ||
+              null;
+          } else if (pType === "sperm") {
+            const code = (det.bull_code as string | null) || "";
+            const name = (det.bull_name as string | null) || "";
+            label = `${code}${name ? " - " + name : ""}`.trim() || null;
+          } else if (pType === "manure") {
+            label = (det.manure_type as string | null) || null;
+          } else if (pType === "services") {
+            label =
+              (det.service_name as string | null) ||
+              (det.service_code as string | null) ||
+              null;
+          } else if (pType === "rental") {
+            label = (det.purpose as string | null) || (det.driver_name as string | null) || null;
+          } else if (pType === "other") {
+            label = (det.item_name as string | null) || null;
+          }
+
+          return {
+            id: String(r.id),
+            row_number: (r.row_number as number | null) ?? null,
+            product_type: pType,
+            quantity: (r.quantity as number | null) ?? null,
+            unit: (r.unit as string | null) ?? null,
+            unit_price: (r.unit_price as number | null) ?? null,
+            discount_amount: (r.discount_amount as number | null) ?? null,
+            tax_amount: (r.tax_amount as number | null) ?? null,
+            total_amount: (r.total_amount as number | null) ?? null,
+            description: (r.description as string | null) ?? null,
+            details: det,
+            display_label: label,
+          };
+        });
+        setSelectedMixedItems(mixedRows);
       }
       // Note: "manure" / "other" / legacy_product_* have no dedicated items
       // table — the detail panel renders factor.description + totals only.
@@ -1504,6 +1792,7 @@ export default function Invoices() {
           wageItems={selectedWageItems}
           dailyWorkerItems={selectedDailyWorkerItems}
           rentalItems={selectedRentalItems}
+          mixedItems={selectedMixedItems}
           loading={detailLoading}
           errorMsg={detailError}
           onChanged={fetchFactors}
@@ -1517,6 +1806,7 @@ export default function Invoices() {
             setSelectedWageItems([]);
             setSelectedDailyWorkerItems([]);
             setSelectedRentalItems([]);
+            setSelectedMixedItems([]);
             setDetailError(null);
           }}
         />
