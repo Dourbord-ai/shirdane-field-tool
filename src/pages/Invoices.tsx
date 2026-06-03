@@ -1792,6 +1792,7 @@ export default function Invoices() {
           wageItems={selectedWageItems}
           dailyWorkerItems={selectedDailyWorkerItems}
           rentalItems={selectedRentalItems}
+          mixedItems={selectedMixedItems}
           loading={detailLoading}
           errorMsg={detailError}
           onChanged={fetchFactors}
@@ -1805,6 +1806,7 @@ export default function Invoices() {
             setSelectedWageItems([]);
             setSelectedDailyWorkerItems([]);
             setSelectedRentalItems([]);
+            setSelectedMixedItems([]);
             setDetailError(null);
           }}
         />
