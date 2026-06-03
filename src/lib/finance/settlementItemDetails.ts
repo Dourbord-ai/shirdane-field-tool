@@ -36,7 +36,19 @@ export interface BankTransferDetails {
   destination_bank_name?: string;
   transfer_type?: "card_to_card" | "paya" | "satna" | "bank_transfer";
   payment_note?: string;
+  // ---- Phase 6B additions: registered-account snapshot ------------------
+  // When a user picks a verified account from `finance_party_accounts` the
+  // picker snapshots its identifying fields here so:
+  //   1. The picker doesn't have to re-fetch when rendering the read view.
+  //   2. Phase 6B enforces that only `verification_status='verified'` rows
+  //      can be selected — recorded as `account_verification_status`.
+  //   3. Future deletes/disables of the party account row don't retroactively
+  //      change the historical settlement payload.
+  party_account_id?: string;
+  account_verification_status?: "verified"; // Phase 6B only allows 'verified'
+  verified_at?: string;
 }
+
 
 export interface CheckDetails {
   payee_name?: string;
