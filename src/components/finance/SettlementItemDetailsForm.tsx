@@ -43,7 +43,7 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
   // Local lookups for selectors. We fetch once per mounted form; the dialog
   // remounts on each row addition so this is cheap enough.
   const [banks, setBanks] = useState<{ id: string; title: string | null; bank_name: string | null }[]>([]);
-  const [checkbooks, setCheckbooks] = useState<{ id: string; series_label: string | null; bank_id: string | null }[]>([]);
+  const [checkbooks, setCheckbooks] = useState<{ id: string; title: string | null; bank_id: string | null }[]>([]);
   const [parties, setParties] = useState<{ id: string; first_name: string | null; last_name: string | null; company_name: string | null }[]>([]);
 
   useEffect(() => {
