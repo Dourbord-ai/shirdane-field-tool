@@ -550,6 +550,10 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
 
         execution_status: "pending",
         execution_priority: i.execution_priority ?? 3,
+        // Phase 5: method-specific payload. Always send an object — never
+        // null — so the RPC's COALESCE keeps the column non-null.
+        details: i.details ?? {},
+
       }));
 
 
