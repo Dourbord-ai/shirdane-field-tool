@@ -440,6 +440,10 @@ function PRDialog({
         due_date: "",
         execution_priority: 3,
         details: {},
+        // Phase 7B: preserve the source related-cost id so submit() can
+        // forward it to the RPC. The seller row has no related_cost_id and
+        // will simply stay null (no back-fill happens for it).
+        source_related_cost_id: di.source?.related_cost_id ?? null,
       }));
     }
     return [
