@@ -693,8 +693,79 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </>
                       );
                     })()}
+                    {/* ----- Phase 4 item-level lifecycle selectors -----
+                        Every NEW item is required to declare its payment
+                        method, what it is settling, when it must be paid,
+                        and (optionally) an execution priority. The
+                        execution_status is implicit ('pending') and not
+                        exposed in this dialog because new items always
+                        start as pending — the executor flips it later. We
+                        keep the markup compact (two 2-col grids) so the
+                        mobile sheet stays usable. */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          روش پرداخت <span className="text-destructive">*</span>
+                        </Label>
+                        <select
+                          value={it.payment_method || ""}
+                          onChange={(e) => updateItem(idx, { payment_method: e.target.value as PaymentMethod })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">انتخاب کنید…</option>
+                          {/* `legacy` is intentionally HIDDEN from the new-item
+                              picker — it must never be chosen for a brand-new
+                              item; it only labels rows imported before Phase 3. */}
+                          {PAYMENT_METHODS.filter((m) => m !== "legacy").map((m) => (
+                            <option key={m} value={m}>{PAYMENT_METHOD_LABELS_FA[m]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          موضوع تسویه <span className="text-destructive">*</span>
+                        </Label>
+                        <select
+                          value={it.settlement_subject_type || ""}
+                          onChange={(e) => updateItem(idx, { settlement_subject_type: e.target.value as SettlementSubjectType })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {SETTLEMENT_SUBJECT_TYPES.map((s) => (
+                            <option key={s} value={s}>{SETTLEMENT_SUBJECT_LABELS_FA[s]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          تاریخ سررسید <span className="text-destructive">*</span>
+                        </Label>
+                        {/* Reuse the project-wide Jalali date picker so the
+                            user picks a Persian date; its onChange returns an
+                            ISO yyyy-mm-dd Gregorian string ready for the
+                            `date` column. */}
+                        <ShamsiDatePicker
+                          value={it.due_date || ""}
+                          onChange={(v) => updateItem(idx, { due_date: v })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">اولویت اجرا</Label>
+                        <select
+                          value={String(it.execution_priority ?? 3)}
+                          onChange={(e) => updateItem(idx, { execution_priority: Number(e.target.value) as ExecutionPriority })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {EXECUTION_PRIORITIES.map((p) => (
+                            <option key={p} value={p}>{EXECUTION_PRIORITY_LABELS_FA[p]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
+
                   </div>
                 );
               })}
