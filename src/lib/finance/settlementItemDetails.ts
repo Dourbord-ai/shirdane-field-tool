@@ -190,8 +190,13 @@ export function summarizeDetails(method: string | null | undefined, raw: unknown
       const tType = pick("transfer_type");
       const idLabel = (ACCOUNT_IDENTIFIER_TYPE_LABELS_FA as Record<string, string>)[idType] || idType || "";
       const tLabel = (TRANSFER_TYPE_LABELS_FA as Record<string, string>)[tType] || tType || "";
-      return [owner, idValue && `${idLabel}: ${idValue}`, bank, tLabel].filter(Boolean).join(" — ") || "—";
+      // Phase 6B: append a Persian tag when the row was filled from a
+      // registered party account so reviewers can tell at a glance.
+      const fromRegistered = pick("party_account_id") ? "حساب ثبت‌شده ذینفع" : "";
+      return [owner, idValue && `${idLabel}: ${idValue}`, bank, tLabel, fromRegistered]
+        .filter(Boolean).join(" — ") || "—";
     }
+
     case "check": {
       return [pick("payee_name"), pick("check_reason"), pick("suggested_bank_name")]
         .filter(Boolean).join(" — ") || "—";
