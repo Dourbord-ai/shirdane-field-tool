@@ -398,36 +398,61 @@ export default function PaymentRequestsTab() {
   );
 }
 
-function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function PRDialog({
+  onClose,
+  onDone,
+  // Phase 7: optional draft handed in by the invoice page. When present we
+  // pre-populate title/description and seed `items` with one row per draft
+  // item. Operator still picks payment_method / due_date / details per row.
+  seedDraft = null,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+  seedDraft?: SettlementDraft | null;
+}) {
   const [typeCode, setTypeCode] = useState<number | "">("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  // Phase 4: every NEW item starts with explicit Phase-3 lifecycle defaults
-  // so the form is honest about what the user must pick. payment_method is
-  // intentionally empty (no default) to force a conscious choice — there is
-  // no sensible silent default among bank/cashbox/check/barter/deferred.
-  // settlement_subject_type defaults to 'main_invoice' (the most common
-  // case). execution_priority defaults to 3 (عادی) as required by the
-  // Phase-4 spec; execution_status is always 'pending' for new items and is
-  // therefore set later in the RPC payload, not on this row.
-  const [items, setItems] = useState<PRItem[]>([
-    {
-      party_id: null,
-      amount: 0,
-      amount_type_code: 1,
-      amount_type: "creditor",
-      description: "",
-      payment_method: "",
-      settlement_subject_type: "main_invoice",
-      due_date: "",
-      execution_priority: 3,
-      // Phase 5: start with empty details — the per-method sub-form is only
-      // rendered after the user picks a payment_method, and patches this
-      // object in place via `onChange`.
-      details: {},
-
-    },
-  ]);
+  const [title, setTitle] = useState(seedDraft?.title ?? "");
+  const [description, setDescription] = useState(seedDraft?.description ?? "");
+  // Phase 4 defaults — see original comment block. When a draft is provided,
+  // we expand it into one PRItem per draft entry, copying party_id, amount
+  // and description; everything else keeps the Phase-4 safe defaults so the
+  // operator is forced to pick payment_method consciously.
+  const [items, setItems] = useState<PRItem[]>(() => {
+    // Drain the sessionStorage seed exactly once on mount so a refresh of
+    // the dialog doesn't keep re-seeding stale data.
+    const consumed = seedDraft ?? consumeSettlementDraft();
+    if (consumed && consumed.items.length > 0) {
+      return consumed.items.map((di) => ({
+        party_id: di.party_id,
+        amount: di.amount,
+        amount_type_code: 1,
+        amount_type: "creditor",
+        description: di.description,
+        payment_method: "",
+        settlement_subject_type: "main_invoice",
+        due_date: "",
+        execution_priority: 3,
+        details: {},
+      }));
+    }
+    return [
+      {
+        party_id: null,
+        amount: 0,
+        amount_type_code: 1,
+        amount_type: "creditor",
+        description: "",
+        payment_method: "",
+        settlement_subject_type: "main_invoice",
+        due_date: "",
+        execution_priority: 3,
+        // Phase 5: start with empty details — the per-method sub-form is only
+        // rendered after the user picks a payment_method, and patches this
+        // object in place via `onChange`.
+        details: {},
+      },
+    ];
+  });
 
   const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
   const [partySepidarIds, setPartySepidarIds] = useState<Record<string, number | null>>({});
