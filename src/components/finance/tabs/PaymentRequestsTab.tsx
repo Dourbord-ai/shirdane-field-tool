@@ -619,6 +619,11 @@ function PRDialog({
         // Phase 5: method-specific payload. Always send an object — never
         // null — so the RPC's COALESCE keeps the column non-null.
         details: i.details ?? {},
+        // Phase 7B: forward the related-cost row id (if this item was seeded
+        // from one) so the RPC can persist it on the new item AND back-fill
+        // factor_related_costs.settlement_request_item_id in the same
+        // transaction. Seller rows / manually-added rows send null.
+        source_related_cost_id: i.source_related_cost_id ?? null,
 
       }));
 
