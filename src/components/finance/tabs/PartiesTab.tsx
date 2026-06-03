@@ -17,6 +17,11 @@ import {
 import { Plus, Pencil, X, Send, CheckCircle2, XCircle, RefreshCw, AlertTriangle, GitCompareArrows, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import BeneficiaryStatementCompareDialog from "@/components/finance/BeneficiaryStatementCompareDialog";
+// Phase 6A: party-scoped bank accounts panel embedded as a new tab inside
+// the party detail drawer. Kept as a separate module so the drawer stays
+// focused on identity/Sepidar concerns.
+import PartyAccountsTab from "@/components/finance/PartyAccountsTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Party {
   id: string;
