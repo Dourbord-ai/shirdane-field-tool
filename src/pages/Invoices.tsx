@@ -1798,36 +1798,78 @@ export default function Invoices() {
         </div>
       )}
 
-      {selectedFactor && (
-        <InvoiceDetail
-          factor={selectedFactor}
-          items={selectedItems}
-          milkItems={selectedMilkItems}
-          feedItems={selectedFeedItems}
-          medicineItems={selectedMedicineItems}
-          livestockItems={selectedLivestockItems}
-          wageItems={selectedWageItems}
-          dailyWorkerItems={selectedDailyWorkerItems}
-          rentalItems={selectedRentalItems}
-          mixedItems={selectedMixedItems}
-          loading={detailLoading}
-          errorMsg={detailError}
-          onChanged={fetchFactors}
-          onClose={() => {
-            setSelectedId(null);
-            setSelectedItems([]);
-            setSelectedMilkItems([]);
-            setSelectedFeedItems([]);
-            setSelectedMedicineItems([]);
-            setSelectedLivestockItems([]);
-            setSelectedWageItems([]);
-            setSelectedDailyWorkerItems([]);
-            setSelectedRentalItems([]);
-            setSelectedMixedItems([]);
-            setDetailError(null);
-          }}
-        />
-      )}
+      {/* Detail modal — replaces the legacy inline top-of-page panel so the
+          user keeps their scroll position when opening a row. On desktop it
+          renders as a centered max-w-3xl dialog; on mobile we expand it to
+          ~95vw / 95vh which gives a near full-screen sheet feel without
+          requiring a separate Sheet component. */}
+      <Dialog
+        open={!!selectedFactor}
+        onOpenChange={(open) => {
+          if (!open) closeDetail();
+        }}
+      >
+        <DialogContent
+          dir="rtl"
+          className="max-w-3xl w-[95vw] max-h-[90vh] overflow-hidden p-0 gap-0 flex flex-col"
+        >
+          {selectedFactor && (
+            <>
+              {/* Scrollable body — keeps the prev/next bar pinned at the bottom. */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <InvoiceDetail
+                  factor={selectedFactor}
+                  items={selectedItems}
+                  milkItems={selectedMilkItems}
+                  feedItems={selectedFeedItems}
+                  medicineItems={selectedMedicineItems}
+                  livestockItems={selectedLivestockItems}
+                  wageItems={selectedWageItems}
+                  dailyWorkerItems={selectedDailyWorkerItems}
+                  rentalItems={selectedRentalItems}
+                  mixedItems={selectedMixedItems}
+                  loading={detailLoading}
+                  errorMsg={detailError}
+                  onChanged={fetchFactors}
+                  onClose={closeDetail}
+                />
+              </div>
+
+              {/* Prev / Next navigation bar — follows the current filtered &
+                  sorted factors list order so it matches what the operator
+                  sees in the table. Buttons are disabled at the boundaries. */}
+              <div className="flex items-center justify-between gap-2 border-t border-border bg-card px-4 py-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!prevFactor || detailLoading}
+                  onClick={() => prevFactor && handleSelect(prevFactor.id)}
+                  className="gap-1"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  فاکتور قبلی
+                </Button>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {selectedIndex >= 0
+                    ? `${toPersianDigits(String(selectedIndex + 1))} / ${toPersianDigits(String(factors.length))}`
+                    : ""}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!nextFactor || detailLoading}
+                  onClick={() => nextFactor && handleSelect(nextFactor.id)}
+                  className="gap-1"
+                >
+                  فاکتور بعدی
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
 
       {/* Result count + loading + error states */}
       {errorMsg && (
