@@ -2021,6 +2021,81 @@ export type Database = {
         }
         Relationships: []
       }
+      factor_related_costs: {
+        Row: {
+          amount: number
+          attachment_path: string | null
+          cost_category: string
+          cost_date: string
+          cost_type: string
+          created_at: string
+          description: string | null
+          driver_name: string | null
+          factor_id: string
+          id: string
+          is_deleted: boolean
+          party_id: string | null
+          payment_required: boolean
+          settlement_request_item_id: string | null
+          source_document_number: string | null
+          updated_at: string
+          vehicle_plate: string | null
+        }
+        Insert: {
+          amount: number
+          attachment_path?: string | null
+          cost_category: string
+          cost_date?: string
+          cost_type: string
+          created_at?: string
+          description?: string | null
+          driver_name?: string | null
+          factor_id: string
+          id?: string
+          is_deleted?: boolean
+          party_id?: string | null
+          payment_required?: boolean
+          settlement_request_item_id?: string | null
+          source_document_number?: string | null
+          updated_at?: string
+          vehicle_plate?: string | null
+        }
+        Update: {
+          amount?: number
+          attachment_path?: string | null
+          cost_category?: string
+          cost_date?: string
+          cost_type?: string
+          created_at?: string
+          description?: string | null
+          driver_name?: string | null
+          factor_id?: string
+          id?: string
+          is_deleted?: boolean
+          party_id?: string | null
+          payment_required?: boolean
+          settlement_request_item_id?: string | null
+          source_document_number?: string | null
+          updated_at?: string
+          vehicle_plate?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factor_related_costs_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factor_related_costs_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       factor_state_transitions: {
         Row: {
           actor_user_id: string | null
