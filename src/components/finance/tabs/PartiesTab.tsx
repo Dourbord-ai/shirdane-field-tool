@@ -404,7 +404,17 @@ function PartyDetailDrawer({
           </div>
         </div>
 
-        <div className="p-4 space-y-4">
+        {/* Phase 6A: the drawer body is now split into two tabs. The original
+            "نمای کلی" content lives in the first tab; the new bank-account
+            registry lives in the second. Tabs keep the drawer compact while
+            making the new section discoverable. */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid grid-cols-2 mx-4 mt-4">
+            <TabsTrigger value="overview">نمای کلی</TabsTrigger>
+            <TabsTrigger value="accounts">حساب‌های بانکی</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="p-4 space-y-4 mt-0">
           {/* Posting readiness banner */}
           {!ready && (
             <div className="rounded-lg border bg-amber-50 text-amber-900 text-xs p-2 flex items-start gap-2">
@@ -510,7 +520,14 @@ function PartyDetailDrawer({
               </div>
             )}
           </div>
-        </div>
+          </TabsContent>
+
+          <TabsContent value="accounts" className="p-4 mt-0">
+            {/* Self-contained section: lists/edits/disables bank accounts and
+                handles its own verify flow via AccountVerifyButton. */}
+            <PartyAccountsTab partyId={party.id} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
