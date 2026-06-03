@@ -56,6 +56,12 @@ import {
   type SettlementItemDetails,
 } from "@/lib/finance/settlementItemDetails";
 import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetailsForm";
+// Phase 8: execution layer — request-level progress summary (with monetary
+// KPIs) at the top of the detail view, and a per-item execution panel that
+// routes by payment_method. Both are pure components that work off the
+// already-loaded items list and reload via the existing `reload()` helper.
+import SettlementRequestProgressSummary from "@/components/finance/SettlementRequestProgressSummary";
+import SettlementItemExecutionPanel from "@/components/finance/SettlementItemExecutionPanel";
 
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
