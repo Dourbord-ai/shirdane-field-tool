@@ -1179,6 +1179,20 @@ function InvoiceDetail({
             </div>
           )}
 
+          {/* Phase 7: structured related costs (freight, weighing, unloading,
+              misc). Lives inside the invoice detail because each row is
+              factor-scoped. Renders its own list + "ثبت درخواست تسویه" CTA
+              that hands a draft to PaymentRequestsTab via sessionStorage. */}
+          <RelatedCostsSection
+            invoice={{
+              id: factor.id,
+              invoice_number: factor.invoice_number,
+              finance_party_id: factor.finance_party_id,
+              total_amount: factor.total_amount,
+              payable_amount: factor.payable_amount,
+            }}
+          />
+
           {/* MVP posting controls — renders nothing for factors that have not
               yet entered the accounting pipeline (lifecycle_state NULL/draft). */}
           {/* Approval (Approve/Reject) runs first for draft rows; PostingPanel
