@@ -798,8 +798,20 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </select>
                       </div>
                     </div>
+                    {/* Phase 5 method-specific sub-form. Conditional render
+                        is handled INSIDE the component — passing an empty
+                        method simply yields null, so the row stays compact
+                        until the user picks a method. */}
+                    {it.payment_method && (
+                      <SettlementItemDetailsForm
+                        paymentMethod={it.payment_method as string}
+                        value={it.details || {}}
+                        onChange={(next) => updateItem(idx, { details: next })}
+                      />
+                    )}
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
+
 
                   </div>
                 );
