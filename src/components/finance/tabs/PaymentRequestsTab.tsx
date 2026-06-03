@@ -44,6 +44,14 @@ import {
   type SettlementSubjectType,
   type ExecutionPriority,
 } from "@/lib/finance/settlementItemTypes";
+// Phase 5: method-specific details (jsonb), validation + Persian summary.
+import {
+  validateDetails,
+  summarizeDetails,
+  type SettlementItemDetails,
+} from "@/lib/finance/settlementItemDetails";
+import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetailsForm";
+
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
 // parties that exist locally but aren't in Sepidar's beneficiary view. Rows
@@ -108,6 +116,11 @@ interface PRItem {
   settlement_subject_type?: SettlementSubjectType | "";
   due_date?: string; // ISO yyyy-mm-dd in Gregorian (DB stores `date` column)
   execution_priority?: ExecutionPriority;
+  // Phase 5: method-specific fields stored on the row as jsonb. Empty object
+  // for items whose method does not need extra metadata; never null so the
+  // server-side COALESCE stays predictable.
+  details?: SettlementItemDetails;
+
 }
 
 
@@ -378,6 +391,11 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       settlement_subject_type: "main_invoice",
       due_date: "",
       execution_priority: 3,
+      // Phase 5: start with empty details — the per-method sub-form is only
+      // rendered after the user picks a payment_method, and patches this
+      // object in place via `onChange`.
+      details: {},
+
     },
   ]);
 
@@ -466,6 +484,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
     const missingDue = items.findIndex((i) => !i.due_date);
     if (missingDue >= 0) return toast.error(`ردیف ${missingDue + 1}: تاریخ سررسید الزامی است.`);
 
+    // Phase 5: per-method details validation. Each method has its own list of
+    // required fields (defined centrally in `validateDetails`). We surface
+    // the first failure with a row-number prefix so the user can locate it.
+    for (let i = 0; i < items.length; i++) {
+      const err = validateDetails(items[i].payment_method as string, items[i].details);
+      if (err) return toast.error(`ردیف ${i + 1}: ${err}`);
+    }
+
+
 
     // Validate creditor balance for amount_type_code = 1 using the snapshot
     // captured at selection time.
@@ -523,6 +550,10 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
 
         execution_status: "pending",
         execution_priority: i.execution_priority ?? 3,
+        // Phase 5: method-specific payload. Always send an object — never
+        // null — so the RPC's COALESCE keeps the column non-null.
+        details: i.details ?? {},
+
       }));
 
 
@@ -581,7 +612,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           <div className="rounded-lg border">
             <div className="p-2 border-b bg-muted/40 flex justify-between items-center">
               <span className="font-bold text-sm">آیتم‌ها</span>
-              <Button size="sm" variant="ghost" onClick={() => setItems([...items, { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "", payment_method: "", settlement_subject_type: "main_invoice", due_date: "", execution_priority: 3 }])}>
+              <Button size="sm" variant="ghost" onClick={() => setItems([...items, { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "", payment_method: "", settlement_subject_type: "main_invoice", due_date: "", execution_priority: 3, details: {} }])}>
                 <Plus className="w-3 h-3 ml-1" /> افزودن
               </Button>
             </div>
@@ -713,7 +744,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </Label>
                         <select
                           value={it.payment_method || ""}
-                          onChange={(e) => updateItem(idx, { payment_method: e.target.value as PaymentMethod })}
+                          onChange={(e) => {
+                            // Switching method invalidates any partially
+                            // filled details from the previous method, so we
+                            // reset details to {} to avoid sending mixed
+                            // payloads (e.g. a check `payee_name` saved on a
+                            // bank_transfer row).
+                            updateItem(idx, { payment_method: e.target.value as PaymentMethod, details: {} });
+                          }}
+
                           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">انتخاب کنید…</option>
@@ -767,8 +806,20 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </select>
                       </div>
                     </div>
+                    {/* Phase 5 method-specific sub-form. Conditional render
+                        is handled INSIDE the component — passing an empty
+                        method simply yields null, so the row stays compact
+                        until the user picks a method. */}
+                    {it.payment_method && (
+                      <SettlementItemDetailsForm
+                        paymentMethod={it.payment_method as string}
+                        value={it.details || {}}
+                        onChange={(next) => updateItem(idx, { details: next })}
+                      />
+                    )}
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
+
 
                   </div>
                 );
@@ -811,6 +862,10 @@ interface PRItemFull {
   due_date?: string | null;
   execution_status?: string | null;
   execution_priority?: number | null;
+  // Phase 5: method-specific jsonb. Supabase returns Json | null; we accept
+  // unknown and let the summarizer narrow safely.
+  details?: unknown;
+
 }
 
 
@@ -1090,6 +1145,19 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       </div>
                     </div>
                   )}
+
+                  {/* Phase 5 method-specific summary. Rendered only for
+                      non-legacy items (legacy rows already show a separate
+                      read-only banner above). The text is built by
+                      `summarizeDetails` so the formatting stays consistent
+                      with the new-request form. */}
+                  {!isLegacyItem(i) && i.payment_method && (
+                    <div className="rounded bg-muted/30 border border-dashed px-2 py-1 text-[11px] flex items-start gap-2">
+                      <span className="text-muted-foreground shrink-0">جزئیات روش:</span>
+                      <span className="break-words">{summarizeDetails(i.payment_method, i.details)}</span>
+                    </div>
+                  )}
+
 
                   {isRejected && (
                     <div className="text-[11px] text-red-700 dark:text-red-300">
