@@ -125,13 +125,27 @@ export function validateDetails(
     !d[key] || String(d[key]).trim() === "" ? `${label} الزامی است.` : null;
 
   switch (method) {
-    case "bank_transfer":
+    case "bank_transfer": {
+      // Phase 6B: branch by mode. If a `party_account_id` is present we are
+      // in "registered account" mode — the snapshot fields are already
+      // copied from the verified account row, so we only need to ensure the
+      // verification stamp is 'verified' and the user picked a transfer type.
+      if (d.party_account_id) {
+        if (d.account_verification_status !== "verified") {
+          return "حساب انتخاب‌شده تأیید نشده است؛ ابتدا در پروفایل ذینفع آن را استعلام کنید.";
+        }
+        return req("transfer_type", "نوع انتقال");
+      }
+      // Manual mode — same Phase 5 rules. (Verification of manual entries is
+      // deferred to a later phase; the UI warns the user.)
       return (
         req("declared_account_owner_name", "نام صاحب حساب اعلام‌شده") ||
         req("account_identifier_type", "نوع شناسه حساب") ||
         req("account_identifier_value", "شماره حساب/کارت/شبا") ||
         req("transfer_type", "نوع انتقال")
       );
+    }
+
     case "check":
       // check_number is intentionally NOT required at request stage.
       return req("payee_name", "نام دریافت‌کننده چک") || req("check_reason", "بابت");
