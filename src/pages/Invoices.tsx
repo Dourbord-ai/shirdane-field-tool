@@ -1145,6 +1145,10 @@ export default function Invoices() {
   const [selectedWageItems, setSelectedWageItems] = useState<WageItemRow[]>([]);
   const [selectedDailyWorkerItems, setSelectedDailyWorkerItems] = useState<DailyWorkerItemRow[]>([]);
   const [selectedRentalItems, setSelectedRentalItems] = useState<RentalItemRow[]>([]);
+  // Mixed-factor rows (factors.product_type='mixed'). One entry per factor_items
+  // row, hydrated with the matching factor_item_<type>_details snapshot and a
+  // resolved human label for master-table FKs.
+  const [selectedMixedItems, setSelectedMixedItems] = useState<MixedItemRow[]>([]);
   // Loading flag drives the spinner + "empty" message inside the detail panel.
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
