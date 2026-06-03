@@ -862,6 +862,10 @@ interface PRItemFull {
   due_date?: string | null;
   execution_status?: string | null;
   execution_priority?: number | null;
+  // Phase 5: method-specific jsonb. Supabase returns Json | null; we accept
+  // unknown and let the summarizer narrow safely.
+  details?: unknown;
+
 }
 
 
