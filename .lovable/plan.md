@@ -1,129 +1,164 @@
-# Plan — Check Auto-Posting + Guarantee/Cancelled Categories
+# درخواست تسویه — Audit & Phased Plan
 
-Two related changes to the Check Management module. Task 1 makes received/payable checks immediately affect the General Ledger; Task 2 adds two new tracking-only categories that share the UI shell but never touch accounting.
+> Phase 1 only: this is an audit + plan. No code/DB changes yet. Each later phase waits for your approval before execution.
 
 ---
 
-## Part 1 — Schema additions (single migration)
+## Phase 1 — Current System Audit
 
-### 1.1 Extend `finance_checks`
-- Add `category` text NOT NULL DEFAULT `'operational'`, CHECK in (`'operational'`,`'guarantee'`,`'cancelled'`). Backfill existing rows to `'operational'`.
-- Add `voucher_id uuid NULL` (FK → `finance_vouchers(id)`) — primary "registration" voucher, for fast joins.
-- Add for guarantee/cancelled metadata:
-  - `expiry_date date NULL` — guarantee
-  - `guarantee_subject text NULL`
-  - `related_contract text NULL`
-  - `related_project text NULL`
-  - `cancelled_date date NULL`
-  - `cancel_reason text NULL` (CHECK in the 7 reasons listed in the spec)
-- New CHECK: when `category='operational'` `party_id` must be NOT NULL (current implicit rule).
+### 1.1 Payment Request module (current)
 
-### 1.2 Extend enums
-- `check_status`: add value `'cancelled'`. Add allowed transitions in `fn_finance_check_status_guard` for the new category (cancelled checks are born `cancelled`; guarantee checks support `active → returned/claimed/expired/voided`). Reuse existing values where possible: map "active"→ for guarantees we'll use status = `'issued'` semantically and rely on category to distinguish. Decision: add `'active'`, `'returned'`, `'claimed'`, `'expired'` to `check_status` enum to match the spec exactly.
-- `check_event_type`: add `'voucher_posted'`, `'voucher_reversed'`, `'guarantee_claimed'`, `'guarantee_returned'`, `'cancelled'`.
+**DB tables** (already present, will be reused, not replaced):
 
-### 1.3 Voucher posting helper (plpgsql, SECURITY DEFINER)
-Function `public.fn_finance_check_post_voucher(p_check_id uuid, p_event text)` where `p_event ∈ ('register','clear','bounce')`:
+- `finance_payment_requests`
+  - Key cols: `id, legacy_id, title, description, request_type, legacy_request_type_code, status, payment_status, total_amount, confirmed_amount, total_paid_amount, remaining_amount, requested_by, approved_by, approved_at, is_deleted`
+  - `status`: draft / pending_approval / approved / rejected / cancelled
+  - `payment_status`: unpaid / partial_payment / full_payment (driven by trigger)
+- `finance_payment_request_items`
+  - Key cols: `id, payment_request_id, party_id, amount, confirmed_amount, amount_type, amount_type_code (1=creditor,2=prepayment,3=on_account), description, status, paid_transaction_id, voucher_id, paid_amount, remaining_amount, beneficiary_id, dl_ref, dl_code, beneficiary_name, beneficiary_balance_snapshot, beneficiary_type, beneficiary_snapshot_at`
+- `finance_payment_allocations`
+  - Links a request/item to one `bank_transaction_id` with `amount, status, voucher_id, sepidar_sync_status`
 
-1. Lock the check row. Bail early (no-op, no error) if `category <> 'operational'`.
-2. Guard idempotency via `finance_check_links` unique index on `(check_id, link_type='voucher', metadata->>'event')` — if a link with this `event` already exists, return its `voucher_id` and exit.
-3. Insert a `finance_vouchers` row using existing sequence-based numbering (`voucher_number` auto via `DEFAULT nextval`), with:
-   - `voucher_type` = `'check'`
-   - `source_operation_type` = `'finance_check'`
-   - `source_operation_id` = `p_check_id`
-   - `voucher_date` = `now()` (or check's relevant date)
-   - `title`/`description` = Persian sentence describing the event
-   - `status` = `'posted'`
-4. Insert two `finance_voucher_items` rows per the matrix below.
-5. Insert one `finance_check_links` row (`link_type='voucher'`, metadata `{event}`).
-6. Insert one `finance_check_events` row (`event_type='voucher_posted'` or `'voucher_reversed'`).
-7. For the `register` event only, set `finance_checks.voucher_id = new_voucher.id`.
+**UI**: `src/components/finance/tabs/PaymentRequestsTab.tsx` (1189 lines). Single-tab Finance page entry registered in `src/pages/Finance.tsx` as `payment-requests`.
 
-Account-type strings used in `finance_voucher_items.account_type` (the only existing identification column; Sepidar IDs left NULL for now and will be filled later by mapping):
+**Supporting libs**: `src/lib/finance.ts`, `src/lib/paymentRequestTypes.ts` (7 legacy types: misc/purchase/refund/insurance_tax/petty_cash/payroll/bank_fees), `src/lib/paymentAmountTypes.ts`.
 
-| Event | Direction | Debit row | Credit row |
+**Existing records**: 3 requests in production — must not break.
+
+### 1.2 Factor / Purchase invoice module
+
+- `factors` (50+ columns): `invoice_type, product_type, invoice_number, payable_amount, settlement_type, settlement_date, settlement_number, lifecycle_state, voucher_id, finance_party_id, shipping (numeric), ...`. Already has a single `shipping` numeric and an `image` attachment but **no structured related-cost table**.
+- `factor_items` + per-product detail tables (`factor_item_livestock_details`, `_feed_details`, `_medicine_details`, `_milk_details`, `_sperm_details`, `_rental_details`, `_service_details`, `_manure_details`, `_other_details`).
+- `factor_attachments` (file-level only; no party/amount fields).
+- Forms: `src/components/invoices/MixedInvoiceForm.tsx`, `src/pages/NewInvoice.tsx`, `src/pages/Invoices.tsx`.
+
+### 1.3 Parties
+
+- `finance_parties` — full party profile (ownership_type, first/last name, company_name, national_code, identification_code, economic_code, mobile, balance, request_balance, sepidar_party_id, approval_status, sepidar_dl_*).
+- No card/account/IBAN columns yet on parties (verification today is on bank transactions, not parties).
+- Quick-create UI: `PartiesTab.tsx` + `LocalPartyBeneficiarySelector.tsx`.
+
+### 1.4 Check module (complete & reusable)
+
+- `finance_checks` — direction, party_id, amount, check_number, sayad_number, bank_id, bank_account_id, checkbook_leaf_id, issue_date, receive_date, due_date, status, party_effected_at, bank_effected_at, category (guarantee/cancelled/normal), voucher_id, expiry_date, guarantee_subject, related_contract, related_project, cancelled_date, cancel_reason.
+- `finance_check_events` — event_type, event_date, description, metadata.
+- `finance_check_links` — `link_type + link_id` polymorphic link (perfect for linking a check to a settlement item).
+- `finance_checkbooks`, `finance_checkbook_leaves` (status, issued_check_id).
+- UI: `src/components/finance/checks/*`, hooks in `src/hooks/useChecks.ts`, `useCheckbooks.ts`.
+
+### 1.5 CardInfo / Verify Account (already production)
+
+- Edge function `supabase/functions/verify-account/index.ts` — type 1/2/3 (card/sheba/deposit), cached in `bankpartyaccountinfos`.
+- UI component `src/components/AccountVerifyButton.tsx` — number, declared name, live similarity match (match/partial/mismatch), inline override.
+- Already used in `NewInvoiceLegacy.tsx`. Auto-pipeline use in `processDepositAI.ts`, `autoIdentify.ts`, `bankImport.ts`.
+
+### 1.6 RLS / constraints
+
+Standard pattern: all finance tables RLS-enabled, GRANTs to authenticated/service_role. The new fields/tables will follow the same pattern.
+
+### 1.7 What can be reused vs migrated vs untouched
+
+| Concern | Decision |
+|---|---|
+| Payment request tables/IDs/legacy data | **Reuse**, do not drop/rename. Only extend with columns. |
+| `finance_payment_request_items` | **Extend** with grouping + execution fields. No sub-item table. |
+| Check tables | **Reuse as-is**, link via `finance_check_links(link_type='settlement_item')`. |
+| Verify-account edge function + AccountVerifyButton | **Reuse as-is**. |
+| `factor_attachments` only freight model | **Replace** (additively) with new `factor_related_costs` table. |
+| Parties | Add card/account/IBAN columns + verification snapshot. |
+| Accounting/Sepidar posting | **Do not touch**. Settlement request remains zero-effect. |
+
+### 1.8 What must NOT be broken
+
+- Existing 3 payment requests + items + allocations.
+- Factor posting flow (`factor-post-voucher` edge fn).
+- Check workflow, party balance triggers, bank transaction allocation flow.
+- Sepidar sync columns/edge functions.
+
+---
+
+## Phased Implementation Plan (await approval per phase)
+
+### Phase 2 — Rename & reframe (UI-only, zero DB)
+- Tab label & route key stay `payment-requests` internally (no breakage) but display as «درخواست تسویه».
+- Update titles, buttons, empty states, breadcrumbs, dashboard widgets.
+- Add concept note: parent request can contain multiple executable items.
+
+### Phase 3 — Settlement item enhancement (1 migration)
+Add to `finance_payment_request_items` (nullable, backward compatible):
+- `payment_method` text check in (`bank_transfer`,`cashbox`,`check`,`barter`,`deferred`)
+- `settlement_subject_type` text (`main_invoice`,`freight`,`waybill`,`unloading`,`loading`,`weighing`,`storage`,`commission`,`service`,`misc`)
+- `settlement_subject_title` text
+- `settlement_group_key` text (UI grouping)
+- `source_factor_id uuid` → `factors(id)`
+- `source_related_cost_id uuid` → `factor_related_costs(id)` (added in Phase 6)
+- `due_date date`, `execution_status text` (`pending`,`in_progress`,`executed`,`cancelled`)
+- Indexes on `settlement_group_key`, `source_factor_id`.
+Existing rows get `payment_method='bank_transfer'` defaults via backfill.
+
+### Phase 4 — Item-specific forms (frontend)
+- New polymorphic item editor; switches fields by `payment_method`.
+- Bank transfer: card/account/IBAN + transfer_type + due_date + AccountVerifyButton.
+- Cashbox: cashbox ref + recipient + payment_date + receipt slot.
+- Check: amount/due_date/payee/reason/suggested bank+checkbook (no check_number yet).
+- Deferred: amount/follow_up_date/reason.
+- Barter: amount/counterparty/barter_type/reference.
+
+Storage for transient fields uses a new nullable `details jsonb` on the item (single column, no sub-table).
+
+### Phase 5 — Verify-account integration
+- Add to `finance_parties`: `card_number`, `account_number`, `iban`, `declared_owner_name`, `verified_owner_name`, `verified_bank_name`, `verification_status` (verified/mismatch/pending/invalid/unknown), `verified_at`, `verified_by`, `verify_raw jsonb`, `mismatch_override_by`, `mismatch_override_reason`.
+- Reuse `AccountVerifyButton` in: settlement item bank-transfer form, quick-party modal, freight/driver modal, party profile, factor related-cost form.
+- Submit-guard: bank_transfer item requires `verification_status in ('verified')` OR manager-role override w/ reason.
+
+### Phase 6 — Purchase invoice related costs (1 migration)
+New table `factor_related_costs`:
+- `id, factor_id (fk), cost_type (text: freight/waybill/unloading/loading/weighing/transport_insurance/storage/commission/misc), amount numeric, party_id (fk finance_parties), description, waybill_number, vehicle_plate, driver_name, attachment_path, account_identifier_type, account_identifier_value, declared_owner_name, verification_status, verified_at, created_by, created_at, updated_at`.
+- RLS + GRANTs per house style.
+- Add «هزینه‌های وابسته» section inside `MixedInvoiceForm` and Mixed factor detail view.
+
+### Phase 7 — Quick party creation improvements
+- Single shared `QuickPartyDialog` (extract from existing flow) accepting context: `{defaultPartyType, buttonLabel, defaultPartyStatus, prefill}`.
+- Duplicate detection on name+mobile+national_id+card+account+IBAN with «استفاده از همین» / «ایجاد با وجود شباهت».
+- Returns created/selected party to caller; never resets parent form.
+
+### Phase 8 — Invoice → settlement shortcut
+- After-create success screen with 6 actions (ثبت درخواست تسویه + related cost + view check/payments/list).
+- "ثبت درخواست تسویه" creates ONE parent `finance_payment_requests` + N items (seller × payment_methods + each related cost × payment_method), all sharing distinct `settlement_group_key`s per (party_id + subject).
+
+### Phase 9 — Check integration
+- Item-stage: store check spec in item `details`.
+- Issue-stage action on item → opens existing `NewPayableCheckDialog` prefilled; on save creates `finance_checks` + `finance_check_events(event_type='issued')` + `finance_check_links(link_type='settlement_item', link_id=item.id)`; flips item `execution_status='executed'`.
+- No new check tables, no duplicated logic.
+
+### Phase 10 — Execution rules (financial effect contract)
+- Settlement request creation: **no triggers fire** on balance/voucher.
+- Effects only on execution path:
+  - bank_transfer: existing `finance_payment_allocations` flow + bank-transaction match.
+  - cashbox: insert into cashbox ledger (existing).
+  - check: existing finance_checks workflow (party/bank effected dates).
+  - barter/deferred: state-only.
+- Validate by reviewing existing triggers (audit step before coding).
+
+### Phase 11 — UI/UX finalization
+- Status cards, filters (status/party/date/source/payment_method), grouped item rendering by `settlement_group_key`, badges, dialog-in-place (no scroll-to-top), full RTL + mobile.
+
+### Phase 12 — Testing plan
+- Scripted scenarios per your list (simple bank, multi-check seller, invoice→seller+driver, two-stage driver, verify success/mismatch/override, dup party, check issuance writes events+links, legacy 3 records still load, no premature financial effect).
+- Edge-fn integration tests for verify-account & factor-post-voucher remain green.
+
+---
+
+## Migration footprint summary
+
+| Phase | New table | Altered table | Edge fn |
 |---|---|---|---|
-| register | received | `notes_receivable`, party_id=NULL | `party_receivable`, party_id=check.party_id |
-| register | payable  | `party_payable`, party_id=check.party_id | `notes_payable`, party_id=NULL |
-| clear    | received | `bank`, bank_id=check.bank_id | `notes_receivable` |
-| clear    | payable  | `notes_payable` | `bank`, bank_id=check.bank_id |
-| bounce   | received | `party_receivable`, party_id=check.party_id | `notes_receivable` |
-| bounce   | payable  | `notes_payable` | `party_payable`, party_id=check.party_id |
+| 3 | — | finance_payment_request_items (+10 cols, +details jsonb, +indexes, backfill) | — |
+| 5 | — | finance_parties (+12 cols) | — |
+| 6 | factor_related_costs | finance_payment_request_items.source_related_cost_id FK | — |
 
-Party balance auto-recomputes via the existing `tg_recompute_party_balance_items` trigger on `finance_voucher_items`.
-
-### 1.4 Trigger wiring
-- Replace/extend `fn_finance_check_after_insert`: after its existing work, if `NEW.category='operational'`, call `fn_finance_check_post_voucher(NEW.id, 'register')`.
-- New `fn_finance_check_after_status_change` (AFTER UPDATE OF status): if `category='operational'` and `OLD.status <> NEW.status` and `NEW.status IN ('cleared','bounced')`, call `fn_finance_check_post_voucher(NEW.id, NEW.status::text)`.
-- Update `fn_finance_check_status_guard` to allow guarantee/cancelled lifecycle transitions and to forbid `cleared`/`bounced` for `category <> 'operational'`.
-
-### 1.5 GRANTs / RLS
-- All new columns inherit existing table grants. No new tables → no new GRANT statements required.
+No drops, no renames, no destructive backfills.
 
 ---
 
-## Part 2 — Frontend
-
-### 2.1 Tab structure (`ChecksTab.tsx`)
-Update `SUBTABS` to the spec ordering:
-```
-چک‌های دریافتنی | چک‌های پرداختنی | چک‌های ضمانتی | چک‌های ابطالی | دسته‌چک‌ها | سررسیدها | برگشتی‌ها
-```
-List queries for the existing received/payable tabs are filtered by `category='operational'` so guarantee/cancelled checks never leak into them.
-
-### 2.2 New components
-- `NewGuaranteeCheckDialog.tsx` — fields: ذینفع، مبلغ، شماره چک، شماره صیاد، بانک، حساب بانکی، تاریخ چک، تاریخ انقضا، موضوع ضمانت، قرارداد، پروژه، توضیحات. Inserts with `direction='received'|'payable'` (user picks), `category='guarantee'`, `status='active'`. No voucher created.
-- `NewCancelledCheckDialog.tsx` — fields: ذینفع، مبلغ، شماره چک، شماره صیاد، بانک، حساب بانکی، تاریخ چک، تاریخ ابطال، علت ابطال (Select from the 7 reasons), توضیحات. Inserts `category='cancelled'`, `status='cancelled'`.
-- `GuaranteeChecksTab.tsx`, `CancelledChecksTab.tsx` — list + KPI cards as specified.
-- Reuse existing `CheckDetailDialog` (passes through `category` to switch labels; voucher-related sections shown only for `operational`).
-- Update `StatusBadge` to label the new statuses (`active` → "فعال" green, `returned` → "بازگشتی" muted, `claimed` → "ضبط شده" red, `expired` → "منقضی" amber, `cancelled` → "ابطال" destructive).
-
-### 2.3 KPI cards
-- Guarantee tab: تعداد فعال، جمع مبلغ، تعداد منقضی.
-- Cancelled tab: تعداد، جمع مبلغ، breakdown بر اساس علت (small bar/list).
-
-### 2.4 Hooks / lib
-- Extend `useChecks` with `category` filter; add `useGuaranteeChecks`, `useCancelledChecks` (thin wrappers).
-- `src/lib/checks.ts`: extend `CheckStatus`, add `CheckCategory`, `CANCEL_REASONS`, label/tone maps.
-- Existing `NewReceivedCheckDialog` and `NewPayableCheckDialog` keep working — they'll send `category` implicitly via DB default (`'operational'`).
-
-### 2.5 Detail dialog additions
-Show the linked voucher number + click-through (using `finance_check_links` rows of `link_type='voucher'`) for operational checks. Guarantee/cancelled show a neutral "این چک سند حسابداری ندارد" note.
-
----
-
-## Technical details
-
-- **Idempotency** lives in DB only — no client-side dedup. A unique partial index on `finance_check_links` over `(check_id, (metadata->>'event'))` where `link_type='voucher'` prevents double-posting from any path (trigger re-fire, manual UI retry).
-- **Status guard interaction with auto-posting**: the existing guard runs BEFORE UPDATE and validates transitions; the new posting trigger runs AFTER UPDATE so its work is rolled back on guard failure.
-- **Reversal for bounce**: implemented as a new voucher with the reversal entries (not by negating the original). Original `register` voucher stays intact for auditability.
-- **No edge function** — all work happens in plpgsql, consistent with `post_approved_factor`.
-- **No new account-codes table** — strings on `account_type` for now; a future mapping table can populate Sepidar IDs.
-- **Existing data**: backfill `category='operational'` for all existing rows. The `voucher_id` column stays NULL for historical checks (no retroactive posting).
-
-## What this plan deliberately does NOT do
-
-- Does **not** retroactively post vouchers for pre-existing checks.
-- Does **not** add a chart-of-accounts table or check_accounting_map (kept as follow-up — `account_type` strings are stable hooks for a later mapping layer).
-- Does **not** auto-create a reversal when a `cleared` check is later marked `bounced` more than once — DB guards already prevent that transition.
-- Does **not** touch Sepidar sync — generated vouchers land with `sync_status='pending'` (default) like every other voucher.
-
----
-
-## File-change summary
-
-**Migration (1 file):**
-- `supabase/migrations/<ts>_check_auto_post_and_categories.sql`
-
-**Frontend (new):**
-- `src/components/finance/checks/NewGuaranteeCheckDialog.tsx`
-- `src/components/finance/checks/NewCancelledCheckDialog.tsx`
-- `src/components/finance/checks/GuaranteeChecksTab.tsx`
-- `src/components/finance/checks/CancelledChecksTab.tsx`
-
-**Frontend (edited):**
-- `src/components/finance/checks/ChecksTab.tsx` — tab list + routing
-- `src/components/finance/checks/CheckDetailDialog.tsx` — show voucher link / category badge
-- `src/components/finance/checks/StatusBadge.tsx` — new statuses
-- `src/lib/checks.ts` — types, labels, reasons
-- `src/hooks/useChecks.ts` — category filter
+**Awaiting approval to proceed with Phase 2.** Reply با «تأیید فاز ۲» تا شروع کنم، یا تغییرات لازم را بفرمایید.
