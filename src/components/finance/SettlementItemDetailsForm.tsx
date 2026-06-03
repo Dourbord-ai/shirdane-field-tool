@@ -130,56 +130,243 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
   // -------- BANK TRANSFER --------------------------------------------------
   if (paymentMethod === "bank_transfer") {
     const d = value as Record<string, string | undefined>;
+    // Phase 6B: derive the active "mode" from the snapshot itself instead of
+    // a separate state variable. When `party_account_id` is set we render
+    // the registered-account view; otherwise the manual fields. This means
+    // re-opening an existing item always renders the right mode without
+    // extra wiring.
+    const mode: "registered" | "manual" = d.party_account_id ? "registered" : "manual";
+
+    // Switching mode: clearing the snapshot is the only way out of
+    // "registered" mode. We wipe every field the picker had filled so the
+    // manual form starts blank, while preserving transfer_type & note that
+    // the user might want to keep.
+    const switchToManual = () => {
+      onChange({
+        ...value,
+        party_account_id: undefined,
+        account_verification_status: undefined,
+        verified_at: undefined,
+        declared_account_owner_name: "",
+        account_identifier_type: undefined,
+        account_identifier_value: "",
+        destination_bank_name: "",
+      } as SettlementItemDetails);
+    };
+
+    // Picking a verified account: snapshot every identifying field straight
+    // into `details` so the historical payload is self-contained — future
+    // edits to the party-account row don't mutate this item's history.
+    const pickAccount = (acct: PartyAccount) => {
+      onChange({
+        ...value,
+        party_account_id: acct.id,
+        declared_account_owner_name:
+          acct.verified_owner_name || acct.declared_owner_name,
+        account_identifier_type: acct.account_type,
+        account_identifier_value: acct.account_value,
+        destination_bank_name: acct.verified_bank_name || "",
+        account_verification_status: "verified",
+        verified_at: acct.verified_at || undefined,
+      } as SettlementItemDetails);
+    };
+
     return (
       <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
         <div className="text-[11px] font-bold text-muted-foreground">جزئیات انتقال بانکی</div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-[11px]">نام صاحب حساب اعلام‌شده <span className="text-destructive">*</span></Label>
-            <Input value={d.declared_account_owner_name || ""} onChange={(e) => onChange(patch(value, "declared_account_owner_name", e.target.value))} />
+
+        {/* Mode chooser — only meaningful when we know which party owns the
+            item. Without partyId there's nothing to fetch, so we silently
+            render manual-only. */}
+        {partyId && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="text-muted-foreground">حساب مقصد:</span>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name={`bt-mode-${partyId}`}
+                checked={mode === "registered"}
+                onChange={() => {
+                  // Auto-select the default account (or first) if available.
+                  const auto = verifiedAccounts[0];
+                  if (auto) pickAccount(auto);
+                }}
+                disabled={accountsLoaded && verifiedAccounts.length === 0}
+              />
+              <span>انتخاب از حساب‌های ثبت‌شدهٔ ذینفع</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name={`bt-mode-${partyId}`}
+                checked={mode === "manual"}
+                onChange={switchToManual}
+              />
+              <span>ورود دستی</span>
+            </label>
           </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">نوع شناسه حساب <span className="text-destructive">*</span></Label>
-            <select
-              value={d.account_identifier_type || ""}
-              onChange={(e) => onChange(patch(value, "account_identifier_type", e.target.value))}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">انتخاب کنید…</option>
-              {ACCOUNT_IDENTIFIER_TYPES.map((t) => (
-                <option key={t} value={t}>{ACCOUNT_IDENTIFIER_TYPE_LABELS_FA[t]}</option>
-              ))}
-            </select>
+        )}
+
+        {/* ---- REGISTERED-ACCOUNT MODE ---- */}
+        {mode === "registered" && partyId && (
+          <div className="space-y-2">
+            {/* Empty state: the user selected the registered mode but the
+                party has no verified accounts. Per spec, we explain how to
+                fix it instead of silently failing. */}
+            {accountsLoaded && verifiedAccounts.length === 0 && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-amber-700 dark:text-amber-400 text-[11px] flex items-start gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  برای این ذینفع حساب تأییدشده‌ای ثبت نشده است. از پروفایل ذینفع
+                  حساب را اضافه و استعلام کنید یا از ورود دستی استفاده کنید.
+                </span>
+              </div>
+            )}
+
+            {verifiedAccounts.length > 0 && (
+              <>
+                <Label className="text-[11px]">حساب مقصد <span className="text-destructive">*</span></Label>
+                <select
+                  // We store the chosen id in details; the value control here
+                  // is derived from the snapshot so React renders the right
+                  // option after mount/edit.
+                  value={d.party_account_id || ""}
+                  onChange={(e) => {
+                    const acct = verifiedAccounts.find((a) => a.id === e.target.value);
+                    if (acct) pickAccount(acct);
+                  }}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">انتخاب کنید…</option>
+                  {verifiedAccounts.map((a) => {
+                    // Rich label per spec:
+                    //   بانک ملت — کارت شخصی — 6037-99**-****-1234 — حسن رضایی ⭐ پیش‌فرض
+                    const bank = a.verified_bank_name || "—";
+                    const title = a.account_title || PARTY_ACCOUNT_TYPE_LABEL_FA[a.account_type];
+                    const masked = maskAccountValue(a.account_type, a.account_value);
+                    const owner = a.verified_owner_name || a.declared_owner_name;
+                    const star = a.is_default ? " ⭐ پیش‌فرض" : "";
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {`${bank} — ${title} — ${masked} — ${owner}${star}`}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {/* Read-only snapshot card so the user can see what was
+                    selected without re-opening the dropdown. */}
+                {d.party_account_id && (
+                  <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-[11px] space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      {(() => {
+                        const a = verifiedAccounts.find((x) => x.id === d.party_account_id);
+                        if (!a) return <span className="text-muted-foreground">—</span>;
+                        return (
+                          <>
+                            <span className="font-bold">{a.verified_bank_name || PARTY_ACCOUNT_TYPE_LABEL_FA[a.account_type]}</span>
+                            <span className="text-muted-foreground">·</span>
+                            <span dir="ltr" className="font-mono">{maskAccountValue(a.account_type, a.account_value)}</span>
+                            <span className="text-muted-foreground">·</span>
+                            <span>{a.verified_owner_name || a.declared_owner_name}</span>
+                            {a.is_default && (
+                              <span className="ml-auto inline-flex items-center gap-0.5 text-primary font-bold">
+                                <Star className="w-3 h-3" /> پیش‌فرض
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-muted-foreground">
+                      حساب از پروفایل ذینفع انتخاب شد و نیازی به استعلام مجدد نیست.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* transfer_type remains REQUIRED in both modes. */}
+            <div className="space-y-1">
+              <Label className="text-[11px]">نوع انتقال <span className="text-destructive">*</span></Label>
+              <select
+                value={d.transfer_type || ""}
+                onChange={(e) => onChange(patch(value, "transfer_type", e.target.value))}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">انتخاب کنید…</option>
+                {TRANSFER_TYPES.map((t) => (
+                  <option key={t} value={t}>{TRANSFER_TYPE_LABELS_FA[t]}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px]">یادداشت پرداخت</Label>
+              <Textarea rows={2} value={d.payment_note || ""} onChange={(e) => onChange(patch(value, "payment_note", e.target.value))} />
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">شماره حساب/کارت/شبا <span className="text-destructive">*</span></Label>
-            <Input dir="ltr" value={d.account_identifier_value || ""} onChange={(e) => onChange(patch(value, "account_identifier_value", e.target.value))} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">نام بانک مقصد</Label>
-            <Input value={d.destination_bank_name || ""} onChange={(e) => onChange(patch(value, "destination_bank_name", e.target.value))} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">نوع انتقال <span className="text-destructive">*</span></Label>
-            <select
-              value={d.transfer_type || ""}
-              onChange={(e) => onChange(patch(value, "transfer_type", e.target.value))}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">انتخاب کنید…</option>
-              {TRANSFER_TYPES.map((t) => (
-                <option key={t} value={t}>{TRANSFER_TYPE_LABELS_FA[t]}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[11px]">یادداشت پرداخت</Label>
-          <Textarea rows={2} value={d.payment_note || ""} onChange={(e) => onChange(patch(value, "payment_note", e.target.value))} />
-        </div>
+        )}
+
+        {/* ---- MANUAL MODE (Phase 5 fields untouched) ---- */}
+        {mode === "manual" && (
+          <>
+            {/* Per spec: explicit notice that manual entries are not yet
+                tied to a saved account and that verification will become
+                mandatory in a later phase. */}
+            <div className="rounded-md border border-border bg-background p-2 text-[10px] text-muted-foreground">
+              ورود دستی فعلاً بدون اتصال به حساب ذخیره‌شده است و در فاز بعدی نیازمند استعلام خواهد شد.
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px]">نام صاحب حساب اعلام‌شده <span className="text-destructive">*</span></Label>
+                <Input value={d.declared_account_owner_name || ""} onChange={(e) => onChange(patch(value, "declared_account_owner_name", e.target.value))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">نوع شناسه حساب <span className="text-destructive">*</span></Label>
+                <select
+                  value={d.account_identifier_type || ""}
+                  onChange={(e) => onChange(patch(value, "account_identifier_type", e.target.value))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">انتخاب کنید…</option>
+                  {ACCOUNT_IDENTIFIER_TYPES.map((t) => (
+                    <option key={t} value={t}>{ACCOUNT_IDENTIFIER_TYPE_LABELS_FA[t]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">شماره حساب/کارت/شبا <span className="text-destructive">*</span></Label>
+                <Input dir="ltr" value={d.account_identifier_value || ""} onChange={(e) => onChange(patch(value, "account_identifier_value", e.target.value))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">نام بانک مقصد</Label>
+                <Input value={d.destination_bank_name || ""} onChange={(e) => onChange(patch(value, "destination_bank_name", e.target.value))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">نوع انتقال <span className="text-destructive">*</span></Label>
+                <select
+                  value={d.transfer_type || ""}
+                  onChange={(e) => onChange(patch(value, "transfer_type", e.target.value))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">انتخاب کنید…</option>
+                  {TRANSFER_TYPES.map((t) => (
+                    <option key={t} value={t}>{TRANSFER_TYPE_LABELS_FA[t]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">یادداشت پرداخت</Label>
+              <Textarea rows={2} value={d.payment_note || ""} onChange={(e) => onChange(patch(value, "payment_note", e.target.value))} />
+            </div>
+          </>
+        )}
       </div>
     );
   }
+
 
   // -------- CHECK ----------------------------------------------------------
   if (paymentMethod === "check") {
