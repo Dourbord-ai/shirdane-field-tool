@@ -16,7 +16,7 @@ import { toast } from "sonner";
 // The legacy `transaction_jalali_date` text column is unused (100% NULL),
 // so filtering against it was effectively hiding every result.
 import ShamsiDatePicker from "@/components/ShamsiDatePicker";
-import { jalaliRangeToGregorianRange } from "@/lib/dateUtils";
+import { jalaliRangeToGregorianRange, jalaliToGregorianDate, gregorianDateToJalali } from "@/lib/dateUtils";
 import { PAYMENT_REQUEST_TYPES, getPaymentRequestTypeLabel, getPaymentRequestTypeKey } from "@/lib/paymentRequestTypes";
 import {
   PAYMENT_AMOUNT_TYPES,
@@ -25,12 +25,32 @@ import {
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
 import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+// Phase 4: item-level lifecycle metadata (payment method, what the item pays
+// for, due date, execution status/priority). Pre-Phase-3 rows carry
+// `payment_method = 'legacy'` and must be displayed as read-only — any edit
+// attempt surfaces a Persian warning instead of mutating the row.
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS_FA,
+  SETTLEMENT_SUBJECT_TYPES,
+  SETTLEMENT_SUBJECT_LABELS_FA,
+  EXECUTION_PRIORITIES,
+  EXECUTION_PRIORITY_LABELS_FA,
+  isLegacyItem,
+  labelForPaymentMethod,
+  labelForSubjectType,
+  labelForExecutionPriority,
+  type PaymentMethod,
+  type SettlementSubjectType,
+  type ExecutionPriority,
+} from "@/lib/finance/settlementItemTypes";
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
 // parties that exist locally but aren't in Sepidar's beneficiary view. Rows
 // without a sepidar_party_id are shown disabled with a clear warning rather
 // than dropped from the list.
 import { LocalPartyBeneficiarySelector, type LocalPartyBeneficiary } from "@/components/finance/LocalPartyBeneficiarySelector";
+
 
 interface PR {
   id: string;
@@ -78,7 +98,18 @@ interface PRItem {
   beneficiary_name?: string | null;
   beneficiary_type?: string | null;
   beneficiary_balance_snapshot?: number | null;
+  // --- Phase 4 lifecycle fields (NEW items only) -------------------------
+  // The user MUST explicitly choose payment_method + subject_type for every
+  // new item. due_date is also required. execution_status defaults to
+  // 'pending'; execution_priority defaults to 3 (عادی) but can be changed.
+  // Legacy rows (created before Phase 3) carry payment_method='legacy' and
+  // are never re-written by this dialog.
+  payment_method?: PaymentMethod | "";
+  settlement_subject_type?: SettlementSubjectType | "";
+  due_date?: string; // ISO yyyy-mm-dd in Gregorian (DB stores `date` column)
+  execution_priority?: ExecutionPriority;
 }
+
 
 export default function PaymentRequestsTab() {
   const [requests, setRequests] = useState<PR[]>([]);
@@ -328,9 +359,28 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
   const [typeCode, setTypeCode] = useState<number | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // Phase 4: every NEW item starts with explicit Phase-3 lifecycle defaults
+  // so the form is honest about what the user must pick. payment_method is
+  // intentionally empty (no default) to force a conscious choice — there is
+  // no sensible silent default among bank/cashbox/check/barter/deferred.
+  // settlement_subject_type defaults to 'main_invoice' (the most common
+  // case). execution_priority defaults to 3 (عادی) as required by the
+  // Phase-4 spec; execution_status is always 'pending' for new items and is
+  // therefore set later in the RPC payload, not on this row.
   const [items, setItems] = useState<PRItem[]>([
-    { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "" },
+    {
+      party_id: null,
+      amount: 0,
+      amount_type_code: 1,
+      amount_type: "creditor",
+      description: "",
+      payment_method: "",
+      settlement_subject_type: "main_invoice",
+      due_date: "",
+      execution_priority: 3,
+    },
   ]);
+
   const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
   const [partySepidarIds, setPartySepidarIds] = useState<Record<string, number | null>>({});
   const [sepidarBalances, setSepidarBalances] = useState<Record<string, { loading: boolean; balance: number | null; error: string | null }>>({});
@@ -403,6 +453,20 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       );
     if (items.some((i) => !i.amount_type_code)) return toast.error("نوع مبلغ هر آیتم الزامی است");
 
+    // Phase 4 hard guards: every NEW item MUST explicitly declare its
+    // payment_method, settlement_subject_type, and due_date. We never let
+    // the dialog silently fall back to a default for these because that
+    // would defeat the whole point of separating new items from legacy
+    // rows. The dialog only ever creates NEW items (never updates legacy
+    // ones), so these checks are safe to enforce unconditionally.
+    const missingMethod = items.findIndex((i) => !i.payment_method);
+    if (missingMethod >= 0) return toast.error(`ردیف ${missingMethod + 1}: روش پرداخت را انتخاب کنید.`);
+    const missingSubject = items.findIndex((i) => !i.settlement_subject_type);
+    if (missingSubject >= 0) return toast.error(`ردیف ${missingSubject + 1}: موضوع تسویه را انتخاب کنید.`);
+    const missingDue = items.findIndex((i) => !i.due_date);
+    if (missingDue >= 0) return toast.error(`ردیف ${missingDue + 1}: تاریخ سررسید الزامی است.`);
+
+
     // Validate creditor balance for amount_type_code = 1 using the snapshot
     // captured at selection time.
     for (let idx = 0; idx < items.length; idx++) {
@@ -439,6 +503,10 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
       // Beneficiary/snapshot columns don't exist in the table yet, so we
       // omit them from the RPC payload to avoid 42703 errors. The server
       // RPC sets paid_amount=0 and remaining_amount=amount on insert.
+      // Phase 4: include the new lifecycle columns so the RPC can write them
+      // on INSERT. execution_status is hard-coded to 'pending' for every
+      // new item (executors flip it later). execution_priority defaults to
+      // 3 (عادی) but the user can override per-row before saving.
       const itemsPayload = items.map((i) => ({
         party_id: i.party_id,
         amount: i.amount,
@@ -446,7 +514,17 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
         amount_type: i.amount_type,
         description: i.description,
         status: "pending_approval",
+        payment_method: i.payment_method,
+        settlement_subject_type: i.settlement_subject_type,
+        // due_date is collected as a Jalali "YYYY/MM/DD" string from the
+        // Shamsi picker; the DB column is Gregorian `date`. We convert at
+        // payload-build time so the wire format matches the column type.
+        due_date: jalaliToGregorianDate(i.due_date || "") || "",
+
+        execution_status: "pending",
+        execution_priority: i.execution_priority ?? 3,
       }));
+
 
       // Temporary logging to make payload inspection trivial in DevTools.
       // eslint-disable-next-line no-console
@@ -503,7 +581,7 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
           <div className="rounded-lg border">
             <div className="p-2 border-b bg-muted/40 flex justify-between items-center">
               <span className="font-bold text-sm">آیتم‌ها</span>
-              <Button size="sm" variant="ghost" onClick={() => setItems([...items, { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "" }])}>
+              <Button size="sm" variant="ghost" onClick={() => setItems([...items, { party_id: null, amount: 0, amount_type_code: 1, amount_type: "creditor", description: "", payment_method: "", settlement_subject_type: "main_invoice", due_date: "", execution_priority: 3 }])}>
                 <Plus className="w-3 h-3 ml-1" /> افزودن
               </Button>
             </div>
@@ -619,8 +697,79 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </>
                       );
                     })()}
+                    {/* ----- Phase 4 item-level lifecycle selectors -----
+                        Every NEW item is required to declare its payment
+                        method, what it is settling, when it must be paid,
+                        and (optionally) an execution priority. The
+                        execution_status is implicit ('pending') and not
+                        exposed in this dialog because new items always
+                        start as pending — the executor flips it later. We
+                        keep the markup compact (two 2-col grids) so the
+                        mobile sheet stays usable. */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          روش پرداخت <span className="text-destructive">*</span>
+                        </Label>
+                        <select
+                          value={it.payment_method || ""}
+                          onChange={(e) => updateItem(idx, { payment_method: e.target.value as PaymentMethod })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">انتخاب کنید…</option>
+                          {/* `legacy` is intentionally HIDDEN from the new-item
+                              picker — it must never be chosen for a brand-new
+                              item; it only labels rows imported before Phase 3. */}
+                          {PAYMENT_METHODS.filter((m) => m !== "legacy").map((m) => (
+                            <option key={m} value={m}>{PAYMENT_METHOD_LABELS_FA[m]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          موضوع تسویه <span className="text-destructive">*</span>
+                        </Label>
+                        <select
+                          value={it.settlement_subject_type || ""}
+                          onChange={(e) => updateItem(idx, { settlement_subject_type: e.target.value as SettlementSubjectType })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {SETTLEMENT_SUBJECT_TYPES.map((s) => (
+                            <option key={s} value={s}>{SETTLEMENT_SUBJECT_LABELS_FA[s]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">
+                          تاریخ سررسید <span className="text-destructive">*</span>
+                        </Label>
+                        {/* Reuse the project-wide Jalali date picker so the
+                            user picks a Persian date; its onChange returns an
+                            ISO yyyy-mm-dd Gregorian string ready for the
+                            `date` column. */}
+                        <ShamsiDatePicker
+                          value={it.due_date || ""}
+                          onChange={(v) => updateItem(idx, { due_date: v })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">اولویت اجرا</Label>
+                        <select
+                          value={String(it.execution_priority ?? 3)}
+                          onChange={(e) => updateItem(idx, { execution_priority: Number(e.target.value) as ExecutionPriority })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {EXECUTION_PRIORITIES.map((p) => (
+                            <option key={p} value={p}>{EXECUTION_PRIORITY_LABELS_FA[p]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                     <Input placeholder="توضیحات" value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })} />
+
                   </div>
                 );
               })}
@@ -654,7 +803,16 @@ interface PRItemFull {
   description: string | null;
   status: string | null;
   party?: PartyLite & { id?: string };
+  // Phase 4 read-only metadata. These columns exist on every row (legacy
+  // rows carry payment_method='legacy' and NULLs for the others); the
+  // detail view renders them as a small annotation strip per item.
+  payment_method?: string | null;
+  settlement_subject_type?: string | null;
+  due_date?: string | null;
+  execution_status?: string | null;
+  execution_priority?: number | null;
 }
+
 
 interface AllocationRow {
   id: string;
@@ -869,6 +1027,18 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
                         {getPaymentAmountTypeLabel(i.amount_type_code)}
                       </span>
+                      {/* Phase 4 legacy badge — pre-Phase-3 items carry
+                          payment_method='legacy' and must be visually
+                          marked as read-only. The Persian wording is fixed
+                          by spec: «قدیمی / فقط نمایش». */}
+                      {isLegacyItem(i) && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-amber-400/60 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                          title="این آیتم مربوط به ساختار قبلی است و فقط قابل مشاهده است."
+                        >
+                          قدیمی / فقط نمایش
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -890,11 +1060,43 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                       <MoneyCell value={isRejected ? 0 : remaining} className="text-[11px]" />
                     </div>
                   </div>
+
+                  {/* Phase 4 metadata strip — shows the new lifecycle fields
+                      for NEW items. For legacy rows we render a single
+                      explanatory line instead of fake/empty cells, so the
+                      missing data isn't confusing. */}
+                  {isLegacyItem(i) ? (
+                    <div className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-300/40 rounded px-2 py-1">
+                      این آیتم مربوط به ساختار قبلی است و برای جلوگیری از تغییر ناخواسته فقط قابل مشاهده است.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">روش پرداخت</span>
+                        <span>{labelForPaymentMethod(i.payment_method)}</span>
+                      </div>
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">موضوع</span>
+                        <span>{labelForSubjectType(i.settlement_subject_type)}</span>
+                      </div>
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">سررسید</span>
+                        {/* Convert Gregorian DB date back to Jalali for display. */}
+                        <span dir="ltr">{gregorianDateToJalali(i.due_date) || "—"}</span>
+                      </div>
+                      <div className="rounded bg-muted/30 px-2 py-1 flex justify-between">
+                        <span className="text-muted-foreground">اولویت</span>
+                        <span>{labelForExecutionPriority(i.execution_priority)}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {isRejected && (
                     <div className="text-[11px] text-red-700 dark:text-red-300">
                       این آیتم رد شده است و در محاسبات پرداخت لحاظ نمی‌شود.
                     </div>
                   )}
+
                   {canAllocate && (
                     <Button size="sm" variant="outline" className="w-full" onClick={() => setAllocItem(i)}>
                       <Link2 className="w-3.5 h-3.5 ml-1" /> اتصال تراکنش پرداخت
