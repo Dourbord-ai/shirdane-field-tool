@@ -183,10 +183,22 @@ export default function PaymentRequestsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-lg font-bold">درخواست‌های تسویه</h2>
-        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست جدید</Button>
+      <div className="flex items-start justify-between flex-wrap gap-2">
+        {/*
+          Phase 2 rename: the module is now framed as «درخواست تسویه».
+          A single درخواست تسویه is a PARENT container that can hold multiple
+          executable settlement items (bank transfer, check, cashbox, …).
+          The underlying tables/routes are unchanged in this phase.
+        */}
+        <div>
+          <h2 className="text-lg font-bold">درخواست‌های تسویه</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            هر درخواست می‌تواند شامل چندین آیتم اجرایی (انتقال بانکی، چک، صندوق و …) باشد.
+          </p>
+        </div>
+        <Button onClick={() => setOpen(true)}><Plus className="w-4 h-4 ml-1" /> درخواست تسویه جدید</Button>
       </div>
+
 
       {/* Filter toolbar — search + type + status + voucher + payment.
           All filters compose: server-side ones refetch, client-side ones
