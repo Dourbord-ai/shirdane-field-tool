@@ -44,6 +44,14 @@ import {
   type SettlementSubjectType,
   type ExecutionPriority,
 } from "@/lib/finance/settlementItemTypes";
+// Phase 5: method-specific details (jsonb), validation + Persian summary.
+import {
+  validateDetails,
+  summarizeDetails,
+  type SettlementItemDetails,
+} from "@/lib/finance/settlementItemDetails";
+import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetailsForm";
+
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
 // parties that exist locally but aren't in Sepidar's beneficiary view. Rows
