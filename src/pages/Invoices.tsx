@@ -1474,6 +1474,151 @@ export default function Invoices() {
         setSelectedDailyWorkerItems((dwRes.data as DailyWorkerItemRow[]) || []);
         setSelectedRentalItems((rentalRes.data as RentalItemRow[]) || []);
         setSelectedMedicineItems((examRes.data as MedicineItemRow[]) || []);
+      } else if (pt === "mixed") {
+        // -----------------------------------------------------------------
+        // Mixed factor — created by MixedInvoiceForm. The header lives in
+        // `factors` with product_type='mixed'; each line is a `factor_items`
+        // row whose per-type fields live in `factor_item_<type>_details`
+        // keyed by factor_item_id. We fetch all detail tables in parallel
+        // and join in memory so a single map() builds the display rows
+        // regardless of how many product types the operator mixed.
+        // -----------------------------------------------------------------
+        const sb = supabase as unknown as {
+          from: (t: string) => {
+            select: (s: string) => {
+              eq: (c: string, v: string) => Promise<{ data: unknown }> & {
+                order?: (c: string, opts?: { ascending: boolean }) => Promise<{ data: unknown }>;
+              };
+            };
+          };
+        };
+        const itemsRes = await supabase
+          .from("factor_items")
+          .select("*")
+          .eq("factor_id", id)
+          .order("row_number", { ascending: true });
+        const itemRows = (itemsRes.data as Array<Record<string, unknown>> | null) || [];
+        const itemIds = itemRows.map((r) => String(r.id));
+
+        // Fan-out detail fetches. Each detail table is keyed by
+        // factor_item_id which is unique per row, so `.in(...)` returns at
+        // most one record per item. We tolerate missing tables (legacy DBs)
+        // by swallowing errors per fetch — the row still renders using the
+        // shared factor_items fields if its detail snapshot is absent.
+        const detailTables = [
+          "factor_item_livestock_details",
+          "factor_item_feed_details",
+          "factor_item_medicine_details",
+          "factor_item_sperm_details",
+          "factor_item_milk_details",
+          "factor_item_manure_details",
+          "factor_item_service_details",
+          "factor_item_rental_details",
+          "factor_item_other_details",
+        ] as const;
+
+        const detailByItem = new Map<string, Record<string, unknown>>();
+        if (itemIds.length > 0) {
+          await Promise.all(
+            detailTables.map(async (tbl) => {
+              try {
+                const { data } = await (sb as unknown as { from: (t: string) => { select: (s: string) => { in: (c: string, v: string[]) => Promise<{ data: unknown }> } } })
+                  .from(tbl)
+                  .select("*")
+                  .in("factor_item_id", itemIds);
+                for (const row of ((data as Array<Record<string, unknown>> | null) || [])) {
+                  detailByItem.set(String(row.factor_item_id), row);
+                }
+              } catch {
+                // Detail table missing or RLS denied — ignore, fall back to shared fields.
+              }
+            }),
+          );
+        }
+
+        // Resolve cow labels for livestock rows (cow_id is an internal bigint
+        // we must not show to operators — prefer bodynumber / tag_number /
+        // earnumber, exactly like the single-product livestock branch above).
+        const cowIds = Array.from(
+          new Set(
+            itemRows
+              .map((r) => detailByItem.get(String(r.id))?.cow_id)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v)),
+          ),
+        ) as number[];
+        const cowLabelMap = new Map<string, string>();
+        if (cowIds.length > 0) {
+          const { data: cows } = await supabase
+            .from("cows")
+            .select("id, bodynumber, tag_number, earnumber")
+            .in("id", cowIds);
+          for (const c of ((cows as Array<Record<string, unknown>> | null) || [])) {
+            const label =
+              (c.bodynumber != null && String(c.bodynumber).trim()) ||
+              (c.tag_number != null && String(c.tag_number).trim()) ||
+              (c.earnumber != null && String(c.earnumber).trim()) ||
+              "دام بدون پلاک";
+            cowLabelMap.set(String(c.id), String(label));
+          }
+        }
+
+        const mixedRows: MixedItemRow[] = itemRows.map((r) => {
+          const det = detailByItem.get(String(r.id)) || {};
+          const pType = String(r.product_type ?? "other");
+          // Build a friendly per-row label so the operator sees the master
+          // record (cow plaque, feed/medicine commercial name, sperm code…)
+          // instead of a UUID. Each branch reads the columns that branch's
+          // detail table is known to have.
+          let label: string | null = null;
+          if (pType === "livestock" && det.cow_id != null) {
+            label = cowLabelMap.get(String(det.cow_id)) ?? "دام بدون پلاک";
+          } else if (pType === "feed") {
+            label =
+              (det.commercial_product_name_fa as string | null) ||
+              (det.name_fa as string | null) ||
+              (det.feed_name as string | null) ||
+              (det.feed_code as string | null) ||
+              null;
+          } else if (pType === "medicine") {
+            label =
+              (det.commercial_product_name_fa as string | null) ||
+              (det.medicine_name as string | null) ||
+              null;
+          } else if (pType === "sperm") {
+            const code = (det.bull_code as string | null) || "";
+            const name = (det.bull_name as string | null) || "";
+            label = `${code}${name ? " - " + name : ""}`.trim() || null;
+          } else if (pType === "manure") {
+            label = (det.manure_type as string | null) || null;
+          } else if (pType === "services") {
+            label =
+              (det.service_name as string | null) ||
+              (det.service_code as string | null) ||
+              null;
+          } else if (pType === "rental") {
+            label = (det.purpose as string | null) || (det.driver_name as string | null) || null;
+          } else if (pType === "other") {
+            label = (det.item_name as string | null) || null;
+          }
+
+          return {
+            id: String(r.id),
+            row_number: (r.row_number as number | null) ?? null,
+            product_type: pType,
+            quantity: (r.quantity as number | null) ?? null,
+            unit: (r.unit as string | null) ?? null,
+            unit_price: (r.unit_price as number | null) ?? null,
+            discount_amount: (r.discount_amount as number | null) ?? null,
+            tax_amount: (r.tax_amount as number | null) ?? null,
+            total_amount: (r.total_amount as number | null) ?? null,
+            description: (r.description as string | null) ?? null,
+            details: det,
+            display_label: label,
+          };
+        });
+        setSelectedMixedItems(mixedRows);
       }
       // Note: "manure" / "other" / legacy_product_* have no dedicated items
       // table — the detail panel renders factor.description + totals only.
