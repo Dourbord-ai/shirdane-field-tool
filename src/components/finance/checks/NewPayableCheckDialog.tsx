@@ -51,7 +51,7 @@ function shamsiToISODate(s: string): string | null {
   return `${g.year}-${String(g.month).padStart(2, "0")}-${String(g.day).padStart(2, "0")}`;
 }
 
-export default function NewPayableCheckDialog({ open, onOpenChange }: Props) {
+export default function NewPayableCheckDialog({ open, onOpenChange, seed, onCreated }: Props) {
   // Party list — payee/supplier for whom we are issuing the check.
   const { data: parties = [] } = useQuery({
     queryKey: ["finance_parties_for_check"],
