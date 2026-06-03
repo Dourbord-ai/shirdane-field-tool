@@ -25,6 +25,11 @@ import {
   validateCreditorBalance,
 } from "@/lib/paymentAmountTypes";
 import { getSepidarBeneficiaryBalance, shouldEnforceSepidarBalance } from "@/lib/sepidar";
+// Phase 7: consume a settlement-draft handed off by the invoice page. The
+// invoice's "ثبت درخواست تسویه" button stashes a draft (party_id + amount +
+// description per row) into sessionStorage and navigates here; we read it
+// once on PRDialog open so the operator can review and submit.
+import { consumeSettlementDraft, type SettlementDraft } from "@/lib/finance/relatedCosts";
 // Phase 4: item-level lifecycle metadata (payment method, what the item pays
 // for, due date, execution status/priority). Pre-Phase-3 rows carry
 // `payment_method = 'legacy'` and must be displayed as read-only — any edit
@@ -158,6 +163,25 @@ export default function PaymentRequestsTab() {
   // table). We fetch a Set of request ids that have at least one item with
   // a non-null voucher_id and consult it in the client-side filter.
   const [requestsWithVoucher, setRequestsWithVoucher] = useState<Set<string>>(new Set());
+
+  // Phase 7 hand-off: when the invoice page navigates here with a stashed
+  // settlement draft (sessionStorage), and when the URL hash is the one we
+  // route to (#payment-requests), auto-open PRDialog so the operator lands
+  // straight on the editor. We DO NOT consume the storage here — PRDialog
+  // is the consumer; we only peek.
+  const [seedDraft, setSeedDraft] = useState<SettlementDraft | null>(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("finance:pr_seed_draft_v1");
+      if (!raw) return;
+      // Peek (don't remove) — PRDialog calls consumeSettlementDraft() to
+      // both read and clear the storage atomically when it mounts.
+      setSeedDraft(JSON.parse(raw) as SettlementDraft);
+      setOpen(true);
+    } catch {
+      // Ignore — operator can still open the dialog manually.
+    }
+  }, []);
 
   // Refetch whenever any SERVER-side filter changes. paymentFilter is now
   // server-side too (it maps to numeric column predicates), so it joins the
@@ -362,42 +386,73 @@ export default function PaymentRequestsTab() {
         )}
       </div>
 
-      {open && <PRDialog onClose={() => setOpen(false)} onDone={() => { setOpen(false); void load(); }} />}
+      {open && (
+        <PRDialog
+          seedDraft={seedDraft}
+          onClose={() => { setOpen(false); setSeedDraft(null); }}
+          onDone={() => { setOpen(false); setSeedDraft(null); void load(); }}
+        />
+      )}
       {detail && <PRDetail pr={detail} onClose={() => { setDetail(null); void load(); }} />}
     </div>
   );
 }
 
-function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function PRDialog({
+  onClose,
+  onDone,
+  // Phase 7: optional draft handed in by the invoice page. When present we
+  // pre-populate title/description and seed `items` with one row per draft
+  // item. Operator still picks payment_method / due_date / details per row.
+  seedDraft = null,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+  seedDraft?: SettlementDraft | null;
+}) {
   const [typeCode, setTypeCode] = useState<number | "">("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  // Phase 4: every NEW item starts with explicit Phase-3 lifecycle defaults
-  // so the form is honest about what the user must pick. payment_method is
-  // intentionally empty (no default) to force a conscious choice — there is
-  // no sensible silent default among bank/cashbox/check/barter/deferred.
-  // settlement_subject_type defaults to 'main_invoice' (the most common
-  // case). execution_priority defaults to 3 (عادی) as required by the
-  // Phase-4 spec; execution_status is always 'pending' for new items and is
-  // therefore set later in the RPC payload, not on this row.
-  const [items, setItems] = useState<PRItem[]>([
-    {
-      party_id: null,
-      amount: 0,
-      amount_type_code: 1,
-      amount_type: "creditor",
-      description: "",
-      payment_method: "",
-      settlement_subject_type: "main_invoice",
-      due_date: "",
-      execution_priority: 3,
-      // Phase 5: start with empty details — the per-method sub-form is only
-      // rendered after the user picks a payment_method, and patches this
-      // object in place via `onChange`.
-      details: {},
-
-    },
-  ]);
+  const [title, setTitle] = useState(seedDraft?.title ?? "");
+  const [description, setDescription] = useState(seedDraft?.description ?? "");
+  // Phase 4 defaults — see original comment block. When a draft is provided,
+  // we expand it into one PRItem per draft entry, copying party_id, amount
+  // and description; everything else keeps the Phase-4 safe defaults so the
+  // operator is forced to pick payment_method consciously.
+  const [items, setItems] = useState<PRItem[]>(() => {
+    // Drain the sessionStorage seed exactly once on mount so a refresh of
+    // the dialog doesn't keep re-seeding stale data.
+    const consumed = seedDraft ?? consumeSettlementDraft();
+    if (consumed && consumed.items.length > 0) {
+      return consumed.items.map((di) => ({
+        party_id: di.party_id,
+        amount: di.amount,
+        amount_type_code: 1,
+        amount_type: "creditor",
+        description: di.description,
+        payment_method: "",
+        settlement_subject_type: "main_invoice",
+        due_date: "",
+        execution_priority: 3,
+        details: {},
+      }));
+    }
+    return [
+      {
+        party_id: null,
+        amount: 0,
+        amount_type_code: 1,
+        amount_type: "creditor",
+        description: "",
+        payment_method: "",
+        settlement_subject_type: "main_invoice",
+        due_date: "",
+        execution_priority: 3,
+        // Phase 5: start with empty details — the per-method sub-form is only
+        // rendered after the user picks a payment_method, and patches this
+        // object in place via `onChange`.
+        details: {},
+      },
+    ];
+  });
 
   const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
   const [partySepidarIds, setPartySepidarIds] = useState<Record<string, number | null>>({});
