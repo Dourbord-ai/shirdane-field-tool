@@ -744,7 +744,15 @@ function PRDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void
                         </Label>
                         <select
                           value={it.payment_method || ""}
-                          onChange={(e) => updateItem(idx, { payment_method: e.target.value as PaymentMethod })}
+                          onChange={(e) => {
+                            // Switching method invalidates any partially
+                            // filled details from the previous method, so we
+                            // reset details to {} to avoid sending mixed
+                            // payloads (e.g. a check `payee_name` saved on a
+                            // bank_transfer row).
+                            updateItem(idx, { payment_method: e.target.value as PaymentMethod, details: {} });
+                          }}
+
                           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">انتخاب کنید…</option>
