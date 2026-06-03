@@ -1031,14 +1031,119 @@ function InvoiceDetail({
               </p>
             </>
           )}
-          {/* Generic "no items" fallback for non-services / non-manure types
-              when the dedicated query returned zero rows. */}
+
+          {/* Line items for MIXED factors (new MixedInvoiceForm flow). Each
+              factor_items row may use a different product_type, so we render
+              one card per row and switch the per-row body by product_type.
+              Rows are sorted by row_number client-side fallback. */}
+          {factor.product_type === "mixed" && mixedItems.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-bold text-foreground mb-2">اقلام فاکتور ترکیبی:</p>
+              {mixedItems.map((it, idx) => {
+                const d = it.details || {};
+                // Per-row product label — falls back to raw key for unknown
+                // types so we never render an empty badge.
+                const typeLabel = productLabels[it.product_type] || it.product_type;
+                return (
+                  <div key={it.id} className="bg-secondary/50 rounded-lg p-3 mb-2 space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        ردیف {toPersianDigits(String(it.row_number ?? idx + 1))}
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                          {typeLabel}
+                        </span>
+                        {it.display_label && (
+                          <span className="font-medium text-foreground">
+                            {toPersianDigits(it.display_label)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Per-type detail snippets. We render only the few fields
+                        that are most useful at a glance — full snapshot is
+                        always in the DB. */}
+                    {it.product_type === "livestock" && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">وزن × قیمت پایه</span>
+                        <span className="text-foreground">
+                          {toPersianDigits(String((d.weight as number | null) ?? 0))} × {formatRial((d.off_unit_price as number | null) ?? 0)}
+                        </span>
+                      </div>
+                    )}
+                    {it.product_type === "feed" && (
+                      <>
+                        {d.batch_number ? (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">شماره بچ</span>
+                            <span className="text-foreground">{toPersianDigits(String(d.batch_number))}</span>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                    {it.product_type === "medicine" && d.batch_number ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">شماره بچ</span>
+                        <span className="text-foreground">{toPersianDigits(String(d.batch_number))}</span>
+                      </div>
+                    ) : null}
+                    {it.product_type === "manure" && d.vehicle_plate ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">پلاک خودرو</span>
+                        <span className="text-foreground">{toPersianDigits(String(d.vehicle_plate))}</span>
+                      </div>
+                    ) : null}
+
+                    {/* Shared factor_items fields — quantity × unit_price → total. */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">تعداد × قیمت واحد</span>
+                      <span className="text-foreground">
+                        {toPersianDigits(String(it.quantity ?? 0))}
+                        {it.unit ? ` ${it.unit}` : ""} × {formatRial(it.unit_price ?? 0)}
+                      </span>
+                    </div>
+                    {(it.discount_amount || 0) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">تخفیف</span>
+                        <span className="text-foreground">{formatRial(it.discount_amount || 0)}</span>
+                      </div>
+                    )}
+                    {(it.tax_amount || 0) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">مالیات</span>
+                        <span className="text-foreground">{formatRial(it.tax_amount || 0)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-bold">
+                      <span className="text-muted-foreground">جمع ردیف</span>
+                      <span className="text-foreground">{formatRial(it.total_amount || 0)}</span>
+                    </div>
+                    {it.description && (
+                      <div className="text-xs text-muted-foreground border-t border-border pt-1.5 mt-1.5">
+                        {it.description}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {/* Generic "no items" fallback. Only shown when the dedicated query
+              for this product_type successfully returned ZERO rows — never
+              when the query simply hasn't loaded yet (handled by `loading`)
+              or failed (handled by `errorMsg`). Mixed factors are included
+              so operators see a clear message instead of a blank panel. */}
           {!loading && !errorMsg && (
             (factor.product_type === "sperm" && items.length === 0) ||
             (factor.product_type === "milk" && milkItems.length === 0) ||
             (factor.product_type === "feed" && feedItems.length === 0) ||
             (factor.product_type === "medicine" && medicineItems.length === 0) ||
-            (factor.product_type === "livestock" && livestockItems.length === 0)
+            (factor.product_type === "livestock" && livestockItems.length === 0) ||
+            (factor.product_type === "mixed" && mixedItems.length === 0)
           ) && (
             <p className="text-xs text-muted-foreground bg-secondary/40 rounded-lg p-3">
               ردیف اقلامی برای این فاکتور یافت نشد.
