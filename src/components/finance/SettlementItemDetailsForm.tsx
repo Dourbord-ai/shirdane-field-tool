@@ -60,6 +60,10 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
   const [banks, setBanks] = useState<{ id: string; title: string | null; bank_name: string | null }[]>([]);
   const [checkbooks, setCheckbooks] = useState<{ id: string; title: string | null; bank_id: string | null }[]>([]);
   const [parties, setParties] = useState<{ id: string; first_name: string | null; last_name: string | null; company_name: string | null }[]>([]);
+  // Phase 6B: verified accounts for THIS party. We refetch whenever the
+  // partyId changes so switching the item's party reloads the picker.
+  const [verifiedAccounts, setVerifiedAccounts] = useState<PartyAccount[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
 
   useEffect(() => {
     if (paymentMethod === "check") {
@@ -86,6 +90,42 @@ export default function SettlementItemDetailsForm({ paymentMethod, value, onChan
         .then(({ data }) => setParties((data as never[]) || []));
     }
   }, [paymentMethod]);
+
+  // Phase 6B: load this party's verified bank accounts for the picker.
+  // Filters mirror the spec exactly:
+  //   - same party
+  //   - is_active = true
+  //   - is_deleted = false
+  //   - verification_status = 'verified'   ← critical: only verified rows
+  // We never load 'pending'/'mismatch'/'invalid' rows so the picker can
+  // never accidentally select an unverified account.
+  useEffect(() => {
+    if (paymentMethod !== "bank_transfer" || !partyId) {
+      setVerifiedAccounts([]);
+      setAccountsLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    void supabase
+      .from("finance_party_accounts")
+      .select("*")
+      .eq("party_id", partyId)
+      .eq("is_active", true)
+      .eq("is_deleted", false)
+      .eq("verification_status", "verified")
+      .order("is_default", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setVerifiedAccounts((data as PartyAccount[]) || []);
+        setAccountsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentMethod, partyId]);
+
+
 
   // -------- BANK TRANSFER --------------------------------------------------
   if (paymentMethod === "bank_transfer") {
