@@ -219,8 +219,21 @@ export function summarizeDetails(method: string | null | undefined, raw: unknown
     }
 
     case "check": {
-      return [pick("payee_name"), pick("check_reason"), pick("suggested_bank_name")]
-        .filter(Boolean).join(" — ") || "—";
+      // Task 1: surface the payee national id in the one-line summary so
+      // reviewers can verify the recipient at a glance. We render it as a
+      // separate `شناسه:` segment, but ONLY when present — legacy rows
+      // (no payee_national_id) keep their old two-segment summary so they
+      // continue to render cleanly without spurious empty separators.
+      const payee = pick("payee_name");
+      const nid = pick("payee_national_id");
+      const reason = pick("check_reason");
+      const bank = pick("suggested_bank_name");
+      return [
+        payee && `در وجه: ${payee}`,
+        nid && `شناسه: ${nid}`,
+        reason && `بابت: ${reason}`,
+        bank,
+      ].filter(Boolean).join(" — ") || "—";
     }
     case "cashbox": {
       return [pick("recipient_name"), pick("cashbox_name") || pick("cashbox_id")]
