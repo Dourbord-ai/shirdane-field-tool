@@ -803,7 +803,16 @@ interface PRItemFull {
   description: string | null;
   status: string | null;
   party?: PartyLite & { id?: string };
+  // Phase 4 read-only metadata. These columns exist on every row (legacy
+  // rows carry payment_method='legacy' and NULLs for the others); the
+  // detail view renders them as a small annotation strip per item.
+  payment_method?: string | null;
+  settlement_subject_type?: string | null;
+  due_date?: string | null;
+  execution_status?: string | null;
+  execution_priority?: number | null;
 }
+
 
 interface AllocationRow {
   id: string;
