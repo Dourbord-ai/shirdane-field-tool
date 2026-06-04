@@ -2035,6 +2035,9 @@ export type Database = {
           destination_text: string | null
           driver_name: string | null
           factor_id: string
+          freight_trip_id: string | null
+          freight_trip_invoice_id: string | null
+          freight_trip_share_basis: string | null
           id: string
           is_deleted: boolean
           origin_location_id: string | null
@@ -2068,6 +2071,9 @@ export type Database = {
           destination_text?: string | null
           driver_name?: string | null
           factor_id: string
+          freight_trip_id?: string | null
+          freight_trip_invoice_id?: string | null
+          freight_trip_share_basis?: string | null
           id?: string
           is_deleted?: boolean
           origin_location_id?: string | null
@@ -2101,6 +2107,9 @@ export type Database = {
           destination_text?: string | null
           driver_name?: string | null
           factor_id?: string
+          freight_trip_id?: string | null
+          freight_trip_invoice_id?: string | null
+          freight_trip_share_basis?: string | null
           id?: string
           is_deleted?: boolean
           origin_location_id?: string | null
@@ -2134,6 +2143,20 @@ export type Database = {
             columns: ["factor_id"]
             isOneToOne: false
             referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factor_related_costs_freight_trip_id_fkey"
+            columns: ["freight_trip_id"]
+            isOneToOne: false
+            referencedRelation: "freight_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factor_related_costs_freight_trip_invoice_id_fkey"
+            columns: ["freight_trip_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "freight_trip_invoices"
             referencedColumns: ["id"]
           },
           {
@@ -4830,6 +4853,198 @@ export type Database = {
             columns: ["reversal_of"]
             isOneToOne: false
             referencedRelation: "finance_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      freight_trip_invoices: {
+        Row: {
+          allocated_amount: number
+          cargo_weight_kg: number | null
+          created_at: string
+          created_by: string | null
+          factor_id: string
+          id: string
+          is_deleted: boolean
+          manual_share_amount: number | null
+          notes: string | null
+          related_cost_id: string | null
+          trip_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allocated_amount?: number
+          cargo_weight_kg?: number | null
+          created_at?: string
+          created_by?: string | null
+          factor_id: string
+          id?: string
+          is_deleted?: boolean
+          manual_share_amount?: number | null
+          notes?: string | null
+          related_cost_id?: string | null
+          trip_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allocated_amount?: number
+          cargo_weight_kg?: number | null
+          created_at?: string
+          created_by?: string | null
+          factor_id?: string
+          id?: string
+          is_deleted?: boolean
+          manual_share_amount?: number | null
+          notes?: string | null
+          related_cost_id?: string | null
+          trip_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "freight_trip_invoices_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trip_invoices_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trip_invoices_related_cost_id_fkey"
+            columns: ["related_cost_id"]
+            isOneToOne: false
+            referencedRelation: "factor_related_costs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trip_invoices_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "freight_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trip_invoices_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      freight_trips: {
+        Row: {
+          allocation_method: string
+          created_at: string
+          created_by: string | null
+          destination_location_id: string | null
+          destination_text: string | null
+          driver_party_id: string | null
+          id: string
+          is_deleted: boolean
+          notes: string | null
+          origin_location_id: string | null
+          origin_text: string | null
+          payment_required: boolean
+          route_distance_km: number | null
+          status: string
+          total_amount: number
+          trip_code: string | null
+          trip_date: string
+          updated_at: string
+          updated_by: string | null
+          vehicle_plate: string | null
+          vehicle_type: string | null
+        }
+        Insert: {
+          allocation_method?: string
+          created_at?: string
+          created_by?: string | null
+          destination_location_id?: string | null
+          destination_text?: string | null
+          driver_party_id?: string | null
+          id?: string
+          is_deleted?: boolean
+          notes?: string | null
+          origin_location_id?: string | null
+          origin_text?: string | null
+          payment_required?: boolean
+          route_distance_km?: number | null
+          status?: string
+          total_amount?: number
+          trip_code?: string | null
+          trip_date?: string
+          updated_at?: string
+          updated_by?: string | null
+          vehicle_plate?: string | null
+          vehicle_type?: string | null
+        }
+        Update: {
+          allocation_method?: string
+          created_at?: string
+          created_by?: string | null
+          destination_location_id?: string | null
+          destination_text?: string | null
+          driver_party_id?: string | null
+          id?: string
+          is_deleted?: boolean
+          notes?: string | null
+          origin_location_id?: string | null
+          origin_text?: string | null
+          payment_required?: boolean
+          route_distance_km?: number | null
+          status?: string
+          total_amount?: number
+          trip_code?: string | null
+          trip_date?: string
+          updated_at?: string
+          updated_by?: string | null
+          vehicle_plate?: string | null
+          vehicle_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "freight_trips_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trips_destination_location_id_fkey"
+            columns: ["destination_location_id"]
+            isOneToOne: false
+            referencedRelation: "geo_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trips_driver_party_id_fkey"
+            columns: ["driver_party_id"]
+            isOneToOne: false
+            referencedRelation: "finance_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trips_origin_location_id_fkey"
+            columns: ["origin_location_id"]
+            isOneToOne: false
+            referencedRelation: "geo_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trips_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
             referencedColumns: ["id"]
           },
         ]

@@ -38,6 +38,11 @@ import SyncTypesAdmin from "./pages/admin/SyncTypesAdmin";
 import SyncTypeDetailsAdmin from "./pages/admin/SyncTypeDetailsAdmin";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
+// Task 6 — Freight Trips (multi-invoice freight allocation). Lazy-static
+// imports keep the existing bundle behavior; these pages are small.
+import FreightTripsList from "./pages/finance/FreightTrips";
+import FreightTripEditor from "./pages/finance/FreightTripEditor";
+import FreightTripDetail from "./pages/finance/FreightTripDetail";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +92,13 @@ const App = () => (
               <Route path="/admin/sync-type-details" element={<SyncTypeDetailsAdmin />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/reports" element={<Reports />} />
+              {/* Task 6 — Freight Trips routes. New trip uses the same
+                  editor component with no :id param; detail/edit share the
+                  same /:id base. */}
+              <Route path="/finance/freight-trips" element={<FreightTripsList />} />
+              <Route path="/finance/freight-trips/new" element={<FreightTripEditor />} />
+              <Route path="/finance/freight-trips/:id" element={<FreightTripDetail />} />
+              <Route path="/finance/freight-trips/:id/edit" element={<FreightTripEditor />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
