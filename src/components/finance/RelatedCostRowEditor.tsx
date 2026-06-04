@@ -76,7 +76,7 @@ const EMPTY_DRIVER: QuickDriverInput = {
   mobile: "",
 };
 
-export default function RelatedCostRowEditor({ factorId, initial, seed, onClose, onSaved }: Props) {
+export default function RelatedCostRowEditor({ mode = "db", factorId, initial, seed, onClose, onSaved, onDraftSave }: Props) {
   // -------------------------------------------------------------------------
   // Form state — initialized from the row when editing, or from the seed
   // when adding. We keep the state shape close to RelatedCostInput so the
