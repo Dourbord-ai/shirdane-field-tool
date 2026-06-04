@@ -123,12 +123,21 @@ export interface RelatedCost {
   // Vehicle/cargo metadata for future cost-per-km analytics.
   vehicle_type: string | null;
   cargo_weight: number | null;
+
+  // ---------- Task 6: freight trip linkage ----------
+  // When a cost row is materialized by a freight trip allocation, these
+  // three columns tie it back to the source trip so the invoice page can
+  // render the "از سرویس حمل" badge and enforce read-only editing.
+  freight_trip_id: string | null;
+  freight_trip_invoice_id: string | null;
+  freight_trip_share_basis: string | null;
 }
 
 /** Insert/update payload — omit server-managed columns. */
 export type RelatedCostInput = Omit<
   RelatedCost,
-  "id" | "created_at" | "updated_at" | "is_deleted" | "settlement_request_item_id"
+  | "id" | "created_at" | "updated_at" | "is_deleted" | "settlement_request_item_id"
+  | "freight_trip_id" | "freight_trip_invoice_id" | "freight_trip_share_basis"
 > & { id?: string };
 
 // ---------------------------------------------------------------------------

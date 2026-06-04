@@ -10,10 +10,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadsheet, Link2, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadsheet, Link2, CheckCircle2, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 
 import {
@@ -256,9 +262,9 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       materialized by a freight trip. The row is treated as
                       read-only from the invoice side: edit happens on the
                       trip page so the operator can't desync the link. */}
-                  {(r as unknown as { freight_trip_id?: string | null }).freight_trip_id && (
+                  {r.freight_trip_id && (
                     <button
-                      onClick={() => navigate(`/finance/freight-trips/${(r as unknown as { freight_trip_id: string }).freight_trip_id}`)}
+                      onClick={() => navigate(`/finance/freight-trips/${r.freight_trip_id}`)}
                       className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px] font-bold inline-flex items-center gap-1 hover:bg-secondary/80"
                       title="مشاهده سرویس حمل"
                     >
@@ -305,20 +311,37 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       <Link2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <button
-                    onClick={() => openEdit(r)}
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                    aria-label="ویرایش"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(r)}
-                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                    aria-label="حذف"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {r.freight_trip_id ? (
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block p-1 rounded text-muted-foreground cursor-help">
+                            <Info className="w-3.5 h-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>این هزینه از سرویس حمل ایجاد شده است و فقط از صفحه سرویس حمل قابل ویرایش است.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                        aria-label="ویرایش"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        aria-label="حذف"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">

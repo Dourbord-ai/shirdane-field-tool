@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Save, X, MapPin, Route as RouteIcon } from "lucide-react";
+import { Plus, Save, X, MapPin, Route as RouteIcon, AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,7 @@ import {
   formatPerUnit,
   INSUFFICIENT_FREIGHT_DATA,
 } from "@/lib/finance/freightMetrics";
+import { findActiveTripForInvoice } from "@/lib/finance/freightTrips";
 
 // ---------------------------------------------------------------------------
 // Component props
@@ -172,6 +173,12 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
   const [driverDraft, setDriverDraft] = useState<QuickDriverInput>(EMPTY_DRIVER);
   const [creatingDriver, setCreatingDriver] = useState(false);
 
+  // P1-B — warn when the invoice already belongs to an active freight trip
+  // so the operator doesn't accidentally create duplicate freight costs.
+  const [activeTripWarning, setActiveTripWarning] = useState<{
+    tripCode: string | null;
+  } | null>(null);
+
   // Keep cost_type valid when the operator switches category — if the
   // current type isn't a known sub-type of the new category, reset it.
   useEffect(() => {
@@ -183,6 +190,26 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
   // The freight-only fields are conditionally shown to keep the form short
   // for the (much more common) non-freight rows.
   const showFreightFields = cost_category === "freight";
+
+  // P1-B — fetch active trip warning whenever the operator opens the freight
+  // editor (add or edit of a non-trip row). Skip when editing a row that
+  // was already materialized by a trip — the operator already knows.
+  useEffect(() => {
+    if (!showFreightFields) { setActiveTripWarning(null); return; }
+    if (initial?.freight_trip_id) { setActiveTripWarning(null); return; }
+    let cancelled = false;
+    findActiveTripForInvoice(factorId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result) {
+          setActiveTripWarning({ tripCode: result.trip.trip_code });
+        } else {
+          setActiveTripWarning(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setActiveTripWarning(null); });
+    return () => { cancelled = true; };
+  }, [showFreightFields, factorId, initial?.freight_trip_id]);
 
   // Only fetch geo_locations when we actually need them — i.e. the operator
   // is on a freight row. Avoids a wasted network call for the 80% case.
@@ -496,7 +523,24 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
 
           {/* Freight-only fields */}
           {showFreightFields && (
-            <div className="grid grid-cols-2 gap-2">
+            <>
+              {/* P1-B — duplicate-freight warning */}
+              {activeTripWarning && (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-0.5">
+                      <p className="font-bold text-foreground">
+                        این فاکتور به سرویس حمل فعال {activeTripWarning.tripCode ?? "—"} متصل است.
+                      </p>
+                      <p className="text-muted-foreground">
+                        ثبت کرایه مستقل ممکن است باعث دوباره‌کاری در هزینه حمل شود.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label>پلاک خودرو</Label>
                 <Input value={vehicle_plate} onChange={(e) => setPlate(e.target.value)} />
@@ -506,7 +550,7 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
                 <Input value={driver_name} onChange={(e) => setDriverName(e.target.value)} />
               </div>
             </div>
-          )}
+          </> )}
 
           {/* ===================== Task 4 — Route section ===================== */}
           {/* Only rendered for freight rows; collapsed inside a bordered block

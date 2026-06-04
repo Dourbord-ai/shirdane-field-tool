@@ -90,6 +90,10 @@ export default function InvoiceRelatedCostsBlock({ drafts, onAdd, onUpdate, onDe
     route_checked_by: d.route_checked_by ?? null,
     vehicle_type: d.vehicle_type ?? null,
     cargo_weight: d.cargo_weight ?? null,
+    // Task 6 — synthetic freight-trip fields so the editor shape is complete.
+    freight_trip_id: null,
+    freight_trip_invoice_id: null,
+    freight_trip_share_basis: null,
   });
 
   return (
