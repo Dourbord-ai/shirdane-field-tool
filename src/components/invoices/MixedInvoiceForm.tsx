@@ -958,6 +958,82 @@ export default function MixedInvoiceForm() {
       }
 
 
+      // ----------------------------------------------------------------
+      // Step 4 — persist related-cost drafts.
+      // We collect input-order ids so step 5 can wire each item back to its
+      // source via `source_related_cost_id`. Partial failures are tolerated:
+      // a missing id only blocks step 6 if that cost backs an enabled source.
+      // ----------------------------------------------------------------
+      const costIdByDraftId: Record<string, string> = {};
+      let skipSettlementDueToCostFailure = false;
+      if (costDrafts.length > 0) {
+        // Strip the local-only _draftId before insert (insertManyRelatedCosts
+        // ignores `id` automatically; we additionally drop `factor_id` because
+        // the helper sets the real one from its first arg).
+        const stripped = costDrafts.map(({ _draftId: _d, factor_id: _f, ...rest }) => rest);
+        const res = await insertManyRelatedCosts(factor.id, stripped);
+        res.ids.forEach((id, i) => {
+          if (id) costIdByDraftId[costDrafts[i]._draftId] = id;
+        });
+        if (res.failed.length > 0) {
+          // If any failed cost is referenced by an enabled source, skip
+          // step 6 so we don't emit orphan items.
+          const failedDraftIds = new Set(res.failed.map((f) => costDrafts[f.index]._draftId));
+          const blocks = sources.some(
+            (s) =>
+              s.settlement_requirement === "requires_settlement" &&
+              s.origin.type === "cost" &&
+              failedDraftIds.has(s.origin.costDraftId),
+          );
+          skipSettlementDueToCostFailure = blocks;
+          toast({
+            title: "برخی هزینه‌های وابسته ذخیره نشدند",
+            description: res.failed.map((f) => `ردیف ${f.index + 1}: ${f.message}`).join(" | "),
+            variant: "destructive",
+          });
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // Steps 5+6 — build settlement payload and submit atomically.
+      // Skipped when zero sources require settlement OR when a cost
+      // failure invalidated the linkage.
+      // ----------------------------------------------------------------
+      const itemsPayload = buildRpcItemsPayload(
+        sources,
+        costIdByDraftId,
+        invoiceNumber || null,
+      );
+      if (itemsPayload.length > 0 && !skipSettlementDueToCostFailure) {
+        const requestPayload = {
+          title: `تسویه فاکتور ${invoiceNumber ?? ""}`.trim(),
+          description: `تولید خودکار از فاکتور ${invoiceNumber ?? factor.id}`,
+          request_type: "purchase",
+          legacy_request_type_code: 2,
+          status: "pending_approval",
+        };
+        // Convert Jalali "YYYY/MM/DD" → Gregorian ISO for the wire shape the
+        // RPC expects (matches what PaymentRequestsTab does).
+        const wireItems = itemsPayload.map((i) => ({
+          ...i,
+          due_date: jalaliToGregorianDate(i.due_date || "") || "",
+          status: "pending_approval",
+          execution_status: "pending",
+        }));
+        const { error: rpcErr } = await supabase.rpc(
+          "submit_payment_request" as never,
+          { p_request: requestPayload, p_items: wireItems } as never,
+        );
+        if (rpcErr) {
+          toast({
+            title: "ثبت درخواست تسویه ناموفق بود",
+            description: rpcErr.message,
+            variant: "destructive",
+          });
+          // Factor + costs are kept; user can retry from PaymentRequestsTab.
+        }
+      }
+
       toast({ title: "فاکتور با موفقیت ثبت شد" });
       navigate("/invoices");
     } catch (err) {
