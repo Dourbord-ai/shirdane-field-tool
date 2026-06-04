@@ -252,6 +252,20 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       </span>
                     )
                   )}
+                  {/* Task 6 — badge + click-through when this row was
+                      materialized by a freight trip. The row is treated as
+                      read-only from the invoice side: edit happens on the
+                      trip page so the operator can't desync the link. */}
+                  {(r as unknown as { freight_trip_id?: string | null }).freight_trip_id && (
+                    <button
+                      onClick={() => navigate(`/finance/freight-trips/${(r as unknown as { freight_trip_id: string }).freight_trip_id}`)}
+                      className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px] font-bold inline-flex items-center gap-1 hover:bg-secondary/80"
+                      title="مشاهده سرویس حمل"
+                    >
+                      <Truck className="w-3 h-3" />
+                      از سرویس حمل
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {/* Open-in-settlement shortcut. We resolve the parent
