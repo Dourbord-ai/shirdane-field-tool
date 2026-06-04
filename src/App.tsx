@@ -38,6 +38,11 @@ import SyncTypesAdmin from "./pages/admin/SyncTypesAdmin";
 import SyncTypeDetailsAdmin from "./pages/admin/SyncTypeDetailsAdmin";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
+// Task 6 — Freight Trips (multi-invoice freight allocation). Lazy-static
+// imports keep the existing bundle behavior; these pages are small.
+import FreightTripsList from "./pages/finance/FreightTrips";
+import FreightTripEditor from "./pages/finance/FreightTripEditor";
+import FreightTripDetail from "./pages/finance/FreightTripDetail";
 
 const queryClient = new QueryClient();
 
