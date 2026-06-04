@@ -2025,66 +2025,122 @@ export type Database = {
         Row: {
           amount: number
           attachment_path: string | null
+          cargo_weight: number | null
           cost_category: string
           cost_date: string
           cost_type: string
           created_at: string
           description: string | null
+          destination_location_id: string | null
+          destination_text: string | null
           driver_name: string | null
           factor_id: string
           id: string
           is_deleted: boolean
+          origin_location_id: string | null
+          origin_text: string | null
           party_id: string | null
           payment_required: boolean
+          route_api_provider: string | null
+          route_api_response: Json | null
+          route_checked_at: string | null
+          route_checked_by: string | null
+          route_distance_km: number | null
+          route_duration_minutes: number | null
+          route_note: string | null
+          route_source: string | null
           settlement_request_item_id: string | null
           source_document_number: string | null
           updated_at: string
           vehicle_plate: string | null
+          vehicle_type: string | null
         }
         Insert: {
           amount: number
           attachment_path?: string | null
+          cargo_weight?: number | null
           cost_category: string
           cost_date?: string
           cost_type: string
           created_at?: string
           description?: string | null
+          destination_location_id?: string | null
+          destination_text?: string | null
           driver_name?: string | null
           factor_id: string
           id?: string
           is_deleted?: boolean
+          origin_location_id?: string | null
+          origin_text?: string | null
           party_id?: string | null
           payment_required?: boolean
+          route_api_provider?: string | null
+          route_api_response?: Json | null
+          route_checked_at?: string | null
+          route_checked_by?: string | null
+          route_distance_km?: number | null
+          route_duration_minutes?: number | null
+          route_note?: string | null
+          route_source?: string | null
           settlement_request_item_id?: string | null
           source_document_number?: string | null
           updated_at?: string
           vehicle_plate?: string | null
+          vehicle_type?: string | null
         }
         Update: {
           amount?: number
           attachment_path?: string | null
+          cargo_weight?: number | null
           cost_category?: string
           cost_date?: string
           cost_type?: string
           created_at?: string
           description?: string | null
+          destination_location_id?: string | null
+          destination_text?: string | null
           driver_name?: string | null
           factor_id?: string
           id?: string
           is_deleted?: boolean
+          origin_location_id?: string | null
+          origin_text?: string | null
           party_id?: string | null
           payment_required?: boolean
+          route_api_provider?: string | null
+          route_api_response?: Json | null
+          route_checked_at?: string | null
+          route_checked_by?: string | null
+          route_distance_km?: number | null
+          route_duration_minutes?: number | null
+          route_note?: string | null
+          route_source?: string | null
           settlement_request_item_id?: string | null
           source_document_number?: string | null
           updated_at?: string
           vehicle_plate?: string | null
+          vehicle_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "factor_related_costs_destination_location_id_fkey"
+            columns: ["destination_location_id"]
+            isOneToOne: false
+            referencedRelation: "geo_locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "factor_related_costs_factor_id_fkey"
             columns: ["factor_id"]
             isOneToOne: false
             referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factor_related_costs_origin_location_id_fkey"
+            columns: ["origin_location_id"]
+            isOneToOne: false
+            referencedRelation: "geo_locations"
             referencedColumns: ["id"]
           },
           {
@@ -4777,6 +4833,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      geo_locations: {
+        Row: {
+          city: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_deleted: boolean
+          kind: string
+          name: string
+          notes: string | null
+          province: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          kind?: string
+          name: string
+          notes?: string | null
+          province?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          kind?: string
+          name?: string
+          notes?: string | null
+          province?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       hr_attendance: {
         Row: {
