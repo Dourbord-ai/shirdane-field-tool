@@ -110,13 +110,50 @@ export default function InvoiceReviewDialog({
             {costDrafts.length === 0 ? (
               <p className="text-xs text-muted-foreground">—</p>
             ) : (
-              <ul className="text-xs space-y-1">
-                {costDrafts.map((d) => (
-                  <li key={d._draftId} className="flex justify-between gap-2">
-                    <span>{COST_CATEGORY_LABEL[d.cost_category]} / {COST_TYPE_LABEL[d.cost_type] ?? d.cost_type}</span>
-                    <span>{(Number(d.amount) || 0).toLocaleString("fa-IR")} ریال {d.payment_required ? "" : "(فقط در هزینه تمام‌شده)"}</span>
-                  </li>
-                ))}
+              <ul className="text-xs space-y-2">
+                {costDrafts.map((d) => {
+                  // Task 5 — for freight drafts only, compute the three
+                  // reference numbers from the in-memory draft. We never
+                  // mutate the draft; this is pure derivation for display.
+                  const isFreight = d.cost_category === "freight";
+                  const metrics = isFreight
+                    ? computeFreightMetrics({
+                        amount: d.amount,
+                        route_distance_km: d.route_distance_km,
+                        cargo_weight: d.cargo_weight,
+                      })
+                    : null;
+                  return (
+                    <li key={d._draftId} className="space-y-0.5">
+                      <div className="flex justify-between gap-2">
+                        <span>{COST_CATEGORY_LABEL[d.cost_category]} / {COST_TYPE_LABEL[d.cost_type] ?? d.cost_type}</span>
+                        <span>{(Number(d.amount) || 0).toLocaleString("fa-IR")} ریال {d.payment_required ? "" : "(فقط در هزینه تمام‌شده)"}</span>
+                      </div>
+                      {metrics && (
+                        <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 pr-2">
+                          <span>
+                            هزینه/کیلومتر:{" "}
+                            <span className={metrics.cost_per_km === null ? "" : "text-foreground"}>
+                              {metrics.cost_per_km === null ? INSUFFICIENT_FREIGHT_DATA : formatPerUnit(metrics.cost_per_km, "کیلومتر")}
+                            </span>
+                          </span>
+                          <span>
+                            هزینه/کیلوگرم:{" "}
+                            <span className={metrics.cost_per_kg === null ? "" : "text-foreground"}>
+                              {metrics.cost_per_kg === null ? INSUFFICIENT_FREIGHT_DATA : formatPerUnit(metrics.cost_per_kg, "کیلوگرم")}
+                            </span>
+                          </span>
+                          <span>
+                            هزینه/تن:{" "}
+                            <span className={metrics.cost_per_ton === null ? "" : "text-foreground"}>
+                              {metrics.cost_per_ton === null ? INSUFFICIENT_FREIGHT_DATA : formatPerUnit(metrics.cost_per_ton, "تن")}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Section>
