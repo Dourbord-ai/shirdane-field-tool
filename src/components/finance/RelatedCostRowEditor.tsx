@@ -37,13 +37,27 @@ import {
 // ---------------------------------------------------------------------------
 
 interface Props {
+  /**
+   * In "db" mode (default) the editor writes directly to factor_related_costs
+   * on save — used by the post-save RelatedCostsSection.
+   *
+   * In "draft" mode it skips the DB call and instead emits the assembled
+   * RelatedCostInput via `onDraftSave` so the parent (MixedInvoiceForm) can
+   * hold the row in local state until the parent factor is saved. The
+   * `factorId` in draft mode is intentionally a sentinel ("__draft__") and
+   * is replaced with the real id at batch-insert time.
+   */
+  mode?: "db" | "draft";
   factorId: string;
   /** When editing an existing row, pass it here. Add-mode if undefined. */
   initial?: RelatedCost;
   /** Seed values for the quick-add buttons (e.g. {category: "freight", type:"driver"}). */
   seed?: { cost_category?: CostCategory; cost_type?: string };
   onClose: () => void;
-  onSaved: () => void;
+  /** Fired in db-mode after a successful upsert. */
+  onSaved?: () => void;
+  /** Fired in draft-mode with the assembled input payload (no DB call). */
+  onDraftSave?: (input: RelatedCostInput) => void;
 }
 
 // Minimal driver-create payload — kept small on purpose; the operator can
@@ -62,7 +76,7 @@ const EMPTY_DRIVER: QuickDriverInput = {
   mobile: "",
 };
 
-export default function RelatedCostRowEditor({ factorId, initial, seed, onClose, onSaved }: Props) {
+export default function RelatedCostRowEditor({ mode = "db", factorId, initial, seed, onClose, onSaved, onDraftSave }: Props) {
   // -------------------------------------------------------------------------
   // Form state — initialized from the row when editing, or from the seed
   // when adding. We keep the state shape close to RelatedCostInput so the
@@ -114,8 +128,9 @@ export default function RelatedCostRowEditor({ factorId, initial, seed, onClose,
     if (!amount || amount <= 0) return toast.error("مبلغ باید بزرگ‌تر از صفر باشد");
     setSaving(true);
     try {
-      // Build the input payload. We pass undefined for empty strings so the
-      // DB stores NULL (cleaner than "" for optional text columns).
+      // Build the input payload — identical shape for db + draft modes so the
+      // draft can be replayed unchanged into `insertManyRelatedCosts` after
+      // the parent factor lands.
       const payload: RelatedCostInput = {
         id: initial?.id,
         factor_id: factorId,
@@ -129,12 +144,21 @@ export default function RelatedCostRowEditor({ factorId, initial, seed, onClose,
         attachment_path: attachment_path || null,
         vehicle_plate: showFreightFields ? (vehicle_plate || null) : null,
         driver_name: showFreightFields ? (driver_name || null) : null,
-        // Convert the datetime-local value back to an ISO string.
         cost_date: new Date(cost_date).toISOString(),
       };
+
+      if (mode === "draft") {
+        // Draft path: hand the assembled payload back to the parent. The
+        // parent decides when (and if) it ever reaches the DB.
+        onDraftSave?.(payload);
+        toast.success(initial ? "هزینه به‌روزرسانی شد" : "هزینه به فاکتور اضافه شد");
+        onClose();
+        return;
+      }
+
       await upsertRelatedCost(payload);
       toast.success(initial ? "هزینه ویرایش شد" : "هزینه ثبت شد");
-      onSaved();
+      onSaved?.();
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "خطا در ذخیره";

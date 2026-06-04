@@ -27,7 +27,7 @@ import { Plus, Trash2 } from "lucide-react";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate } from "@/lib/jalali";
-import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
+import { jalaliToGregorianTimestamp, jalaliToGregorianDate } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +38,20 @@ import MedicineProductPicker, { MedicineProduct } from "@/components/medicine/Me
 // Same architecture as MedicineProductPicker: per-field server-side search
 // over feed_products, snapshot the full row into the invoice line on save.
 import FeedProductPicker, { FeedProduct } from "@/components/feed/FeedProductPicker";
+// Tasks 2+3 — related-costs + per-source settlement workflow lives inside
+// the invoice form. The three blocks below are pure presentation; all state
+// and persistence is owned by this component.
+import InvoiceRelatedCostsBlock from "@/components/invoices/sections/InvoiceRelatedCostsBlock";
+import InvoiceSettlementSourcesBlock from "@/components/invoices/sections/InvoiceSettlementSourcesBlock";
+import InvoiceReviewDialog from "@/components/invoices/sections/InvoiceReviewDialog";
+import {
+  deriveSources,
+  validateSources,
+  buildRpcItemsPayload,
+  type DraftCost,
+  type SettlementSource,
+} from "@/lib/finance/invoiceSettlementBuilder";
+import { insertManyRelatedCosts, type RelatedCostInput } from "@/lib/finance/relatedCosts";
 
 // ---------------------------------------------------------------------------
 // Static option lists. These are intentionally local to the new form so
@@ -316,6 +330,16 @@ export default function MixedInvoiceForm() {
   // Rows: start with a single livestock row so the form is non-empty.
   const [rows, setRows] = useState<MixedRow[]>([blankRow("livestock")]);
 
+  // ----- Tasks 2+3 state -----
+  // Local-only related-cost draft rows. Persisted via insertManyRelatedCosts
+  // immediately after the parent factor lands (step 4 of save sequence).
+  const [costDrafts, setCostDrafts] = useState<DraftCost[]>([]);
+  // Per-source settlement configuration. Reconciled from costDrafts + invoice
+  // header on every change so user edits survive cost adds/deletes.
+  const [sources, setSources] = useState<SettlementSource[]>([]);
+  // Mandatory review dialog — the ONLY entry point into the save flow.
+  const [reviewOpen, setReviewOpen] = useState(false);
+
   // -----------------------------------------------------------------------
   // Finance party options. Same query the legacy form uses, lifted here so
   // this component is self-contained.
@@ -541,6 +565,56 @@ export default function MixedInvoiceForm() {
     const payable = total - discountSum + taxSum;
     return { total, discountSum, taxSum, payable };
   }, [rows]);
+
+  // -----------------------------------------------------------------------
+  // Tasks 2+3: reconcile settlement sources from header + cost drafts.
+  //
+  // We re-derive on every relevant change. The pure helper preserves any
+  // user-edited values (user_dirty=true) so adding a cost or changing the
+  // invoice payable doesn't wipe in-progress configuration.
+  // -----------------------------------------------------------------------
+  const partyLabel = useMemo(
+    () => partyOptions.find((o) => o.value === financePartyId)?.label ?? null,
+    [partyOptions, financePartyId],
+  );
+  useEffect(() => {
+    setSources((prev) =>
+      deriveSources(
+        {
+          financePartyId: financePartyId || null,
+          financePartyLabel: partyLabel,
+          invoicePayable: totals.payable,
+          costDrafts,
+        },
+        prev,
+      ),
+    );
+  }, [financePartyId, partyLabel, totals.payable, costDrafts]);
+
+  // Live validation — surfaced in the source cards AND the review dialog.
+  const settlementErrors = useMemo(
+    () => validateSources(sources, financePartyId || null),
+    [sources, financePartyId],
+  );
+
+  // ----- cost-draft mutators -----
+  const addCostDraft = (input: RelatedCostInput) => {
+    const _draftId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2);
+    // _draftId stays local; factor_id is replaced at insert time.
+    setCostDrafts((prev) => [...prev, { ...input, _draftId }]);
+  };
+  const updateCostDraft = (draftId: string, input: RelatedCostInput) =>
+    setCostDrafts((prev) => prev.map((d) => (d._draftId === draftId ? { ...input, _draftId: draftId } : d)));
+  const deleteCostDraft = (draftId: string) =>
+    setCostDrafts((prev) => prev.filter((d) => d._draftId !== draftId));
+
+  // ----- source patcher -----
+  const patchSource = (sourceId: string, patch: Partial<SettlementSource>) =>
+    setSources((prev) => prev.map((s) => (s.source_id === sourceId ? { ...s, ...patch } : s)));
+
 
   // -----------------------------------------------------------------------
   // Submit handler. Sequence:
@@ -884,6 +958,82 @@ export default function MixedInvoiceForm() {
       }
 
 
+      // ----------------------------------------------------------------
+      // Step 4 — persist related-cost drafts.
+      // We collect input-order ids so step 5 can wire each item back to its
+      // source via `source_related_cost_id`. Partial failures are tolerated:
+      // a missing id only blocks step 6 if that cost backs an enabled source.
+      // ----------------------------------------------------------------
+      const costIdByDraftId: Record<string, string> = {};
+      let skipSettlementDueToCostFailure = false;
+      if (costDrafts.length > 0) {
+        // Strip the local-only _draftId before insert (insertManyRelatedCosts
+        // ignores `id` automatically; we additionally drop `factor_id` because
+        // the helper sets the real one from its first arg).
+        const stripped = costDrafts.map(({ _draftId: _d, factor_id: _f, ...rest }) => rest);
+        const res = await insertManyRelatedCosts(factor.id, stripped);
+        res.ids.forEach((id, i) => {
+          if (id) costIdByDraftId[costDrafts[i]._draftId] = id;
+        });
+        if (res.failed.length > 0) {
+          // If any failed cost is referenced by an enabled source, skip
+          // step 6 so we don't emit orphan items.
+          const failedDraftIds = new Set(res.failed.map((f) => costDrafts[f.index]._draftId));
+          const blocks = sources.some(
+            (s) =>
+              s.settlement_requirement === "requires_settlement" &&
+              s.origin.type === "cost" &&
+              failedDraftIds.has(s.origin.costDraftId),
+          );
+          skipSettlementDueToCostFailure = blocks;
+          toast({
+            title: "برخی هزینه‌های وابسته ذخیره نشدند",
+            description: res.failed.map((f) => `ردیف ${f.index + 1}: ${f.message}`).join(" | "),
+            variant: "destructive",
+          });
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // Steps 5+6 — build settlement payload and submit atomically.
+      // Skipped when zero sources require settlement OR when a cost
+      // failure invalidated the linkage.
+      // ----------------------------------------------------------------
+      const itemsPayload = buildRpcItemsPayload(
+        sources,
+        costIdByDraftId,
+        invoiceNumber || null,
+      );
+      if (itemsPayload.length > 0 && !skipSettlementDueToCostFailure) {
+        const requestPayload = {
+          title: `تسویه فاکتور ${invoiceNumber ?? ""}`.trim(),
+          description: `تولید خودکار از فاکتور ${invoiceNumber ?? factor.id}`,
+          request_type: "purchase",
+          legacy_request_type_code: 2,
+          status: "pending_approval",
+        };
+        // Convert Jalali "YYYY/MM/DD" → Gregorian ISO for the wire shape the
+        // RPC expects (matches what PaymentRequestsTab does).
+        const wireItems = itemsPayload.map((i) => ({
+          ...i,
+          due_date: jalaliToGregorianDate(i.due_date || "") || "",
+          status: "pending_approval",
+          execution_status: "pending",
+        }));
+        const { error: rpcErr } = await supabase.rpc(
+          "submit_payment_request" as never,
+          { p_request: requestPayload, p_items: wireItems } as never,
+        );
+        if (rpcErr) {
+          toast({
+            title: "ثبت درخواست تسویه ناموفق بود",
+            description: rpcErr.message,
+            variant: "destructive",
+          });
+          // Factor + costs are kept; user can retry from PaymentRequestsTab.
+        }
+      }
+
       toast({ title: "فاکتور با موفقیت ثبت شد" });
       navigate("/invoices");
     } catch (err) {
@@ -1151,6 +1301,21 @@ export default function MixedInvoiceForm() {
         })}
       </Card>
 
+      {/* ------------------ Tasks 2+3: Related Costs ------------------ */}
+      <InvoiceRelatedCostsBlock
+        drafts={costDrafts}
+        onAdd={addCostDraft}
+        onUpdate={updateCostDraft}
+        onDelete={deleteCostDraft}
+      />
+
+      {/* ------------------ Tasks 2+3: Settlement Sources ------------------ */}
+      <InvoiceSettlementSourcesBlock
+        sources={sources}
+        errors={settlementErrors}
+        onPatchSource={patchSource}
+      />
+
       {/* ------------------ Totals + Submit ------------------ */}
       <Card className="p-4 bg-card border-border space-y-3">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -1159,10 +1324,43 @@ export default function MixedInvoiceForm() {
           <Totals label="جمع مالیات" value={totals.taxSum} />
           <Totals label="قابل پرداخت" value={totals.payable} bold />
         </div>
-        <Button onClick={handleSubmit} disabled={saving} className="w-full">
-          {saving ? "در حال ثبت..." : "ثبت فاکتور"}
+        {/* The review dialog is mandatory — clicking here only OPENS it.
+            Actual save runs from inside the dialog's "ثبت نهایی" button. */}
+        <Button
+          onClick={() => {
+            if (!invoiceDate) {
+              toast({ title: "تاریخ فاکتور را وارد کنید", variant: "destructive" });
+              return;
+            }
+            setReviewOpen(true);
+          }}
+          disabled={saving}
+          className="w-full"
+        >
+          پیش‌نمایش و ثبت نهایی
         </Button>
       </Card>
+
+      <InvoiceReviewDialog
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onConfirm={async () => {
+          await handleSubmit();
+          setReviewOpen(false);
+        }}
+        saving={saving}
+        invoiceNumber={invoiceNumber || null}
+        invoiceDateLabel={
+          invoiceDate ? `${invoiceDate.year}/${invoiceDate.month}/${invoiceDate.day}` : "—"
+        }
+        invoiceTypeLabel={INVOICE_TYPES.find((t) => t.value === invoiceType)?.label ?? invoiceType}
+        partyLabel={partyLabel}
+        totalPayable={totals.payable}
+        itemCount={rows.length}
+        costDrafts={costDrafts}
+        sources={sources}
+        errors={settlementErrors}
+      />
     </div>
   );
 }

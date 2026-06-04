@@ -174,6 +174,55 @@ export async function softDeleteRelatedCost(id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Batch insert — used by the new-invoice form to persist locally-held draft
+// rows AFTER the parent factor has been inserted.
+//
+// Why a dedicated batch helper instead of looping `upsertRelatedCost`?
+//   - Callers need the resulting row id in INPUT ORDER so they can wire each
+//     cost back to its corresponding settlement source (source_related_cost_id).
+//   - Partial failures must be tolerated: a single bad row should not abort
+//     the whole flow, because the parent factor is already saved.
+//   - Keeping the loop here (rather than in MixedInvoiceForm) keeps the
+//     component free of supabase calls beyond what it already does.
+// ---------------------------------------------------------------------------
+export interface InsertManyResult {
+  /** Same length as input drafts. null at index i = that row failed. */
+  ids: (string | null)[];
+  /** One entry per failed row with its original index + DB error message. */
+  failed: { index: number; message: string }[];
+}
+
+export async function insertManyRelatedCosts(
+  factorId: string,
+  drafts: Omit<RelatedCostInput, "factor_id">[],
+): Promise<InsertManyResult> {
+  const ids: (string | null)[] = [];
+  const failed: { index: number; message: string }[] = [];
+  for (let i = 0; i < drafts.length; i++) {
+    const d = drafts[i];
+    // Strip `undefined` so PG defaults still fire (e.g. cost_date=now()).
+    const clean: Record<string, unknown> = { factor_id: factorId };
+    for (const [k, v] of Object.entries(d)) {
+      if (k === "id") continue; // batch insert is always a fresh row
+      if (v !== undefined) clean[k] = v;
+    }
+    const { data, error } = await supabase
+      .from("factor_related_costs")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .insert(clean as any)
+      .select("id")
+      .single();
+    if (error || !data) {
+      ids.push(null);
+      failed.push({ index: i, message: error?.message ?? "insert failed" });
+    } else {
+      ids.push((data as { id: string }).id);
+    }
+  }
+  return { ids, failed };
+}
+
+// ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
 
