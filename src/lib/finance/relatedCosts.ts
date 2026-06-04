@@ -99,6 +99,30 @@ export interface RelatedCost {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+
+  // ---------- Task 4: freight route fields (all optional) ----------
+  // FK to geo_locations dictionary. Populated by the editor for freight rows.
+  origin_location_id: string | null;
+  destination_location_id: string | null;
+  // Custom one-off overrides used when the operator wants a label different
+  // from the canonical geo_location name (e.g. "anbar 2" instead of "farm").
+  origin_text: string | null;
+  destination_text: string | null;
+  // Distance + duration of the route. Source flag tells consumers whether
+  // the number is manual (operator typed), estimated (rough guess) or api
+  // (returned by a future routing service — disabled in this phase).
+  route_distance_km: number | null;
+  route_duration_minutes: number | null;
+  route_source: "manual" | "estimated" | "api" | null;
+  route_note: string | null;
+  // Audit/provenance for future API integration — left null today.
+  route_api_provider: string | null;
+  route_api_response: unknown | null;
+  route_checked_at: string | null;
+  route_checked_by: string | null;
+  // Vehicle/cargo metadata for future cost-per-km analytics.
+  vehicle_type: string | null;
+  cargo_weight: number | null;
 }
 
 /** Insert/update payload — omit server-managed columns. */

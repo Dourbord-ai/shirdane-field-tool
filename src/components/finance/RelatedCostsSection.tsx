@@ -306,11 +306,29 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                 <span>{formatDate(r.cost_date)}</span>
                 <span className="font-bold text-foreground">{formatRial(r.amount)}</span>
               </div>
-              {(r.source_document_number || r.description || r.vehicle_plate || r.driver_name) && (
+              {(r.source_document_number || r.description || r.vehicle_plate || r.driver_name ||
+                r.origin_location_id || r.destination_location_id || r.origin_text || r.destination_text ||
+                r.route_distance_km || r.route_note) && (
                 <div className="text-xs text-muted-foreground space-y-0.5 mt-0.5">
                   {r.source_document_number && <div>سند: {r.source_document_number}</div>}
                   {r.vehicle_plate && <div>پلاک: {r.vehicle_plate}</div>}
                   {r.driver_name && <div>راننده: {r.driver_name}</div>}
+                  {/* Task 4 — surface route info for freight rows. We render a
+                      single compact line "مبدأ → مقصد · {km} km" so the row
+                      stays scannable. Custom text overrides display in
+                      parentheses when present. */}
+                  {r.cost_category === "freight" && (r.origin_location_id || r.destination_location_id || r.origin_text || r.destination_text || r.route_distance_km) && (
+                    <div className="text-foreground/80">
+                      مسیر:&nbsp;
+                      <span>{r.origin_text || (r.origin_location_id ? "مبدأ" : "—")}</span>
+                      &nbsp;←&nbsp;
+                      <span>{r.destination_text || (r.destination_location_id ? "مقصد" : "—")}</span>
+                      {r.route_distance_km != null && (
+                        <span> · {Number(r.route_distance_km).toLocaleString("fa-IR")} کیلومتر</span>
+                      )}
+                    </div>
+                  )}
+                  {r.route_note && <div>توضیح مسیر: {r.route_note}</div>}
                   {r.description && <div>{r.description}</div>}
                 </div>
               )}

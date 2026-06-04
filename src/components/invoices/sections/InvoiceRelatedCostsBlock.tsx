@@ -74,6 +74,22 @@ export default function InvoiceRelatedCostsBlock({ drafts, onAdd, onUpdate, onDe
     is_deleted: false,
     created_at: d.cost_date,
     updated_at: d.cost_date,
+    // Task 4 — pass through freight route fields so the editor can
+    // re-render them when the operator opens an existing draft for editing.
+    origin_location_id: d.origin_location_id ?? null,
+    destination_location_id: d.destination_location_id ?? null,
+    origin_text: d.origin_text ?? null,
+    destination_text: d.destination_text ?? null,
+    route_distance_km: d.route_distance_km ?? null,
+    route_duration_minutes: d.route_duration_minutes ?? null,
+    route_source: d.route_source ?? null,
+    route_note: d.route_note ?? null,
+    route_api_provider: d.route_api_provider ?? null,
+    route_api_response: d.route_api_response ?? null,
+    route_checked_at: d.route_checked_at ?? null,
+    route_checked_by: d.route_checked_by ?? null,
+    vehicle_type: d.vehicle_type ?? null,
+    cargo_weight: d.cargo_weight ?? null,
   });
 
   return (
