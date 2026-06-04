@@ -330,6 +330,16 @@ export default function MixedInvoiceForm() {
   // Rows: start with a single livestock row so the form is non-empty.
   const [rows, setRows] = useState<MixedRow[]>([blankRow("livestock")]);
 
+  // ----- Tasks 2+3 state -----
+  // Local-only related-cost draft rows. Persisted via insertManyRelatedCosts
+  // immediately after the parent factor lands (step 4 of save sequence).
+  const [costDrafts, setCostDrafts] = useState<DraftCost[]>([]);
+  // Per-source settlement configuration. Reconciled from costDrafts + invoice
+  // header on every change so user edits survive cost adds/deletes.
+  const [sources, setSources] = useState<SettlementSource[]>([]);
+  // Mandatory review dialog — the ONLY entry point into the save flow.
+  const [reviewOpen, setReviewOpen] = useState(false);
+
   // -----------------------------------------------------------------------
   // Finance party options. Same query the legacy form uses, lifted here so
   // this component is self-contained.
