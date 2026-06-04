@@ -93,7 +93,17 @@ export default function FreightTripDetail() {
   // Lifecycle gates.
   const canEdit = trip.status === "draft" || trip.status === "allocated";
   const canAllocate = canEdit && links.length > 0;
-  const canCreateSettlement = trip.status === "allocated" && trip.payment_required;
+  // Settlement create requires: allocated status, needs payment, has a
+  // driver party, positive amount, AND no prior request is already linked.
+  const canCreateSettlement =
+    trip.status === "allocated" &&
+    trip.payment_required &&
+    !!trip.driver_party_id &&
+    Number(trip.total_amount) > 0 &&
+    !trip.settlement_request_id;
+  // Once a request exists, expose the "view" action regardless of status
+  // so operators can always navigate to it (even after settled/cancelled).
+  const hasLinkedRequest = !!trip.settlement_request_id;
   const canCancel = trip.status !== "settled";
 
   const handleAllocate = async () => {
