@@ -59,6 +59,10 @@ export interface FreightTrip {
   created_at: string;
   updated_at: string;
   is_deleted: boolean;
+  // Task 7 — link to the single settlement request created from the trip
+  // detail page. NULL until the operator submits one. 1:1 for v1; a
+  // future multi-request enhancement will require a dedicated link table.
+  settlement_request_id: string | null;
 }
 
 /** One link row — connects a trip to one invoice. */
