@@ -262,9 +262,9 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       materialized by a freight trip. The row is treated as
                       read-only from the invoice side: edit happens on the
                       trip page so the operator can't desync the link. */}
-                  {(r as unknown as { freight_trip_id?: string | null }).freight_trip_id && (
+                  {r.freight_trip_id && (
                     <button
-                      onClick={() => navigate(`/finance/freight-trips/${(r as unknown as { freight_trip_id: string }).freight_trip_id}`)}
+                      onClick={() => navigate(`/finance/freight-trips/${r.freight_trip_id}`)}
                       className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px] font-bold inline-flex items-center gap-1 hover:bg-secondary/80"
                       title="مشاهده سرویس حمل"
                     >
