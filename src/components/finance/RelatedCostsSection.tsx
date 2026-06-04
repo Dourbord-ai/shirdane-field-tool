@@ -311,20 +311,37 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       <Link2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <button
-                    onClick={() => openEdit(r)}
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                    aria-label="ویرایش"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(r)}
-                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                    aria-label="حذف"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {r.freight_trip_id ? (
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block p-1 rounded text-muted-foreground cursor-help">
+                            <Info className="w-3.5 h-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>این هزینه از سرویس حمل ایجاد شده است و فقط از صفحه سرویس حمل قابل ویرایش است.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                        aria-label="ویرایش"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        aria-label="حذف"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
