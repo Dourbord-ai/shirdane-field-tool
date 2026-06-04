@@ -59,6 +59,10 @@ export interface FreightTrip {
   created_at: string;
   updated_at: string;
   is_deleted: boolean;
+  // Task 7 — link to the single settlement request created from the trip
+  // detail page. NULL until the operator submits one. 1:1 for v1; a
+  // future multi-request enhancement will require a dedicated link table.
+  settlement_request_id: string | null;
 }
 
 /** One link row — connects a trip to one invoice. */
@@ -425,7 +429,22 @@ export async function cancelTrip(tripId: string): Promise<void> {
   }
 }
 
-/** Mark trip as having a settlement request (called by the trip page). */
+/**
+ * @deprecated As of Task 7, the trip status transition to
+ * `"settlement_created"` is performed atomically inside
+ * `submitFreightTripSettlement` (see `src/lib/finance/freightTripSettlement.ts`)
+ * together with the RPC call and the `settlement_request_id` link. This
+ * standalone helper is retained for backward-compat callers only and
+ * should NOT be used by new code — a manual status flip without an
+ * accompanying settlement request would create a "phantom" trip state.
+ *
+ * FUTURE: trip status `"settled"` must eventually be DERIVED from the
+ * settlement execution state of the linked `finance_payment_request_items`
+ * (e.g. all items reach `execution_status = "executed"` and are
+ * voucher-posted), not set manually here. A future migration / trigger
+ * or scheduled job is the right home for that derivation; do not add a
+ * manual setter for `"settled"` to this file.
+ */
 export async function markTripSettlementCreated(tripId: string): Promise<void> {
   const { error } = await supabase
     .from("freight_trips")

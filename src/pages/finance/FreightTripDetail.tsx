@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Pencil, PlayCircle, ReceiptText, XCircle, ArrowRight } from "lucide-react";
+import { Pencil, PlayCircle, ReceiptText, XCircle, ArrowRight, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +32,11 @@ import {
   cancelTrip,
   FREIGHT_TRIP_STATUS_LABEL,
   getFreightTripWithInvoices,
-  markTripSettlementCreated,
   type FreightTrip,
   type FreightTripInvoice,
 } from "@/lib/finance/freightTrips";
 import { allocate } from "@/lib/finance/freightAllocation";
+import FreightTripSettlementDialog from "@/components/finance/FreightTripSettlementDialog";
 
 interface InvoiceLite {
   id: string;
@@ -93,7 +93,17 @@ export default function FreightTripDetail() {
   // Lifecycle gates.
   const canEdit = trip.status === "draft" || trip.status === "allocated";
   const canAllocate = canEdit && links.length > 0;
-  const canCreateSettlement = trip.status === "allocated" && trip.payment_required;
+  // Settlement create requires: allocated status, needs payment, has a
+  // driver party, positive amount, AND no prior request is already linked.
+  const canCreateSettlement =
+    trip.status === "allocated" &&
+    trip.payment_required &&
+    !!trip.driver_party_id &&
+    Number(trip.total_amount) > 0 &&
+    !trip.settlement_request_id;
+  // Once a request exists, expose the "view" action regardless of status
+  // so operators can always navigate to it (even after settled/cancelled).
+  const hasLinkedRequest = !!trip.settlement_request_id;
   const canCancel = trip.status !== "settled";
 
   const handleAllocate = async () => {
@@ -114,22 +124,22 @@ export default function FreightTripDetail() {
     }
   };
 
-  const handleCreateSettlement = async () => {
-    if (!tripId) return;
-    setBusy(true);
-    try {
-      // Task 6 deliberately stops short of building the full settlement
-      // request RPC integration. We mark the status so the lifecycle is
-      // visible; the actual settlement form is the next phase.
-      await markTripSettlementCreated(tripId);
-      toast.success("وضعیت سرویس به 'درخواست تسویه ثبت شد' تغییر یافت");
-      await reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+  // Task 7 — open the settlement dialog. Actual RPC submission +
+  // status flip happens inside submitFreightTripSettlement, which the
+  // dialog calls. The manual `markTripSettlementCreated` shortcut from
+  // Task 6 has been removed: status can only flip via real RPC success.
+  const [settlementOpen, setSettlementOpen] = useState(false);
+  const handleOpenSettlement = () => setSettlementOpen(true);
+  const handleSettlementSubmitted = async (_requestId: string) => {
+    // Reload so the link badge + view-request action appear and the
+    // status pill flips to "درخواست تسویه ثبت شد".
+    await reload();
   };
+
+  // Navigate to the payment-requests tab. We don't deep-link to the
+  // individual request because the existing UI is a tab-based list, not
+  // a per-request route — operators filter by request title there.
+  const handleViewRequest = () => navigate("/finance?tab=payment-requests");
 
   const handleCancel = async () => {
     if (!tripId) return;
@@ -170,10 +180,16 @@ export default function FreightTripDetail() {
             <PlayCircle className="w-4 h-4 ml-1" />
             تخصیص و ثبت هزینه‌ها
           </Button>
-          <Button size="sm" disabled={!canCreateSettlement || busy} onClick={handleCreateSettlement}>
+          <Button size="sm" disabled={!canCreateSettlement || busy} onClick={handleOpenSettlement}>
             <ReceiptText className="w-4 h-4 ml-1" />
-            ثبت درخواست تسویه
+            ثبت درخواست تسویه کرایه سفر
           </Button>
+          {hasLinkedRequest && (
+            <Button size="sm" variant="outline" onClick={handleViewRequest}>
+              <ExternalLink className="w-4 h-4 ml-1" />
+              مشاهده درخواست تسویه
+            </Button>
+          )}
           <Button size="sm" variant="destructive" disabled={!canCancel || busy} onClick={handleCancel}>
             <XCircle className="w-4 h-4 ml-1" />
             لغو سرویس
@@ -248,6 +264,17 @@ export default function FreightTripDetail() {
           </div>
         )}
       </section>
+
+      {/* Task 7 — Freight Trip settlement dialog. Mounted unconditionally
+          so it can fade out cleanly; visibility is driven by state. */}
+      <FreightTripSettlementDialog
+        open={settlementOpen}
+        onOpenChange={setSettlementOpen}
+        trip={trip}
+        invoiceLinks={links}
+        invoiceMap={invoices}
+        onSubmitted={handleSettlementSubmitted}
+      />
     </div>
   );
 }

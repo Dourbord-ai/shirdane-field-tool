@@ -4956,6 +4956,7 @@ export type Database = {
           origin_text: string | null
           payment_required: boolean
           route_distance_km: number | null
+          settlement_request_id: string | null
           status: string
           total_amount: number
           trip_code: string | null
@@ -4979,6 +4980,7 @@ export type Database = {
           origin_text?: string | null
           payment_required?: boolean
           route_distance_km?: number | null
+          settlement_request_id?: string | null
           status?: string
           total_amount?: number
           trip_code?: string | null
@@ -5002,6 +5004,7 @@ export type Database = {
           origin_text?: string | null
           payment_required?: boolean
           route_distance_km?: number | null
+          settlement_request_id?: string | null
           status?: string
           total_amount?: number
           trip_code?: string | null
@@ -5038,6 +5041,13 @@ export type Database = {
             columns: ["origin_location_id"]
             isOneToOne: false
             referencedRelation: "geo_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "freight_trips_settlement_request_id_fkey"
+            columns: ["settlement_request_id"]
+            isOneToOne: false
+            referencedRelation: "finance_payment_requests"
             referencedColumns: ["id"]
           },
           {
