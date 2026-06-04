@@ -128,8 +128,9 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
     if (!amount || amount <= 0) return toast.error("مبلغ باید بزرگ‌تر از صفر باشد");
     setSaving(true);
     try {
-      // Build the input payload. We pass undefined for empty strings so the
-      // DB stores NULL (cleaner than "" for optional text columns).
+      // Build the input payload — identical shape for db + draft modes so the
+      // draft can be replayed unchanged into `insertManyRelatedCosts` after
+      // the parent factor lands.
       const payload: RelatedCostInput = {
         id: initial?.id,
         factor_id: factorId,
@@ -143,12 +144,21 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
         attachment_path: attachment_path || null,
         vehicle_plate: showFreightFields ? (vehicle_plate || null) : null,
         driver_name: showFreightFields ? (driver_name || null) : null,
-        // Convert the datetime-local value back to an ISO string.
         cost_date: new Date(cost_date).toISOString(),
       };
+
+      if (mode === "draft") {
+        // Draft path: hand the assembled payload back to the parent. The
+        // parent decides when (and if) it ever reaches the DB.
+        onDraftSave?.(payload);
+        toast.success(initial ? "هزینه به‌روزرسانی شد" : "هزینه به فاکتور اضافه شد");
+        onClose();
+        return;
+      }
+
       await upsertRelatedCost(payload);
       toast.success(initial ? "هزینه ویرایش شد" : "هزینه ثبت شد");
-      onSaved();
+      onSaved?.();
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "خطا در ذخیره";
