@@ -138,7 +138,6 @@ export default function FreightTripEditor() {
     let query = supabase
       .from("factors")
       .select("id, invoice_number, invoice_date, payable_amount, total_amount, finance_party_id")
-      .eq("is_deleted", false)
       .order("invoice_date", { ascending: false })
       .limit(50);
     if (q) {
