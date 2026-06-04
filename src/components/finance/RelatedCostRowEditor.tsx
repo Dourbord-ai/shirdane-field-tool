@@ -57,6 +57,7 @@ import {
   formatPerUnit,
   INSUFFICIENT_FREIGHT_DATA,
 } from "@/lib/finance/freightMetrics";
+import { findActiveTripForInvoice } from "@/lib/finance/freightTrips";
 
 // ---------------------------------------------------------------------------
 // Component props
