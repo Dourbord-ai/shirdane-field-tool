@@ -136,7 +136,8 @@ export interface RelatedCost {
 /** Insert/update payload — omit server-managed columns. */
 export type RelatedCostInput = Omit<
   RelatedCost,
-  "id" | "created_at" | "updated_at" | "is_deleted" | "settlement_request_item_id"
+  | "id" | "created_at" | "updated_at" | "is_deleted" | "settlement_request_item_id"
+  | "freight_trip_id" | "freight_trip_invoice_id" | "freight_trip_share_basis"
 > & { id?: string };
 
 // ---------------------------------------------------------------------------
