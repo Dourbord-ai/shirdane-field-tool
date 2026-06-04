@@ -550,7 +550,7 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
                 <Input value={driver_name} onChange={(e) => setDriverName(e.target.value)} />
               </div>
             </div>
-          )}
+          </> )}
 
           {/* ===================== Task 4 — Route section ===================== */}
           {/* Only rendered for freight rows; collapsed inside a bordered block
