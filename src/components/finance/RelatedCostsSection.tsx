@@ -30,6 +30,11 @@ import {
 
 import RelatedCostRowEditor from "@/components/finance/RelatedCostRowEditor";
 
+// Task 5 — compact freight reference metrics for the row summary. Only the
+// calculator is imported here; we omit any fallback string in the compact
+// summary because we'd rather hide the line entirely than add noise.
+import { computeFreightMetrics, formatPerUnit } from "@/lib/finance/freightMetrics";
+
 // Tiny number formatter to keep this file independent from app-wide helpers.
 // Mirrors the existing Persian-digit + thousands-separator style.
 function formatRial(n: number): string {
@@ -328,6 +333,31 @@ export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite 
                       )}
                     </div>
                   )}
+                  {/* Task 5 — compact freight reference metrics. We render
+                      only what is computable: if BOTH metrics are null (no
+                      distance AND no weight), we omit the line entirely so
+                      legacy rows or non-numeric drafts stay quiet. The full
+                      "اطلاعات کافی نیست" fallback lives in the editor and
+                      review dialog, where the operator expects to see it. */}
+                  {r.cost_category === "freight" && (() => {
+                    const m = computeFreightMetrics({
+                      amount: r.amount,
+                      route_distance_km: r.route_distance_km,
+                      cargo_weight: r.cargo_weight,
+                    });
+                    if (m.cost_per_km === null && m.cost_per_ton === null) return null;
+                    return (
+                      <div className="text-foreground/70">
+                        {m.cost_per_km !== null && (
+                          <span>{formatPerUnit(m.cost_per_km, "کم")}</span>
+                        )}
+                        {m.cost_per_km !== null && m.cost_per_ton !== null && <span> · </span>}
+                        {m.cost_per_ton !== null && (
+                          <span>{formatPerUnit(m.cost_per_ton, "تن")}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {r.route_note && <div>توضیح مسیر: {r.route_note}</div>}
                   {r.description && <div>{r.description}</div>}
                 </div>

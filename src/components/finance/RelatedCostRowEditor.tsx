@@ -49,6 +49,14 @@ import {
   listGeoLocations,
   type GeoLocation,
 } from "@/lib/finance/geoLocations";
+// Task 5 — informational freight metrics. Pure client-side derivation; we
+// import only the calculator + the standardized fallback string so this
+// component never holds its own copy of the formula.
+import {
+  computeFreightMetrics,
+  formatPerUnit,
+  INSUFFICIENT_FREIGHT_DATA,
+} from "@/lib/finance/freightMetrics";
 
 // ---------------------------------------------------------------------------
 // Component props
@@ -625,6 +633,49 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
                   />
                 </div>
               </div>
+
+              {/* ============== Task 5 — Reference metrics (read-only) ===============
+                  Derived live from amount + distance + cargo weight. Pure
+                  client-side; we recompute on every render so the operator
+                  sees the numbers update as they edit any of the three
+                  inputs. NOTHING here validates or blocks save — it's an
+                  informational sanity check only. When data is missing we
+                  fall back to the standardized Persian string. */}
+              {(() => {
+                const m = computeFreightMetrics({ amount, route_distance_km, cargo_weight });
+                return (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-foreground">شاخص‌های مرجع</p>
+                      <span className="text-[10px] text-muted-foreground">
+                        فقط جهت اطلاع — مسدودکننده‌ی ثبت نیست
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">هزینه/کیلومتر</span>
+                        <span className={m.cost_per_km === null ? "text-muted-foreground" : "text-foreground font-medium"}>
+                          {m.cost_per_km === null ? INSUFFICIENT_FREIGHT_DATA : formatPerUnit(m.cost_per_km, "کیلومتر")}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">هزینه/کیلوگرم</span>
+                        <span className={m.cost_per_kg === null ? "text-muted-foreground" : "text-foreground font-medium"}>
+                          {m.cost_per_kg === null ? INSUFFICIENT_FREIGHT_DATA : formatPerUnit(m.cost_per_kg, "کیلوگرم")}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">هزینه/تن</span>
+                        <span className={m.cost_per_ton === null ? "text-muted-foreground" : "text-foreground font-medium"}>
+                          {m.cost_per_ton === null ? INSUFFICIENT_FREIGHT_DATA : formatPerUnit(m.cost_per_ton, "تن")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+
 
               {/* Route source — three radio-style buttons. "api" is intentionally
                   disabled with a "به‌زودی" badge per the Task 4 brief. */}
