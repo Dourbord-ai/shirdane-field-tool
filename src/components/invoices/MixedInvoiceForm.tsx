@@ -1301,6 +1301,21 @@ export default function MixedInvoiceForm() {
         })}
       </Card>
 
+      {/* ------------------ Tasks 2+3: Related Costs ------------------ */}
+      <InvoiceRelatedCostsBlock
+        drafts={costDrafts}
+        onAdd={addCostDraft}
+        onUpdate={updateCostDraft}
+        onDelete={deleteCostDraft}
+      />
+
+      {/* ------------------ Tasks 2+3: Settlement Sources ------------------ */}
+      <InvoiceSettlementSourcesBlock
+        sources={sources}
+        errors={settlementErrors}
+        onPatchSource={patchSource}
+      />
+
       {/* ------------------ Totals + Submit ------------------ */}
       <Card className="p-4 bg-card border-border space-y-3">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -1309,10 +1324,43 @@ export default function MixedInvoiceForm() {
           <Totals label="جمع مالیات" value={totals.taxSum} />
           <Totals label="قابل پرداخت" value={totals.payable} bold />
         </div>
-        <Button onClick={handleSubmit} disabled={saving} className="w-full">
-          {saving ? "در حال ثبت..." : "ثبت فاکتور"}
+        {/* The review dialog is mandatory — clicking here only OPENS it.
+            Actual save runs from inside the dialog's "ثبت نهایی" button. */}
+        <Button
+          onClick={() => {
+            if (!invoiceDate) {
+              toast({ title: "تاریخ فاکتور را وارد کنید", variant: "destructive" });
+              return;
+            }
+            setReviewOpen(true);
+          }}
+          disabled={saving}
+          className="w-full"
+        >
+          پیش‌نمایش و ثبت نهایی
         </Button>
       </Card>
+
+      <InvoiceReviewDialog
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onConfirm={async () => {
+          await handleSubmit();
+          setReviewOpen(false);
+        }}
+        saving={saving}
+        invoiceNumber={invoiceNumber || null}
+        invoiceDateLabel={
+          invoiceDate ? `${invoiceDate.year}/${invoiceDate.month}/${invoiceDate.day}` : "—"
+        }
+        invoiceTypeLabel={INVOICE_TYPES.find((t) => t.value === invoiceType)?.label ?? invoiceType}
+        partyLabel={partyLabel}
+        totalPayable={totals.payable}
+        itemCount={rows.length}
+        costDrafts={costDrafts}
+        sources={sources}
+        errors={settlementErrors}
+      />
     </div>
   );
 }
