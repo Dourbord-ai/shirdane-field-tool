@@ -30,6 +30,11 @@ import {
 
 import RelatedCostRowEditor from "@/components/finance/RelatedCostRowEditor";
 
+// Task 5 — compact freight reference metrics for the row summary. Only the
+// calculator is imported here; we omit any fallback string in the compact
+// summary because we'd rather hide the line entirely than add noise.
+import { computeFreightMetrics, formatPerUnit } from "@/lib/finance/freightMetrics";
+
 // Tiny number formatter to keep this file independent from app-wide helpers.
 // Mirrors the existing Persian-digit + thousands-separator style.
 function formatRial(n: number): string {
