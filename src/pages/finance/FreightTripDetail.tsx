@@ -264,6 +264,17 @@ export default function FreightTripDetail() {
           </div>
         )}
       </section>
+
+      {/* Task 7 — Freight Trip settlement dialog. Mounted unconditionally
+          so it can fade out cleanly; visibility is driven by state. */}
+      <FreightTripSettlementDialog
+        open={settlementOpen}
+        onOpenChange={setSettlementOpen}
+        trip={trip}
+        invoiceLinks={links}
+        invoiceMap={invoices}
+        onSubmitted={handleSettlementSubmitted}
+      />
     </div>
   );
 }
