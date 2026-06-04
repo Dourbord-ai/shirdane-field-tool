@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Pencil, PlayCircle, ReceiptText, XCircle, ArrowRight } from "lucide-react";
+import { Pencil, PlayCircle, ReceiptText, XCircle, ArrowRight, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +32,11 @@ import {
   cancelTrip,
   FREIGHT_TRIP_STATUS_LABEL,
   getFreightTripWithInvoices,
-  markTripSettlementCreated,
   type FreightTrip,
   type FreightTripInvoice,
 } from "@/lib/finance/freightTrips";
 import { allocate } from "@/lib/finance/freightAllocation";
+import FreightTripSettlementDialog from "@/components/finance/FreightTripSettlementDialog";
 
 interface InvoiceLite {
   id: string;
