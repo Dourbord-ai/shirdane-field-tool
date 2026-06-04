@@ -33,6 +33,14 @@ import {
   PAYMENT_METHOD_LABELS_FA,
   SETTLEMENT_SUBJECT_LABELS_FA,
 } from "@/lib/finance/settlementItemTypes";
+// Task 5 — informational freight metrics for the review summary. We render
+// the full set (with the fallback string) here because review is the
+// operator's last sanity-check moment before final submit.
+import {
+  computeFreightMetrics,
+  formatPerUnit,
+  INSUFFICIENT_FREIGHT_DATA,
+} from "@/lib/finance/freightMetrics";
 
 interface Props {
   open: boolean;
