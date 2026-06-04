@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadsheet, Link2, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadsheet, Link2, CheckCircle2, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
