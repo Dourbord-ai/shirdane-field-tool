@@ -191,6 +191,26 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
   // for the (much more common) non-freight rows.
   const showFreightFields = cost_category === "freight";
 
+  // P1-B — fetch active trip warning whenever the operator opens the freight
+  // editor (add or edit of a non-trip row). Skip when editing a row that
+  // was already materialized by a trip — the operator already knows.
+  useEffect(() => {
+    if (!showFreightFields) { setActiveTripWarning(null); return; }
+    if (initial?.freight_trip_id) { setActiveTripWarning(null); return; }
+    let cancelled = false;
+    findActiveTripForInvoice(factorId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result) {
+          setActiveTripWarning({ tripCode: result.trip.trip_code });
+        } else {
+          setActiveTripWarning(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setActiveTripWarning(null); });
+    return () => { cancelled = true; };
+  }, [showFreightFields, factorId, initial?.freight_trip_id]);
+
   // Only fetch geo_locations when we actually need them — i.e. the operator
   // is on a freight row. Avoids a wasted network call for the 80% case.
   useEffect(() => {
