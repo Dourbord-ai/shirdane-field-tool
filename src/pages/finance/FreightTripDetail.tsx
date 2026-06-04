@@ -114,22 +114,22 @@ export default function FreightTripDetail() {
     }
   };
 
-  const handleCreateSettlement = async () => {
-    if (!tripId) return;
-    setBusy(true);
-    try {
-      // Task 6 deliberately stops short of building the full settlement
-      // request RPC integration. We mark the status so the lifecycle is
-      // visible; the actual settlement form is the next phase.
-      await markTripSettlementCreated(tripId);
-      toast.success("وضعیت سرویس به 'درخواست تسویه ثبت شد' تغییر یافت");
-      await reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+  // Task 7 — open the settlement dialog. Actual RPC submission +
+  // status flip happens inside submitFreightTripSettlement, which the
+  // dialog calls. The manual `markTripSettlementCreated` shortcut from
+  // Task 6 has been removed: status can only flip via real RPC success.
+  const [settlementOpen, setSettlementOpen] = useState(false);
+  const handleOpenSettlement = () => setSettlementOpen(true);
+  const handleSettlementSubmitted = async (_requestId: string) => {
+    // Reload so the link badge + view-request action appear and the
+    // status pill flips to "درخواست تسویه ثبت شد".
+    await reload();
   };
+
+  // Navigate to the payment-requests tab. We don't deep-link to the
+  // individual request because the existing UI is a tab-based list, not
+  // a per-request route — operators filter by request title there.
+  const handleViewRequest = () => navigate("/finance?tab=payment-requests");
 
   const handleCancel = async () => {
     if (!tripId) return;
