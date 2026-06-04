@@ -27,7 +27,7 @@ import { Plus, Trash2 } from "lucide-react";
 import SearchableSelect from "@/components/SearchableSelect";
 import JalaliDatePicker from "@/components/JalaliDatePicker";
 import { JalaliDate } from "@/lib/jalali";
-import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
+import { jalaliToGregorianTimestamp, jalaliToGregorianDate } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +38,20 @@ import MedicineProductPicker, { MedicineProduct } from "@/components/medicine/Me
 // Same architecture as MedicineProductPicker: per-field server-side search
 // over feed_products, snapshot the full row into the invoice line on save.
 import FeedProductPicker, { FeedProduct } from "@/components/feed/FeedProductPicker";
+// Tasks 2+3 — related-costs + per-source settlement workflow lives inside
+// the invoice form. The three blocks below are pure presentation; all state
+// and persistence is owned by this component.
+import InvoiceRelatedCostsBlock from "@/components/invoices/sections/InvoiceRelatedCostsBlock";
+import InvoiceSettlementSourcesBlock from "@/components/invoices/sections/InvoiceSettlementSourcesBlock";
+import InvoiceReviewDialog from "@/components/invoices/sections/InvoiceReviewDialog";
+import {
+  deriveSources,
+  validateSources,
+  buildRpcItemsPayload,
+  type DraftCost,
+  type SettlementSource,
+} from "@/lib/finance/invoiceSettlementBuilder";
+import { insertManyRelatedCosts, type RelatedCostInput } from "@/lib/finance/relatedCosts";
 
 // ---------------------------------------------------------------------------
 // Static option lists. These are intentionally local to the new form so
