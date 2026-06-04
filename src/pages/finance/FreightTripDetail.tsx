@@ -180,10 +180,16 @@ export default function FreightTripDetail() {
             <PlayCircle className="w-4 h-4 ml-1" />
             تخصیص و ثبت هزینه‌ها
           </Button>
-          <Button size="sm" disabled={!canCreateSettlement || busy} onClick={handleCreateSettlement}>
+          <Button size="sm" disabled={!canCreateSettlement || busy} onClick={handleOpenSettlement}>
             <ReceiptText className="w-4 h-4 ml-1" />
-            ثبت درخواست تسویه
+            ثبت درخواست تسویه کرایه سفر
           </Button>
+          {hasLinkedRequest && (
+            <Button size="sm" variant="outline" onClick={handleViewRequest}>
+              <ExternalLink className="w-4 h-4 ml-1" />
+              مشاهده درخواست تسویه
+            </Button>
+          )}
           <Button size="sm" variant="destructive" disabled={!canCancel || busy} onClick={handleCancel}>
             <XCircle className="w-4 h-4 ml-1" />
             لغو سرویس
