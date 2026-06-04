@@ -999,12 +999,22 @@ export default function MixedInvoiceForm() {
       // Skipped when zero sources require settlement OR when a cost
       // failure invalidated the linkage.
       // ----------------------------------------------------------------
+      // Track outcome flags so the final user-facing toast accurately
+      // describes which save phases succeeded. This is the core of the
+      // Scenario-10 fix: we must not show a generic success toast (or
+      // navigate away silently) when settlement RPC failed.
+      let settlementAttempted = false;
+      let settlementFailed = false;
+      let settlementErrorMessage: string | null = null;
+      const costsAttempted = costDrafts.length > 0;
+
       const itemsPayload = buildRpcItemsPayload(
         sources,
         costIdByDraftId,
         invoiceNumber || null,
       );
       if (itemsPayload.length > 0 && !skipSettlementDueToCostFailure) {
+        settlementAttempted = true;
         const requestPayload = {
           title: `تسویه فاکتور ${invoiceNumber ?? ""}`.trim(),
           description: `تولید خودکار از فاکتور ${invoiceNumber ?? factor.id}`,
@@ -1025,17 +1035,46 @@ export default function MixedInvoiceForm() {
           { p_request: requestPayload, p_items: wireItems } as never,
         );
         if (rpcErr) {
-          toast({
-            title: "ثبت درخواست تسویه ناموفق بود",
-            description: rpcErr.message,
-            variant: "destructive",
-          });
-          // Factor + costs are kept; user can retry from PaymentRequestsTab.
+          // Factor + costs remain persisted. Mark failure so the final
+          // toast accurately reflects partial success and we do NOT
+          // navigate away silently. User can retry settlement creation
+          // from PaymentRequestsTab on the invoice detail page.
+          settlementFailed = true;
+          settlementErrorMessage = rpcErr.message || null;
         }
       }
 
-      toast({ title: "فاکتور با موفقیت ثبت شد" });
-      navigate("/invoices");
+      // ----------------------------------------------------------------
+      // Final user-facing outcome. Four distinct cases, per the spec:
+      //   1) invoice only saved
+      //   2) invoice + costs saved
+      //   3) invoice + costs + settlement saved
+      //   4) invoice + costs saved but settlement FAILED  ← Scenario 10
+      // In case 4 we stay on the form (do not navigate) so the user can
+      // see the error and decide what to do next.
+      // ----------------------------------------------------------------
+      if (settlementFailed) {
+        toast({
+          title: "فاکتور و هزینه‌های وابسته ثبت شدند، اما درخواست تسویه ایجاد نشد.",
+          description: settlementErrorMessage
+            ? `خطای درخواست تسویه: ${settlementErrorMessage}`
+            : "می‌توانید بعداً از صفحه جزئیات فاکتور، درخواست تسویه را ایجاد کنید.",
+          variant: "destructive",
+        });
+        // Intentionally do NOT navigate away — user must see the failure
+        // and can navigate manually when ready.
+      } else if (settlementAttempted) {
+        toast({
+          title: "فاکتور، هزینه‌های وابسته و درخواست تسویه با موفقیت ثبت شدند",
+        });
+        navigate("/invoices");
+      } else if (costsAttempted) {
+        toast({ title: "فاکتور و هزینه‌های وابسته با موفقیت ثبت شدند" });
+        navigate("/invoices");
+      } else {
+        toast({ title: "فاکتور با موفقیت ثبت شد" });
+        navigate("/invoices");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast({ title: "ثبت فاکتور ناموفق بود", description: message, variant: "destructive" });
@@ -1043,6 +1082,7 @@ export default function MixedInvoiceForm() {
       setSaving(false);
     }
   };
+
 
   // -----------------------------------------------------------------------
   // Render
