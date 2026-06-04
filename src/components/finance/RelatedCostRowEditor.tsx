@@ -173,6 +173,12 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
   const [driverDraft, setDriverDraft] = useState<QuickDriverInput>(EMPTY_DRIVER);
   const [creatingDriver, setCreatingDriver] = useState(false);
 
+  // P1-B — warn when the invoice already belongs to an active freight trip
+  // so the operator doesn't accidentally create duplicate freight costs.
+  const [activeTripWarning, setActiveTripWarning] = useState<{
+    tripCode: string | null;
+  } | null>(null);
+
   // Keep cost_type valid when the operator switches category — if the
   // current type isn't a known sub-type of the new category, reset it.
   useEffect(() => {
