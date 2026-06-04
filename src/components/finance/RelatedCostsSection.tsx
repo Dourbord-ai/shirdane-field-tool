@@ -14,6 +14,12 @@ import { Plus, Pencil, Trash2, Receipt, Truck, Scale, PackageOpen, FileSpreadshe
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 
 import {
