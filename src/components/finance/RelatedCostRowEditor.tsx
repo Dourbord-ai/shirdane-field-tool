@@ -523,7 +523,24 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
 
           {/* Freight-only fields */}
           {showFreightFields && (
-            <div className="grid grid-cols-2 gap-2">
+            <>
+              {/* P1-B — duplicate-freight warning */}
+              {activeTripWarning && (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-0.5">
+                      <p className="font-bold text-foreground">
+                        این فاکتور به سرویس حمل فعال {activeTripWarning.tripCode ?? "—"} متصل است.
+                      </p>
+                      <p className="text-muted-foreground">
+                        ثبت کرایه مستقل ممکن است باعث دوباره‌کاری در هزینه حمل شود.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label>پلاک خودرو</Label>
                 <Input value={vehicle_plate} onChange={(e) => setPlate(e.target.value)} />
