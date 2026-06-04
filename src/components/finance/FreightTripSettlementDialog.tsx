@@ -76,12 +76,16 @@ export default function FreightTripSettlementDialog({
     (async () => {
       const { data } = await supabase
         .from("finance_parties")
-        .select("display_name, full_name")
+        .select("company_name, first_name, last_name, sepidar_full_name")
         .eq("id", trip.driver_party_id!)
         .maybeSingle();
       if (cancelled) return;
-      const row = data as { display_name: string | null; full_name: string | null } | null;
-      setPartyLabel(row?.display_name || row?.full_name || null);
+      const row = data as { company_name: string | null; first_name: string | null; last_name: string | null; sepidar_full_name: string | null } | null;
+      const label = row?.sepidar_full_name
+        || row?.company_name
+        || [row?.first_name, row?.last_name].filter(Boolean).join(" ")
+        || null;
+      setPartyLabel(label);
     })();
     return () => { cancelled = true; };
   }, [open, trip.driver_party_id]);
