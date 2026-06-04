@@ -37,13 +37,27 @@ import {
 // ---------------------------------------------------------------------------
 
 interface Props {
+  /**
+   * In "db" mode (default) the editor writes directly to factor_related_costs
+   * on save — used by the post-save RelatedCostsSection.
+   *
+   * In "draft" mode it skips the DB call and instead emits the assembled
+   * RelatedCostInput via `onDraftSave` so the parent (MixedInvoiceForm) can
+   * hold the row in local state until the parent factor is saved. The
+   * `factorId` in draft mode is intentionally a sentinel ("__draft__") and
+   * is replaced with the real id at batch-insert time.
+   */
+  mode?: "db" | "draft";
   factorId: string;
   /** When editing an existing row, pass it here. Add-mode if undefined. */
   initial?: RelatedCost;
   /** Seed values for the quick-add buttons (e.g. {category: "freight", type:"driver"}). */
   seed?: { cost_category?: CostCategory; cost_type?: string };
   onClose: () => void;
-  onSaved: () => void;
+  /** Fired in db-mode after a successful upsert. */
+  onSaved?: () => void;
+  /** Fired in draft-mode with the assembled input payload (no DB call). */
+  onDraftSave?: (input: RelatedCostInput) => void;
 }
 
 // Minimal driver-create payload — kept small on purpose; the operator can
