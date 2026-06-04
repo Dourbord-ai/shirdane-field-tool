@@ -567,6 +567,56 @@ export default function MixedInvoiceForm() {
   }, [rows]);
 
   // -----------------------------------------------------------------------
+  // Tasks 2+3: reconcile settlement sources from header + cost drafts.
+  //
+  // We re-derive on every relevant change. The pure helper preserves any
+  // user-edited values (user_dirty=true) so adding a cost or changing the
+  // invoice payable doesn't wipe in-progress configuration.
+  // -----------------------------------------------------------------------
+  const partyLabel = useMemo(
+    () => partyOptions.find((o) => o.value === financePartyId)?.label ?? null,
+    [partyOptions, financePartyId],
+  );
+  useEffect(() => {
+    setSources((prev) =>
+      deriveSources(
+        {
+          financePartyId: financePartyId || null,
+          financePartyLabel: partyLabel,
+          invoicePayable: totals.payable,
+          costDrafts,
+        },
+        prev,
+      ),
+    );
+  }, [financePartyId, partyLabel, totals.payable, costDrafts]);
+
+  // Live validation — surfaced in the source cards AND the review dialog.
+  const settlementErrors = useMemo(
+    () => validateSources(sources, financePartyId || null),
+    [sources, financePartyId],
+  );
+
+  // ----- cost-draft mutators -----
+  const addCostDraft = (input: RelatedCostInput) => {
+    const _draftId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2);
+    // _draftId stays local; factor_id is replaced at insert time.
+    setCostDrafts((prev) => [...prev, { ...input, _draftId }]);
+  };
+  const updateCostDraft = (draftId: string, input: RelatedCostInput) =>
+    setCostDrafts((prev) => prev.map((d) => (d._draftId === draftId ? { ...input, _draftId: draftId } : d)));
+  const deleteCostDraft = (draftId: string) =>
+    setCostDrafts((prev) => prev.filter((d) => d._draftId !== draftId));
+
+  // ----- source patcher -----
+  const patchSource = (sourceId: string, patch: Partial<SettlementSource>) =>
+    setSources((prev) => prev.map((s) => (s.source_id === sourceId ? { ...s, ...patch } : s)));
+
+
+  // -----------------------------------------------------------------------
   // Submit handler. Sequence:
   //   1. Insert factor header → get factor_id
   //   2. For each row: insert factor_items → insert matching detail
