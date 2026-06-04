@@ -49,6 +49,14 @@ import {
   listGeoLocations,
   type GeoLocation,
 } from "@/lib/finance/geoLocations";
+// Task 5 — informational freight metrics. Pure client-side derivation; we
+// import only the calculator + the standardized fallback string so this
+// component never holds its own copy of the formula.
+import {
+  computeFreightMetrics,
+  formatPerUnit,
+  INSUFFICIENT_FREIGHT_DATA,
+} from "@/lib/finance/freightMetrics";
 
 // ---------------------------------------------------------------------------
 // Component props
