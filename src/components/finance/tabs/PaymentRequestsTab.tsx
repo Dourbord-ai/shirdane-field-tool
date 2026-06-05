@@ -87,6 +87,10 @@ interface PR {
   confirmed_amount: number | null;
   total_paid_amount: number | null;
   remaining_amount: number | null;
+  // Invoice ↔ Settlement dependency model: authoritative back-pointer to
+  // the invoice that produced this request. NULL for legacy / independent
+  // requests — those keep working exactly as before.
+  source_factor_id?: string | null;
   created_at: string;
 }
 
