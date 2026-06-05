@@ -1108,7 +1108,17 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
       toast.success("درخواست تایید شد");
       await reload();
     } catch (e: unknown) {
-      toastFinanceError(toast, e);
+      // Invoice ↔ Settlement dependency model: the DB trigger
+      // `guard_invoice_owned_settlement_approval` blocks approval when the
+      // linked invoice is not yet approved. We translate that low-level
+      // error code into a Persian, actionable message instead of dumping
+      // raw SQL state onto the operator.
+      const raw = e instanceof Error ? e.message : String(e);
+      if (raw.includes("INVOICE_NOT_APPROVED")) {
+        toast.error("ابتدا باید فاکتور مرتبط با این درخواست تأیید شود.");
+      } else {
+        toastFinanceError(toast, e);
+      }
     } finally { setBusy(false); }
   }
   async function reject() {
