@@ -100,12 +100,22 @@ export default function InvoiceSettlementSummaryCard({
   if (linked === null) return null;
 
   const goToRequest = () => {
-    // PaymentRequestsTab lives under /finance with a #payment-requests hash.
-    // We also stash the target id so the tab can auto-open the detail view.
+    // UAT Bug 3 fix — deterministic deep-link to the linked request:
+    //   1) Stash the target request id so PaymentRequestsTab can auto-open
+    //      the detail view once the list loads.
+    //   2) Defensively clear `finance:pr_seed_draft_v1`. That key is used
+    //      by the invoice → "new settlement request" flow; if a stale
+    //      draft survives in sessionStorage the PR tab would otherwise
+    //      auto-open the "new request" dialog on top of our detail view.
+    //   3) Navigate via the `?tab=` query param (NOT the `#hash`) because
+    //      Finance.tsx reads `searchParams.get("tab")` to choose the
+    //      active tab. The hash-based URL used previously left the tab on
+    //      "dashboard" until the user clicked Payment Requests manually.
     try {
       sessionStorage.setItem("finance.openPaymentRequestId", linked.id);
+      sessionStorage.removeItem("finance:pr_seed_draft_v1");
     } catch { /* sessionStorage may be unavailable in some embeds */ }
-    navigate("/finance#payment-requests");
+    navigate("/finance?tab=payment-requests");
   };
 
   return (

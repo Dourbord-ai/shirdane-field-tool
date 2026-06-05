@@ -525,7 +525,36 @@ export default function MixedInvoiceForm() {
   // -----------------------------------------------------------------------
   // Row mutators. Each one returns a NEW array so React picks up the change.
   // -----------------------------------------------------------------------
-  const addRow = () => setRows((r) => [...r, blankRow()]);
+  // Ref to the most recently appended row's wrapper element. We use this to
+  // scroll the newly-added row into view right after addRow() runs, so the
+  // operator never has to scroll manually (UAT Bug 1).
+  const lastRowRef = useRef<HTMLDivElement | null>(null);
+  // Flag set by addRow() and consumed by an effect after `rows` updates.
+  // We can't scroll directly inside addRow because the DOM node for the
+  // new row doesn't exist yet at the moment setRows is called.
+  const scrollToLastRef = useRef<boolean>(false);
+
+  const addRow = () => {
+    // Append a new blank row at the end, then signal the post-render
+    // effect to scroll it into view + focus its first input.
+    scrollToLastRef.current = true;
+    setRows((r) => [...r, blankRow()]);
+  };
+
+  // After every render where addRow asked us to, scroll the last row into
+  // view and try to focus the first focusable element inside it. We use
+  // 'nearest' so the page doesn't jump if the row is already visible.
+  useEffect(() => {
+    if (!scrollToLastRef.current) return;
+    scrollToLastRef.current = false;
+    const node = lastRowRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    const focusable = node.querySelector<HTMLElement>(
+      "input,select,textarea,button:not([aria-label='حذف ردیف'])",
+    );
+    focusable?.focus();
+  }, [rows.length]);
   const removeRow = (uid: string) =>
     setRows((r) => (r.length <= 1 ? r : r.filter((row) => row.uid !== uid)));
   const updateRow = (uid: string, patch: Partial<MixedRow>) =>
@@ -1229,13 +1258,18 @@ export default function MixedInvoiceForm() {
       </Card>
 
       {/* ------------------ Rows ------------------ */}
+      {/*
+        Bug-fix (UAT Batch): the "افزودن ردیف" button used to live in the
+        section header (top). With many rows the operator had to scroll up
+        to add and then back down to fill. We now render the button BELOW
+        the last row (see end of this Card) and only keep the title on top.
+        A ref-list lets addRow scroll the freshly inserted row into view
+        and focus its first interactive element, so no manual scroll is
+        ever needed.
+      */}
       <Card className="p-4 space-y-4 bg-card border-border">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">اقلام فاکتور</h2>
-          <Button type="button" variant="secondary" size="sm" onClick={addRow}>
-            <Plus className="ms-1 h-4 w-4" />
-            افزودن ردیف
-          </Button>
         </div>
 
         {rows.map((row, idx) => {
@@ -1243,6 +1277,9 @@ export default function MixedInvoiceForm() {
           return (
             <div
               key={row.uid}
+              // Attach the ref ONLY to the last row so the post-addRow effect
+              // can scroll it into view. Earlier rows don't need a ref.
+              ref={idx === rows.length - 1 ? lastRowRef : undefined}
               // Each row gets its own bordered card so the operator can
               // visually scan a long mixed invoice.
               className="rounded-md border border-border p-3 space-y-3 bg-background/40"
@@ -1418,6 +1455,22 @@ export default function MixedInvoiceForm() {
             </div>
           );
         })}
+
+        {/*
+          Bug-fix (UAT Batch 1): Add-row button rendered directly under the
+          last row, full-width and dashed so it visually reads as an "add
+          slot". Clicking it appends a new row at the end AND triggers the
+          scroll/focus effect above, so the operator stays in flow.
+        */}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={addRow}
+          className="w-full border-dashed"
+        >
+          <Plus className="ms-1 h-4 w-4" />
+          افزودن ردیف
+        </Button>
       </Card>
 
       {/* ------------------ Tasks 2+3: Related Costs ------------------ */}

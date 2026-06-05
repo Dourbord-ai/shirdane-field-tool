@@ -225,6 +225,13 @@ export default function PaymentRequestsTab() {
   const [seedDraft, setSeedDraft] = useState<SettlementDraft | null>(null);
   useEffect(() => {
     try {
+      // UAT Bug 3 guard — if we're arriving here to VIEW a specific
+      // existing request (deep-link from invoice detail set
+      // `finance.openPaymentRequestId`), do NOT consume any pre-existing
+      // settlement draft. The draft key belongs to the "new request from
+      // invoice" creation flow and a stale value would otherwise pop the
+      // new-request dialog on top of the detail view.
+      if (sessionStorage.getItem("finance.openPaymentRequestId")) return;
       const raw = sessionStorage.getItem("finance:pr_seed_draft_v1");
       if (!raw) return;
       // Peek (don't remove) — PRDialog calls consumeSettlementDraft() to
