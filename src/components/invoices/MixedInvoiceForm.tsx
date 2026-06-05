@@ -1277,6 +1277,9 @@ export default function MixedInvoiceForm() {
           return (
             <div
               key={row.uid}
+              // Attach the ref ONLY to the last row so the post-addRow effect
+              // can scroll it into view. Earlier rows don't need a ref.
+              ref={idx === rows.length - 1 ? lastRowRef : undefined}
               // Each row gets its own bordered card so the operator can
               // visually scan a long mixed invoice.
               className="rounded-md border border-border p-3 space-y-3 bg-background/40"
