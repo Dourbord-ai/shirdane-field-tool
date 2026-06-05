@@ -1229,13 +1229,18 @@ export default function MixedInvoiceForm() {
       </Card>
 
       {/* ------------------ Rows ------------------ */}
+      {/*
+        Bug-fix (UAT Batch): the "افزودن ردیف" button used to live in the
+        section header (top). With many rows the operator had to scroll up
+        to add and then back down to fill. We now render the button BELOW
+        the last row (see end of this Card) and only keep the title on top.
+        A ref-list lets addRow scroll the freshly inserted row into view
+        and focus its first interactive element, so no manual scroll is
+        ever needed.
+      */}
       <Card className="p-4 space-y-4 bg-card border-border">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">اقلام فاکتور</h2>
-          <Button type="button" variant="secondary" size="sm" onClick={addRow}>
-            <Plus className="ms-1 h-4 w-4" />
-            افزودن ردیف
-          </Button>
         </div>
 
         {rows.map((row, idx) => {
