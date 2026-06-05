@@ -592,10 +592,43 @@ export default function MixedInvoiceForm() {
     );
   }, [financePartyId, partyLabel, totals.payable, costDrafts]);
 
+  // UAT Fix 1 — Issue 2: fetch current `balance` for every party referenced
+  // by a settlement source so we can auto-derive each payment's
+  // amount_type_key (creditor / on_account) without asking the operator.
+  const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
+  const partyIdsKey = sources.map((s) => s.party_id || "").join("|");
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(sources.map((s) => s.party_id).filter((x): x is string => !!x)),
+    );
+    if (ids.length === 0) {
+      setPartyBalances({});
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("finance_parties")
+        .select("id, balance")
+        .in("id", ids);
+      if (!data) return;
+      setPartyBalances(
+        Object.fromEntries(data.map((r: { id: string; balance: number | null }) => [r.id, Number(r.balance) || 0])),
+      );
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyIdsKey]);
+
+  // Derived view: same sources but with amount_type_key auto-assigned.
+  // Display components, validation, and the RPC builder all consume this.
+  const assignedSources = useMemo(
+    () => applyAutoAmountTypes(sources, partyBalances),
+    [sources, partyBalances],
+  );
+
   // Live validation — surfaced in the source cards AND the review dialog.
   const settlementErrors = useMemo(
-    () => validateSources(sources, financePartyId || null),
-    [sources, financePartyId],
+    () => validateSources(assignedSources, financePartyId || null),
+    [assignedSources, financePartyId],
   );
 
   // ----- cost-draft mutators -----
