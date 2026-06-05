@@ -184,7 +184,9 @@ export function buildFreightTripRpcItems(
   // costIdByDraftId is empty — there is no real cost draft id for a trip
   // source; the trip itself is the subject. `buildRpcItemsPayload` will
   // therefore set `source_related_cost_id = null` for every row.
-  const base = buildRpcItemsPayload([source], {}, null);
+  // Freight trips are NOT invoice-owned, so source_factor_id stays null —
+  // the invoice↔settlement dependency rules do not apply to this flow.
+  const base = buildRpcItemsPayload([source], {}, null, null);
 
   const tripCode = trip.trip_code || trip.id.slice(0, 8);
 
