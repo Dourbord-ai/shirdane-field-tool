@@ -135,8 +135,8 @@ export default function InvoiceReviewDialog({
                   </thead>
                   <tbody>
                     {items.map((it, i) => (
-                      <>
-                        <tr key={`r-${i}`} className="border-b border-border/40">
+                      <Fragment key={i}>
+                        <tr className="border-b border-border/40">
                           <td className="py-1 px-1">{i + 1}</td>
                           <td className="py-1 px-1">
                             <Badge variant="outline" className="text-[10px]">{it.productTypeLabel}</Badge>
@@ -150,14 +150,14 @@ export default function InvoiceReviewDialog({
                           </td>
                         </tr>
                         {it.description && (
-                          <tr key={`d-${i}`} className="border-b border-border/40">
+                          <tr className="border-b border-border/40">
                             <td></td>
                             <td colSpan={6} className="py-1 px-1 text-[11px] text-muted-foreground">
                               توضیحات: {it.description}
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
