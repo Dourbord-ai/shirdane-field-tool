@@ -21,7 +21,6 @@ import {
   PAYMENT_METHOD_LABELS_FA,
   type PaymentMethod,
 } from "@/lib/finance/settlementItemTypes";
-import { PAYMENT_AMOUNT_TYPES } from "@/lib/paymentAmountTypes";
 import type { PaymentDraft } from "@/lib/finance/invoiceSettlementBuilder";
 
 interface Props {
