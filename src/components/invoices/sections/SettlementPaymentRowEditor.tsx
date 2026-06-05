@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import ShamsiDatePicker from "@/components/ShamsiDatePicker";
 import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetailsForm";
+// UAT Fix 1 — Issue 2: amount_type_key is now auto-derived from party
+// balance (see applyAutoAmountTypes). We no longer expose a manual selector
+// in this row editor; the read-only basis preview lives on the source card.
 import {
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS_FA,
