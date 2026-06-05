@@ -19,6 +19,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Save, X, MapPin, Route as RouteIcon, AlertTriangle } from "lucide-react";
+// Bug 1 fix — switch the cost-date input from a native Gregorian
+// datetime-local picker to the existing Jalali (Shamsi) picker used across
+// the rest of the app, so operators always see/enter Persian dates.
+// Storage stays ISO/timestamptz in the DB; we only convert at the UI edge.
+import JalaliDatePicker from "@/components/JalaliDatePicker";
+import {
+  gregorianToJalali,
+  jalaliToGregorian,
+  type JalaliDate,
+} from "@/lib/jalali";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,11 +133,15 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
   const [attachment_path, setAttachment] = useState<string>(initial?.attachment_path ?? "");
   const [vehicle_plate, setPlate] = useState<string>(initial?.vehicle_plate ?? "");
   const [driver_name, setDriverName] = useState<string>(initial?.driver_name ?? "");
-  // cost_date as a string (YYYY-MM-DDTHH:mm) for the datetime-local input.
-  // PG accepts ISO via supabase-js. When editing, slice the timestamptz.
-  const [cost_date, setCostDate] = useState<string>(
-    initial?.cost_date ? initial.cost_date.slice(0, 16) : new Date().toISOString().slice(0, 16),
-  );
+  // Bug 1 fix — cost_date is now held as a JalaliDate {year, month, day}
+  // for the Shamsi picker. We derive the initial Jalali value from either
+  // the existing row's timestamptz (edit mode) or "today" (add mode) by
+  // converting the underlying Gregorian Date. At save time we convert back
+  // to a Gregorian ISO timestamp so the DB column (timestamptz) is unchanged.
+  const [cost_date, setCostDate] = useState<JalaliDate>(() => {
+    const base = initial?.cost_date ? new Date(initial.cost_date) : new Date();
+    return gregorianToJalali(base.getFullYear(), base.getMonth() + 1, base.getDate());
+  });
 
   // ---------- Task 4 — freight route state ----------
   // Each value defaults from the initial row (edit mode) or stays empty.
@@ -324,7 +338,13 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
         attachment_path: attachment_path || null,
         vehicle_plate: showFreightFields ? (vehicle_plate || null) : null,
         driver_name: showFreightFields ? (driver_name || null) : null,
-        cost_date: new Date(cost_date).toISOString(),
+        // Bug 1 fix — convert the Shamsi {y,m,d} back to a Gregorian ISO
+        // timestamp at noon local time. Noon avoids any timezone-edge day
+        // shifting when the value is re-read and re-converted to Jalali.
+        cost_date: (() => {
+          const g = jalaliToGregorian(cost_date.year, cost_date.month, cost_date.day);
+          return new Date(g.year, g.month - 1, g.day, 12, 0, 0).toISOString();
+        })(),
 
         // ---- Task 4 freight route fields ----
         origin_location_id: showFreightFields ? origin_location_id : null,
@@ -482,11 +502,13 @@ export default function RelatedCostRowEditor({ mode = "db", factorId, initial, s
               />
             </div>
             <div>
-              <Label>تاریخ هزینه</Label>
-              <Input
-                type="datetime-local"
+              {/* Bug 1 fix — Shamsi/Jalali date picker (same component used
+                  across the app). The stored DB value is still Gregorian
+                  timestamptz; only the UI is Persian. */}
+              <JalaliDatePicker
+                label="تاریخ هزینه"
                 value={cost_date}
-                onChange={(e) => setCostDate(e.target.value)}
+                onChange={(d) => setCostDate(d)}
               />
             </div>
           </div>
