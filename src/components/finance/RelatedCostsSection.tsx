@@ -185,9 +185,11 @@ export default function RelatedCostsSection({
           <Receipt className="w-4 h-4 text-primary" />
           هزینه‌های وابسته
         </h3>
-        <Button size="sm" variant="outline" onClick={handleGenerateSettlement}>
-          ثبت درخواست تسویه
-        </Button>
+        {!hideSettlementCta && (
+          <Button size="sm" variant="outline" onClick={handleGenerateSettlement}>
+            ثبت درخواست تسویه
+          </Button>
+        )}
       </div>
 
       {/* Quick-add toolbar — the four most common cases get their own button
