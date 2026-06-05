@@ -1195,10 +1195,22 @@ function InvoiceDetail({
             </div>
           )}
 
+          {/* Invoice ↔ Settlement summary card. Rendered ABOVE the costs
+              section so the linked-request status is the first thing the
+              operator sees. When no link exists this component renders
+              nothing and we fall back to the legacy creation CTA inside
+              RelatedCostsSection (Rule 5 — flexible invoices). */}
+          <InvoiceSettlementSummaryCard
+            factorId={factor.id}
+            onLinkedChange={setLinkedSettlement}
+          />
+
           {/* Phase 7: structured related costs (freight, weighing, unloading,
               misc). Lives inside the invoice detail because each row is
               factor-scoped. Renders its own list + "ثبت درخواست تسویه" CTA
-              that hands a draft to PaymentRequestsTab via sessionStorage. */}
+              that hands a draft to PaymentRequestsTab via sessionStorage.
+              The CTA is suppressed when an invoice-owned settlement
+              already exists (Rule 3 — no duplicate creation). */}
           <RelatedCostsSection
             invoice={{
               id: factor.id,
@@ -1207,6 +1219,7 @@ function InvoiceDetail({
               total_amount: factor.total_amount,
               payable_amount: factor.payable_amount,
             }}
+            hideSettlementCta={linkedSettlement !== null}
           />
 
           {/* MVP posting controls — renders nothing for factors that have not
