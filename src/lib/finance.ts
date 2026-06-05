@@ -1256,21 +1256,28 @@ export async function approvePaymentRequest(payment_request_id: string): Promise
   // below will fire it again. This keeps a single source of truth and
   // ensures rejected items are excluded from the approved payable total.
   // -------------------------------------------------------------------
-  await supabase
+  // Invoice ↔ Settlement dependency model: the DB trigger
+  // `guard_invoice_owned_settlement_approval` may reject this UPDATE when
+  // the request is invoice-owned and the linked factor isn't approved
+  // yet. We MUST surface that error to the caller so the UI can show a
+  // helpful message; previously the result was silently swallowed.
+  const { error: hdrErr } = await supabase
     .from("finance_payment_requests")
     .update({
       status: "approved",
       approved_at: new Date().toISOString(),
     })
     .eq("id", payment_request_id);
+  if (hdrErr) throw new Error(hdrErr.message);
 
   // Promote items still pending_approval → approved. The items trigger
   // will then recompute confirmed_amount / remaining_amount / payment_status
   // based ONLY on approved (non-deleted) items.
-  await supabase
+  const { error: itemsErr } = await supabase
     .from("finance_payment_request_items")
     .update({ status: "approved" })
     .eq("payment_request_id", payment_request_id)
     .in("status", ["pending_approval", "pending"]);
+  if (itemsErr) throw new Error(itemsErr.message);
 }
 
