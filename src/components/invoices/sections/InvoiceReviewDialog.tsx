@@ -114,9 +114,55 @@ export default function InvoiceReviewDialog({
             <Row label="قابل پرداخت" value={`${totalPayable.toLocaleString("fa-IR")} ریال`} />
           </Section>
 
-          {/* 2) Items */}
-          <Section title="اقلام فاکتور">
-            <p className="text-xs text-muted-foreground">{itemCount} ردیف کالا/خدمت</p>
+          {/* 2) Items — UAT Fix 1, Issue 1: full per-row breakdown so the
+              operator can verify exactly what is being saved. */}
+          <Section title={`اقلام فاکتور (${itemCount} ردیف)`}>
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground">—</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-right py-1 px-1 font-normal">#</th>
+                      <th className="text-right py-1 px-1 font-normal">نوع</th>
+                      <th className="text-right py-1 px-1 font-normal">نام</th>
+                      <th className="text-right py-1 px-1 font-normal">تعداد</th>
+                      <th className="text-right py-1 px-1 font-normal">واحد</th>
+                      <th className="text-right py-1 px-1 font-normal">قیمت واحد</th>
+                      <th className="text-right py-1 px-1 font-normal">جمع ردیف</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => (
+                      <>
+                        <tr key={`r-${i}`} className="border-b border-border/40">
+                          <td className="py-1 px-1">{i + 1}</td>
+                          <td className="py-1 px-1">
+                            <Badge variant="outline" className="text-[10px]">{it.productTypeLabel}</Badge>
+                          </td>
+                          <td className="py-1 px-1 text-foreground">{it.name}</td>
+                          <td className="py-1 px-1">{it.quantity.toLocaleString("fa-IR")}</td>
+                          <td className="py-1 px-1">{it.unit || "—"}</td>
+                          <td className="py-1 px-1">{it.unitPrice.toLocaleString("fa-IR")}</td>
+                          <td className="py-1 px-1 font-medium text-foreground">
+                            {it.lineTotal.toLocaleString("fa-IR")}
+                          </td>
+                        </tr>
+                        {it.description && (
+                          <tr key={`d-${i}`} className="border-b border-border/40">
+                            <td></td>
+                            <td colSpan={6} className="py-1 px-1 text-[11px] text-muted-foreground">
+                              توضیحات: {it.description}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Section>
 
           {/* 3) Related cost drafts */}
