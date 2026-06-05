@@ -1043,7 +1043,7 @@ export default function MixedInvoiceForm() {
       const costsAttempted = costDrafts.length > 0;
 
       const itemsPayload = buildRpcItemsPayload(
-        sources,
+        assignedSources,
         costIdByDraftId,
         invoiceNumber || null,
       );
