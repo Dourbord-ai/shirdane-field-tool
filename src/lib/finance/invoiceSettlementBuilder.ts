@@ -473,12 +473,24 @@ export interface RpcItemPayload {
   execution_priority: number;
   details: Record<string, unknown>;
   source_related_cost_id: string | null;
+  // Per-item back-pointer to the originating invoice. The request-level
+  // `source_factor_id` on `finance_payment_requests` is the AUTHORITATIVE
+  // link used by triggers + UI; we still mirror it onto each item so
+  // reports that read items directly (settlement dashboards etc.) can
+  // attribute money back to the invoice without an extra join.
+  source_factor_id: string | null;
 }
 
 export function buildRpcItemsPayload(
   sources: SettlementSource[],
   costIdByDraftId: Record<string, string>,
   invoiceNumberForDesc: string | null,
+  // NEW (Invoice↔Settlement dependency model): when the request is generated
+  // from the invoice form, every item carries the source factor id. Caller
+  // passes the freshly-inserted factor.id. `null` is allowed only for code
+  // paths that legitimately have no invoice context (none today inside this
+  // builder, but kept permissive for future re-use).
+  sourceFactorId: string | null,
 ): RpcItemPayload[] {
   const out: RpcItemPayload[] = [];
   for (const s of sources) {
@@ -489,9 +501,6 @@ export function buildRpcItemsPayload(
 
     s.payments.forEach((p, idx) => {
       const at = buildPaymentRequestItemAmountType(p.amount_type_key);
-      // Inject the per-source reference + per-payment ordinal into details so
-      // the historical jsonb payload remains the single source of truth for
-      // grouping/reporting (no schema change needed).
       const details = {
         ...(p.details || {}),
         source_reference: s.source_id,
@@ -517,6 +526,9 @@ export function buildRpcItemsPayload(
         execution_priority: p.execution_priority ?? 3,
         details,
         source_related_cost_id: sourceRelatedCostId,
+        // Mirror the request-level link onto every emitted item so item-level
+        // queries can attribute money back to the invoice without a join.
+        source_factor_id: sourceFactorId,
       });
     });
   }
