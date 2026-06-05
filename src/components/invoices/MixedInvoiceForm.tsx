@@ -1455,6 +1455,22 @@ export default function MixedInvoiceForm() {
             </div>
           );
         })}
+
+        {/*
+          Bug-fix (UAT Batch 1): Add-row button rendered directly under the
+          last row, full-width and dashed so it visually reads as an "add
+          slot". Clicking it appends a new row at the end AND triggers the
+          scroll/focus effect above, so the operator stays in flow.
+        */}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={addRow}
+          className="w-full border-dashed"
+        >
+          <Plus className="ms-1 h-4 w-4" />
+          افزودن ردیف
+        </Button>
       </Card>
 
       {/* ------------------ Tasks 2+3: Related Costs ------------------ */}
