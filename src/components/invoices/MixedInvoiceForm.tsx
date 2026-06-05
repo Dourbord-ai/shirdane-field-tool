@@ -48,6 +48,7 @@ import {
   deriveSources,
   validateSources,
   buildRpcItemsPayload,
+  applyAutoAmountTypes,
   type DraftCost,
   type SettlementSource,
 } from "@/lib/finance/invoiceSettlementBuilder";
@@ -591,10 +592,43 @@ export default function MixedInvoiceForm() {
     );
   }, [financePartyId, partyLabel, totals.payable, costDrafts]);
 
+  // UAT Fix 1 — Issue 2: fetch current `balance` for every party referenced
+  // by a settlement source so we can auto-derive each payment's
+  // amount_type_key (creditor / on_account) without asking the operator.
+  const [partyBalances, setPartyBalances] = useState<Record<string, number>>({});
+  const partyIdsKey = sources.map((s) => s.party_id || "").join("|");
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(sources.map((s) => s.party_id).filter((x): x is string => !!x)),
+    );
+    if (ids.length === 0) {
+      setPartyBalances({});
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("finance_parties")
+        .select("id, balance")
+        .in("id", ids);
+      if (!data) return;
+      setPartyBalances(
+        Object.fromEntries(data.map((r: { id: string; balance: number | null }) => [r.id, Number(r.balance) || 0])),
+      );
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyIdsKey]);
+
+  // Derived view: same sources but with amount_type_key auto-assigned.
+  // Display components, validation, and the RPC builder all consume this.
+  const assignedSources = useMemo(
+    () => applyAutoAmountTypes(sources, partyBalances),
+    [sources, partyBalances],
+  );
+
   // Live validation — surfaced in the source cards AND the review dialog.
   const settlementErrors = useMemo(
-    () => validateSources(sources, financePartyId || null),
-    [sources, financePartyId],
+    () => validateSources(assignedSources, financePartyId || null),
+    [assignedSources, financePartyId],
   );
 
   // ----- cost-draft mutators -----
@@ -1009,7 +1043,7 @@ export default function MixedInvoiceForm() {
       const costsAttempted = costDrafts.length > 0;
 
       const itemsPayload = buildRpcItemsPayload(
-        sources,
+        assignedSources,
         costIdByDraftId,
         invoiceNumber || null,
       );
@@ -1351,7 +1385,7 @@ export default function MixedInvoiceForm() {
 
       {/* ------------------ Tasks 2+3: Settlement Sources ------------------ */}
       <InvoiceSettlementSourcesBlock
-        sources={sources}
+        sources={assignedSources}
         errors={settlementErrors}
         onPatchSource={patchSource}
       />
@@ -1397,8 +1431,41 @@ export default function MixedInvoiceForm() {
         partyLabel={partyLabel}
         totalPayable={totals.payable}
         itemCount={rows.length}
+        /* UAT Fix 1 — Issue 1: pass full per-row details so the review
+           dialog can render an item table before final submit. Name is
+           best-effort from the per-product detail bag/snapshot. */
+        items={rows.map((r, idx) => {
+          const qty = num(r.quantity) ?? 0;
+          const price = num(r.unit_price) ?? 0;
+          const disc = num(r.discount_amount) ?? 0;
+          const taxAmt = num(r.tax_amount) ?? 0;
+          const lineTotal = qty * price - disc + taxAmt;
+          const productLabel =
+            PRODUCT_TYPES.find((p) => p.value === r.product_type)?.label ?? r.product_type;
+          // Best-effort human-readable name, looking first at rich snapshots
+          // (medicine / feed pickers) and then at common detail-bag keys.
+          const name =
+            r.medicineProduct?.commercial_product_name_fa ||
+            r.medicineProduct?.commercial_product_name_en ||
+            r.feedProduct?.commercial_product_name_fa ||
+            r.feedProduct?.commercial_product_name_en ||
+            r.details.feed_name ||
+            r.details.bull_name ||
+            r.details.cow_id ||
+            r.details.service_name ||
+            `ردیف ${idx + 1}`;
+          return {
+            name: String(name),
+            productTypeLabel: productLabel,
+            quantity: qty,
+            unit: r.unit || "",
+            unitPrice: price,
+            lineTotal,
+            description: r.description || "",
+          };
+        })}
         costDrafts={costDrafts}
-        sources={sources}
+        sources={assignedSources}
         errors={settlementErrors}
       />
     </div>

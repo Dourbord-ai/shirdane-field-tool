@@ -13,6 +13,7 @@
 // direct save bypass per the brief.
 // ---------------------------------------------------------------------------
 
+import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
@@ -42,6 +43,19 @@ import {
   INSUFFICIENT_FREIGHT_DATA,
 } from "@/lib/finance/freightMetrics";
 
+// UAT Fix 1 — Issue 1: the review dialog now renders a per-row invoice item
+// table. Each row carries a normalized projection of MixedRow so this dialog
+// stays presentational (no MixedRow / product-type imports needed here).
+export interface ReviewInvoiceItem {
+  name: string;
+  productTypeLabel: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  lineTotal: number;
+  description: string;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -55,6 +69,7 @@ interface Props {
   totalPayable: number;
   // Body
   itemCount: number;
+  items: ReviewInvoiceItem[];
   costDrafts: DraftCost[];
   sources: SettlementSource[];
   errors: ValidationError[];
@@ -63,7 +78,7 @@ interface Props {
 export default function InvoiceReviewDialog({
   open, onClose, onConfirm, saving,
   invoiceNumber, invoiceDateLabel, invoiceTypeLabel, partyLabel, totalPayable,
-  itemCount, costDrafts, sources, errors,
+  itemCount, items, costDrafts, sources, errors,
 }: Props) {
   if (!open) return null;
 
@@ -100,9 +115,55 @@ export default function InvoiceReviewDialog({
             <Row label="قابل پرداخت" value={`${totalPayable.toLocaleString("fa-IR")} ریال`} />
           </Section>
 
-          {/* 2) Items */}
-          <Section title="اقلام فاکتور">
-            <p className="text-xs text-muted-foreground">{itemCount} ردیف کالا/خدمت</p>
+          {/* 2) Items — UAT Fix 1, Issue 1: full per-row breakdown so the
+              operator can verify exactly what is being saved. */}
+          <Section title={`اقلام فاکتور (${itemCount} ردیف)`}>
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground">—</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b border-border">
+                      <th className="text-right py-1 px-1 font-normal">#</th>
+                      <th className="text-right py-1 px-1 font-normal">نوع</th>
+                      <th className="text-right py-1 px-1 font-normal">نام</th>
+                      <th className="text-right py-1 px-1 font-normal">تعداد</th>
+                      <th className="text-right py-1 px-1 font-normal">واحد</th>
+                      <th className="text-right py-1 px-1 font-normal">قیمت واحد</th>
+                      <th className="text-right py-1 px-1 font-normal">جمع ردیف</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => (
+                      <Fragment key={i}>
+                        <tr className="border-b border-border/40">
+                          <td className="py-1 px-1">{i + 1}</td>
+                          <td className="py-1 px-1">
+                            <Badge variant="outline" className="text-[10px]">{it.productTypeLabel}</Badge>
+                          </td>
+                          <td className="py-1 px-1 text-foreground">{it.name}</td>
+                          <td className="py-1 px-1">{it.quantity.toLocaleString("fa-IR")}</td>
+                          <td className="py-1 px-1">{it.unit || "—"}</td>
+                          <td className="py-1 px-1">{it.unitPrice.toLocaleString("fa-IR")}</td>
+                          <td className="py-1 px-1 font-medium text-foreground">
+                            {it.lineTotal.toLocaleString("fa-IR")}
+                          </td>
+                        </tr>
+                        {it.description && (
+                          <tr className="border-b border-border/40">
+                            <td></td>
+                            <td colSpan={6} className="py-1 px-1 text-[11px] text-muted-foreground">
+                              توضیحات: {it.description}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Section>
 
           {/* 3) Related cost drafts */}
