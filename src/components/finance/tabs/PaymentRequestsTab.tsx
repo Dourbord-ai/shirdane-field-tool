@@ -204,6 +204,19 @@ export default function PaymentRequestsTab() {
     } catch { /* sessionStorage unavailable — no-op */ }
   }, []);
 
+  // Consume pendingOpenId whenever the requests list updates. Covers the
+  // case where the list loads before the pendingOpenId effect runs and
+  // vice versa, without any timing assumptions.
+  useEffect(() => {
+    if (!pendingOpenId) return;
+    const hit = requests.find((r) => r.id === pendingOpenId);
+    if (hit) {
+      setDetail(hit);
+      setPendingOpenId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, pendingOpenId]);
+
   // Phase 7 hand-off: when the invoice page navigates here with a stashed
   // settlement draft (sessionStorage), and when the URL hash is the one we
   // route to (#payment-requests), auto-open PRDialog so the operator lands
