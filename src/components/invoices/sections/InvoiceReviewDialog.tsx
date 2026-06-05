@@ -42,6 +42,19 @@ import {
   INSUFFICIENT_FREIGHT_DATA,
 } from "@/lib/finance/freightMetrics";
 
+// UAT Fix 1 — Issue 1: the review dialog now renders a per-row invoice item
+// table. Each row carries a normalized projection of MixedRow so this dialog
+// stays presentational (no MixedRow / product-type imports needed here).
+export interface ReviewInvoiceItem {
+  name: string;
+  productTypeLabel: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  lineTotal: number;
+  description: string;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -55,6 +68,7 @@ interface Props {
   totalPayable: number;
   // Body
   itemCount: number;
+  items: ReviewInvoiceItem[];
   costDrafts: DraftCost[];
   sources: SettlementSource[];
   errors: ValidationError[];
@@ -63,7 +77,7 @@ interface Props {
 export default function InvoiceReviewDialog({
   open, onClose, onConfirm, saving,
   invoiceNumber, invoiceDateLabel, invoiceTypeLabel, partyLabel, totalPayable,
-  itemCount, costDrafts, sources, errors,
+  itemCount, items, costDrafts, sources, errors,
 }: Props) {
   if (!open) return null;
 
