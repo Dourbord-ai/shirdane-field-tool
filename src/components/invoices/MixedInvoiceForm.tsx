@@ -1431,8 +1431,39 @@ export default function MixedInvoiceForm() {
         partyLabel={partyLabel}
         totalPayable={totals.payable}
         itemCount={rows.length}
+        /* UAT Fix 1 — Issue 1: pass full per-row details so the review
+           dialog can render an item table before final submit. Name is
+           best-effort from the per-product detail bag/snapshot. */
+        items={rows.map((r, idx) => {
+          const qty = num(r.quantity) ?? 0;
+          const price = num(r.unit_price) ?? 0;
+          const disc = num(r.discount_amount) ?? 0;
+          const taxAmt = num(r.tax_amount) ?? 0;
+          const lineTotal = qty * price - disc + taxAmt;
+          const productLabel =
+            PRODUCT_TYPES.find((p) => p.value === r.product_type)?.label ?? r.product_type;
+          // Best-effort human-readable name, looking first at rich snapshots
+          // (medicine / feed pickers) and then at common detail-bag keys.
+          const name =
+            r.medicineProduct?.name ||
+            r.feedProduct?.name ||
+            r.details.feed_name ||
+            r.details.bull_name ||
+            r.details.cow_id ||
+            r.details.service_name ||
+            `ردیف ${idx + 1}`;
+          return {
+            name: String(name),
+            productTypeLabel: productLabel,
+            quantity: qty,
+            unit: r.unit || "",
+            unitPrice: price,
+            lineTotal,
+            description: r.description || "",
+          };
+        })}
         costDrafts={costDrafts}
-        sources={sources}
+        sources={assignedSources}
         errors={settlementErrors}
       />
     </div>
