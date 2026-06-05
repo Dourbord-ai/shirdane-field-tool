@@ -181,6 +181,38 @@ export default function PaymentRequestsTab() {
   // a non-null voucher_id and consult it in the client-side filter.
   const [requestsWithVoucher, setRequestsWithVoucher] = useState<Set<string>>(new Set());
 
+  // Invoice ↔ Settlement dependency model: map of request_id → invoice link
+  // (factor id + invoice number). Populated after each list load and
+  // consumed by the card render to show the "وابسته به فاکتور <number>"
+  // badge. Requests with no entry here are independent (legacy behaviour
+  // unchanged).
+  const [invoiceLinks, setInvoiceLinks] = useState<Map<string, { factorId: string; invoiceNumber: string | null }>>(new Map());
+
+  // Auto-open a specific request when arriving via the summary card on the
+  // invoice detail. We read `finance.openPaymentRequestId` written by
+  // InvoiceSettlementSummaryCard.goToRequest.
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem("finance.openPaymentRequestId");
+      if (!id) return;
+      sessionStorage.removeItem("finance.openPaymentRequestId");
+      // Defer until the list has loaded so we can hand the PR row to PRDetail.
+      const handle = window.setInterval(() => {
+        // `requests` is read via the latest closure each tick; once the row
+        // shows up we open and stop polling. 3s cap to avoid leaking.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const list = (window as any).__lastPRList as PR[] | undefined;
+        if (!list) return;
+        const hit = list.find((r) => r.id === id);
+        if (hit) {
+          setDetail(hit);
+          window.clearInterval(handle);
+        }
+      }, 200);
+      window.setTimeout(() => window.clearInterval(handle), 3000);
+    } catch { /* sessionStorage unavailable — no-op */ }
+  }, []);
+
   // Phase 7 hand-off: when the invoice page navigates here with a stashed
   // settlement draft (sessionStorage), and when the URL hash is the one we
   // route to (#payment-requests), auto-open PRDialog so the operator lands
