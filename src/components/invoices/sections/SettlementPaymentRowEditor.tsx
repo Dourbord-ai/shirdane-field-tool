@@ -79,18 +79,9 @@ export default function SettlementPaymentRowEditor({
           </select>
         </div>
 
-        <div className="space-y-1">
-          <Label className="text-[11px]">مبنا</Label>
-          <select
-            value={payment.amount_type_key}
-            onChange={(e) => onChange({ amount_type_key: e.target.value as PaymentDraft["amount_type_key"] })}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            {PAYMENT_AMOUNT_TYPES.map((t) => (
-              <option key={t.key} value={t.key}>{t.label}</option>
-            ))}
-          </select>
-        </div>
+        {/* UAT Fix 1 — Issue 2: manual "مبنا" selector removed. The basis
+            (creditor / advance / on_account) is auto-derived from the party
+            balance and shown read-only in the source-card header. */}
       </div>
 
       {/* Per-method details — reuses the post-save form so behaviour stays
