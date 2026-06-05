@@ -525,7 +525,36 @@ export default function MixedInvoiceForm() {
   // -----------------------------------------------------------------------
   // Row mutators. Each one returns a NEW array so React picks up the change.
   // -----------------------------------------------------------------------
-  const addRow = () => setRows((r) => [...r, blankRow()]);
+  // Ref to the most recently appended row's wrapper element. We use this to
+  // scroll the newly-added row into view right after addRow() runs, so the
+  // operator never has to scroll manually (UAT Bug 1).
+  const lastRowRef = useRef<HTMLDivElement | null>(null);
+  // Flag set by addRow() and consumed by an effect after `rows` updates.
+  // We can't scroll directly inside addRow because the DOM node for the
+  // new row doesn't exist yet at the moment setRows is called.
+  const scrollToLastRef = useRef<boolean>(false);
+
+  const addRow = () => {
+    // Append a new blank row at the end, then signal the post-render
+    // effect to scroll it into view + focus its first input.
+    scrollToLastRef.current = true;
+    setRows((r) => [...r, blankRow()]);
+  };
+
+  // After every render where addRow asked us to, scroll the last row into
+  // view and try to focus the first focusable element inside it. We use
+  // 'nearest' so the page doesn't jump if the row is already visible.
+  useEffect(() => {
+    if (!scrollToLastRef.current) return;
+    scrollToLastRef.current = false;
+    const node = lastRowRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    const focusable = node.querySelector<HTMLElement>(
+      "input,select,textarea,button:not([aria-label='حذف ردیف'])",
+    );
+    focusable?.focus();
+  }, [rows.length]);
   const removeRow = (uid: string) =>
     setRows((r) => (r.length <= 1 ? r : r.filter((row) => row.uid !== uid)));
   const updateRow = (uid: string, patch: Partial<MixedRow>) =>
