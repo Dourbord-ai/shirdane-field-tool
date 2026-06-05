@@ -190,26 +190,17 @@ export default function PaymentRequestsTab() {
 
   // Auto-open a specific request when arriving via the summary card on the
   // invoice detail. We read `finance.openPaymentRequestId` written by
-  // InvoiceSettlementSummaryCard.goToRequest.
+  // InvoiceSettlementSummaryCard.goToRequest. The effect re-runs whenever
+  // the request list updates, so the consumer doesn't fire until the row
+  // is actually loaded.
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
   useEffect(() => {
     try {
       const id = sessionStorage.getItem("finance.openPaymentRequestId");
-      if (!id) return;
-      sessionStorage.removeItem("finance.openPaymentRequestId");
-      // Defer until the list has loaded so we can hand the PR row to PRDetail.
-      const handle = window.setInterval(() => {
-        // `requests` is read via the latest closure each tick; once the row
-        // shows up we open and stop polling. 3s cap to avoid leaking.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const list = (window as any).__lastPRList as PR[] | undefined;
-        if (!list) return;
-        const hit = list.find((r) => r.id === id);
-        if (hit) {
-          setDetail(hit);
-          window.clearInterval(handle);
-        }
-      }, 200);
-      window.setTimeout(() => window.clearInterval(handle), 3000);
+      if (id) {
+        sessionStorage.removeItem("finance.openPaymentRequestId");
+        setPendingOpenId(id);
+      }
     } catch { /* sessionStorage unavailable — no-op */ }
   }, []);
 
