@@ -263,8 +263,48 @@ export default function PaymentRequestsTab() {
         .in("payment_request_id", ids)
         .not("voucher_id", "is", null);
       setRequestsWithVoucher(new Set((items || []).map((i: { payment_request_id: string }) => i.payment_request_id)));
+
+      // Invoice ↔ Settlement dependency model: resolve invoice numbers for
+      // every invoice-owned request in the page so we can render the
+      // "وابسته به فاکتور" badge. Requests with source_factor_id NULL are
+      // legacy/independent and stay un-badged.
+      const factorIds = Array.from(
+        new Set(rows.map((r) => r.source_factor_id).filter(Boolean) as string[]),
+      );
+      if (factorIds.length > 0) {
+        const { data: facs } = await supabase
+          .from("factors")
+          .select("id,invoice_number")
+          .in("id", factorIds);
+        const facMap = new Map<string, string | null>(
+          (facs || []).map((f) => [f.id as string, (f.invoice_number ?? null) as string | null]),
+        );
+        const linkMap = new Map<string, { factorId: string; invoiceNumber: string | null }>();
+        for (const r of rows) {
+          if (!r.source_factor_id) continue;
+          linkMap.set(r.id, {
+            factorId: r.source_factor_id,
+            invoiceNumber: facMap.get(r.source_factor_id) ?? null,
+          });
+        }
+        setInvoiceLinks(linkMap);
+      } else {
+        setInvoiceLinks(new Map());
+      }
     } else {
       setRequestsWithVoucher(new Set());
+      setInvoiceLinks(new Map());
+    }
+
+    // Consume any pending auto-open id queued by the invoice summary card.
+    // Done here (rather than in a separate effect) so we can hand the row
+    // directly to PRDetail without an extra render pass.
+    if (pendingOpenId) {
+      const hit = rows.find((r) => r.id === pendingOpenId);
+      if (hit) {
+        setDetail(hit);
+        setPendingOpenId(null);
+      }
     }
   }
 
