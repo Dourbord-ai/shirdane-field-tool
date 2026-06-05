@@ -4253,6 +4253,7 @@ export type Database = {
           remaining_amount: number | null
           request_type: string | null
           requested_by: string | null
+          source_factor_id: string | null
           status: string | null
           title: string | null
           total_amount: number | null
@@ -4275,6 +4276,7 @@ export type Database = {
           remaining_amount?: number | null
           request_type?: string | null
           requested_by?: string | null
+          source_factor_id?: string | null
           status?: string | null
           title?: string | null
           total_amount?: number | null
@@ -4297,13 +4299,22 @@ export type Database = {
           remaining_amount?: number | null
           request_type?: string | null
           requested_by?: string | null
+          source_factor_id?: string | null
           status?: string | null
           title?: string | null
           total_amount?: number | null
           total_paid_amount?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "finance_payment_requests_source_factor_id_fkey"
+            columns: ["source_factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       finance_receive_identifications: {
         Row: {

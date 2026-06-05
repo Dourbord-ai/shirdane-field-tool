@@ -87,6 +87,10 @@ interface PR {
   confirmed_amount: number | null;
   total_paid_amount: number | null;
   remaining_amount: number | null;
+  // Invoice ↔ Settlement dependency model: authoritative back-pointer to
+  // the invoice that produced this request. NULL for legacy / independent
+  // requests — those keep working exactly as before.
+  source_factor_id?: string | null;
   created_at: string;
 }
 
@@ -177,6 +181,42 @@ export default function PaymentRequestsTab() {
   // a non-null voucher_id and consult it in the client-side filter.
   const [requestsWithVoucher, setRequestsWithVoucher] = useState<Set<string>>(new Set());
 
+  // Invoice ↔ Settlement dependency model: map of request_id → invoice link
+  // (factor id + invoice number). Populated after each list load and
+  // consumed by the card render to show the "وابسته به فاکتور <number>"
+  // badge. Requests with no entry here are independent (legacy behaviour
+  // unchanged).
+  const [invoiceLinks, setInvoiceLinks] = useState<Map<string, { factorId: string; invoiceNumber: string | null }>>(new Map());
+
+  // Auto-open a specific request when arriving via the summary card on the
+  // invoice detail. We read `finance.openPaymentRequestId` written by
+  // InvoiceSettlementSummaryCard.goToRequest. The effect re-runs whenever
+  // the request list updates, so the consumer doesn't fire until the row
+  // is actually loaded.
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem("finance.openPaymentRequestId");
+      if (id) {
+        sessionStorage.removeItem("finance.openPaymentRequestId");
+        setPendingOpenId(id);
+      }
+    } catch { /* sessionStorage unavailable — no-op */ }
+  }, []);
+
+  // Consume pendingOpenId whenever the requests list updates. Covers the
+  // case where the list loads before the pendingOpenId effect runs and
+  // vice versa, without any timing assumptions.
+  useEffect(() => {
+    if (!pendingOpenId) return;
+    const hit = requests.find((r) => r.id === pendingOpenId);
+    if (hit) {
+      setDetail(hit);
+      setPendingOpenId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, pendingOpenId]);
+
   // Phase 7 hand-off: when the invoice page navigates here with a stashed
   // settlement draft (sessionStorage), and when the URL hash is the one we
   // route to (#payment-requests), auto-open PRDialog so the operator lands
@@ -236,8 +276,48 @@ export default function PaymentRequestsTab() {
         .in("payment_request_id", ids)
         .not("voucher_id", "is", null);
       setRequestsWithVoucher(new Set((items || []).map((i: { payment_request_id: string }) => i.payment_request_id)));
+
+      // Invoice ↔ Settlement dependency model: resolve invoice numbers for
+      // every invoice-owned request in the page so we can render the
+      // "وابسته به فاکتور" badge. Requests with source_factor_id NULL are
+      // legacy/independent and stay un-badged.
+      const factorIds = Array.from(
+        new Set(rows.map((r) => r.source_factor_id).filter(Boolean) as string[]),
+      );
+      if (factorIds.length > 0) {
+        const { data: facs } = await supabase
+          .from("factors")
+          .select("id,invoice_number")
+          .in("id", factorIds);
+        const facMap = new Map<string, string | null>(
+          (facs || []).map((f) => [f.id as string, (f.invoice_number ?? null) as string | null]),
+        );
+        const linkMap = new Map<string, { factorId: string; invoiceNumber: string | null }>();
+        for (const r of rows) {
+          if (!r.source_factor_id) continue;
+          linkMap.set(r.id, {
+            factorId: r.source_factor_id,
+            invoiceNumber: facMap.get(r.source_factor_id) ?? null,
+          });
+        }
+        setInvoiceLinks(linkMap);
+      } else {
+        setInvoiceLinks(new Map());
+      }
     } else {
       setRequestsWithVoucher(new Set());
+      setInvoiceLinks(new Map());
+    }
+
+    // Consume any pending auto-open id queued by the invoice summary card.
+    // Done here (rather than in a separate effect) so we can hand the row
+    // directly to PRDetail without an extra render pass.
+    if (pendingOpenId) {
+      const hit = rows.find((r) => r.id === pendingOpenId);
+      if (hit) {
+        setDetail(hit);
+        setPendingOpenId(null);
+      }
     }
   }
 
@@ -363,6 +443,18 @@ export default function PaymentRequestsTab() {
                 {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
                 {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
               </p>
+              {/* Invoice ↔ Settlement dependency model: surface the
+                  authoritative invoice link so the operator instantly sees
+                  that this request is OWNED by an invoice and must be
+                  edited through the invoice (Rules 2 & 4). Requests with
+                  no link render no badge — independent behaviour preserved. */}
+              {invoiceLinks.has(r.id) && (
+                <div className="mt-1">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">
+                    وابسته به فاکتور {invoiceLinks.get(r.id)?.invoiceNumber || "—"}
+                  </span>
+                </div>
+              )}
               {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
               {/* Amounts row: requested / approved-payable / paid / remaining.
                   Requested = original total. Approved = sum of approved items
@@ -1016,7 +1108,17 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
       toast.success("درخواست تایید شد");
       await reload();
     } catch (e: unknown) {
-      toastFinanceError(toast, e);
+      // Invoice ↔ Settlement dependency model: the DB trigger
+      // `guard_invoice_owned_settlement_approval` blocks approval when the
+      // linked invoice is not yet approved. We translate that low-level
+      // error code into a Persian, actionable message instead of dumping
+      // raw SQL state onto the operator.
+      const raw = e instanceof Error ? e.message : String(e);
+      if (raw.includes("INVOICE_NOT_APPROVED")) {
+        toast.error("ابتدا باید فاکتور مرتبط با این درخواست تأیید شود.");
+      } else {
+        toastFinanceError(toast, e);
+      }
     } finally { setBusy(false); }
   }
   async function reject() {

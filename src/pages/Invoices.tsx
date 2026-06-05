@@ -32,6 +32,11 @@ import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 // Phase 7: structured related costs panel embedded inside the invoice
 // detail view. Self-contained — pulls and writes its own rows.
 import RelatedCostsSection from "@/components/finance/RelatedCostsSection";
+// Invoice ↔ Settlement dependency model: summary card that renders when
+// the invoice already owns a settlement request. Used here to also flip
+// off the legacy "ثبت درخواست تسویه" CTA inside RelatedCostsSection.
+import InvoiceSettlementSummaryCard from "@/components/invoices/sections/InvoiceSettlementSummaryCard";
+import type { InvoiceLinkedSettlement } from "@/lib/finance/invoiceSettlementLink";
 
 interface FactorRow {
   id: string;
@@ -693,9 +698,17 @@ function InvoiceDetail({
   // Jalali/Persian date — never pipe a raw timestamp through toPersianDigits.
   const dateStr = factor.invoice_date ? formatShamsi(factor.invoice_date) : "—";
 
+  // Invoice ↔ Settlement dependency model — local state tracking whether
+  // this invoice already owns an active settlement request. The summary
+  // card sets it via onLinkedChange; we read it to (a) hide the legacy
+  // creation CTA inside RelatedCostsSection and (b) avoid showing two
+  // entry points side-by-side.
+  const [linkedSettlement, setLinkedSettlement] = useState<InvoiceLinkedSettlement | null>(null);
+
   return (
     <div className="animate-fade-in">
       <div className="rounded-2xl bg-card overflow-hidden">
+
         <div className="border-b border-border p-3 mb-2">
           <h2 className="text-body-lg font-bold text-primary">جزئیات فاکتور</h2>
         </div>
@@ -1182,10 +1195,22 @@ function InvoiceDetail({
             </div>
           )}
 
+          {/* Invoice ↔ Settlement summary card. Rendered ABOVE the costs
+              section so the linked-request status is the first thing the
+              operator sees. When no link exists this component renders
+              nothing and we fall back to the legacy creation CTA inside
+              RelatedCostsSection (Rule 5 — flexible invoices). */}
+          <InvoiceSettlementSummaryCard
+            factorId={factor.id}
+            onLinkedChange={setLinkedSettlement}
+          />
+
           {/* Phase 7: structured related costs (freight, weighing, unloading,
               misc). Lives inside the invoice detail because each row is
               factor-scoped. Renders its own list + "ثبت درخواست تسویه" CTA
-              that hands a draft to PaymentRequestsTab via sessionStorage. */}
+              that hands a draft to PaymentRequestsTab via sessionStorage.
+              The CTA is suppressed when an invoice-owned settlement
+              already exists (Rule 3 — no duplicate creation). */}
           <RelatedCostsSection
             invoice={{
               id: factor.id,
@@ -1194,6 +1219,7 @@ function InvoiceDetail({
               total_amount: factor.total_amount,
               payable_amount: factor.payable_amount,
             }}
+            hideSettlementCta={linkedSettlement !== null}
           />
 
           {/* MVP posting controls — renders nothing for factors that have not
