@@ -443,6 +443,18 @@ export default function PaymentRequestsTab() {
                 {getPaymentRequestTypeLabel(r.legacy_request_type_code)}
                 {r.legacy_id != null && <span className="font-mono mr-2">#{r.legacy_id}</span>}
               </p>
+              {/* Invoice ↔ Settlement dependency model: surface the
+                  authoritative invoice link so the operator instantly sees
+                  that this request is OWNED by an invoice and must be
+                  edited through the invoice (Rules 2 & 4). Requests with
+                  no link render no badge — independent behaviour preserved. */}
+              {invoiceLinks.has(r.id) && (
+                <div className="mt-1">
+                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">
+                    وابسته به فاکتور {invoiceLinks.get(r.id)?.invoiceNumber || "—"}
+                  </span>
+                </div>
+              )}
               {r.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.description}</p>}
               {/* Amounts row: requested / approved-payable / paid / remaining.
                   Requested = original total. Approved = sum of approved items
