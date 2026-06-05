@@ -1487,18 +1487,76 @@ export default function MixedInvoiceForm() {
           const lineTotal = qty * price - disc + taxAmt;
           const productLabel =
             PRODUCT_TYPES.find((p) => p.value === r.product_type)?.label ?? r.product_type;
-          // Best-effort human-readable name, looking first at rich snapshots
-          // (medicine / feed pickers) and then at common detail-bag keys.
+
+          // Bug 2 fix — resolve a real, human-readable name per product type.
+          // Priority order, by source of truth:
+          //   1. Rich picker snapshots (medicineProduct / feedProduct) →
+          //      prefer name_fa / commercial_product_name_fa.
+          //   2. Master-list lookup by the selector-assigned FK id
+          //      (cow_id, sperm_id) so livestock and sperm display their
+          //      پلاک / code+name rather than a generic "ردیف N".
+          //   3. Any name-ish key already saved into the detail bag (covers
+          //      legacy rows and manual entries like service_name).
+          //   4. The row's free-text description (service / other / manual).
+          //   5. Final fallback to "ردیف N" — only if nothing above resolves.
+          const m = r.medicineProduct;
+          const f = r.feedProduct as unknown as Record<string, unknown> | null | undefined;
+          let resolved: string | null = null;
+
+          if (r.product_type === "medicine" && m) {
+            resolved =
+              m.commercial_product_name_fa ||
+              (m as unknown as Record<string, string | null>).name_fa ||
+              m.commercial_product_name_en ||
+              null;
+          } else if (r.product_type === "feed" && f) {
+            resolved =
+              (f.commercial_product_name_fa as string | null) ||
+              (f.name_fa as string | null) ||
+              (f.commercial_product_name_en as string | null) ||
+              (f.name_en as string | null) ||
+              null;
+          } else if (r.product_type === "livestock") {
+            // Look up the cow in the master bucket — labels were built as
+            // "<bodynumber> / <earnumber>" at fetch time.
+            const cowId = r.details.cow_id;
+            if (cowId) {
+              const raw = masters.cows.raw.get(String(cowId));
+              if (raw) {
+                const body = (raw.bodynumber ?? "") as string | number;
+                const ear = (raw.earnumber ?? "") as string | number;
+                resolved = [body, ear].filter(Boolean).join(" / ") || null;
+              }
+            }
+          } else if (r.product_type === "sperm") {
+            // Prefer the inline snapshot the selector wrote into the
+            // details bag (bull_code/bull_name), then fall back to the
+            // master bucket lookup by sperm_id.
+            const code = r.details.bull_code;
+            const nm = r.details.bull_name;
+            if (code || nm) {
+              resolved = `${code ?? ""}${nm ? " - " + nm : ""}`.trim() || null;
+            }
+            if (!resolved && r.details.sperm_id) {
+              const raw = masters.sperms.raw.get(String(r.details.sperm_id));
+              if (raw) {
+                resolved = `${raw.code ?? ""}${raw.name ? " - " + raw.name : ""}`.trim() || null;
+              }
+            }
+          }
+
+          // Generic detail-bag and description fallbacks (covers service,
+          // other, rental, manure, milk, and any legacy rows without a
+          // populated picker snapshot).
           const name =
-            r.medicineProduct?.commercial_product_name_fa ||
-            r.medicineProduct?.commercial_product_name_en ||
-            r.feedProduct?.commercial_product_name_fa ||
-            r.feedProduct?.commercial_product_name_en ||
-            r.details.feed_name ||
-            r.details.bull_name ||
-            r.details.cow_id ||
-            r.details.service_name ||
+            resolved ||
+            (r.details.feed_name as string | undefined) ||
+            (r.details.service_name as string | undefined) ||
+            (r.details.product_name as string | undefined) ||
+            (r.details.name as string | undefined) ||
+            (r.description && r.description.trim()) ||
             `ردیف ${idx + 1}`;
+
           return {
             name: String(name),
             productTypeLabel: productLabel,
