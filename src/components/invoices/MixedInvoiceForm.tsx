@@ -1073,17 +1073,53 @@ export default function MixedInvoiceForm() {
           status: "pending_approval",
           execution_status: "pending",
         }));
-        const { error: rpcErr } = await supabase.rpc(
-          "submit_payment_request" as never,
-          { p_request: requestPayload, p_items: wireItems } as never,
-        );
-        if (rpcErr) {
-          // Factor + costs remain persisted. Mark failure so the final
-          // toast accurately reflects partial success and we do NOT
-          // navigate away silently. User can retry settlement creation
-          // from PaymentRequestsTab on the invoice detail page.
+        // Pre-flight duplicate guard. The partial unique index
+        // `ux_finance_payment_requests_source_factor_active` is the hard
+        // back-stop, but doing a cheap SELECT first lets us give the user
+        // a much friendlier error than a Postgres unique-violation.
+        const { data: existingLink } = await supabase
+          .from("finance_payment_requests")
+          .select("id")
+          .eq("source_factor_id", factor.id)
+          .eq("is_deleted", false)
+          .maybeSingle();
+
+        if (existingLink) {
           settlementFailed = true;
-          settlementErrorMessage = rpcErr.message || null;
+          settlementErrorMessage =
+            "برای این فاکتور قبلاً یک درخواست تسویه فعال ثبت شده است.";
+        } else {
+          // The RPC returns the new request id as a uuid scalar. We capture
+          // it and then UPDATE source_factor_id on the request header — this
+          // keeps the RPC contract untouched while still populating the
+          // authoritative link column. The item-level source_factor_id is
+          // already sent through wireItems.
+          const { data: newRequestId, error: rpcErr } = await supabase.rpc(
+            "submit_payment_request" as never,
+            { p_request: requestPayload, p_items: wireItems } as never,
+          );
+          if (rpcErr) {
+            settlementFailed = true;
+            settlementErrorMessage = rpcErr.message || null;
+          } else if (typeof newRequestId === "string") {
+            // Stamp the authoritative invoice link onto the request header.
+            // If this UPDATE fails the request still exists, just without
+            // the link — surface it so the operator can recover manually.
+            const { error: linkErr } = await supabase
+              .from("finance_payment_requests")
+              .update({ source_factor_id: factor.id })
+              .eq("id", newRequestId)
+              .is("source_factor_id", null);
+            if (linkErr) {
+              // Non-fatal: request is created but unlinked. Tell the user
+              // so they know not to retry settlement creation.
+              toast({
+                title: "درخواست تسویه ایجاد شد اما اتصال به فاکتور ثبت نشد",
+                description: linkErr.message,
+                variant: "destructive",
+              });
+            }
+          }
         }
       }
 
