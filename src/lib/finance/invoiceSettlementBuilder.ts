@@ -336,6 +336,51 @@ export function computeBasis(source: SettlementSource): BasisBreakdown {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-assignment of amount_type_key (UAT Fix 1 — Issue 2)
+//
+// The operator no longer picks "creditor / advance / on_account" manually in
+// the invoice settlement UI. Instead we derive each payment's basis from the
+// party's CURRENT balance vs the payment amount:
+//
+//   - convention: finance_parties.balance is NEGATIVE when the party is a
+//     creditor (i.e. we owe them). availableCreditor = abs(min(balance, 0)).
+//   - we walk payments in order, consuming availableCreditor first:
+//       payment.amount <= remaining availableCreditor  → "creditor"
+//                                              otherwise → "on_account"
+//   - "on_account" is the SAFE default — `validateCreditorBalance` only
+//     runs for creditor items, and `submit_payment_request` already
+//     accepts on_account items without balance preconditions.
+//
+// The function is pure and idempotent — call it on every derive/balance
+// change and pass the result to display + RPC builders. Source state held
+// by the form keeps an `amount_type_key` field for back-compat, but it is
+// effectively ignored once this helper runs.
+// ---------------------------------------------------------------------------
+export function applyAutoAmountTypes(
+  sources: SettlementSource[],
+  partyBalances: Record<string, number>,
+): SettlementSource[] {
+  return sources.map((s) => {
+    if (!s.party_id) return s;
+    const bal = Number(partyBalances[s.party_id] ?? 0);
+    // Negative balance means we owe them (creditor) → available pool.
+    let available = bal < 0 ? Math.abs(bal) : 0;
+    const payments = s.payments.map((p) => {
+      const amt = Number(p.amount) || 0;
+      let key: PaymentAmountTypeKey;
+      if (amt > 0 && available + 1e-6 >= amt) {
+        key = "creditor";
+        available -= amt;
+      } else {
+        key = "on_account";
+      }
+      return { ...p, amount_type_key: key };
+    });
+    return { ...s, payments };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
