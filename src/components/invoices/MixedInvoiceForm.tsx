@@ -1500,7 +1500,7 @@ export default function MixedInvoiceForm() {
           //   4. The row's free-text description (service / other / manual).
           //   5. Final fallback to "ردیف N" — only if nothing above resolves.
           const m = r.medicineProduct;
-          const f = r.feedProduct as Record<string, unknown> | null | undefined;
+          const f = r.feedProduct as unknown as Record<string, unknown> | null | undefined;
           let resolved: string | null = null;
 
           if (r.product_type === "medicine" && m) {
