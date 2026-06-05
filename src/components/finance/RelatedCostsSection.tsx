@@ -71,7 +71,18 @@ interface InvoiceLite {
   payable_amount: number | null;
 }
 
-export default function RelatedCostsSection({ invoice }: { invoice: InvoiceLite }) {
+export default function RelatedCostsSection({
+  invoice,
+  // Invoice↔Settlement dependency model (Rule 3):
+  // When the invoice already has an active linked settlement request, the
+  // parent passes hideSettlementCta=true so we suppress the legacy
+  // "ثبت درخواست تسویه" button. The summary card rendered alongside this
+  // section becomes the single entry point.
+  hideSettlementCta = false,
+}: {
+  invoice: InvoiceLite;
+  hideSettlementCta?: boolean;
+}) {
   // -------------------------------------------------------------------------
   // State
   // -------------------------------------------------------------------------
