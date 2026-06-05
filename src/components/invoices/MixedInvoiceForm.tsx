@@ -48,6 +48,7 @@ import {
   deriveSources,
   validateSources,
   buildRpcItemsPayload,
+  applyAutoAmountTypes,
   type DraftCost,
   type SettlementSource,
 } from "@/lib/finance/invoiceSettlementBuilder";
