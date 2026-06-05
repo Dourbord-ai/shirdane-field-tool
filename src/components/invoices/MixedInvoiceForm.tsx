@@ -1385,7 +1385,7 @@ export default function MixedInvoiceForm() {
 
       {/* ------------------ Tasks 2+3: Settlement Sources ------------------ */}
       <InvoiceSettlementSourcesBlock
-        sources={sources}
+        sources={assignedSources}
         errors={settlementErrors}
         onPatchSource={patchSource}
       />
