@@ -1445,8 +1445,10 @@ export default function MixedInvoiceForm() {
           // Best-effort human-readable name, looking first at rich snapshots
           // (medicine / feed pickers) and then at common detail-bag keys.
           const name =
-            r.medicineProduct?.name ||
-            r.feedProduct?.name ||
+            r.medicineProduct?.commercial_product_name_fa ||
+            r.medicineProduct?.commercial_product_name_en ||
+            r.feedProduct?.commercial_product_name_fa ||
+            r.feedProduct?.commercial_product_name_en ||
             r.details.feed_name ||
             r.details.bull_name ||
             r.details.cow_id ||
