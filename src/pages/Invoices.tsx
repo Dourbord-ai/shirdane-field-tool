@@ -32,6 +32,11 @@ import { jalaliToGregorianTimestamp } from "@/lib/dateUtils";
 // Phase 7: structured related costs panel embedded inside the invoice
 // detail view. Self-contained — pulls and writes its own rows.
 import RelatedCostsSection from "@/components/finance/RelatedCostsSection";
+// Invoice ↔ Settlement dependency model: summary card that renders when
+// the invoice already owns a settlement request. Used here to also flip
+// off the legacy "ثبت درخواست تسویه" CTA inside RelatedCostsSection.
+import InvoiceSettlementSummaryCard from "@/components/invoices/sections/InvoiceSettlementSummaryCard";
+import type { InvoiceLinkedSettlement } from "@/lib/finance/invoiceSettlementLink";
 
 interface FactorRow {
   id: string;
