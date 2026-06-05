@@ -1046,6 +1046,9 @@ export default function MixedInvoiceForm() {
         assignedSources,
         costIdByDraftId,
         invoiceNumber || null,
+        // NEW: stamp every emitted item with the originating factor id so
+        // item-level reports can attribute payments back to this invoice.
+        factor.id,
       );
       if (itemsPayload.length > 0 && !skipSettlementDueToCostFailure) {
         settlementAttempted = true;
@@ -1055,6 +1058,12 @@ export default function MixedInvoiceForm() {
           request_type: "purchase",
           legacy_request_type_code: 2,
           status: "pending_approval",
+          // AUTHORITATIVE link back to the invoice. Combined with the
+          // partial unique index `ux_finance_payment_requests_source_factor_active`
+          // this guarantees at most ONE active invoice-owned request per
+          // factor (DB-enforced), and lets the approval-guard trigger
+          // block approving the request before the invoice is approved.
+          source_factor_id: factor.id,
         };
         // Convert Jalali "YYYY/MM/DD" → Gregorian ISO for the wire shape the
         // RPC expects (matches what PaymentRequestsTab does).
