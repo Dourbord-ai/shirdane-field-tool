@@ -698,9 +698,17 @@ function InvoiceDetail({
   // Jalali/Persian date — never pipe a raw timestamp through toPersianDigits.
   const dateStr = factor.invoice_date ? formatShamsi(factor.invoice_date) : "—";
 
+  // Invoice ↔ Settlement dependency model — local state tracking whether
+  // this invoice already owns an active settlement request. The summary
+  // card sets it via onLinkedChange; we read it to (a) hide the legacy
+  // creation CTA inside RelatedCostsSection and (b) avoid showing two
+  // entry points side-by-side.
+  const [linkedSettlement, setLinkedSettlement] = useState<InvoiceLinkedSettlement | null>(null);
+
   return (
     <div className="animate-fade-in">
       <div className="rounded-2xl bg-card overflow-hidden">
+
         <div className="border-b border-border p-3 mb-2">
           <h2 className="text-body-lg font-bold text-primary">جزئیات فاکتور</h2>
         </div>
