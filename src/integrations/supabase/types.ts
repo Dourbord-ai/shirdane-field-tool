@@ -7215,6 +7215,16 @@ export type Database = {
           verified_owner_name: string
         }[]
       }
+      get_beneficiary_balances: {
+        Args: never
+        Returns: {
+          balance: number
+          balance_status: string
+          creditor_total: number
+          debtor_total: number
+          party_id: string
+        }[]
+      }
       has_app_role: {
         Args: { _role_name: string; _user_id: string }
         Returns: boolean
