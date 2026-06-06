@@ -1671,6 +1671,67 @@ function FieldNumber({
   );
 }
 
+/* ---------------------------------------------------------------------------
+   Standard list of measurement units exposed in the invoice row "واحد" field.
+   We render it as a Select so data entry stays consistent across operators
+   (instead of free-typing variants like "kg" / "كيلو" / "کیلوگرم").
+   The DB column stays a plain text field — we just constrain the UI.
+   Legacy rows whose stored unit is NOT in this list are preserved by
+   appending the existing value as an extra option (see FieldUnitSelect).
+--------------------------------------------------------------------------- */
+const UNIT_OPTIONS: string[] = [
+  "کیلوگرم",
+  "گرم",
+  "تن",
+  "عدد",
+  "رأس",
+  "لیتر",
+  "میلی‌لیتر",
+  "متر",
+  "مترمربع",
+  "بسته",
+  "کارتن",
+  "سرویس",
+  "ماه",
+  "روز",
+  "ساعت",
+];
+
+function FieldUnitSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  // Preserve any legacy free-typed unit by surfacing it as an additional
+  // option at the top of the list, so editing an old row doesn't silently
+  // wipe its unit when the user opens the form.
+  const hasLegacy = value && !UNIT_OPTIONS.includes(value);
+  return (
+    <div className="space-y-1">
+      <label className="block text-xs font-medium text-foreground">{label}</label>
+      <Select value={value || undefined} onValueChange={(v) => onChange(v)}>
+        <SelectTrigger className="w-full" dir="rtl">
+          <SelectValue placeholder="انتخاب واحد" />
+        </SelectTrigger>
+        <SelectContent dir="rtl">
+          {hasLegacy && (
+            <SelectItem value={value}>{value} (قبلی)</SelectItem>
+          )}
+          {UNIT_OPTIONS.map((u) => (
+            <SelectItem key={u} value={u}>
+              {u}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 // Render any DETAIL_CONFIG field by its declared type. Date fields fall back
 // to a plain HTML `date` input so we don't pull the heavy Jalali picker into
 // every detail row.
