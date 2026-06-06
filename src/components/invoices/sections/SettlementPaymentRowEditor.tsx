@@ -38,7 +38,7 @@ export default function SettlementPaymentRowEditor({
   return (
     <div className="rounded-md border border-border p-2 space-y-2 bg-background/40">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-foreground">پرداخت {index + 1}</span>
+        <span className="text-xs font-bold text-foreground">مرحله {index + 1}</span>
         {removable && (
           <Button size="icon" variant="ghost" onClick={onRemove} aria-label="حذف">
             <Trash2 className="w-3.5 h-3.5 text-destructive" />
