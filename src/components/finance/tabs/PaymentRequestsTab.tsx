@@ -91,6 +91,9 @@ interface PR {
   // the invoice that produced this request. NULL for legacy / independent
   // requests — those keep working exactly as before.
   source_factor_id?: string | null;
+  // The operator who created this settlement request. Maps to app_users.id
+  // so we can filter "my requests" or audit by requester.
+  requested_by: string | null;
   created_at: string;
 }
 
