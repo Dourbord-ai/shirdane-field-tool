@@ -9,6 +9,7 @@ import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/fina
 import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
+import SearchableSelect from "@/components/SearchableSelect";
 import { toast } from "sonner";
 // Jalali calendar UI returns "YYYY/MM/DD" Jalali strings. We convert these
 // to Gregorian timestamp boundaries (start-of-day / end-of-day in Tehran)
