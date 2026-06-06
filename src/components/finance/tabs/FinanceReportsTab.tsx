@@ -23,7 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/finance";
 import { cn } from "@/lib/utils";
-import { ChevronUp, ChevronDown, Search, Loader2 } from "lucide-react";
+import { ChevronUp, ChevronDown, Search, Loader2, FileText } from "lucide-react";
+import BeneficiaryVouchersDialog from "@/components/finance/BeneficiaryVouchersDialog";
 
 const PAGE_SIZE = 25;
 
@@ -131,6 +132,11 @@ export default function FinanceReportsTab() {
   const [sortKey, setSortKey] = useState<SortKey>("display_name");
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
+
+  // ذینفع انتخاب‌شده برای مودال «مشاهده اسناد». null یعنی مودال بسته است.
+  // ViewRow کامل را نگه می‌داریم تا خلاصهٔ بالای مودال (بدهکار/بستانکار/مانده)
+  // را بدون رفت‌وبرگشت اضافه با سرور پاس بدهیم.
+  const [openVouchersFor, setOpenVouchersFor] = useState<ViewRow | null>(null);
 
   // دباونس جستجو تا روی هر کلید فیلتر دوباره ساخته نشود.
   useEffect(() => {
@@ -337,6 +343,8 @@ export default function FinanceReportsTab() {
                 <th className="text-right p-2"><SortHeader k="creditor">بستانکار</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="balance">مانده</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="request_balance">درخواست تسویه تایید شده</SortHeader></th>
+                {/* ستون اکشن — بدون مرتب‌سازی، فقط دکمهٔ مشاهدهٔ اسناد. */}
+                <th className="text-right p-2">اقدامات</th>
               </tr>
               <tr className="border-b">
                 <th className="p-1"><Input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
@@ -344,6 +352,7 @@ export default function FinanceReportsTab() {
                 <th className="p-1"><Input value={fCreditor} onChange={(e) => setFCreditor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fBalance} onChange={(e) => setFBalance(e.target.value)} placeholder="|≥|" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fRequest} onChange={(e) => setFRequest(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
+                <th className="p-1" />
               </tr>
             </thead>
             <tbody>
@@ -352,13 +361,31 @@ export default function FinanceReportsTab() {
                 // هم‌خوان بماند و هیچ‌گاه UI با خودش تناقض نداشته باشد.
                 const balTone = p.balance < 0 ? "debit" : p.balance > 0 ? "credit" : "neutral";
                 return (
-                  <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
+                  <tr
+                    key={p.id}
+                    className="border-b border-border/50 hover:bg-muted/30 cursor-pointer"
+                    // کلیک روی خود ردیف هم مودال اسناد را باز می‌کند تا تجربهٔ
+                    // «کلیک روی ذینفع» راحت‌تر باشد؛ دکمه روی سلول آخر هم
+                    // به‌صورت صریح در دسترس است.
+                    onClick={() => setOpenVouchersFor(p)}
+                  >
                     <td className="p-2 font-medium">{p.display_name}</td>
                     {/* همیشه 0 نمایش داده می‌شود (نه خالی) وقتی گردشی نیست. */}
                     <td className="p-2"><Money value={p.debtor} tone="debit" /></td>
                     <td className="p-2"><Money value={p.creditor} tone="credit" /></td>
                     <td className="p-2"><Money value={p.balance} tone={balTone} /></td>
                     <td className="p-2"><Money value={p.request_balance} tone="neutral" /></td>
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 text-xs"
+                        onClick={() => setOpenVouchersFor(p)}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        مشاهده اسناد
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
@@ -382,6 +409,25 @@ export default function FinanceReportsTab() {
           </div>
         </footer>
       )}
+
+      {/* مودال «مشاهده اسناد» — همان مدلِ «مقایسه صورتحساب» اما فقط منبع
+          داخلی. partyId در render محافظت می‌شود تا قبل از اولین انتخاب
+          درخواستی به سرور نرود. */}
+      <BeneficiaryVouchersDialog
+        open={!!openVouchersFor}
+        onOpenChange={(o) => !o && setOpenVouchersFor(null)}
+        partyId={openVouchersFor?.id ?? null}
+        partyName={openVouchersFor?.display_name ?? ""}
+        summary={
+          openVouchersFor
+            ? {
+                debtor: openVouchersFor.debtor,
+                creditor: openVouchersFor.creditor,
+                balance: openVouchersFor.balance,
+              }
+            : undefined
+        }
+      />
     </section>
   );
 }
