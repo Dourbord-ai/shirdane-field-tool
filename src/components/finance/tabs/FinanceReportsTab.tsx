@@ -73,12 +73,36 @@ function computeDisplayName(p: PartyRow): string {
 }
 
 // سلول مبلغ — LTR تا علامت منفی سمت چپ ارقام دیده شود (داخل layout راست‌چین).
-function Money({ value, tone }: { value: number; tone?: "debit" | "credit" | "neutral" }) {
-  if (!value) return <span className="text-muted-foreground">—</span>;
+//
+// نکته مهم محصول (تب گزارشات):
+//   مقادیر null / undefined / NaN / صفر هیچ‌گاه به‌صورت «—» نمایش داده نشوند.
+//   همیشه عددِ «۰» رندر شود تا کاربر در ستون‌های بدهکار/بستانکار/مانده/تعداد
+//   هرگز placeholder خالی نبیند. این رفتار فقط برای فیلدهای عددی است؛
+//   فیلدهای متنی (نام ذینفع، شرح، کد…) همچنان مسیر قبلی‌شان را حفظ می‌کنند
+//   (در computeDisplayName همچنان "—" برمی‌گردد).
+//
+// formatMoney خودش null/empty/non-finite را به "۰" تبدیل می‌کند، پس کافی است
+// مقدار را normalize کنیم و بدون شرطِ «اگر صفر بود dash نشان بده» مستقیم
+// رندر کنیم. tone هم برای صفر روی "neutral" می‌افتد تا رنگ گمراه‌کننده‌ای
+// (سبز/قرمز) برای مبلغ صفر دیده نشود.
+function Money({
+  value,
+  tone,
+}: {
+  value: number | null | undefined;
+  tone?: "debit" | "credit" | "neutral";
+}) {
+  // coercion ایمن: هر چیزی که عدد متناهی نباشد → 0. این یعنی NaN، Infinity،
+  // null و undefined همگی به ۰ تبدیل می‌شوند، دقیقاً همان قاعده‌ای که
+  // محصول خواسته است.
+  const safe = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  // وقتی مقدار نهایی صفر شد، رنگ debit/credit را خنثی می‌کنیم تا «۰ قرمز»
+  // یا «۰ سبز» القا نکند که گردش وجود داشته است.
+  const effectiveTone = safe === 0 ? "neutral" : tone;
   const color =
-    tone === "debit"
+    effectiveTone === "debit"
       ? "text-red-600 dark:text-red-400"
-      : tone === "credit"
+      : effectiveTone === "credit"
         ? "text-emerald-600 dark:text-emerald-400"
         : "text-foreground";
   return (
@@ -89,10 +113,11 @@ function Money({ value, tone }: { value: number; tone?: "debit" | "credit" | "ne
         color,
       )}
     >
-      {formatMoney(value)}
+      {formatMoney(safe)}
     </span>
   );
 }
+
 
 // تبدیل اعداد فارسی/عربی به ASCII تا فیلترهای عددی هم با ۱۲۳ کار کنند.
 function toAsciiNumber(s: string): number | null {
