@@ -314,11 +314,14 @@ function StatementTable({
   rows,
   kind,
   onExport,
+  onExpandDescription,
 }: {
   title: string;
   rows: StatementRow[];
   kind: "internal" | "sepidar";
   onExport: () => void;
+  // Opens the shared full-description modal in the parent dialog.
+  onExpandDescription: (text: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
