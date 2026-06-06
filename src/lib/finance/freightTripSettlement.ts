@@ -62,7 +62,7 @@ import type { FreightTrip } from "@/lib/finance/freightTrips";
  *     editable but defaults to ON.
  *   - One default payment row equal to the full total — matches the
  *     invoice editor's pattern, operator can split via the existing
- *     "تعداد پرداخت" + "تقسیم خودکار" controls in `SettlementSourceCard`.
+ *     "تعداد مراحل تسویه" + "تقسیم خودکار" controls in `SettlementSourceCard`.
  */
 export function buildInitialFreightTripSource(
   trip: FreightTrip,
