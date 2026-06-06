@@ -366,6 +366,36 @@ function StatementTable({
   const cur = Math.min(page, totalPages);
   const slice = filtered.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE);
 
+  // ---------------------------------------------------------------------------
+  // جمع‌ ستون‌های جدول جاری.
+  //
+  // الزام محصول:
+  //   - بدهکار فقط از debit / DebitAmount خوانده شود (تابع debitAmount).
+  //   - بستانکار فقط از credit / CreditAmount خوانده شود (تابع creditAmount).
+  //   - مانده = creditTotal − debitTotal (نه مجموع ستون مانده تجمعی ردیف‌ها،
+  //     چون آن ستون مانده دوره‌ای است و جمع آن معنای حسابداری ندارد).
+  //
+  // مبنای محاسبه عمداً `filtered` است نه `rows`، تا اگر کاربر در آینده با
+  // جستجو/فیلتر تاریخ ردیف‌ها را محدود کند، جمع‌ها هم با همان زیرمجموعه
+  // هم‌خوان باشند. این دقیقاً همان رفتاری است که در نیازمندی خواسته شده:
+  // «اگر کاربر بازه تاریخ انتخاب کرد، جمع‌ها فقط برای همان بازه محاسبه شود».
+  // useMemo تا روی هر کلید جستجو دوباره روی تمام ردیف‌ها loop نزنیم.
+  // ---------------------------------------------------------------------------
+  const totals = useMemo(() => {
+    let debitTotal = 0;
+    let creditTotal = 0;
+    for (const r of filtered) {
+      debitTotal += debitAmount(r);
+      creditTotal += creditAmount(r);
+    }
+    return {
+      debitTotal,
+      creditTotal,
+      // فرمول دقیق محصول — هیچ‌گاه از r.balance استفاده نمی‌کنیم.
+      balance: creditTotal - debitTotal,
+    };
+  }, [filtered]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -385,6 +415,57 @@ function StatementTable({
           </Button>
         </div>
       </div>
+
+      {/*
+        نوار خلاصه جمع ستون‌ها — بالای جدول قرار می‌گیرد تا قبل از اسکرول
+        لیست سند به چشم بیاید. روی موبایل grid-cols-3 خوانا می‌ماند چون
+        سه کارت کوچک کنار هم می‌نشینند و دیگر نیازی به wrap نیست.
+        رنگ مانده طبق قاعدهٔ سراسری برنامه:
+          منفی → قرمز (بدهکار خالص)
+          مثبت → سبز (بستانکار خالص)
+          صفر → خنثی (text-foreground بدون رنگ)
+        از همان MoneyCell موجود استفاده می‌کنیم تا با بقیه گزارش‌ها هم‌سطح
+        باشد و علامت‌گذاری رنگ یک نقطهٔ مرکزی داشته باشد.
+      */}
+      <div
+        className="grid grid-cols-3 gap-2 sm:gap-3 rounded-lg border bg-muted/30 p-2 sm:p-3"
+        dir="rtl"
+        aria-label="جمع ستون‌های جدول"
+      >
+        <div className="rounded-md bg-card border p-2 sm:p-3 min-w-0">
+          <p className="text-[10px] sm:text-[11px] text-muted-foreground mb-1">جمع بدهکار</p>
+          {/* در نمایش جمع ستون‌ها، بدهکار همیشه «هزینه/برداشت» است؛ برای
+              هم‌خوانی با عرف حسابداری دامبان آن را قرمز نشان می‌دهیم زمانی
+              که مقدارش بیش از صفر است. */}
+          <MoneyCell
+            value={totals.debitTotal}
+            className="text-xs sm:text-sm"
+            negative={totals.debitTotal > 0}
+          />
+        </div>
+        <div className="rounded-md bg-card border p-2 sm:p-3 min-w-0">
+          <p className="text-[10px] sm:text-[11px] text-muted-foreground mb-1">جمع بستانکار</p>
+          <MoneyCell
+            value={totals.creditTotal}
+            className="text-xs sm:text-sm"
+            positive={totals.creditTotal > 0}
+          />
+        </div>
+        <div className="rounded-md bg-card border p-2 sm:p-3 min-w-0">
+          <p className="text-[10px] sm:text-[11px] text-muted-foreground mb-1">
+            مانده (بستانکار − بدهکار)
+          </p>
+          {/* مانده ممکن است منفی شود؛ MoneyCell علامت منفی را به‌درستی LTR
+              نمایش می‌دهد و رنگ‌گذاری بر اساس علامت balance انجام می‌شود. */}
+          <MoneyCell
+            value={totals.balance}
+            className="text-xs sm:text-sm"
+            positive={totals.balance > 0}
+            negative={totals.balance < 0}
+          />
+        </div>
+      </div>
+
 
       <div className="overflow-x-auto rounded-lg border" dir="rtl">
         <table className="w-full text-sm text-right" dir="rtl">
