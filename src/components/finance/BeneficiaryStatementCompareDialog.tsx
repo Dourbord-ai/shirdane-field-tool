@@ -189,7 +189,15 @@ export default function BeneficiaryStatementCompareDialog({
   );
 }
 
-function Body({ data }: { data: BeneficiaryStatementComparison }) {
+function Body({
+  data,
+  onExpandDescription,
+}: {
+  data: BeneficiaryStatementComparison;
+  // Passed down to StatementTable so per-row "نمایش کامل" can trigger the
+  // shared modal mounted at the dialog root.
+  onExpandDescription: (text: string) => void;
+}) {
   const totalDiffs =
     data.onlyInInternal.length +
     data.onlyInSepidar.length +
