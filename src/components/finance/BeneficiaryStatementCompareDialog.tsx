@@ -174,9 +174,17 @@ export default function BeneficiaryStatementCompareDialog({
               در حال واکشی صورتحساب...
             </div>
           )}
-          {!loading && data && <Body data={data} />}
+          {!loading && data && (
+            <Body data={data} onExpandDescription={setExpandedDescription} />
+          )}
         </div>
       </div>
+      {/* Full-description modal lives at the dialog root so it overlays the
+          entire compare dialog (z-[60] > z-50). */}
+      <DescriptionModal
+        text={expandedDescription}
+        onClose={() => setExpandedDescription(null)}
+      />
     </div>
   );
 }
