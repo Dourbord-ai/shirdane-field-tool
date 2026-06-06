@@ -120,6 +120,10 @@ export default function BeneficiaryStatementCompareDialog({
 }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BeneficiaryStatementComparison | null>(null);
+  // Holds the full description text when the user clicks the "نمایش کامل"
+  // eye-button on a row whose description is too long for the table cell.
+  // null = modal closed.
+  const [expandedDescription, setExpandedDescription] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
