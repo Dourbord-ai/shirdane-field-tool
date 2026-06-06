@@ -1,20 +1,28 @@
 // ---------------------------------------------------------------------------
 // گزارش وضعیت ذینفعان (Beneficiaries Status Report)
+// ---------------------------------------------------------------------------
+// Data contract (single source of truth = SQL RPC):
+//   public.get_beneficiaries_balance_report(p_search, p_limit, p_offset)
 //
-// Read-only report. For every beneficiary we show:
-//   • بدهکار  = SUM(finance_voucher_items.debit)
-//   • بستانکار = SUM(finance_voucher_items.credit)
+// Per the product spec, for every beneficiary we show:
+//   • بدهکار  = SUM(COALESCE(finance_voucher_items.debit, 0))
+//   • بستانکار = SUM(COALESCE(finance_voucher_items.credit, 0))
 //   • مانده   = بستانکار − بدهکار
 //
-// Sign convention (must match finance_parties.balance and the voucher_items
-// double-entry model already used across the app):
-//   مانده > 0 → بستانکار (party is owed; show GREEN)
-//   مانده < 0 → بدهکار   (party owes us;  show RED)
-//   مانده = 0 → بی‌حساب  (neutral / white)
+// Sign convention (color + chip both derive from the same `balance` value
+// so they can never disagree):
+//   مانده > 0 → بستانکار (party is owed; GREEN)
+//   مانده < 0 → بدهکار   (party owes us;  RED)
+//   مانده = 0 → بی‌حساب  (neutral / foreground)
 //
-// Parties with NO voucher activity at all must render as 0 / 0 / 0 — never
-// blank, never null. This is enforced by defaulting missing aggregate rows
-// to zero after the join.
+// Beneficiaries with zero voucher activity MUST still appear in the table
+// with 0 / 0 / 0. The RPC guarantees this by using a LEFT JOIN with the
+// deleted-voucher predicate on the JOIN condition (NOT in WHERE) — otherwise
+// the LEFT JOIN would collapse to INNER JOIN and drop those rows.
+//
+// We deliberately ignore finance_parties.balance here: it can be out of sync
+// with the voucher_items ledger. The report must always reflect the actual
+// posted ledger so reconciliation is meaningful.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -25,59 +33,69 @@ import { formatMoney } from "@/lib/finance";
 import { cn } from "@/lib/utils";
 import { ChevronUp, ChevronDown, Search, Loader2 } from "lucide-react";
 
+// One page = 25 rows. Matches the previous behaviour so the UI stays familiar.
 const PAGE_SIZE = 25;
 
-interface PartyRow {
-  id: string;
-  company_name: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  sepidar_full_name: string | null;
-  ownership_type: string | null;
+// Shape returned by the RPC. We mirror only what the table actually uses.
+interface RpcRow {
+  party_id: string;
+  party_name: string;
+  debit_total: number | string | null;
+  credit_total: number | string | null;
+  balance: number | string | null;
+  balance_status: "debtor" | "creditor" | "settled" | string;
+  total_count: number | string | null; // same number on every row
 }
 
-// Aggregated debit/credit per party computed from finance_voucher_items.
-interface PartyTotals {
+// Local view-model after numeric coercion. RPC returns NUMERIC which the
+// PostgREST client serialises as strings to avoid precision loss — we coerce
+// here so the sort comparators behave correctly.
+interface ViewRow {
+  id: string;
+  display_name: string;
   debit: number;
   credit: number;
-  balance: number; // credit − debit (positive = creditor, negative = debtor)
+  balance: number;
+  status: "debtor" | "creditor" | "settled";
 }
 
 type SortKey = "display_name" | "debit" | "credit" | "balance";
 
-function computeDisplayName(p: PartyRow): string {
-  if (p.company_name || p.ownership_type === "legal") {
-    return p.company_name || p.sepidar_full_name || "—";
-  }
-  const personal = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
-  return personal || p.sepidar_full_name || "—";
-}
-
-// Category bucket — derived from balance sign per the product spec.
-function categorize(balance: number): { label: string; tone: string } {
-  if (balance > 0) return { label: "بستانکار", tone: "bg-emerald-100 text-emerald-800" };
-  if (balance < 0) return { label: "بدهکار", tone: "bg-red-100 text-red-800" };
+// Map balance bucket → label + chip tone. We accept either the RPC-provided
+// status string OR a balance number; both paths must produce the same chip.
+function categorize(status: ViewRow["status"]): { label: string; tone: string } {
+  if (status === "creditor") return { label: "بستانکار", tone: "bg-emerald-100 text-emerald-800" };
+  if (status === "debtor") return { label: "بدهکار", tone: "bg-red-100 text-red-800" };
   return { label: "بی‌حساب", tone: "bg-muted text-muted-foreground" };
 }
 
+// Safe Number() coercion: handles null/undefined/strings ("12345.67") and
+// guarantees we never feed NaN into Math operations or formatMoney.
+function n(v: number | string | null | undefined): number {
+  if (v == null) return 0;
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
 export default function BeneficiariesStatusReport() {
-  const [rows, setRows] = useState<PartyRow[]>([]);
-  // Map keyed by party.id → aggregated debit/credit. Defaults to zero when a
-  // party has zero voucher rows (the spec requires 0, never null).
-  const [totals, setTotals] = useState<Record<string, PartyTotals>>({});
+  const [rows, setRows] = useState<ViewRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("display_name");
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
+  // Debounce the search input so we don't fire an RPC on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
 
+  // Reset to page 1 when the search term changes — otherwise the user can
+  // land on an empty page (e.g. they were on page 4 of a long list).
   useEffect(() => setPage(1), [debouncedSearch]);
 
   useEffect(() => {
@@ -87,102 +105,66 @@ export default function BeneficiariesStatusReport() {
 
   async function load() {
     setLoading(true);
+    setError(null);
 
-    // ---- 1) load parties for the current page (search + pagination) ------
-    let q = supabase
-      .from("finance_parties")
-      .select(
-        "id, company_name, first_name, last_name, sepidar_full_name, ownership_type",
-        { count: "exact" },
-      )
-      .or("is_deleted.is.null,is_deleted.eq.false")
-      .order("sepidar_full_name", { ascending: true, nullsFirst: false });
+    // Single round-trip: the RPC returns aggregates + total_count window.
+    // This removes the previous client-side aggregation that was vulnerable
+    // to Supabase's 1000-row response cap.
+    const { data, error: rpcErr } = await supabase.rpc(
+      "get_beneficiaries_balance_report",
+      {
+        p_search: debouncedSearch || null,
+        p_limit: PAGE_SIZE,
+        p_offset: (page - 1) * PAGE_SIZE,
+      },
+    );
 
-    if (debouncedSearch) {
-      const safe = debouncedSearch.replace(/[%,()*]/g, " ").trim();
-      if (safe) {
-        const pat = `*${safe}*`;
-        q = q.or(
-          [
-            `company_name.ilike.${pat}`,
-            `first_name.ilike.${pat}`,
-            `last_name.ilike.${pat}`,
-            `sepidar_full_name.ilike.${pat}`,
-            `national_code.ilike.${pat}`,
-            `national_id.ilike.${pat}`,
-            `mobile.ilike.${pat}`,
-          ].join(","),
-        );
-      }
-    }
-
-    const from = (page - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    q = q.range(from, to);
-
-    const { data: parties, count, error } = await q;
-    if (error) {
+    if (rpcErr) {
+      setError(rpcErr.message);
+      setRows([]);
+      setTotalCount(0);
       setLoading(false);
       return;
     }
 
-    const list = (parties as PartyRow[]) || [];
-    setRows(list);
-    setTotalCount(count ?? 0);
+    const list = (data as RpcRow[]) || [];
 
-    // ---- 2) load voucher_items aggregates for these parties --------------
-    // We pull raw debit/credit per party_id and aggregate client-side. This
-    // avoids needing a DB view/RPC and keeps the report self-contained.
-    // Only non-deleted vouchers should contribute — we filter via inner join.
-    const ids = list.map((p) => p.id);
-    const aggregates: Record<string, PartyTotals> = {};
-    // Pre-seed every visible party with zero so missing data renders as 0/0/0.
-    ids.forEach((id) => (aggregates[id] = { debit: 0, credit: 0, balance: 0 }));
+    // Project RPC rows → ViewRow with numeric coercion done once up-front.
+    const mapped: ViewRow[] = list.map((r) => ({
+      id: r.party_id,
+      display_name: r.party_name || "بدون نام",
+      debit: n(r.debit_total),
+      credit: n(r.credit_total),
+      balance: n(r.balance),
+      status:
+        r.balance_status === "creditor" || r.balance_status === "debtor"
+          ? r.balance_status
+          : "settled",
+    }));
 
-    if (ids.length > 0) {
-      const { data: items, error: itemsErr } = await supabase
-        .from("finance_voucher_items")
-        .select("party_id, debit, credit, finance_vouchers!inner(is_deleted)")
-        .in("party_id", ids)
-        .or("is_deleted.is.null,is_deleted.eq.false", { foreignTable: "finance_vouchers" });
-
-      if (!itemsErr && items) {
-        for (const it of items as Array<{ party_id: string | null; debit: number | string | null; credit: number | string | null }>) {
-          if (!it.party_id || !(it.party_id in aggregates)) continue;
-          const d = Number(it.debit ?? 0) || 0;
-          const c = Number(it.credit ?? 0) || 0;
-          aggregates[it.party_id].debit += d;
-          aggregates[it.party_id].credit += c;
-        }
-        // Finalise the balance: credit − debit per the product spec.
-        for (const id of Object.keys(aggregates)) {
-          aggregates[id].balance = aggregates[id].credit - aggregates[id].debit;
-        }
-      }
-    }
-
-    setTotals(aggregates);
+    setRows(mapped);
+    // total_count is identical on every row (it's a window-function over the
+    // filtered set) — read it from the first row, fall back to length.
+    setTotalCount(list.length ? n(list[0].total_count) : 0);
     setLoading(false);
   }
 
-  // Client-side sort over the current page (server returns by name already).
+  // Client-side sort over the current page only. The RPC already sorts by
+  // party_name; we re-sort here when the user clicks a different header.
   const view = useMemo(() => {
-    const enriched = rows.map((r) => {
-      const t = totals[r.id] || { debit: 0, credit: 0, balance: 0 };
-      return { ...r, _display: computeDisplayName(r), ...t };
-    });
-    enriched.sort((a, b) => {
+    const copy = [...rows];
+    copy.sort((a, b) => {
       let cmp = 0;
-      if (sortKey === "display_name") cmp = a._display.localeCompare(b._display, "fa");
+      if (sortKey === "display_name") cmp = a.display_name.localeCompare(b.display_name, "fa");
       else if (sortKey === "debit") cmp = a.debit - b.debit;
       else if (sortKey === "credit") cmp = a.credit - b.credit;
       else if (sortKey === "balance") cmp = a.balance - b.balance;
       return sortAsc ? cmp : -cmp;
     });
-    return enriched;
-  }, [rows, totals, sortKey, sortAsc]);
+    return copy;
+  }, [rows, sortKey, sortAsc]);
 
-  const pageCount = Math.max(1, Math.ceil((totalCount ?? 0) / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   function SortHeader({ k, children }: { k: SortKey; children: React.ReactNode }) {
     const active = sortKey === k;
@@ -223,6 +205,8 @@ export default function BeneficiariesStatusReport() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
           <Loader2 className="w-4 h-4 animate-spin" /> در حال بارگذاری…
         </div>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">خطا در بارگذاری: {error}</p>
       ) : view.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">ذینفعی یافت نشد</p>
       ) : (
@@ -239,20 +223,20 @@ export default function BeneficiariesStatusReport() {
             </thead>
             <tbody>
               {view.map((p) => {
-                // Balance sign drives BOTH the number color and the bucket
-                // chip — keep them derived from the same value so the UI can
-                // never disagree with itself.
-                const cat = categorize(p.balance);
+                // Color the balance number from the SAME bucket the chip uses
+                // so a single source of truth (RPC's balance_status) drives
+                // the visual category everywhere on the row.
+                const cat = categorize(p.status);
                 const balanceTone =
-                  p.balance > 0
+                  p.status === "creditor"
                     ? "text-emerald-600 dark:text-emerald-400"
-                    : p.balance < 0
+                    : p.status === "debtor"
                       ? "text-red-600 dark:text-red-400"
                       : "text-foreground";
                 return (
                   <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
-                    <td className="p-2 font-medium">{p._display}</td>
-                    {/* Always render 0 (never blank) when there is no activity. */}
+                    <td className="p-2 font-medium">{p.display_name}</td>
+                    {/* formatMoney(0) → "۰" — zeros are never blank. */}
                     <td className="p-2 font-mono tabular-nums">{formatMoney(p.debit)}</td>
                     <td className="p-2 font-mono tabular-nums">{formatMoney(p.credit)}</td>
                     <td className={cn("p-2 font-mono font-bold tabular-nums", balanceTone)}>
@@ -271,7 +255,7 @@ export default function BeneficiariesStatusReport() {
         </div>
       )}
 
-      {totalCount !== null && totalCount > PAGE_SIZE && (
+      {totalCount > PAGE_SIZE && (
         <footer className="flex items-center justify-between text-xs text-muted-foreground pt-2">
           <span>
             صفحه {page} از {pageCount} — مجموع {totalCount.toLocaleString("fa-IR")} ذینفع
