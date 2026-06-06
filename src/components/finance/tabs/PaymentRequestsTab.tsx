@@ -385,6 +385,20 @@ export default function PaymentRequestsTab() {
     });
   }, [requests, searchTerm, voucherFilter, requestsWithVoucher]);
 
+  // Reset every filter back to its default (empty / unselected) state so the
+  // operator can start fresh with a single click.
+  function clearFilters() {
+    setSearchInput("");
+    setSearchTerm("");
+    setTypeFilter("");
+    setStatusFilter("");
+    setPaymentFilter("");
+    setVoucherFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setRequesterFilter("");
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between flex-wrap gap-2">
