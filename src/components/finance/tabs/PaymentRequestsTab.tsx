@@ -292,6 +292,20 @@ export default function PaymentRequestsTab() {
       q = q.eq("payment_status", paymentFilter);
     }
 
+    // -------- Date range filter (based on created_at) -------------------
+    // Convert Jalali range to Gregorian timestamp boundaries anchored in
+    // Tehran timezone so Postgres timestamptz comparisons are correct.
+    if (dateFrom || dateTo) {
+      const { from, to } = jalaliRangeToGregorianRange(dateFrom, dateTo);
+      if (from) q = q.gte("created_at", from);
+      if (to) q = q.lte("created_at", to);
+    }
+
+    // -------- Requester filter (based on requested_by) ------------------
+    if (requesterFilter) {
+      q = q.eq("requested_by", requesterFilter);
+    }
+
     const { data } = await q;
     const rows = (data as PR[]) || [];
     setRequests(rows);
