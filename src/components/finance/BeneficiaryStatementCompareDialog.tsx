@@ -11,7 +11,103 @@ import {
   BeneficiaryStatementComparison,
   StatementRow,
 } from "@/lib/beneficiaryStatement";
-import { X, Download, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, Download, RefreshCw, AlertTriangle, Eye } from "lucide-react";
+
+// How many characters to show before the "نمایش کامل" trigger appears in the
+// description column. Tuned so the row stays single-line on desktop but long
+// shrh strings (typical Sepidar text) still get the expand affordance.
+const DESCRIPTION_PREVIEW_LIMIT = 60;
+
+/**
+ * Render the running balance with sign-driven semantic color:
+ *   balance > 0 → بستانکار  → green
+ *   balance < 0 → بدهکار   → red
+ *   balance = 0 → بی‌حساب  → neutral foreground
+ * We delegate to MoneyCell so number formatting stays consistent with the
+ * rest of the finance UI; we only flip the positive/negative tone props.
+ */
+function BalanceCell({ value }: { value: number }) {
+  const positive = value > 0;
+  const negative = value < 0;
+  return <MoneyCell value={value} positive={positive} negative={negative} />;
+}
+
+/**
+ * Description cell with overflow handling. Short text renders inline as
+ * before; long text is truncated and gets an "نمایش کامل" eye-button that
+ * surfaces the full text in a modal so nothing is silently clipped.
+ */
+function DescriptionCell({
+  text,
+  onExpand,
+}: {
+  text: string;
+  onExpand: (full: string) => void;
+}) {
+  const value = text || "";
+  const isLong = value.length > DESCRIPTION_PREVIEW_LIMIT;
+  if (!value) return <span className="text-muted-foreground">—</span>;
+  return (
+    <div className="flex items-start gap-1 max-w-xs">
+      <span
+        className="truncate text-foreground/90"
+        title={value}
+        dir="auto"
+      >
+        {value}
+      </span>
+      {isLong && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 shrink-0"
+          onClick={() => onExpand(value)}
+          aria-label="نمایش کامل شرح"
+          title="نمایش کامل شرح"
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Simple RTL modal used to display a long description in full without
+ * clipping. Kept local to this dialog because no other screen needs it.
+ */
+function DescriptionModal({
+  text,
+  onClose,
+}: {
+  text: string | null;
+  onClose: () => void;
+}) {
+  if (!text) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+      onClick={onClose}
+      dir="rtl"
+    >
+      <div
+        className="bg-card border rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-3 border-b flex items-center justify-between">
+          <h4 className="font-bold text-sm">شرح کامل</h4>
+          <Button size="icon" variant="ghost" onClick={onClose} aria-label="بستن">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="p-4 overflow-y-auto text-sm leading-7 whitespace-pre-wrap break-words" dir="auto">
+          {text}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 const PAGE_SIZE = 15;
 
