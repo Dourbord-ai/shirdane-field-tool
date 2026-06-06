@@ -11,7 +11,103 @@ import {
   BeneficiaryStatementComparison,
   StatementRow,
 } from "@/lib/beneficiaryStatement";
-import { X, Download, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, Download, RefreshCw, AlertTriangle, Eye } from "lucide-react";
+
+// How many characters to show before the "نمایش کامل" trigger appears in the
+// description column. Tuned so the row stays single-line on desktop but long
+// shrh strings (typical Sepidar text) still get the expand affordance.
+const DESCRIPTION_PREVIEW_LIMIT = 60;
+
+/**
+ * Render the running balance with sign-driven semantic color:
+ *   balance > 0 → بستانکار  → green
+ *   balance < 0 → بدهکار   → red
+ *   balance = 0 → بی‌حساب  → neutral foreground
+ * We delegate to MoneyCell so number formatting stays consistent with the
+ * rest of the finance UI; we only flip the positive/negative tone props.
+ */
+function BalanceCell({ value }: { value: number }) {
+  const positive = value > 0;
+  const negative = value < 0;
+  return <MoneyCell value={value} positive={positive} negative={negative} />;
+}
+
+/**
+ * Description cell with overflow handling. Short text renders inline as
+ * before; long text is truncated and gets an "نمایش کامل" eye-button that
+ * surfaces the full text in a modal so nothing is silently clipped.
+ */
+function DescriptionCell({
+  text,
+  onExpand,
+}: {
+  text: string;
+  onExpand: (full: string) => void;
+}) {
+  const value = text || "";
+  const isLong = value.length > DESCRIPTION_PREVIEW_LIMIT;
+  if (!value) return <span className="text-muted-foreground">—</span>;
+  return (
+    <div className="flex items-start gap-1 max-w-xs">
+      <span
+        className="truncate text-foreground/90"
+        title={value}
+        dir="auto"
+      >
+        {value}
+      </span>
+      {isLong && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 shrink-0"
+          onClick={() => onExpand(value)}
+          aria-label="نمایش کامل شرح"
+          title="نمایش کامل شرح"
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Simple RTL modal used to display a long description in full without
+ * clipping. Kept local to this dialog because no other screen needs it.
+ */
+function DescriptionModal({
+  text,
+  onClose,
+}: {
+  text: string | null;
+  onClose: () => void;
+}) {
+  if (!text) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+      onClick={onClose}
+      dir="rtl"
+    >
+      <div
+        className="bg-card border rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-3 border-b flex items-center justify-between">
+          <h4 className="font-bold text-sm">شرح کامل</h4>
+          <Button size="icon" variant="ghost" onClick={onClose} aria-label="بستن">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="p-4 overflow-y-auto text-sm leading-7 whitespace-pre-wrap break-words" dir="auto">
+          {text}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 const PAGE_SIZE = 15;
 
@@ -24,6 +120,10 @@ export default function BeneficiaryStatementCompareDialog({
 }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BeneficiaryStatementComparison | null>(null);
+  // Holds the full description text when the user clicks the "نمایش کامل"
+  // eye-button on a row whose description is too long for the table cell.
+  // null = modal closed.
+  const [expandedDescription, setExpandedDescription] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -74,14 +174,30 @@ export default function BeneficiaryStatementCompareDialog({
               در حال واکشی صورتحساب...
             </div>
           )}
-          {!loading && data && <Body data={data} />}
+          {!loading && data && (
+            <Body data={data} onExpandDescription={setExpandedDescription} />
+          )}
         </div>
       </div>
+      {/* Full-description modal lives at the dialog root so it overlays the
+          entire compare dialog (z-[60] > z-50). */}
+      <DescriptionModal
+        text={expandedDescription}
+        onClose={() => setExpandedDescription(null)}
+      />
     </div>
   );
 }
 
-function Body({ data }: { data: BeneficiaryStatementComparison }) {
+function Body({
+  data,
+  onExpandDescription,
+}: {
+  data: BeneficiaryStatementComparison;
+  // Passed down to StatementTable so per-row "نمایش کامل" can trigger the
+  // shared modal mounted at the dialog root.
+  onExpandDescription: (text: string) => void;
+}) {
   const totalDiffs =
     data.onlyInInternal.length +
     data.onlyInSepidar.length +
@@ -140,6 +256,7 @@ function Body({ data }: { data: BeneficiaryStatementComparison }) {
             rows={data.internalStatement}
             kind="internal"
             onExport={() => exportStatementToExcel(data, "internal")}
+            onExpandDescription={onExpandDescription}
           />
         </TabsContent>
         <TabsContent value="sepidar" className="mt-3">
@@ -148,6 +265,7 @@ function Body({ data }: { data: BeneficiaryStatementComparison }) {
             rows={data.sepidarStatement}
             kind="sepidar"
             onExport={() => exportStatementToExcel(data, "sepidar")}
+            onExpandDescription={onExpandDescription}
           />
         </TabsContent>
         <TabsContent value="diff" className="mt-3">
@@ -196,11 +314,14 @@ function StatementTable({
   rows,
   kind,
   onExport,
+  onExpandDescription,
 }: {
   title: string;
   rows: StatementRow[];
   kind: "internal" | "sepidar";
   onExport: () => void;
+  // Opens the shared full-description modal in the parent dialog.
+  onExpandDescription: (text: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -271,10 +392,19 @@ function StatementTable({
               <tr key={r.id} className="border-t hover:bg-muted/30">
                 <td className="p-2 whitespace-nowrap"><JalaliDateCell value={r.date} /></td>
                 <td className="p-2 font-mono text-xs">{r.documentNumber || "—"}</td>
-                <td className="p-2 max-w-xs truncate" title={r.description}>{r.description || "—"}</td>
+                {/* Description: truncated inline with an "نمایش کامل" eye
+                    button for long Sepidar/internal voucher narrations. */}
+                <td className="p-2">
+                  <DescriptionCell
+                    text={r.description}
+                    onExpand={onExpandDescription}
+                  />
+                </td>
+                {/* Strictly map debit→بدهکار and credit→بستانکار; the running
+                    balance gets red/green/neutral tone from BalanceCell. */}
                 <td className="p-2"><MoneyCell value={r.debit} /></td>
                 <td className="p-2"><MoneyCell value={r.credit} /></td>
-                <td className="p-2"><MoneyCell value={r.balance} /></td>
+                <td className="p-2"><BalanceCell value={r.balance} /></td>
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.dlCode || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2">{r.dlTitle || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.slCode || "—"}</td>}

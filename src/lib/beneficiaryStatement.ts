@@ -210,8 +210,32 @@ async function fetchSepidar(
 
     let bal = 0;
     const rows: StatementRow[] = list.map((r, i) => {
-      const debit = num(pick(r, "Debit", "debit", "DebitAmount", "debitAmount"));
-      const credit = num(pick(r, "Credit", "credit", "CreditAmount", "creditAmount"));
+      // Sepidar's stored procedure can label the debit/credit columns in a
+      // variety of ways depending on the bridge version (English, Persian
+      // transliterations, or short forms). We accept all known variants so the
+      // UI never accidentally puts a credit value in the debit column.
+      const debit = num(
+        pick(
+          r,
+          "Debit", "debit", "DebitAmount", "debitAmount",
+          "Debtor", "DebtorAmount", "debtor", "debtorAmount",
+          "Bed", "BedAmount", "Bedehkar", "BedehkarAmount",
+          "بدهکار", "مبلغ بدهکار",
+        ),
+      );
+      const credit = num(
+        pick(
+          r,
+          "Credit", "credit", "CreditAmount", "creditAmount",
+          "Creditor", "CreditorAmount", "creditor", "creditorAmount",
+          "Bes", "BesAmount", "Bestankar", "BestankarAmount",
+          "بستانکار", "مبلغ بستانکار",
+        ),
+      );
+      // Running balance is ALWAYS recomputed client-side as
+      //   balance = Σ credit − Σ debit
+      // so the table stays consistent even if the SP returns a stale or
+      // pre-formatted balance column.
       bal += credit - debit;
       const dateRaw = pick<string>(r, "VoucherDate", "voucher_date", "Date");
       return {
