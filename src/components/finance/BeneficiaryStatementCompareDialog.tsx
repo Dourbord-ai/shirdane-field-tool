@@ -392,10 +392,19 @@ function StatementTable({
               <tr key={r.id} className="border-t hover:bg-muted/30">
                 <td className="p-2 whitespace-nowrap"><JalaliDateCell value={r.date} /></td>
                 <td className="p-2 font-mono text-xs">{r.documentNumber || "—"}</td>
-                <td className="p-2 max-w-xs truncate" title={r.description}>{r.description || "—"}</td>
+                {/* Description: truncated inline with an "نمایش کامل" eye
+                    button for long Sepidar/internal voucher narrations. */}
+                <td className="p-2">
+                  <DescriptionCell
+                    text={r.description}
+                    onExpand={onExpandDescription}
+                  />
+                </td>
+                {/* Strictly map debit→بدهکار and credit→بستانکار; the running
+                    balance gets red/green/neutral tone from BalanceCell. */}
                 <td className="p-2"><MoneyCell value={r.debit} /></td>
                 <td className="p-2"><MoneyCell value={r.credit} /></td>
-                <td className="p-2"><MoneyCell value={r.balance} /></td>
+                <td className="p-2"><BalanceCell value={r.balance} /></td>
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.dlCode || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2">{r.dlTitle || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.slCode || "—"}</td>}
