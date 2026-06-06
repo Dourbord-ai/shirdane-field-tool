@@ -112,7 +112,7 @@ export default function SettlementSourceCard({ source, errors, onPatch }: Props)
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px]">تعداد پرداخت</Label>
+              <Label className="text-[11px]">تعداد مراحل تسویه</Label>
               <Input
                 type="number"
                 inputMode="numeric"
@@ -125,6 +125,9 @@ export default function SettlementSourceCard({ source, errors, onPatch }: Props)
                   onPatch({ payments: next.payments });
                 }}
               />
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                مشخص کنید این مبلغ در چند مرحله یا نوبت پرداخت خواهد شد.
+              </p>
             </div>
             <div className="space-y-1 col-span-2 flex items-end">
               <Button
