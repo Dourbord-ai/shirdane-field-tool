@@ -343,6 +343,8 @@ export default function FinanceReportsTab() {
                 <th className="text-right p-2"><SortHeader k="creditor">بستانکار</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="balance">مانده</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="request_balance">درخواست تسویه تایید شده</SortHeader></th>
+                {/* ستون اکشن — بدون مرتب‌سازی، فقط دکمهٔ مشاهدهٔ اسناد. */}
+                <th className="text-right p-2">اقدامات</th>
               </tr>
               <tr className="border-b">
                 <th className="p-1"><Input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
@@ -350,6 +352,7 @@ export default function FinanceReportsTab() {
                 <th className="p-1"><Input value={fCreditor} onChange={(e) => setFCreditor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fBalance} onChange={(e) => setFBalance(e.target.value)} placeholder="|≥|" inputMode="numeric" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fRequest} onChange={(e) => setFRequest(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
+                <th className="p-1" />
               </tr>
             </thead>
             <tbody>
@@ -358,13 +361,31 @@ export default function FinanceReportsTab() {
                 // هم‌خوان بماند و هیچ‌گاه UI با خودش تناقض نداشته باشد.
                 const balTone = p.balance < 0 ? "debit" : p.balance > 0 ? "credit" : "neutral";
                 return (
-                  <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
+                  <tr
+                    key={p.id}
+                    className="border-b border-border/50 hover:bg-muted/30 cursor-pointer"
+                    // کلیک روی خود ردیف هم مودال اسناد را باز می‌کند تا تجربهٔ
+                    // «کلیک روی ذینفع» راحت‌تر باشد؛ دکمه روی سلول آخر هم
+                    // به‌صورت صریح در دسترس است.
+                    onClick={() => setOpenVouchersFor(p)}
+                  >
                     <td className="p-2 font-medium">{p.display_name}</td>
                     {/* همیشه 0 نمایش داده می‌شود (نه خالی) وقتی گردشی نیست. */}
                     <td className="p-2"><Money value={p.debtor} tone="debit" /></td>
                     <td className="p-2"><Money value={p.creditor} tone="credit" /></td>
                     <td className="p-2"><Money value={p.balance} tone={balTone} /></td>
                     <td className="p-2"><Money value={p.request_balance} tone="neutral" /></td>
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1 text-xs"
+                        onClick={() => setOpenVouchersFor(p)}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        مشاهده اسناد
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
