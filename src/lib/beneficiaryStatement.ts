@@ -207,28 +207,28 @@ async function fetchSepidar(
       }
       return undefined;
     };
-    const pickStrictAmount = (r: Record<string, unknown>, ...keys: string[]): number => {
-      // Debit and credit must be independent columns. This intentionally does
-      // NOT fall back to Persian titles, debtor/creditor labels, Bed/Bes names,
-      // or any generic amount field, because those aliases have caused Sepidar
-      // credit values to appear in the debit column. Null/empty values become 0.
-      return num(pick(r, ...keys));
+    // Read ONLY the canonical SP columns. bridge.GetBeneficiaryStatement
+    // returns `DebitAmount` and `CreditAmount` — any other alias (Debit, Bed,
+    // amount, etc.) has historically caused credit values to leak into the
+    // debit column, so we deliberately do NOT accept fallbacks.
+    const readAmount = (r: Record<string, unknown>, canonical: "DebitAmount" | "CreditAmount"): number => {
+      // Case-insensitive lookup so SQL drivers that lowercase identifiers
+      // still work, but restricted to the exact canonical column name.
+      let raw = r[canonical];
+      if (raw === undefined) {
+        const found = Object.keys(r).find((k) => k.toLowerCase() === canonical.toLowerCase());
+        raw = found ? r[found] : undefined;
+      }
+      return num(raw);
     };
 
     let bal = 0;
     const rows: StatementRow[] = list.map((r, i) => {
-      // Strict Sepidar amount mapping:
-      //   بدهکار   ← ONLY debit / debit_amount style fields
-      //   بستانکار ← ONLY credit / credit_amount style fields
-      // No cross-field fallback is allowed; if one side is null/missing it must
-      // render and calculate as 0, not borrow the value from the opposite side.
-      const debit = pickStrictAmount(r, "debit", "debit_amount", "debitAmount", "Debit", "DebitAmount");
-      const credit = pickStrictAmount(r, "credit", "credit_amount", "creditAmount", "Credit", "CreditAmount");
-      // Running balance is ALWAYS recomputed client-side as
-      //   balance = Σ credit − Σ debit
-      // so the table stays consistent even if the SP returns a stale or
-      // pre-formatted balance column.
+      const debit = readAmount(r, "DebitAmount");
+      const credit = readAmount(r, "CreditAmount");
+      // Running balance is ALWAYS Σ credit − Σ debit (client-side recompute).
       bal += credit - debit;
+
       const dateRaw = pick<string>(r, "VoucherDate", "voucher_date", "Date");
       return {
         id: `sep-${i}`,
