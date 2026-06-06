@@ -127,15 +127,61 @@ async function fetchInternal(
     return da - db;
   });
 
+  // -------------------------------------------------------------------------
+  // TIMEZONE FIX (اسناد برنامه date column):
+  // finance_vouchers.voucher_date is `timestamptz`. Values are stored as UTC
+  // instants (e.g. `2026-05-26T20:30:00Z` which is Tehran 1405/03/06 00:00).
+  // The downstream JalaliDateCell → formatJalaliDate uses the BROWSER's local
+  // timezone (`d.getDate()`), so a UTC/non-Tehran browser renders the prior
+  // Gregorian day and therefore the prior Jalali day. The actual `voucher_date`
+  // chosen by the user in Tehran is correct in DB — only the display drifts.
+  //
+  // We normalise here by re-projecting the instant into Asia/Tehran and
+  // emitting a date-only "YYYY-MM-DD" string. Because that string has no time
+  // component, `new Date("YYYY-MM-DD")` parses it as UTC midnight and the
+  // browser-local `getDate()` then returns the same day regardless of TZ.
+  // -------------------------------------------------------------------------
+  const tehranYmdFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tehran",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const toTehranYmd = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso; // fallback: leave untouched
+    // en-CA → "YYYY-MM-DD"
+    return tehranYmdFmt.format(d);
+  };
+
   let bal = opening;
   const rows: StatementRow[] = inRange.map((r) => {
     const debit = r.debit || 0;
     const credit = r.credit || 0;
     bal += credit - debit;
     const v = r.finance_vouchers;
+    const rawVoucherDate = v?.voucher_date ?? null;
+    const normalisedDate = toTehranYmd(rawVoucherDate);
+
+    // Debug logging: emit a single grouped sample for the FIRST row only so
+    // production console isn't spammed. Lets us compare DB value vs r.date vs
+    // what the UI eventually renders (the cell calls formatJalaliDate on
+    // r.date which now equals the Tehran calendar day).
+    if (typeof window !== "undefined" && (window as unknown as { __statementDateDebug?: boolean }).__statementDateDebug !== true) {
+      (window as unknown as { __statementDateDebug?: boolean }).__statementDateDebug = true;
+      // eslint-disable-next-line no-console
+      console.log("[beneficiaryStatement] date mapping sample", {
+        voucherId: v?.id,
+        rawVoucherDateFromDb: rawVoucherDate,
+        rDateNormalisedToTehran: normalisedDate,
+        browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+    }
+
     return {
       id: r.id,
-      date: v?.voucher_date || null,
+      date: normalisedDate,
       description: r.description || v?.title || "",
       debit,
       credit,
