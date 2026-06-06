@@ -167,10 +167,13 @@ function sameParamList(actual: string[], expected: string[]): boolean {
   return actual.length === expected.length && actual.every((name, index) => name === expected[index]);
 }
 
-// RequestType mapping per Sepidar conventions:
-//   1 = payment, 2 = receive
+// RequestType mapping per bridge.CreateBankVoucher conventions:
+//   0 = receive (bank debit / party credit)
+//   1..7 = payment (party debit / bank credit)
+// Previously receive_identification was set to 2, which routed receipts into
+// the payment branch of the SP and posted vouchers with reversed sides.
 const REQUEST_TYPE: Record<string, number> = {
-  receive_identification: 2,
+  receive_identification: 0,
   payment_allocation: 1,
   payment_request: 1,
 };
