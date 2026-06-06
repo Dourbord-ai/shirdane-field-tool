@@ -256,6 +256,7 @@ function Body({
             rows={data.internalStatement}
             kind="internal"
             onExport={() => exportStatementToExcel(data, "internal")}
+            onExpandDescription={onExpandDescription}
           />
         </TabsContent>
         <TabsContent value="sepidar" className="mt-3">
@@ -264,6 +265,7 @@ function Body({
             rows={data.sepidarStatement}
             kind="sepidar"
             onExport={() => exportStatementToExcel(data, "sepidar")}
+            onExpandDescription={onExpandDescription}
           />
         </TabsContent>
         <TabsContent value="diff" className="mt-3">
