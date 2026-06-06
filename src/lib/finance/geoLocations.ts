@@ -86,6 +86,20 @@ export async function createGeoLocation(input: {
     })
     .select("id, name, province, city, kind, notes")
     .single();
-  if (error) throw error;
+  if (error) {
+    // Translate well-known Postgres error codes into Persian operator
+    // messages so the freight cost editor never surfaces raw SQL/Supabase
+    // text. 23505 = unique_violation (enforced by geo_locations_unique_name_idx).
+    // 42501 = insufficient_privilege (should no longer happen after the
+    // anon RLS migration, but we still guard so the UI degrades gracefully).
+    const code = (error as { code?: string }).code;
+    if (code === "23505") {
+      throw new Error("این مکان قبلاً ثبت شده است");
+    }
+    if (code === "42501") {
+      throw new Error("اجازه ثبت مکان جدید را ندارید");
+    }
+    throw new Error(error.message || "خطا در ثبت مکان جدید");
+  }
   return (data as unknown) as GeoLocation;
 }
