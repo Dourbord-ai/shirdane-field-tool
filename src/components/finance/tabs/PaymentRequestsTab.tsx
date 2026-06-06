@@ -418,59 +418,96 @@ export default function PaymentRequestsTab() {
       </div>
 
 
-      {/* Filter toolbar — search + type + status + voucher + payment.
+      {/* Filter toolbar — search + type + status + voucher + payment + date range + requester.
           All filters compose: server-side ones refetch, client-side ones
           narrow the in-memory list. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-        <Input
-          placeholder="جستجو در کد / عنوان / توضیحات…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">همه موارد</option>
-          {PAYMENT_REQUEST_TYPES.map((t) => (
-            <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">همه وضعیت‌ها</option>
-          {/* Use a controlled subset of statuses — only the ones the
-              business asked us to expose as filters. */}
-          {["pending_approval", "approved", "rejected", "cancelled", "paid", "partially_paid"].map((s) => (
-            <option key={s} value={s}>{PAYMENT_REQUEST_STATUS_LABEL[s] || s}</option>
-          ))}
-        </select>
-        <select
-          value={voucherFilter}
-          onChange={(e) => setVoucherFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">سند: همه</option>
-          <option value="with">دارای سند</option>
-          <option value="without">بدون سند</option>
-        </select>
-        <select
-          value={paymentFilter}
-          onChange={(e) => setPaymentFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">پرداخت: همه</option>
-          {/* Four mutually-exclusive buckets, definitions matching the
-              numeric predicates in `load()` and the mirror in `filtered`. */}
-          {/* Three buckets stored on `payment_status` column directly. */}
-          <option value="unpaid">پرداخت نشده</option>
-          <option value="partial_payment">پرداخت ناقص</option>
-          <option value="full_payment">پرداخت کامل</option>
-        </select>
+      <div className="space-y-2">
+        {/* Row 1: existing filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <Input
+            placeholder="جستجو در کد / عنوان / توضیحات…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">همه موارد</option>
+            {PAYMENT_REQUEST_TYPES.map((t) => (
+              <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">همه وضعیت‌ها</option>
+            {/* Use a controlled subset of statuses — only the ones the
+                business asked us to expose as filters. */}
+            {["pending_approval", "approved", "rejected", "cancelled", "paid", "partially_paid"].map((s) => (
+              <option key={s} value={s}>{PAYMENT_REQUEST_STATUS_LABEL[s] || s}</option>
+            ))}
+          </select>
+          <select
+            value={voucherFilter}
+            onChange={(e) => setVoucherFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">سند: همه</option>
+            <option value="with">دارای سند</option>
+            <option value="without">بدون سند</option>
+          </select>
+          <select
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">پرداخت: همه</option>
+            {/* Four mutually-exclusive buckets, definitions matching the
+                numeric predicates in `load()` and the mirror in `filtered`. */}
+            {/* Three buckets stored on `payment_status` column directly. */}
+            <option value="unpaid">پرداخت نشده</option>
+            <option value="partial_payment">پرداخت ناقص</option>
+            <option value="full_payment">پرداخت کامل</option>
+          </select>
+        </div>
+
+        {/* Row 2: date range + requester + clear */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+          <ShamsiDatePicker
+            value={dateFrom}
+            onChange={setDateFrom}
+            placeholder="تاریخ درخواست (از)"
+          />
+          <ShamsiDatePicker
+            value={dateTo}
+            onChange={setDateTo}
+            placeholder="تاریخ درخواست (تا)"
+          />
+          <SearchableSelect
+            options={[
+              { value: "", label: "همه درخواست‌دهنده‌ها" },
+              ...users.map((u) => ({
+                value: u.id,
+                label: u.full_name || u.username,
+              })),
+            ]}
+            value={requesterFilter}
+            onChange={setRequesterFilter}
+            placeholder="درخواست‌دهنده"
+          />
+          <Button
+            variant="outline"
+            onClick={clearFilters}
+            className="h-10"
+          >
+            <X className="w-4 h-4 ml-1" />
+            پاک کردن فیلترها
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
