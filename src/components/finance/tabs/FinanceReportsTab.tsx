@@ -133,6 +133,11 @@ export default function FinanceReportsTab() {
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
 
+  // ذینفع انتخاب‌شده برای مودال «مشاهده اسناد». null یعنی مودال بسته است.
+  // ViewRow کامل را نگه می‌داریم تا خلاصهٔ بالای مودال (بدهکار/بستانکار/مانده)
+  // را بدون رفت‌وبرگشت اضافه با سرور پاس بدهیم.
+  const [openVouchersFor, setOpenVouchersFor] = useState<ViewRow | null>(null);
+
   // دباونس جستجو تا روی هر کلید فیلتر دوباره ساخته نشود.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
