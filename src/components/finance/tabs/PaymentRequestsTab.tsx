@@ -268,7 +268,7 @@ export default function PaymentRequestsTab() {
   // Refetch whenever any SERVER-side filter changes. paymentFilter is now
   // server-side too (it maps to numeric column predicates), so it joins the
   // dependency list. Local-only filters (search, voucher presence) stay out.
-  useEffect(() => { void load(); }, [typeFilter, statusFilter, paymentFilter]);
+  useEffect(() => { void load(); }, [typeFilter, statusFilter, paymentFilter, dateFrom, dateTo, requesterFilter]);
 
   async function load() {
     let q = supabase
