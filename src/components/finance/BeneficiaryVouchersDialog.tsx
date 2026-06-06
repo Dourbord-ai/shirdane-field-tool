@@ -26,10 +26,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Eye, RefreshCw, X } from "lucide-react";
+import { Loader2, Eye, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { formatMoney, formatJalaliDate } from "@/lib/finance";
 import { MoneyCell, JalaliDateCell, SepidarStatusBadge } from "@/components/finance/atoms";
 import { toast } from "sonner";
 
