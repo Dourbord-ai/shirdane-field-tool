@@ -23,7 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/finance";
 import { cn } from "@/lib/utils";
-import { ChevronUp, ChevronDown, Search, Loader2 } from "lucide-react";
+import { ChevronUp, ChevronDown, Search, Loader2, FileText } from "lucide-react";
+import BeneficiaryVouchersDialog from "@/components/finance/BeneficiaryVouchersDialog";
 
 const PAGE_SIZE = 25;
 
