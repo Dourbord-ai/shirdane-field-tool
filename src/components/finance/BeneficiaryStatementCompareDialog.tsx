@@ -111,6 +111,23 @@ function DescriptionModal({
 
 const PAGE_SIZE = 15;
 
+/**
+ * Renderer-level guards for Sepidar/internal statement amount columns.
+ * These helpers deliberately return ONLY the matching field and convert
+ * null/undefined/non-finite values to 0. They must never fall back from debit
+ * to credit (or credit to debit), because that is exactly what makes Sepidar
+ * بستانکاری appear under the بدهکاری column.
+ */
+function debitAmount(row: StatementRow): number {
+  const value = Number(row.debit ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function creditAmount(row: StatementRow): number {
+  const value = Number(row.credit ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
 export default function BeneficiaryStatementCompareDialog({
   beneficiaryId,
   onClose,
@@ -400,10 +417,11 @@ function StatementTable({
                     onExpand={onExpandDescription}
                   />
                 </td>
-                {/* Strictly map debit→بدهکار and credit→بستانکار; the running
-                    balance gets red/green/neutral tone from BalanceCell. */}
-                <td className="p-2"><MoneyCell value={r.debit} /></td>
-                <td className="p-2"><MoneyCell value={r.credit} /></td>
+                {/* Strict renderer mapping: بدهکار reads only row.debit and
+                    بستانکار reads only row.credit. Missing/null values display
+                    as 0; no UI fallback can copy credit into debit. */}
+                <td className="p-2"><MoneyCell value={debitAmount(r)} /></td>
+                <td className="p-2"><MoneyCell value={creditAmount(r)} /></td>
                 <td className="p-2"><BalanceCell value={r.balance} /></td>
                 {kind === "sepidar" && <td className="p-2 font-mono text-xs">{r.dlCode || "—"}</td>}
                 {kind === "sepidar" && <td className="p-2">{r.dlTitle || "—"}</td>}
@@ -536,8 +554,8 @@ function DiffGroup({
               <tr key={r.id} className="border-t">
                 <td className="p-2"><JalaliDateCell value={r.date} /></td>
                 <td className="p-2">{r.description || "—"}</td>
-                <td className="p-2"><MoneyCell value={r.debit} /></td>
-                <td className="p-2"><MoneyCell value={r.credit} /></td>
+                <td className="p-2"><MoneyCell value={debitAmount(r)} /></td>
+                <td className="p-2"><MoneyCell value={creditAmount(r)} /></td>
                 <td className="p-2 font-mono">{r.documentNumber || "—"}</td>
               </tr>
             ))}
@@ -596,8 +614,8 @@ function PairCard({
         <>
           <div className="flex justify-between"><span>تاریخ:</span><JalaliDateCell value={row.date} /></div>
           <div className="flex justify-between"><span>شرح:</span><span className="truncate max-w-[60%]" dir="auto">{row.description || "—"}</span></div>
-          <div className="flex justify-between"><span>بدهکار:</span><MoneyCell value={row.debit} /></div>
-          <div className="flex justify-between"><span>بستانکار:</span><MoneyCell value={row.credit} /></div>
+          <div className="flex justify-between"><span>بدهکار:</span><MoneyCell value={debitAmount(row)} /></div>
+          <div className="flex justify-between"><span>بستانکار:</span><MoneyCell value={creditAmount(row)} /></div>
           <div className="flex justify-between"><span>شماره سند:</span><span className="font-mono">{row.documentNumber || "—"}</span></div>
         </>
       ) : (

@@ -207,31 +207,23 @@ async function fetchSepidar(
       }
       return undefined;
     };
+    const pickStrictAmount = (r: Record<string, unknown>, ...keys: string[]): number => {
+      // Debit and credit must be independent columns. This intentionally does
+      // NOT fall back to Persian titles, debtor/creditor labels, Bed/Bes names,
+      // or any generic amount field, because those aliases have caused Sepidar
+      // credit values to appear in the debit column. Null/empty values become 0.
+      return num(pick(r, ...keys));
+    };
 
     let bal = 0;
     const rows: StatementRow[] = list.map((r, i) => {
-      // Sepidar's stored procedure can label the debit/credit columns in a
-      // variety of ways depending on the bridge version (English, Persian
-      // transliterations, or short forms). We accept all known variants so the
-      // UI never accidentally puts a credit value in the debit column.
-      const debit = num(
-        pick(
-          r,
-          "Debit", "debit", "DebitAmount", "debitAmount",
-          "Debtor", "DebtorAmount", "debtor", "debtorAmount",
-          "Bed", "BedAmount", "Bedehkar", "BedehkarAmount",
-          "بدهکار", "مبلغ بدهکار",
-        ),
-      );
-      const credit = num(
-        pick(
-          r,
-          "Credit", "credit", "CreditAmount", "creditAmount",
-          "Creditor", "CreditorAmount", "creditor", "creditorAmount",
-          "Bes", "BesAmount", "Bestankar", "BestankarAmount",
-          "بستانکار", "مبلغ بستانکار",
-        ),
-      );
+      // Strict Sepidar amount mapping:
+      //   بدهکار   ← ONLY debit / debit_amount style fields
+      //   بستانکار ← ONLY credit / credit_amount style fields
+      // No cross-field fallback is allowed; if one side is null/missing it must
+      // render and calculate as 0, not borrow the value from the opposite side.
+      const debit = pickStrictAmount(r, "debit", "debit_amount", "debitAmount", "Debit", "DebitAmount");
+      const credit = pickStrictAmount(r, "credit", "credit_amount", "creditAmount", "Credit", "CreditAmount");
       // Running balance is ALWAYS recomputed client-side as
       //   balance = Σ credit − Σ debit
       // so the table stays consistent even if the SP returns a stale or
