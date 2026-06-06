@@ -1408,7 +1408,7 @@ export default function MixedInvoiceForm() {
                   value={row.quantity}
                   onChange={(v) => updateRow(row.uid, { quantity: v })}
                 />
-                <FieldText
+                <FieldUnitSelect
                   label="واحد"
                   value={row.unit}
                   onChange={(v) => updateRow(row.uid, { unit: v })}
