@@ -169,6 +169,24 @@ export default function PaymentRequestsTab() {
   const [paymentFilter, setPaymentFilter] = useState<string>("");
   const [voucherFilter, setVoucherFilter] = useState<string>("");
 
+  // ---- New server-side filters: date range + requester ------------------
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [requesterFilter, setRequesterFilter] = useState<string>("");
+
+  // ---- Requester list (app_users) for the searchable dropdown -----------
+  const [users, setUsers] = useState<{ id: string; full_name: string | null; username: string }[]>([]);
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("app_users")
+        .select("id, full_name, username")
+        .eq("is_active", true)
+        .order("full_name", { ascending: true });
+      setUsers((data as typeof users) || []);
+    })();
+  }, []);
+
   // ---- Debounced search input -------------------------------------------
   // We keep two pieces of state: `searchInput` mirrors the controlled text
   // box, `searchTerm` is updated 300 ms after the user stops typing and
