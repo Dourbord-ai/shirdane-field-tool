@@ -409,6 +409,25 @@ export default function FinanceReportsTab() {
           </div>
         </footer>
       )}
+
+      {/* مودال «مشاهده اسناد» — همان مدلِ «مقایسه صورتحساب» اما فقط منبع
+          داخلی. partyId در render محافظت می‌شود تا قبل از اولین انتخاب
+          درخواستی به سرور نرود. */}
+      <BeneficiaryVouchersDialog
+        open={!!openVouchersFor}
+        onOpenChange={(o) => !o && setOpenVouchersFor(null)}
+        partyId={openVouchersFor?.id ?? null}
+        partyName={openVouchersFor?.display_name ?? ""}
+        summary={
+          openVouchersFor
+            ? {
+                debtor: openVouchersFor.debtor,
+                creditor: openVouchersFor.creditor,
+                balance: openVouchersFor.balance,
+              }
+            : undefined
+        }
+      />
     </section>
   );
 }
