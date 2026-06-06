@@ -1,16 +1,20 @@
 // ---------------------------------------------------------------------------
-// Finance → گزارش‌ها tab. Hosts the "وضعیت ذینفعان" report (moved here from
-// the global Reports page per product request). Read-only over
-// public.finance_parties. Never mutates balance or request_balance.
+// Finance → گزارش‌ها tab. Hosts the "وضعیت ذینفعان" report.
 //
-// What this tab supports:
-//  • Server-side pagination + global search (name/code/mobile)
-//  • Per-column filter inputs (sortable & filterable on every header)
-//  • Top quick-filter chips: همه / فقط بدهکار / فقط بستانکار
-//  • Two split columns: بدهکار (balance < 0) and بستانکار (balance > 0)
-//  • Drops the "وضعیت تایید سپیدار" column (excluded per spec)
-//  • Money cells rendered LTR so the negative sign stays on the LEFT of the
-//    digits even inside the RTL layout.
+// منبع داده (طبق درخواست محصول):
+//   مقادیر بدهکار/بستانکار/مانده مستقیماً از aggregate واقعی
+//   finance_voucher_items (با حذف اسناد soft-deleted) محاسبه می‌شوند، نه از
+//   ستون cache‌شدهٔ finance_parties.balance. این کار با RPC
+//   public.get_beneficiary_balances() در دیتابیس انجام می‌شود تا join و
+//   group by همانجا اجرا شود و ذینفعان بدون سند هم با مقدار 0 برگردند.
+//
+// فرمول‌ها (همان چیزی که RPC برمی‌گرداند):
+//   debtor_total   = SUM(COALESCE(vi.debit, 0))
+//   creditor_total = SUM(COALESCE(vi.credit, 0))
+//   balance        = creditor_total − debtor_total
+//   balance < 0 → بدهکار (قرمز)
+//   balance > 0 → بستانکار (سبز)
+//   balance = 0 → بی‌حساب (خنثی)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -23,7 +27,8 @@ import { ChevronUp, ChevronDown, Search, Loader2 } from "lucide-react";
 
 const PAGE_SIZE = 25;
 
-// Minimal row projection — matches the columns this report renders.
+// ردیف خام ذینفع که از finance_parties بارگذاری می‌شود — فقط ستون‌های نمایشی.
+// مقادیر مالی از RPC جداگانه می‌آیند تا منبع داده دقیقاً voucher_items باشد.
 interface PartyRow {
   id: string;
   company_name: string | null;
@@ -31,35 +36,33 @@ interface PartyRow {
   last_name: string | null;
   sepidar_full_name: string | null;
   ownership_type: string | null;
-  status: string | null;
-  approval_status: string | null;
-  balance: number | null;
   request_balance: number | null;
 }
 
-// Closed set of sortable keys → prevents bad strings reaching PostgREST.
-// `debtor` / `creditor` are derived from `balance`, so we sort by `balance`
-// server-side and only flip the direction depending on which side the user
-// clicked.
-type SortKey =
-  | "display_name"
-  | "debtor"
-  | "creditor"
-  | "balance"
-  | "request_balance";
+// خروجی RPC get_beneficiary_balances — برای هر ذینفع جمع بدهکار/بستانکار/مانده.
+interface BalanceRow {
+  party_id: string;
+  debtor_total: number | string | null;
+  creditor_total: number | string | null;
+  balance: number | string | null;
+  balance_status: "debtor" | "creditor" | "settled" | null;
+}
 
-const SORT_DB_COLUMN: Record<SortKey, string> = {
-  display_name: "sepidar_full_name",
-  debtor: "balance",
-  creditor: "balance",
-  balance: "balance",
-  request_balance: "request_balance",
-};
+// ردیف نهایی نمایشی — ترکیب اطلاعات نمایشی ذینفع با aggregate مالی.
+interface ViewRow {
+  id: string;
+  display_name: string;
+  debtor: number;   // جمع بدهکار (>= 0)
+  creditor: number; // جمع بستانکار (>= 0)
+  balance: number;  // creditor - debtor (می‌تواند منفی شود)
+  request_balance: number;
+}
 
-// Quick-filter for the balance sign — applied server-side via `.lt` / `.gt`
-// so the page count is correct.
-type SideFilter = "all" | "debtor" | "creditor";
+type SortKey = "display_name" | "debtor" | "creditor" | "balance" | "request_balance";
+type SideFilter = "all" | "debtor" | "creditor" | "settled";
 
+// نام نمایشی ذینفع: شخصیت حقوقی از company_name، حقیقی از first/last_name،
+// و در نبود همه، sepidar_full_name. این تابع همان منطق قبلی است.
 function computeDisplayName(p: PartyRow): string {
   if (p.company_name || p.ownership_type === "legal") {
     return p.company_name || p.sepidar_full_name || "—";
@@ -68,9 +71,7 @@ function computeDisplayName(p: PartyRow): string {
   return personal || p.sepidar_full_name || "—";
 }
 
-// Money cell — wraps the formatted number in dir="ltr" so the leading minus
-// sign visually sits to the LEFT of the digits, even though the surrounding
-// table is RTL. tabular-nums keeps column edges aligned for scanning.
+// سلول مبلغ — LTR تا علامت منفی سمت چپ ارقام دیده شود (داخل layout راست‌چین).
 function Money({ value, tone }: { value: number; tone?: "debit" | "credit" | "neutral" }) {
   if (!value) return <span className="text-muted-foreground">—</span>;
   const color =
@@ -92,143 +93,173 @@ function Money({ value, tone }: { value: number; tone?: "debit" | "credit" | "ne
   );
 }
 
+// تبدیل اعداد فارسی/عربی به ASCII تا فیلترهای عددی هم با ۱۲۳ کار کنند.
+function toAsciiNumber(s: string): number | null {
+  if (!s) return null;
+  const fa = "۰۱۲۳۴۵۶۷۸۹";
+  const ar = "٠١٢٣٤٥٦٧٨٩";
+  let out = s;
+  for (let i = 0; i < 10; i++) {
+    out = out.replace(new RegExp(fa[i], "g"), String(i));
+    out = out.replace(new RegExp(ar[i], "g"), String(i));
+  }
+  out = out.replace(/[،,\s]/g, "");
+  const n = Number(out);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function FinanceReportsTab() {
-  // ---- state --------------------------------------------------------------
-  const [rows, setRows] = useState<PartyRow[]>([]);
+  // داده‌های خام: همهٔ ذینفعان + همهٔ aggregateها یک‌بار بارگذاری می‌شوند.
+  // تعداد ذینفعان در حد چند صد است، بنابراین فیلتر/مرتب‌سازی/صفحه‌بندی روی
+  // کلاینت انجام می‌شود تا فیلترهای ترکیبی بدون رفت‌و‌برگشت با سرور کار کنند
+  // و شمارش صفحه‌ها دقیق بماند.
+  const [parties, setParties] = useState<PartyRow[]>([]);
+  const [balances, setBalances] = useState<Record<string, BalanceRow>>({});
   const [loading, setLoading] = useState(true);
+
+  // فیلترها
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("display_name");
-  const [sortAsc, setSortAsc] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [side, setSide] = useState<SideFilter>("all");
-
-  // Per-column filters — text for textual columns, numeric "≥" for amounts.
   const [fName, setFName] = useState("");
   const [fDebtor, setFDebtor] = useState("");
   const [fCreditor, setFCreditor] = useState("");
   const [fBalance, setFBalance] = useState("");
   const [fRequest, setFRequest] = useState("");
 
-  // Debounce the global search box — 300ms is enough to feel live but spares
-  // the DB on every keystroke (Persian IME may fire many events per char).
+  // مرتب‌سازی و صفحه‌بندی
+  const [sortKey, setSortKey] = useState<SortKey>("display_name");
+  const [sortAsc, setSortAsc] = useState(true);
+  const [page, setPage] = useState(1);
+
+  // دباونس جستجو تا روی هر کلید فیلتر دوباره ساخته نشود.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(t);
   }, [search]);
 
-  // Whenever any filter narrows the set, jump back to the first page so we
-  // never land on an out-of-range offset.
-  useEffect(() => setPage(1), [debouncedSearch, sortKey, sortAsc, side, fDebtor, fCreditor, fBalance, fRequest]);
+  // با تغییر هر فیلتر به صفحه اول برمی‌گردیم تا offset نامعتبر نشود.
+  useEffect(() => setPage(1), [debouncedSearch, side, fName, fDebtor, fCreditor, fBalance, fRequest, sortKey, sortAsc]);
 
+  // بارگذاری اولیه: موازی، چون دو منبع مستقل از هم هستند.
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortKey, sortAsc, page, side, fDebtor, fCreditor, fBalance, fRequest]);
-
-  // Persian/Arabic digit → ASCII so numeric filter inputs accept ۱۲۳ etc.
-  function toAsciiNumber(s: string): number | null {
-    if (!s) return null;
-    const fa = "۰۱۲۳۴۵۶۷۸۹";
-    const ar = "٠١٢٣٤٥٦٧٨٩";
-    let out = s;
-    for (let i = 0; i < 10; i++) {
-      out = out.replace(new RegExp(fa[i], "g"), String(i));
-      out = out.replace(new RegExp(ar[i], "g"), String(i));
-    }
-    out = out.replace(/[،,\s]/g, "");
-    const n = Number(out);
-    return Number.isFinite(n) ? n : null;
-  }
+  }, []);
 
   async function load() {
     setLoading(true);
+    // درخواست موازی: لیست ذینفعان + aggregate مالی. هردو read-only هستند و
+    // نتایج را در client با id کنار هم می‌چینیم.
+    const [pRes, bRes] = await Promise.all([
+      supabase
+        .from("finance_parties")
+        .select("id, company_name, first_name, last_name, sepidar_full_name, ownership_type, request_balance")
+        .or("is_deleted.is.null,is_deleted.eq.false")
+        .limit(5000),
+      // RPC تازه ساخته شده در migration — جمع بدهکار/بستانکار/مانده هر ذینفع
+      // را از روی finance_voucher_items (با حذف اسناد soft-deleted) برمی‌گرداند.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).rpc("get_beneficiary_balances"),
+    ]);
 
-    let q = supabase
-      .from("finance_parties")
-      .select(
-        "id, company_name, first_name, last_name, sepidar_full_name, ownership_type, status, approval_status, balance, request_balance",
-        { count: "exact" },
-      );
-
-    // Soft-delete guard — some rows have null is_deleted, treat as live.
-    q = q.or("is_deleted.is.null,is_deleted.eq.false");
-
-    // Top side filter (همه / فقط بدهکار / فقط بستانکار). Bank-style sign
-    // convention: balance < 0 = debtor, > 0 = creditor.
-    if (side === "debtor") q = q.lt("balance", 0);
-    else if (side === "creditor") q = q.gt("balance", 0);
-
-    if (debouncedSearch) {
-      const safe = debouncedSearch.replace(/[%,()*]/g, " ").trim();
-      if (safe) {
-        const pat = `*${safe}*`;
-        q = q.or(
-          [
-            `company_name.ilike.${pat}`,
-            `first_name.ilike.${pat}`,
-            `last_name.ilike.${pat}`,
-            `sepidar_full_name.ilike.${pat}`,
-            `national_code.ilike.${pat}`,
-            `national_id.ilike.${pat}`,
-            `mobile.ilike.${pat}`,
-          ].join(","),
-        );
-      }
-    }
-
-    // Numeric per-column filters — interpreted as "absolute value at least".
-    // debtor filter: balance <= -threshold ; creditor filter: balance >= threshold.
-    const debtorMin = toAsciiNumber(fDebtor);
-    if (debtorMin != null && debtorMin > 0) q = q.lte("balance", -debtorMin);
-    const creditorMin = toAsciiNumber(fCreditor);
-    if (creditorMin != null && creditorMin > 0) q = q.gte("balance", creditorMin);
-    const requestMin = toAsciiNumber(fRequest);
-    if (requestMin != null && requestMin > 0) q = q.gte("request_balance", requestMin);
-    // مانده |≥| → match rows whose absolute balance is at least the threshold.
-    const balMin = toAsciiNumber(fBalance);
-    if (balMin != null && balMin > 0) q = q.or(`balance.gte.${balMin},balance.lte.${-balMin}`);
-
-    q = q.order(SORT_DB_COLUMN[sortKey], {
-      // debtor column: smaller (more negative) balance comes first when ASC.
-      // creditor column: larger balance first when ASC. Invert ordering for
-      // creditor so the click-direction matches what users see in the cells.
-      ascending: sortKey === "creditor" ? !sortAsc : sortAsc,
-      nullsFirst: false,
-    });
-
-    const from = (page - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    q = q.range(from, to);
-
-    const { data, count, error } = await q;
-    if (!error) {
-      setRows((data as PartyRow[]) || []);
-      setTotalCount(count ?? 0);
+    if (!pRes.error && pRes.data) setParties(pRes.data as PartyRow[]);
+    if (!bRes.error && bRes.data) {
+      const map: Record<string, BalanceRow> = {};
+      for (const r of bRes.data as BalanceRow[]) map[r.party_id] = r;
+      setBalances(map);
     }
     setLoading(false);
   }
 
-  // Derived view — compute display name, then apply the per-column TEXT
-  // filters client-side (server already handled numeric/side filters).
-  const view = useMemo(() => {
-    let list = rows.map((r) => ({ ...r, _display: computeDisplayName(r) }));
+  // ترکیب اطلاعات نمایشی + aggregate مالی. ذینفعان بدون ردیف در RPC (که نباید
+  // پیش بیاید چون RPC از finance_parties با LEFT JOIN شروع می‌کند) و همچنین
+  // ذینفعانی که RPC به هر دلیل برنگردانده، با 0/0/0 رندر می‌شوند.
+  const enriched = useMemo<ViewRow[]>(() => {
+    return parties.map((p) => {
+      const b = balances[p.id];
+      const debtor = Number(b?.debtor_total ?? 0) || 0;
+      const creditor = Number(b?.creditor_total ?? 0) || 0;
+      const balance = Number(b?.balance ?? (creditor - debtor)) || 0;
+      return {
+        id: p.id,
+        display_name: computeDisplayName(p),
+        debtor,
+        creditor,
+        balance,
+        request_balance: Number(p.request_balance ?? 0) || 0,
+      };
+    });
+  }, [parties, balances]);
+
+  // اعمال فیلترها روی لیست ترکیب‌شده.
+  const filtered = useMemo<ViewRow[]>(() => {
+    let list = enriched;
+
+    // فیلتر سراسری جستجو — روی نام نمایشی.
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      list = list.filter((r) => r.display_name.toLowerCase().includes(q));
+    }
+
+    // فیلتر تک‌ستون نام
     if (fName) {
       const q = fName.toLowerCase();
-      list = list.filter((p) => p._display.toLowerCase().includes(q));
+      list = list.filter((r) => r.display_name.toLowerCase().includes(q));
     }
-    if (sortKey === "display_name") {
-      list.sort((a, b) => a._display.localeCompare(b._display, "fa"));
-      if (!sortAsc) list.reverse();
-    }
+
+    // فیلتر چیپ بالای جدول — همه/بدهکار/بستانکار/بی‌حساب
+    if (side === "debtor") list = list.filter((r) => r.balance < 0);
+    else if (side === "creditor") list = list.filter((r) => r.balance > 0);
+    else if (side === "settled") list = list.filter((r) => r.balance === 0);
+
+    // فیلترهای عددی ستونی — «حداقل مقدار»
+    const dMin = toAsciiNumber(fDebtor);
+    if (dMin != null && dMin > 0) list = list.filter((r) => r.debtor >= dMin);
+    const cMin = toAsciiNumber(fCreditor);
+    if (cMin != null && cMin > 0) list = list.filter((r) => r.creditor >= cMin);
+    const bMin = toAsciiNumber(fBalance);
+    if (bMin != null && bMin > 0) list = list.filter((r) => Math.abs(r.balance) >= bMin);
+    const rMin = toAsciiNumber(fRequest);
+    if (rMin != null && rMin > 0) list = list.filter((r) => r.request_balance >= rMin);
+
     return list;
-  }, [rows, sortKey, sortAsc, fName]);
+  }, [enriched, debouncedSearch, fName, side, fDebtor, fCreditor, fBalance, fRequest]);
 
-  const pageCount = Math.max(1, Math.ceil((totalCount ?? 0) / PAGE_SIZE));
+  // مرتب‌سازی — کلید display_name از localeCompare فارسی استفاده می‌کند.
+  const sorted = useMemo<ViewRow[]>(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "display_name") cmp = a.display_name.localeCompare(b.display_name, "fa");
+      else if (sortKey === "debtor") cmp = a.debtor - b.debtor;
+      else if (sortKey === "creditor") cmp = a.creditor - b.creditor;
+      else if (sortKey === "balance") cmp = a.balance - b.balance;
+      else if (sortKey === "request_balance") cmp = a.request_balance - b.request_balance;
+      return sortAsc ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortKey, sortAsc]);
 
-  // Header button — click toggles sort direction; same key already active
-  // flips ascending/descending, otherwise sets new key ascending.
+  // صفحه‌بندی روی نتیجه نهایی
+  const totalCount = sorted.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const view = useMemo(() => {
+    const from = (page - 1) * PAGE_SIZE;
+    return sorted.slice(from, from + PAGE_SIZE);
+  }, [sorted, page]);
+
+  // پاک‌کردن همه فیلترها — راحت‌تر از کلیک تک‌تک روی هر input.
+  function clearFilters() {
+    setSearch("");
+    setDebouncedSearch("");
+    setSide("all");
+    setFName("");
+    setFDebtor("");
+    setFCreditor("");
+    setFBalance("");
+    setFRequest("");
+  }
+
   function SortHeader({ k, children }: { k: SortKey; children: React.ReactNode }) {
     const active = sortKey === k;
     return (
@@ -254,13 +285,12 @@ export default function FinanceReportsTab() {
       <header className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold">وضعیت ذینفعان</h2>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Side quick-filter chips. Server-side balance.lt/gt → counts
-              stay accurate so pagination doesn't lie. */}
           <div className="inline-flex rounded-lg border bg-muted/30 p-1 text-xs">
             {([
               { k: "all", label: "همه" },
               { k: "debtor", label: "فقط بدهکار" },
               { k: "creditor", label: "فقط بستانکار" },
+              { k: "settled", label: "بی‌حساب" },
             ] as { k: SideFilter; label: string }[]).map((s) => (
               <button
                 key={s.k}
@@ -278,12 +308,16 @@ export default function FinanceReportsTab() {
           <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="جستجو نام، کد ملی، شناسه ملی، موبایل..."
+              placeholder="جستجو نام ذینفع..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pr-8"
             />
           </div>
+
+          <Button variant="outline" size="sm" onClick={clearFilters}>
+            پاک‌کردن فیلترها
+          </Button>
         </div>
       </header>
 
@@ -304,7 +338,6 @@ export default function FinanceReportsTab() {
                 <th className="text-right p-2"><SortHeader k="balance">مانده</SortHeader></th>
                 <th className="text-right p-2"><SortHeader k="request_balance">درخواست تسویه تایید شده</SortHeader></th>
               </tr>
-              {/* Per-column filter row — empty string means no filter. */}
               <tr className="border-b">
                 <th className="p-1"><Input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="فیلتر…" className="h-7 text-xs" /></th>
                 <th className="p-1"><Input value={fDebtor} onChange={(e) => setFDebtor(e.target.value)} placeholder="≥" inputMode="numeric" className="h-7 text-xs" /></th>
@@ -315,19 +348,17 @@ export default function FinanceReportsTab() {
             </thead>
             <tbody>
               {view.map((p) => {
-                const bal = Number(p.balance ?? 0);
-                // Split balance into the two visual columns — debtor cell only
-                // shows a value when balance is strictly negative, creditor
-                // cell only when strictly positive. Zero collapses to "—".
-                const debtor = bal < 0 ? -bal : 0;
-                const creditor = bal > 0 ? bal : 0;
+                // tone مانده فقط از علامت balance می‌آید تا با چیپ دسته‌بندی
+                // هم‌خوان بماند و هیچ‌گاه UI با خودش تناقض نداشته باشد.
+                const balTone = p.balance < 0 ? "debit" : p.balance > 0 ? "credit" : "neutral";
                 return (
                   <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
-                    <td className="p-2 font-medium">{p._display}</td>
-                    <td className="p-2"><Money value={debtor} tone="debit" /></td>
-                    <td className="p-2"><Money value={creditor} tone="credit" /></td>
-                    <td className="p-2"><Money value={bal} tone={bal < 0 ? "debit" : bal > 0 ? "credit" : "neutral"} /></td>
-                    <td className="p-2"><Money value={Number(p.request_balance ?? 0)} tone="neutral" /></td>
+                    <td className="p-2 font-medium">{p.display_name}</td>
+                    {/* همیشه 0 نمایش داده می‌شود (نه خالی) وقتی گردشی نیست. */}
+                    <td className="p-2"><Money value={p.debtor} tone="debit" /></td>
+                    <td className="p-2"><Money value={p.creditor} tone="credit" /></td>
+                    <td className="p-2"><Money value={p.balance} tone={balTone} /></td>
+                    <td className="p-2"><Money value={p.request_balance} tone="neutral" /></td>
                   </tr>
                 );
               })}
@@ -336,7 +367,7 @@ export default function FinanceReportsTab() {
         </div>
       )}
 
-      {totalCount !== null && totalCount > PAGE_SIZE && (
+      {totalCount > PAGE_SIZE && (
         <footer className="flex items-center justify-between text-xs text-muted-foreground pt-2">
           <span>
             صفحه {page} از {pageCount} — مجموع {totalCount.toLocaleString("fa-IR")} ذینفع
