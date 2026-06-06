@@ -7215,6 +7215,26 @@ export type Database = {
           verified_owner_name: string
         }[]
       }
+      get_beneficiaries_balance_report: {
+        Args: { p_limit?: number; p_offset?: number; p_search?: string }
+        Returns: {
+          balance: number
+          balance_status: string
+          company_name: string
+          credit_total: number
+          debit_total: number
+          first_name: string
+          last_name: string
+          mobile: string
+          national_code: string
+          national_id: string
+          ownership_type: string
+          party_id: string
+          party_name: string
+          sepidar_full_name: string
+          total_count: number
+        }[]
+      }
       get_beneficiary_balances: {
         Args: never
         Returns: {
