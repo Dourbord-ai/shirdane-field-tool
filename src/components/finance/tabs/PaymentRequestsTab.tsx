@@ -9,6 +9,7 @@ import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/fina
 import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
+import SearchableSelect from "@/components/SearchableSelect";
 import { toast } from "sonner";
 // Jalali calendar UI returns "YYYY/MM/DD" Jalali strings. We convert these
 // to Gregorian timestamp boundaries (start-of-day / end-of-day in Tehran)
@@ -91,6 +92,9 @@ interface PR {
   // the invoice that produced this request. NULL for legacy / independent
   // requests — those keep working exactly as before.
   source_factor_id?: string | null;
+  // The operator who created this settlement request. Maps to app_users.id
+  // so we can filter "my requests" or audit by requester.
+  requested_by: string | null;
   created_at: string;
 }
 
@@ -164,6 +168,24 @@ export default function PaymentRequestsTab() {
   //   "full_payment"   → payment_status = 'full_payment'
   const [paymentFilter, setPaymentFilter] = useState<string>("");
   const [voucherFilter, setVoucherFilter] = useState<string>("");
+
+  // ---- New server-side filters: date range + requester ------------------
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [requesterFilter, setRequesterFilter] = useState<string>("");
+
+  // ---- Requester list (app_users) for the searchable dropdown -----------
+  const [users, setUsers] = useState<{ id: string; full_name: string | null; username: string }[]>([]);
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("app_users")
+        .select("id, full_name, username")
+        .eq("is_active", true)
+        .order("full_name", { ascending: true });
+      setUsers((data as typeof users) || []);
+    })();
+  }, []);
 
   // ---- Debounced search input -------------------------------------------
   // We keep two pieces of state: `searchInput` mirrors the controlled text
@@ -246,7 +268,7 @@ export default function PaymentRequestsTab() {
   // Refetch whenever any SERVER-side filter changes. paymentFilter is now
   // server-side too (it maps to numeric column predicates), so it joins the
   // dependency list. Local-only filters (search, voucher presence) stay out.
-  useEffect(() => { void load(); }, [typeFilter, statusFilter, paymentFilter]);
+  useEffect(() => { void load(); }, [typeFilter, statusFilter, paymentFilter, dateFrom, dateTo, requesterFilter]);
 
   async function load() {
     let q = supabase
@@ -268,6 +290,20 @@ export default function PaymentRequestsTab() {
     // old numeric-derived predicates.
     if (paymentFilter) {
       q = q.eq("payment_status", paymentFilter);
+    }
+
+    // -------- Date range filter (based on created_at) -------------------
+    // Convert Jalali range to Gregorian timestamp boundaries anchored in
+    // Tehran timezone so Postgres timestamptz comparisons are correct.
+    if (dateFrom || dateTo) {
+      const { from, to } = jalaliRangeToGregorianRange(dateFrom, dateTo);
+      if (from) q = q.gte("created_at", from);
+      if (to) q = q.lte("created_at", to);
+    }
+
+    // -------- Requester filter (based on requested_by) ------------------
+    if (requesterFilter) {
+      q = q.eq("requested_by", requesterFilter);
     }
 
     const { data } = await q;
@@ -349,6 +385,20 @@ export default function PaymentRequestsTab() {
     });
   }, [requests, searchTerm, voucherFilter, requestsWithVoucher]);
 
+  // Reset every filter back to its default (empty / unselected) state so the
+  // operator can start fresh with a single click.
+  function clearFilters() {
+    setSearchInput("");
+    setSearchTerm("");
+    setTypeFilter("");
+    setStatusFilter("");
+    setPaymentFilter("");
+    setVoucherFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setRequesterFilter("");
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between flex-wrap gap-2">
@@ -368,59 +418,96 @@ export default function PaymentRequestsTab() {
       </div>
 
 
-      {/* Filter toolbar — search + type + status + voucher + payment.
+      {/* Filter toolbar — search + type + status + voucher + payment + date range + requester.
           All filters compose: server-side ones refetch, client-side ones
           narrow the in-memory list. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-        <Input
-          placeholder="جستجو در کد / عنوان / توضیحات…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">همه موارد</option>
-          {PAYMENT_REQUEST_TYPES.map((t) => (
-            <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">همه وضعیت‌ها</option>
-          {/* Use a controlled subset of statuses — only the ones the
-              business asked us to expose as filters. */}
-          {["pending_approval", "approved", "rejected", "cancelled", "paid", "partially_paid"].map((s) => (
-            <option key={s} value={s}>{PAYMENT_REQUEST_STATUS_LABEL[s] || s}</option>
-          ))}
-        </select>
-        <select
-          value={voucherFilter}
-          onChange={(e) => setVoucherFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">سند: همه</option>
-          <option value="with">دارای سند</option>
-          <option value="without">بدون سند</option>
-        </select>
-        <select
-          value={paymentFilter}
-          onChange={(e) => setPaymentFilter(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-        >
-          <option value="">پرداخت: همه</option>
-          {/* Four mutually-exclusive buckets, definitions matching the
-              numeric predicates in `load()` and the mirror in `filtered`. */}
-          {/* Three buckets stored on `payment_status` column directly. */}
-          <option value="unpaid">پرداخت نشده</option>
-          <option value="partial_payment">پرداخت ناقص</option>
-          <option value="full_payment">پرداخت کامل</option>
-        </select>
+      <div className="space-y-2">
+        {/* Row 1: existing filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <Input
+            placeholder="جستجو در کد / عنوان / توضیحات…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">همه موارد</option>
+            {PAYMENT_REQUEST_TYPES.map((t) => (
+              <option key={t.code} value={t.code}>{t.code} - {t.label}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">همه وضعیت‌ها</option>
+            {/* Use a controlled subset of statuses — only the ones the
+                business asked us to expose as filters. */}
+            {["pending_approval", "approved", "rejected", "cancelled", "paid", "partially_paid"].map((s) => (
+              <option key={s} value={s}>{PAYMENT_REQUEST_STATUS_LABEL[s] || s}</option>
+            ))}
+          </select>
+          <select
+            value={voucherFilter}
+            onChange={(e) => setVoucherFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">سند: همه</option>
+            <option value="with">دارای سند</option>
+            <option value="without">بدون سند</option>
+          </select>
+          <select
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">پرداخت: همه</option>
+            {/* Four mutually-exclusive buckets, definitions matching the
+                numeric predicates in `load()` and the mirror in `filtered`. */}
+            {/* Three buckets stored on `payment_status` column directly. */}
+            <option value="unpaid">پرداخت نشده</option>
+            <option value="partial_payment">پرداخت ناقص</option>
+            <option value="full_payment">پرداخت کامل</option>
+          </select>
+        </div>
+
+        {/* Row 2: date range + requester + clear */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+          <ShamsiDatePicker
+            value={dateFrom}
+            onChange={setDateFrom}
+            placeholder="تاریخ درخواست (از)"
+          />
+          <ShamsiDatePicker
+            value={dateTo}
+            onChange={setDateTo}
+            placeholder="تاریخ درخواست (تا)"
+          />
+          <SearchableSelect
+            options={[
+              { value: "", label: "همه درخواست‌دهنده‌ها" },
+              ...users.map((u) => ({
+                value: u.id,
+                label: u.full_name || u.username,
+              })),
+            ]}
+            value={requesterFilter}
+            onChange={setRequesterFilter}
+            placeholder="درخواست‌دهنده"
+          />
+          <Button
+            variant="outline"
+            onClick={clearFilters}
+            className="h-10"
+          >
+            <X className="w-4 h-4 ml-1" />
+            پاک کردن فیلترها
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
