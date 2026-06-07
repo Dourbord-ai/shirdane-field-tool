@@ -90,19 +90,20 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .eq("id", operationId)
             .maybeSingle();
           if (error) throw error;
-          if (!data) throw new Error("رکورد تخصیص پرداخت یافت نشد."); const d: any = data;
+          if (!data) throw new Error("رکورد تخصیص پرداخت یافت نشد.");
+          const d: any = data;
           // The PostgREST join returns the parent row as a nested object when
           // it's a many-to-one relation. We pluck the few fields we need.
-          const pr: any = data.finance_payment_requests || {};
-          const p: any = data.finance_parties || {};
+          const pr: any = d.finance_payment_requests || {};
+          const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
           setView({
             typeLabel: TYPE_LABEL[operationType],
-            refNumber: pr.title || pr.id || data.payment_request_id,
+            refNumber: pr.title || pr.id || d.payment_request_id,
             partyName: pn,
-            amount: Number(data.amount) || 0,
-            date: data.allocation_datetime,
-            status: data.status,
+            amount: Number(d.amount) || 0,
+            date: d.allocation_datetime,
+            status: d.status,
             description: pr.description,
             navTab: "payment-requests",
           });
@@ -116,17 +117,18 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .eq("id", operationId)
             .maybeSingle();
           if (error) throw error;
-          if (!data) throw new Error("رکورد شناسایی دریافت یافت نشد."); const d: any = data;
-          const p: any = data.finance_parties || {};
+          if (!data) throw new Error("رکورد شناسایی دریافت یافت نشد.");
+          const d: any = data;
+          const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
           setView({
             typeLabel: TYPE_LABEL[operationType],
-            refNumber: data.title || data.id,
+            refNumber: d.title || d.id,
             partyName: pn,
-            amount: Number(data.amount) || 0,
-            date: data.transaction_datetime,
-            status: data.status,
-            description: data.description,
+            amount: Number(d.amount) || 0,
+            date: d.transaction_datetime,
+            status: d.status,
+            description: d.description,
             navTab: "receive-id",
           });
         } else if (operationType === "bank_transfer") {
@@ -139,21 +141,23 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .eq("id", operationId)
             .maybeSingle();
           if (error) throw error;
-          if (!data) throw new Error("رکورد انتقال بانکی یافت نشد."); const d: any = data;
-          const fb: any = data.from_bank || {};
-          const tb: any = data.to_bank || {};
+          if (!data) throw new Error("رکورد انتقال بانکی یافت نشد.");
+          const d: any = data;
+          const fb: any = d.from_bank || {};
+          const tb: any = d.to_bank || {};
           setView({
             typeLabel: TYPE_LABEL[operationType],
-            refNumber: data.id,
+            refNumber: d.id,
             // For a bank-transfer there is no party; we surface the two banks
             // as the "counterparty" line so the operator gets context.
             partyName: `${fb.title || "—"} ← ${tb.title || "—"}`,
-            amount: Number(data.from_amount ?? data.to_amount) || 0,
-            date: data.transfer_datetime,
-            status: data.status,
-            description: data.description,
+            amount: Number(d.from_amount ?? d.to_amount) || 0,
+            date: d.transfer_datetime,
+            status: d.status,
+            description: d.description,
             navTab: "bank-transfer",
           });
+
         } else {
           // Unknown / future operation type — render a friendly placeholder.
           setError("جزئیات این نوع تخصیص هنوز پشتیبانی نمی‌شود.");
