@@ -8,7 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/finance/atoms";
 import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
-import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle } from "lucide-react";
+import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle, Pencil } from "lucide-react";
+// Phase-N: secure RPC-backed item-amount editor. The dialog handles its own
+// validation but the server-side guard inside
+// `fn_finance_update_payment_request_item_amount` is the source of truth.
+import EditItemAmountDialog, { canEditItemAmount } from "@/components/finance/EditItemAmountDialog";
 import SearchableSelect from "@/components/SearchableSelect";
 import { toast } from "sonner";
 // Jalali calendar UI returns "YYYY/MM/DD" Jalali strings. We convert these
@@ -1163,6 +1167,9 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [allocItem, setAllocItem] = useState<PRItemFull | null>(null);
+  // Item targeted by the "Edit amount" dialog. Separate from `allocItem` so
+  // the two dialogs can never collide and the row keeps its individual state.
+  const [editAmountItem, setEditAmountItem] = useState<PRItemFull | null>(null);
   const [headerRefresh, setHeaderRefresh] = useState<PR>(pr);
 
   async function reload() {
@@ -1464,6 +1471,23 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                     </Button>
                   )}
 
+                  {/* "Edit amount" button — visible only for items where the
+                      RPC will accept the call. Legacy rows are not editable
+                      here because their status is typically out of the
+                      whitelist; even if it slipped through, the RPC would
+                      reject the change. */}
+                  {!isLegacyItem(i) && canEditItemAmount(i.status, headerRefresh.status) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full border border-dashed"
+                      onClick={() => setEditAmountItem(i)}
+                    >
+                      <Pencil className="w-3.5 h-3.5 ml-1" /> ویرایش مبلغ
+                    </Button>
+                  )}
+
+
                   {/* Phase 8: per-item execution panel. The panel itself
                       no-ops for legacy rows (renders a tiny "read-only"
                       banner) so we don't need to guard here. After any
@@ -1605,6 +1629,24 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
           requestId={pr.id}
           onClose={() => setAllocItem(null)}
           onDone={async () => { setAllocItem(null); await reload(); }}
+        />
+      )}
+
+      {/* Edit-amount dialog. Reloads the request detail on success so the
+          item status badges, paid/remaining cells, and header progress
+          summary all reflect the new server-side values. */}
+      {editAmountItem && (
+        <EditItemAmountDialog
+          item={{
+            id: editAmountItem.id,
+            amount: Number(editAmountItem.amount || 0),
+            confirmed_amount: editAmountItem.confirmed_amount,
+            paid_amount: editAmountItem.paid_amount,
+            status: editAmountItem.status,
+          }}
+          requestStatus={headerRefresh.status}
+          onClose={() => setEditAmountItem(null)}
+          onSaved={reload}
         />
       )}
     </div>
