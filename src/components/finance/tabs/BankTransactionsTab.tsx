@@ -1562,7 +1562,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               </thead>
               <tbody>
                 {filtered.map((t) => {
-                  const eligible = isBulkAttachEligible(t);
+                  const eligible = isAnySelectionEligible(t);
                   const checked = selectedIds.has(t.id);
                   return (
                   <tr key={t.id} className={`border-t hover:bg-secondary/30 ${checked ? "bg-primary/5" : ""}`}>
