@@ -1778,7 +1778,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         <BulkAttachPaymentRequestDialog
           transactions={
             txs
-              .filter((t) => selectedIds.has(t.id))
+              // Defensive: now that the selection set may also include
+              // deposit/legacy rows (because they're delete-eligible), only
+              // pass attach-eligible rows to the attach dialog.
+              .filter((t) => selectedIds.has(t.id) && isBulkAttachEligible(t))
               .map<BulkAttachTx>((t) => ({
                 id: t.id,
                 withdraw_amount: t.withdraw_amount,
@@ -1793,6 +1796,20 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             // attached rows disappear from the unassigned view and the
             // user starts from a clean slate.
             setOpenBulkAttach(false);
+            clearSelection();
+            void load();
+          }}
+        />
+      )}
+      {/* Bulk delete dialog — receives the FULL selection so it can classify
+          and surface locked / legacy-locked rows to the operator. The
+          underlying RPC re-validates each row server-side. */}
+      {openBulkDelete && (
+        <BulkDeleteBankTxDialog
+          transactions={txs.filter((t) => selectedIds.has(t.id))}
+          onClose={() => setOpenBulkDelete(false)}
+          onDone={() => {
+            setOpenBulkDelete(false);
             clearSelection();
             void load();
           }}
