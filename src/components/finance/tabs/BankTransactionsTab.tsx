@@ -331,6 +331,9 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // the set even if data shifts between renders.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openBulkAttach, setOpenBulkAttach] = useState(false);
+  // Bulk-delete dialog visibility. Same selection set is reused so the
+  // operator doesn't have to re-pick rows when switching between actions.
+  const [openBulkDelete, setOpenBulkDelete] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // ---- Server-side pagination + counts -----------------------------------
