@@ -90,7 +90,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .eq("id", operationId)
             .maybeSingle();
           if (error) throw error;
-          if (!data) throw new Error("رکورد تخصیص پرداخت یافت نشد.");
+          if (!data) throw new Error("رکورد تخصیص پرداخت یافت نشد."); const d: any = data;
           // The PostgREST join returns the parent row as a nested object when
           // it's a many-to-one relation. We pluck the few fields we need.
           const pr: any = data.finance_payment_requests || {};
@@ -116,7 +116,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .eq("id", operationId)
             .maybeSingle();
           if (error) throw error;
-          if (!data) throw new Error("رکورد شناسایی دریافت یافت نشد.");
+          if (!data) throw new Error("رکورد شناسایی دریافت یافت نشد."); const d: any = data;
           const p: any = data.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
           setView({
@@ -139,7 +139,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .eq("id", operationId)
             .maybeSingle();
           if (error) throw error;
-          if (!data) throw new Error("رکورد انتقال بانکی یافت نشد.");
+          if (!data) throw new Error("رکورد انتقال بانکی یافت نشد."); const d: any = data;
           const fb: any = data.from_bank || {};
           const tb: any = data.to_bank || {};
           setView({
