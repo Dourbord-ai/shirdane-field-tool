@@ -4071,6 +4071,45 @@ export type Database = {
           },
         ]
       }
+      finance_payment_item_amount_audit: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          item_id: string
+          new_amount: number
+          old_amount: number | null
+          old_confirmed_amount: number | null
+          paid_amount_at_change: number
+          reason: string | null
+          request_id: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          item_id: string
+          new_amount: number
+          old_amount?: number | null
+          old_confirmed_amount?: number | null
+          paid_amount_at_change: number
+          reason?: string | null
+          request_id: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          item_id?: string
+          new_amount?: number
+          old_amount?: number | null
+          old_confirmed_amount?: number | null
+          paid_amount_at_change?: number
+          reason?: string | null
+          request_id?: string
+        }
+        Relationships: []
+      }
       finance_payment_request_items: {
         Row: {
           amount: number | null
@@ -7281,6 +7320,10 @@ export type Database = {
       fn_finance_request_approved_payable: {
         Args: { p_request_id: string }
         Returns: number
+      }
+      fn_finance_update_payment_request_item_amount: {
+        Args: { p_item_id: string; p_new_amount: number; p_reason?: string }
+        Returns: Json
       }
       fn_fpa_find_duplicates: {
         Args: {
