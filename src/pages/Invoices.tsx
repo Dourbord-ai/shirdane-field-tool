@@ -525,6 +525,25 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
           {state === "approved" ? "ثبت سند مالی در سپیدار" : "تلاش مجدد ثبت سپیدار"}
         </Button>
       )}
+
+      {/* Phase 4 — rollback for already-posted factors. Role-gated by the
+          dialog component itself. Hidden when no Sepidar voucher exists. */}
+      {isPosted && (
+        <RollbackButton
+          entityType="factor"
+          entityId={factor.id}
+          buttonClassName="w-full rounded-xl"
+          metadata={{
+            operationLabel: "فاکتور",
+            amount: Number((factor as { total_amount?: number | null }).total_amount ?? 0) || null,
+            sepidarVoucherId: factor.sepidar_voucher_id ?? factor.sepidar_voucher_number,
+            extraLines: [
+              { label: "شماره فاکتور", value: toPersianDigits(String((factor as { invoice_number?: string | number | null }).invoice_number ?? "—")) },
+            ],
+          }}
+          onSuccess={onChanged}
+        />
+      )}
     </div>
   );
 }
