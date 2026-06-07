@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-react";
 // Unified Jalali UI / Gregorian-ISO value date picker.
 import DatePicker from "@/components/DatePicker";
+// Phase 4 — rollback dialog for party transfers attached to a voucher.
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 // List row shape for finance_party_transfers. We deliberately fetch a narrow
 // set of columns to keep the query fast over the legacy import (≈207 rows).
