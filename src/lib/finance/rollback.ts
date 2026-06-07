@@ -975,7 +975,10 @@ export async function rollbackFinanceOperation(
 
   // Resolve operator from the API-based session (not auth.users — we use a
   // custom app_users table). This becomes rollback_by + performed_by.
-  const performedBy = getSession().user?.id ?? null;
+  // Guard against non-uuid sentinels (e.g. dev mode "0") that would explode
+  // PostgREST when written to uuid columns. toUuidOrNull → null fallback.
+  const performedBy = toUuidOrNull(getSession().user?.id);
+
 
   // ---- Dispatch ------------------------------------------------------------
   switch (input.entityType) {
