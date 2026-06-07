@@ -1576,7 +1576,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {t.assignment_status === "assigning" && (
                     <span className="text-[11px] text-amber-700">در انتظار تایید مدیر</span>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => setOpenRaw(t)}><FileText className="w-3 h-3 ml-1" /> جزئیات</Button>
+                  {/* Operation-details button — mirrors the desktop column.
+                      Only shown when the transaction has a resolved
+                      assignment so we know there is something to display. */}
+                  {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                    <Button size="sm" variant="outline" onClick={() => setOpenDetails(t)}>
+                      <FileText className="w-3 h-3 ml-1" /> جزئیات
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setOpenRaw(t)}><FileText className="w-3 h-3 ml-1" /> جزئیات خام</Button>
+
                   {t.assignment_status === "unassigned" && (
                     <Button size="sm" variant="ghost" onClick={() => softDelete(t)}><Trash2 className="w-3 h-3 ml-1" /> حذف</Button>
                   )}
