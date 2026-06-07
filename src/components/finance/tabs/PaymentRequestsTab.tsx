@@ -1471,6 +1471,23 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                     </Button>
                   )}
 
+                  {/* "Edit amount" button — visible only for items where the
+                      RPC will accept the call. Legacy rows are not editable
+                      here because their status is typically out of the
+                      whitelist; even if it slipped through, the RPC would
+                      reject the change. */}
+                  {!isLegacyItem(i) && canEditItemAmount(i.status, headerRefresh.status) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full border border-dashed"
+                      onClick={() => setEditAmountItem(i)}
+                    >
+                      <Pencil className="w-3.5 h-3.5 ml-1" /> ویرایش مبلغ
+                    </Button>
+                  )}
+
+
                   {/* Phase 8: per-item execution panel. The panel itself
                       no-ops for legacy rows (renders a tiny "read-only"
                       banner) so we don't need to guard here. After any
