@@ -92,11 +92,100 @@ export default function ReceiveIdentificationTab() {
   const [items, setItems] = useState<RI[]>([]);
   const [parties, setParties] = useState<Record<string, PartyRef>>({});
   const [banks, setBanks] = useState<Record<string, BankRef>>({});
-  const [filter, setFilter] = useState<string>("pending_approval");
   const [loading, setLoading] = useState(true);
   const [openNew, setOpenNew] = useState(false);
   const [openReject, setOpenReject] = useState<RI | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // -------------------------------------------------------------
+  // URL-backed filter state (status pill + advanced filters)
+  // -------------------------------------------------------------
+  // We persist EVERY filter into the URL via useSearchParams. Two
+  // benefits:
+  //   1) Refresh / share-link preserves the user's view exactly.
+  //   2) Future pagination can also live in the URL without us
+  //      having to refactor the state model.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The status pill ("همه" / "در انتظار تایید" / ...). We default
+  // to pending_approval because that's the operator's primary
+  // working queue.
+  const filter = searchParams.get("status") ?? "pending_approval";
+
+  // Decode advanced filters from URL. useMemo so identity is stable
+  // across renders unless the URL actually changed — important so
+  // ReceiveIdFilters' internal useEffect doesn't fire spuriously.
+  const advFilters: ReceiveIdFilterState = useMemo(
+    () => ({
+      fromDate: searchParams.get("from") || null,
+      toDate: searchParams.get("to") || null,
+      partyId: searchParams.get("party") || null,
+      minAmount: searchParams.get("min") || null,
+      maxAmount: searchParams.get("max") || null,
+      // bank_ids stored as comma-separated UUIDs in URL.
+      bankIds: (searchParams.get("banks") || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    }),
+    [searchParams],
+  );
+
+  // Setter that PARTIALLY updates the URL while keeping all other
+  // existing params (e.g. the status pill). React-router replaces
+  // the entire searchParams object on each set, so we hand-merge.
+  const setFilter = useCallback(
+    (next: string) => {
+      const p = new URLSearchParams(searchParams);
+      if (next) p.set("status", next);
+      else p.delete("status");
+      setSearchParams(p, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // Push the advanced filters into the URL — called when the user
+  // clicks "اعمال فیلتر". Empty / null values are stripped so the
+  // URL stays short and readable.
+  const applyAdvFilters = useCallback(
+    (next: ReceiveIdFilterState) => {
+      const p = new URLSearchParams(searchParams);
+      const setOrDel = (key: string, val: string | null) => {
+        if (val) p.set(key, val);
+        else p.delete(key);
+      };
+      setOrDel("from", next.fromDate);
+      setOrDel("to", next.toDate);
+      setOrDel("party", next.partyId);
+      setOrDel("min", next.minAmount);
+      setOrDel("max", next.maxAmount);
+      setOrDel("banks", next.bankIds.length ? next.bankIds.join(",") : null);
+      setSearchParams(p, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // Clear all advanced filter keys but keep the status pill choice.
+  const clearAdvFilters = useCallback(() => {
+    const p = new URLSearchParams(searchParams);
+    ["from", "to", "party", "min", "max", "banks"].forEach((k) => p.delete(k));
+    setSearchParams(p, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Tiny helper: turn a Shamsi "YYYY/MM/DD" string into the exact
+  // Gregorian timestamp string we want to pass into Postgres for a
+  // half-open range filter. `endOfDay=true` returns 23:59 so the
+  // upper bound is INCLUSIVE of the chosen day.
+  const shamsiToGreg = useCallback(
+    (s: string | null, endOfDay = false): string | null => {
+      if (!s) return null;
+      const m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+      if (!m) return null;
+      const jd: JalaliDate = { year: +m[1], month: +m[2], day: +m[3] };
+      return toGregorianForDb(jd, endOfDay ? "23:59" : "00:00");
+    },
+    [],
+  );
 
   useEffect(() => {
     void supabase.from("finance_parties").select("id,first_name,last_name,company_name,ownership_type")
@@ -113,7 +202,12 @@ export default function ReceiveIdentificationTab() {
       });
   }, []);
 
-  useEffect(() => { void load(); }, [filter]);
+  // Re-run the list query whenever EITHER the status pill OR the
+  // advanced filters change. We depend on `searchParams.toString()`
+  // (a primitive) rather than the object itself so React's identity
+  // comparison works correctly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); }, [searchParams.toString()]);
 
   async function load() {
     setLoading(true);
@@ -123,6 +217,8 @@ export default function ReceiveIdentificationTab() {
       .eq("is_deleted", false)
       .order("created_at", { ascending: false })
       .limit(500);
+
+    // --- Status pill ---------------------------------------------
     if (filter === "pending_approval") {
       // Legacy imported rows may carry status="draft" — in this flow it
       // means "awaiting approval", so include both keys under the single
@@ -131,10 +227,44 @@ export default function ReceiveIdentificationTab() {
     } else if (filter) {
       q = q.eq("status", filter);
     }
-    const { data } = await q;
+
+    // --- Advanced: transaction date range ------------------------
+    // Server-side filter on the timestamptz column. We convert the
+    // Shamsi pickers to "YYYY-MM-DD HH:MM" which Postgres parses
+    // directly. The upper bound is sent as 23:59 so the chosen day
+    // is INCLUSIVE — matching user expectation for date ranges.
+    const fromTs = shamsiToGreg(advFilters.fromDate, false);
+    const toTs = shamsiToGreg(advFilters.toDate, true);
+    if (fromTs) q = q.gte("transaction_datetime", fromTs);
+    if (toTs) q = q.lte("transaction_datetime", toTs);
+
+    // --- Advanced: party (single, exact match) -------------------
+    if (advFilters.partyId) q = q.eq("party_id", advFilters.partyId);
+
+    // --- Advanced: amount range (numeric, both bounds inclusive) -
+    if (advFilters.minAmount) {
+      const n = Number(advFilters.minAmount);
+      if (Number.isFinite(n)) q = q.gte("amount", n);
+    }
+    if (advFilters.maxAmount) {
+      const n = Number(advFilters.maxAmount);
+      if (Number.isFinite(n)) q = q.lte("amount", n);
+    }
+
+    // --- Advanced: bank multi-select (.in) -----------------------
+    if (advFilters.bankIds.length > 0) q = q.in("bank_id", advFilters.bankIds);
+
+    const { data, error } = await q;
+    if (error) toastFinanceError(toast, error);
     setItems((data as RI[]) || []);
     setLoading(false);
   }
+
+  // Used by the empty-state branch to decide between "no records"
+  // (DB really has nothing for this status) vs "filtered down to
+  // nothing" (user has constraints active and should clear them).
+  const activeAdvCount = countActiveFilters(advFilters);
+
 
   async function approveAndSync(ri: RI) {
     // Explicit confirmation per spec — this triggers Sepidar registration
