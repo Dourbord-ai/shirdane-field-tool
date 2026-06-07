@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LayoutDashboard, Building2, ArrowRightLeft, ClipboardList, ArrowDownToLine, ArrowLeftRight, Repeat, Users, FileText, Settings, FileSpreadsheet, BarChart3, ScrollText } from "lucide-react";
 import ChecksTab from "@/components/finance/checks/ChecksTab";
