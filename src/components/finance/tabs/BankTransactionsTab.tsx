@@ -551,18 +551,21 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
   // Whenever a server-side filter changes, snap back to page 1 so the user
   // doesn't end up on a now-out-of-range page (e.g. page 7 of a 3-page set).
+  // NOTE: filterImportFile is included so picking/clearing an Excel file also
+  // resets pagination.
   useEffect(() => {
     setPage(1);
-  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax]);
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, filterImportFile]);
 
-  // Re-fetch on any server filter OR page change.
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+  // Re-fetch on any server filter OR page change. filterImportFile is part of
+  // the dependency list so toggling it triggers an immediate re-query.
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, filterImportFile, page]);
 
   // Clear bulk-attach selection on filter/page change so we never carry over
   // selections that the user can no longer see in the table.
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, filterImportFile, page]);
 
 
   async function load() {
