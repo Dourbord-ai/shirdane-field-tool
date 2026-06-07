@@ -40,6 +40,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSession } from "@/lib/auth";
 
 // ----------------------------------------------------------------------------
+// UUID guard
+// ----------------------------------------------------------------------------
+// Several columns we write to (finance_vouchers.rollback_by,
+// finance_rollback_audit.performed_by, etc.) are typed as Postgres uuid.
+// In dev/legacy sessions getSession().user?.id can be a non-uuid sentinel
+// like "0" — sending that to PostgREST produces:
+//   invalid input syntax for type uuid: "0"
+// This helper normalizes any candidate into either a valid uuid string or
+// null, so callers never have to remember the rule.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function toUuidOrNull(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s || s === "0") return null;
+  return UUID_RE.test(s) ? s : null;
+}
+
+
+// ----------------------------------------------------------------------------
 // Public types
 // ----------------------------------------------------------------------------
 
@@ -238,8 +258,11 @@ async function softDeleteVoucherWithRollbackMeta(args: {
       // Rollback metadata — keeps sepidar_voucher_id intact for auditability.
       sepidar_status: args.newSepidarStatus ?? "rolled_back",
       rollback_at: new Date().toISOString(),
-      rollback_by: args.performedBy,
+      // Defensive UUID guard — column is uuid, so any non-uuid sentinel
+      // must collapse to null instead of triggering a 22P02 from PostgREST.
+      rollback_by: toUuidOrNull(args.performedBy),
       rollback_reason: args.reason,
+
       // Also mark the internal voucher status so VouchersTab badges read it.
       status: "cancelled",
       updated_at: new Date().toISOString(),
@@ -286,7 +309,9 @@ async function insertRollbackAudit(input: AuditInsertInput): Promise<string | nu
         sepidar_delete_result: (input.sepidarResult as never) ?? null,
         snapshot_before: (input.snapshotBefore as never) ?? null,
         snapshot_after: (input.snapshotAfter as never) ?? null,
-        performed_by: input.performedBy,
+        // Defensive UUID guard — performed_by is uuid in Postgres.
+        performed_by: toUuidOrNull(input.performedBy),
+
         metadata: (input.metadata ?? {}) as never,
       },
     ])
@@ -955,7 +980,10 @@ export async function rollbackFinanceOperation(
 
   // Resolve operator from the API-based session (not auth.users — we use a
   // custom app_users table). This becomes rollback_by + performed_by.
-  const performedBy = getSession().user?.id ?? null;
+  // Guard against non-uuid sentinels (e.g. dev mode "0") that would explode
+  // PostgREST when written to uuid columns. toUuidOrNull → null fallback.
+  const performedBy = toUuidOrNull(getSession().user?.id);
+
 
   // ---- Dispatch ------------------------------------------------------------
   switch (input.entityType) {
