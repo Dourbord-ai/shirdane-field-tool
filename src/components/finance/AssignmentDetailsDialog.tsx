@@ -88,7 +88,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 "finance_parties(first_name, last_name, company_name)",
             )
             .eq("id", operationId)
-            .maybeSingle();
+            .maybeSingle() as any;
           if (error) throw error;
           if (!data) throw new Error("رکورد تخصیص پرداخت یافت نشد.");
           // The PostgREST join returns the parent row as a nested object when
@@ -114,7 +114,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 "finance_parties(first_name, last_name, company_name)",
             )
             .eq("id", operationId)
-            .maybeSingle();
+            .maybeSingle() as any;
           if (error) throw error;
           if (!data) throw new Error("رکورد شناسایی دریافت یافت نشد.");
           const p: any = data.finance_parties || {};
@@ -137,7 +137,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 "from_bank:from_bank_id(title), to_bank:to_bank_id(title)",
             )
             .eq("id", operationId)
-            .maybeSingle();
+            .maybeSingle() as any;
           if (error) throw error;
           if (!data) throw new Error("رکورد انتقال بانکی یافت نشد.");
           const fb: any = data.from_bank || {};
