@@ -238,6 +238,23 @@ export default function BankTransferTab() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
+                    {/* Phase 4 rollback action — only enabled for transfers that
+                        already created a voucher AND aren't already cancelled. */}
+                    <td className="p-2">
+                      {r.voucher_id && r.status !== "cancelled" && r.status !== "rolled_back" && (
+                        <RollbackButton
+                          entityType="bank_transfer"
+                          entityId={r.id}
+                          metadata={{
+                            operationLabel: "انتقال بانکی",
+                            amount: r.from_amount ?? r.to_amount,
+                            bankLabel: `${bankLabel(r.from_bank_id)} ← ${bankLabel(r.to_bank_id)}`,
+                            sepidarVoucherId: r.voucher_id,
+                          }}
+                          onSuccess={() => void load()}
+                        />
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
