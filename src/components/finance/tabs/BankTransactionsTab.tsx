@@ -1490,7 +1490,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                             Opens a modal that resolves the related operation
                             row using (assigned_operation_type, _id) and shows
                             a read-only summary. Pure UI; no mutations. */}
-                        {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                        {/* "جزئیات" button — shown for ANY assigned tx,
+                            regardless of which filter is active. The dialog
+                            itself handles a missing assigned_operation_id by
+                            rendering a friendly error, so we do not gate the
+                            button on that field anymore (previously rows
+                            without an id silently lost the action). */}
+                        {t.assignment_status === "assigned" && (
                           <Button
                             size="sm"
                             variant="outline"
