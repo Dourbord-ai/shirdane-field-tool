@@ -18,6 +18,8 @@ import {
 } from "@/lib/finance";
 import { toast } from "sonner";
 import { CheckCircle2, X, Plus, XCircle, Send } from "lucide-react";
+// Phase 4 — generic rollback dialog gated by admin/super_admin role.
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 // Render a status badge using ONLY the receive-identification label map so
 // that imported rows with status="draft" surface as «در انتظار تایید» rather
@@ -266,6 +268,25 @@ export default function ReceiveIdentificationTab() {
                       <CheckCircle2 className="w-3.5 h-3.5" /> ثبت‌شده در سپیدار
                       {r.voucher_id && <span className="font-mono opacity-70">• {r.voucher_id.slice(0, 8)}…</span>}
                     </span>
+                  )}
+                  {/* Phase 4: rollback button — visible only for admin/super_admin
+                      and only for rows already attached to a Sepidar voucher.
+                      The orchestrator handles SP-first ordering + audit. */}
+                  {alreadySynced && r.status !== "cancelled" && r.status !== "rolled_back" && (
+                    <RollbackButton
+                      entityType="receive_identification"
+                      entityId={r.id}
+                      metadata={{
+                        operationLabel: "شناسایی دریافت",
+                        amount: r.amount,
+                        partyLabel: r.party_id && parties[r.party_id] ? partyName(parties[r.party_id]) : null,
+                        bankLabel: r.bank_id && banks[r.bank_id]
+                          ? (banks[r.bank_id].title || banks[r.bank_id].bank_name)
+                          : null,
+                        sepidarVoucherId: r.voucher_id,
+                      }}
+                      onSuccess={() => void load()}
+                    />
                   )}
                 </div>
               </div>

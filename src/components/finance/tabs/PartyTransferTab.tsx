@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-react";
 // Unified Jalali UI / Gregorian-ISO value date picker.
 import DatePicker from "@/components/DatePicker";
+// Phase 4 — rollback dialog for party transfers attached to a voucher.
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 // List row shape for finance_party_transfers. We deliberately fetch a narrow
 // set of columns to keep the query fast over the legacy import (≈207 rows).
@@ -184,6 +186,7 @@ export default function PartyTransferTab() {
                   <th className="p-2 font-bold">عنوان</th>
                   <th className="p-2 font-bold">وضعیت</th>
                   <th className="p-2 font-bold">سند</th>
+                  <th className="p-2 font-bold">اقدام</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,6 +211,24 @@ export default function PartyTransferTab() {
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {/* Phase 4: admin/super_admin rollback for posted party
+                          transfers. Hidden for rows without a voucher. */}
+                      {r.voucher_id && r.status !== "cancelled" && r.status !== "rolled_back" && (
+                        <RollbackButton
+                          entityType="party_transfer"
+                          entityId={r.id}
+                          metadata={{
+                            operationLabel: "انتقال طرف حساب",
+                            amount: r.amount,
+                            partyLabel: `${nameOf(r.from_party_id)} ← ${nameOf(r.to_party_id)}`,
+                            sepidarVoucherId: r.voucher_id,
+                            extraLines: r.title ? [{ label: "عنوان", value: r.title }] : undefined,
+                          }}
+                          onSuccess={() => void load()}
+                        />
                       )}
                     </td>
                   </tr>

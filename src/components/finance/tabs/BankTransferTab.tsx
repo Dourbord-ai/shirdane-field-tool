@@ -15,6 +15,8 @@ import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-re
 // underlying date comparisons happen on Gregorian ISO strings — matching
 // what `transfer_datetime` (timestamptz) actually stores in the DB.
 import DatePicker from "@/components/DatePicker";
+// Phase 4 — generic rollback button used in the row actions column.
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 interface SelectedTx {
   id: string; bank_id: string | null; deposit_amount: number | null;
@@ -210,6 +212,7 @@ export default function BankTransferTab() {
                   <th className="p-2 font-bold">تاریخ انتقال</th>
                   <th className="p-2 font-bold">وضعیت</th>
                   <th className="p-2 font-bold">سند</th>
+                  <th className="p-2 font-bold">اقدام</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,6 +237,23 @@ export default function BankTransferTab() {
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    {/* Phase 4 rollback action — only enabled for transfers that
+                        already created a voucher AND aren't already cancelled. */}
+                    <td className="p-2">
+                      {r.voucher_id && r.status !== "cancelled" && r.status !== "rolled_back" && (
+                        <RollbackButton
+                          entityType="bank_transfer"
+                          entityId={r.id}
+                          metadata={{
+                            operationLabel: "انتقال بانکی",
+                            amount: r.from_amount ?? r.to_amount,
+                            bankLabel: `${bankLabel(r.from_bank_id)} ← ${bankLabel(r.to_bank_id)}`,
+                            sepidarVoucherId: r.voucher_id,
+                          }}
+                          onSuccess={() => void load()}
+                        />
                       )}
                     </td>
                   </tr>

@@ -63,6 +63,9 @@ import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetail
 // already-loaded items list and reload via the existing `reload()` helper.
 import SettlementRequestProgressSummary from "@/components/finance/SettlementRequestProgressSummary";
 import SettlementItemExecutionPanel from "@/components/finance/SettlementItemExecutionPanel";
+// Phase 4 rollback dialog — wired into PRDetail header (request rollback) and
+// into each allocation row (allocation rollback).
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
@@ -1536,6 +1539,28 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                         </Button>
                       </div>
                     )}
+                    {/* Phase 4: allocation rollback — only meaningful once the
+                        allocation actually created a Sepidar voucher. The
+                        existing «لغو تخصیص» path above is kept for failed
+                        allocations that never reached Sepidar. */}
+                    {a.status === "synced" && (
+                      <div className="flex gap-2">
+                        <RollbackButton
+                          entityType="payment_allocation"
+                          entityId={a.id}
+                          metadata={{
+                            operationLabel: "تخصیص پرداخت",
+                            amount: a.amount,
+                            bankLabel: a.bank?.title || a.bank?.bank_name || null,
+                            sepidarVoucherId: a.bank_transaction?.document_number || null,
+                            extraLines: a.bank_transaction?.transaction_jalali_date
+                              ? [{ label: "تاریخ تراکنش", value: a.bank_transaction.transaction_jalali_date }]
+                              : undefined,
+                          }}
+                          onSuccess={() => { void reload(); }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1549,6 +1574,26 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                 <Button onClick={approve} disabled={busy}><CheckCircle2 className="w-4 h-4 ml-1" /> تایید مدیریت</Button>
                 <Button onClick={reject} variant="outline" disabled={busy}>رد درخواست</Button>
               </>
+            )}
+            {/* Phase 4: full request rollback — admin/super_admin only. Cancels
+                every linked allocation, soft-deletes any posted voucher, and
+                recomputes party balances via the orchestrator. */}
+            {(headerStatus === "approved" || headerStatus === "partially_paid" || headerStatus === "paid") && (
+              <div className="col-span-2 flex justify-end">
+                <RollbackButton
+                  entityType="payment_request"
+                  entityId={pr.id}
+                  metadata={{
+                    operationLabel: "درخواست تسویه",
+                    amount: headerApproved || headerRequested,
+                    extraLines: [
+                      { label: "وضعیت", value: PAYMENT_REQUEST_STATUS_LABEL[headerStatus || ""] || headerStatus || "—" },
+                      { label: "پرداخت شده", value: formatMoney(headerPaid) },
+                    ],
+                  }}
+                  onSuccess={() => { void reload(); }}
+                />
+              </div>
             )}
           </div>
         </div>
