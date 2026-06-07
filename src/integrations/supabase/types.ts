@@ -4450,6 +4450,68 @@ export type Database = {
           },
         ]
       }
+      finance_rollback_audit: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json
+          new_status: string | null
+          old_status: string | null
+          performed_at: string
+          performed_by: string | null
+          rollback_reason: string
+          sepidar_delete_result: Json | null
+          sepidar_voucher_id: number | null
+          snapshot_after: Json | null
+          snapshot_before: Json | null
+        }
+        Insert: {
+          action?: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          old_status?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          rollback_reason: string
+          sepidar_delete_result?: Json | null
+          sepidar_voucher_id?: number | null
+          snapshot_after?: Json | null
+          snapshot_before?: Json | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          old_status?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          rollback_reason?: string
+          sepidar_delete_result?: Json | null
+          sepidar_voucher_id?: number | null
+          snapshot_after?: Json | null
+          snapshot_before?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_rollback_audit_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_sepidar_bank_accounts_cache: {
         Row: {
           account_number: string | null
@@ -7184,6 +7246,7 @@ export type Database = {
           ord: number
         }[]
       }
+      fn_can_rollback_finance: { Args: { _user_id: string }; Returns: boolean }
       fn_finance_check_post_voucher: {
         Args: { p_check_id: string; p_event: string }
         Returns: string
