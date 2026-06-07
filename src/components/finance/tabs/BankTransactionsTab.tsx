@@ -1798,8 +1798,13 @@ function RowBadges({
 function ExpandableDescription({ text }: { text: string | null }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return <span className="text-muted-foreground">—</span>;
-  // Heuristic threshold: anything beyond ~80 chars likely needs the toggle.
-  const isLong = text.length > 80;
+  // Heuristic: in the narrow (max-w-[260px]) description column the 2-line
+  // clamp kicks in well before 80 chars for typical Persian bank narratives
+  // (lots of wide characters + bank names). We use a low threshold (40) AND
+  // also trigger the toggle whenever the text contains a line break, so the
+  // "نمایش کامل شرح" affordance never silently disappears just because the
+  // string is short in raw char count but visually wraps to >2 lines.
+  const isLong = text.length > 40 || text.includes("\n");
   return (
     <div className="text-xs leading-relaxed">
       <p
