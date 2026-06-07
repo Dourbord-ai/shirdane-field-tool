@@ -64,6 +64,12 @@ import BulkAttachPaymentRequestDialog, {
 import DatePicker from "@/components/DatePicker";
 // Read-only modal that shows the operation linked to an assigned bank tx.
 import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
+// Picker dialog for the "Excel file" filter. The list is derived on the fly
+// from finance_bank_transactions itself (no separate uploads table exists).
+import ImportFileFilter from "@/components/finance/ImportFileFilter";
+// We persist the import-file filter into the URL so a Refresh (or sharing the
+// link) keeps the operator's view intact.
+import { useSearchParams } from "react-router-dom";
 
 
 interface Tx {
