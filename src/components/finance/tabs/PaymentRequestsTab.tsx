@@ -1631,6 +1631,24 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
           onDone={async () => { setAllocItem(null); await reload(); }}
         />
       )}
+
+      {/* Edit-amount dialog. Reloads the request detail on success so the
+          item status badges, paid/remaining cells, and header progress
+          summary all reflect the new server-side values. */}
+      {editAmountItem && (
+        <EditItemAmountDialog
+          item={{
+            id: editAmountItem.id,
+            amount: Number(editAmountItem.amount || 0),
+            confirmed_amount: editAmountItem.confirmed_amount,
+            paid_amount: editAmountItem.paid_amount,
+            status: editAmountItem.status,
+          }}
+          requestStatus={headerRefresh.status}
+          onClose={() => setEditAmountItem(null)}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }
