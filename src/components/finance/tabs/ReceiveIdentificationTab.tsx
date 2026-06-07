@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,14 @@ import { toast } from "sonner";
 import { CheckCircle2, X, Plus, XCircle, Send } from "lucide-react";
 // Phase 4 — generic rollback dialog gated by admin/super_admin role.
 import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
+// Phase 5 — advanced server-side filter bar (date / party / amount / banks).
+import ReceiveIdFilters, {
+  EMPTY_RECEIVE_ID_FILTERS,
+  countActiveFilters,
+  type ReceiveIdFilterState,
+} from "@/components/finance/ReceiveIdFilters";
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
+import type { JalaliDate } from "@/lib/jalali";
 
 // Render a status badge using ONLY the receive-identification label map so
 // that imported rows with status="draft" surface as «در انتظار تایید» rather
