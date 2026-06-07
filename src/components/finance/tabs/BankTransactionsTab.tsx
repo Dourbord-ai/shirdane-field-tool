@@ -815,6 +815,23 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   function isBulkAttachEligible(t: Tx): boolean {
     return t.transaction_type === "withdraw" && t.assignment_status === "unassigned";
   }
+  // Bulk-delete eligibility — must mirror the server-side guard in
+  // fn_finance_bulk_delete_bank_transactions. The marker
+  // `bank_fee_candidate` is a classification hint, not a real linkage, so
+  // it's allowed (same logic in BulkDeleteBankTxDialog.categorize).
+  function isBulkDeleteEligible(t: Tx): boolean {
+    return (
+      t.assignment_status === "unassigned" &&
+      !t.assigned_operation_id &&
+      (!t.assigned_operation_type ||
+        t.assigned_operation_type === "bank_fee_candidate")
+    );
+  }
+  // A row is selectable if it qualifies for AT LEAST ONE bulk action. The
+  // per-action dialog filters the selection again, so mixing rows is safe.
+  function isAnySelectionEligible(t: Tx): boolean {
+    return isBulkAttachEligible(t) || isBulkDeleteEligible(t);
+  }
   function toggleSelect(id: string, eligible: boolean) {
     if (!eligible) return;
     setSelectedIds((prev) => {
