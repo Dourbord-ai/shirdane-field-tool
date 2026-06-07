@@ -258,8 +258,11 @@ async function softDeleteVoucherWithRollbackMeta(args: {
       // Rollback metadata — keeps sepidar_voucher_id intact for auditability.
       sepidar_status: args.newSepidarStatus ?? "rolled_back",
       rollback_at: new Date().toISOString(),
-      rollback_by: args.performedBy,
+      // Defensive UUID guard — column is uuid, so any non-uuid sentinel
+      // must collapse to null instead of triggering a 22P02 from PostgREST.
+      rollback_by: toUuidOrNull(args.performedBy),
       rollback_reason: args.reason,
+
       // Also mark the internal voucher status so VouchersTab badges read it.
       status: "cancelled",
       updated_at: new Date().toISOString(),
