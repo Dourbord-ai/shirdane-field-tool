@@ -564,7 +564,71 @@ async function rollbackPaymentAllocation(
     .select()
     .maybeSingle();
 
-  // Belt-and-suspenders: explicitly recalc the request too.
+  // ----------------------------------------------------------------------
+  // STATE RECOVERY (Phase 4.1 fix): the bank transaction that was attached
+  // to this allocation MUST be released back to the unassigned pool so the
+  // operator can re-attach it (the "اتصال تراکنش" / connect-transaction
+  // button only appears when assignment_status='unassigned'). Without this
+  // the rollback leaves an orphan link: allocation is cancelled but the
+  // bank tx still points at it and is invisible in selectors.
+  //
+  // Idempotency rules:
+  //   • Use scoped equality (.eq on assigned_operation_type/id) so we only
+  //     release the row when it's STILL pointing at this allocation. If the
+  //     operator has manually re-routed the tx in the meantime we leave it.
+  //   • Run even when the allocation was already cancelled — the rollback
+  //     "resume" path must still restore the tx (per user spec).
+  //   • Errors are logged but do not abort the rollback — the voucher and
+  //     allocation are already cancelled and the operator can re-trigger
+  //     the resume to retry the tx release.
+  // ----------------------------------------------------------------------
+  const releasedBankTxIds: string[] = [];
+  let bankTxRepaired = false;
+  if (alloc.bank_transaction_id) {
+    const bankTxId = alloc.bank_transaction_id as string;
+    // Inspect current state so we can record whether this was an in-flight
+    // rollback (state was still attached) or a resume repair (state was
+    // already inconsistent).
+    const { data: btBefore } = await supabase
+      .from("finance_bank_transactions")
+      .select("id, assignment_status, assigned_operation_type, assigned_operation_id")
+      .eq("id", bankTxId)
+      .maybeSingle();
+
+    const stillLinked =
+      btBefore?.assigned_operation_type === "payment_allocation" &&
+      btBefore?.assigned_operation_id === alloc.id;
+
+    if (stillLinked) {
+      const { error: btErr } = await supabase
+        .from("finance_bank_transactions")
+        .update({
+          assignment_status: "unassigned",
+          assigned_operation_type: null,
+          assigned_operation_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", bankTxId)
+        // Defensive scope — only release if it still points here. Prevents
+        // accidentally unassigning a tx the operator re-routed mid-flow.
+        .eq("assigned_operation_type", "payment_allocation")
+        .eq("assigned_operation_id", alloc.id);
+      if (btErr) {
+        // eslint-disable-next-line no-console
+        console.error("[rollback payment_allocation] bank tx release failed", btErr);
+      } else {
+        releasedBankTxIds.push(bankTxId);
+        // If the allocation was ALREADY cancelled before this run (i.e. a
+        // resume), the tx release is technically a "repair" — flag it so
+        // the audit row records the recovery action.
+        if (alloc.is_deleted || oldStatus === "cancelled") bankTxRepaired = true;
+      }
+    }
+  }
+
+  // Belt-and-suspenders: explicitly recalc the request too. This is what
+  // flips payment_status back from 'paid' / 'partially_paid' to a state
+  // that re-enables the "connect transaction" button on the request row.
   if (alloc.payment_request_id) {
     await supabase.rpc("fn_finance_recalc_payment_request", {
       p_request_id: alloc.payment_request_id as string,
@@ -576,6 +640,11 @@ async function rollbackPaymentAllocation(
   const auditId = await insertRollbackAudit({
     entityType: "payment_allocation",
     entityId: alloc.id,
+    // If we only performed the bank-tx repair (allocation was already
+    // cancelled coming in), label this run as 'rollback_repair' in the
+    // audit metadata so operators can distinguish resume runs from first
+    // rollbacks. The DB column `action` remains 'rollback'/'cancel' per
+    // the CHECK constraint; the repair flag lives in metadata.
     action: input.action ?? "rollback",
     reason: input.reason,
     oldStatus,
@@ -588,6 +657,9 @@ async function rollbackPaymentAllocation(
       voucherId: voucher?.id ?? null,
       paymentRequestId: alloc.payment_request_id,
       recomputedParties: partyIds,
+      releasedBankTxIds,
+      // Marker used by the future audit viewer to badge "repair" runs.
+      repairAction: bankTxRepaired ? "rollback_repair" : null,
     },
     performedBy,
   });
