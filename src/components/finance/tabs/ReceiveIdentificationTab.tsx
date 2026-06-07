@@ -269,6 +269,25 @@ export default function ReceiveIdentificationTab() {
                       {r.voucher_id && <span className="font-mono opacity-70">• {r.voucher_id.slice(0, 8)}…</span>}
                     </span>
                   )}
+                  {/* Phase 4: rollback button — visible only for admin/super_admin
+                      and only for rows already attached to a Sepidar voucher.
+                      The orchestrator handles SP-first ordering + audit. */}
+                  {alreadySynced && r.status !== "cancelled" && r.status !== "rolled_back" && (
+                    <RollbackButton
+                      entityType="receive_identification"
+                      entityId={r.id}
+                      metadata={{
+                        operationLabel: "شناسایی دریافت",
+                        amount: r.amount,
+                        partyLabel: r.party_id && parties[r.party_id] ? partyName(parties[r.party_id]) : null,
+                        bankLabel: r.bank_id && banks[r.bank_id]
+                          ? (banks[r.bank_id].title || banks[r.bank_id].bank_name)
+                          : null,
+                        sepidarVoucherId: r.voucher_id,
+                      }}
+                      onSuccess={() => void load()}
+                    />
+                  )}
                 </div>
               </div>
             );
