@@ -1337,6 +1337,47 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       </div>
 
+      {/* Filters — third row: "Excel file" filter. Rendered as a single full-
+          width control because it opens a richer picker dialog (with file
+          metadata + transaction counts) instead of a flat dropdown. When a
+          file is active we surface its name + a one-click clear button next
+          to the trigger, so the operator never has to re-open the dialog
+          just to remove the filter. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpenFileFilter(true)}
+          className="gap-1.5"
+        >
+          <FileText className="w-4 h-4" />
+          {filterImportFile ? "تغییر فایل اکسل" : "فیلتر بر اساس فایل اکسل"}
+        </Button>
+        {filterImportFile && (
+          <>
+            {/* Active-filter chip — long file names are truncated so the row
+                stays on a single line on smaller viewports. The full value
+                shows up in the native title tooltip. */}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-xs text-foreground max-w-[60%] truncate"
+              title={filterImportFile}
+            >
+              <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="truncate">{filterImportFile}</span>
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFilterImportFile(null)}
+            >
+              <X className="w-3.5 h-3.5 ml-1" />
+              حذف فیلتر فایل
+            </Button>
+          </>
+        )}
+      </div>
+
       {(filterFromDate || filterToDate || filterMinAmount || filterMaxAmount) && (
         <div className="flex justify-end">
           <Button
