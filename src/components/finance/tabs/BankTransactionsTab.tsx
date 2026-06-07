@@ -62,6 +62,9 @@ import BulkAttachPaymentRequestDialog, {
 } from "@/components/finance/BulkAttachPaymentRequestDialog";
 // Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
 import DatePicker from "@/components/DatePicker";
+// Read-only modal that shows the operation linked to an assigned bank tx.
+import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
+
 
 interface Tx {
   id: string;
