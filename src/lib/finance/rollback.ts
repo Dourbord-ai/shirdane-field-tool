@@ -40,6 +40,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSession } from "@/lib/auth";
 
 // ----------------------------------------------------------------------------
+// UUID guard
+// ----------------------------------------------------------------------------
+// Several columns we write to (finance_vouchers.rollback_by,
+// finance_rollback_audit.performed_by, etc.) are typed as Postgres uuid.
+// In dev/legacy sessions getSession().user?.id can be a non-uuid sentinel
+// like "0" — sending that to PostgREST produces:
+//   invalid input syntax for type uuid: "0"
+// This helper normalizes any candidate into either a valid uuid string or
+// null, so callers never have to remember the rule.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function toUuidOrNull(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s || s === "0") return null;
+  return UUID_RE.test(s) ? s : null;
+}
+
+
+// ----------------------------------------------------------------------------
 // Public types
 // ----------------------------------------------------------------------------
 
