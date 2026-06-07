@@ -1490,7 +1490,13 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                             Opens a modal that resolves the related operation
                             row using (assigned_operation_type, _id) and shows
                             a read-only summary. Pure UI; no mutations. */}
-                        {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                        {/* "جزئیات" button — shown for ANY assigned tx,
+                            regardless of which filter is active. The dialog
+                            itself handles a missing assigned_operation_id by
+                            rendering a friendly error, so we do not gate the
+                            button on that field anymore (previously rows
+                            without an id silently lost the action). */}
+                        {t.assignment_status === "assigned" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1579,7 +1585,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {/* Operation-details button — mirrors the desktop column.
                       Only shown when the transaction has a resolved
                       assignment so we know there is something to display. */}
-                  {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                  {/* Mobile: same rule as desktop — render the details
+                      action for every assigned row, even if the operation id
+                      is missing (the dialog explains that case). */}
+                  {t.assignment_status === "assigned" && (
                     <Button size="sm" variant="outline" onClick={() => setOpenDetails(t)}>
                       <FileText className="w-3 h-3 ml-1" /> جزئیات
                     </Button>
@@ -1789,8 +1798,13 @@ function RowBadges({
 function ExpandableDescription({ text }: { text: string | null }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return <span className="text-muted-foreground">—</span>;
-  // Heuristic threshold: anything beyond ~80 chars likely needs the toggle.
-  const isLong = text.length > 80;
+  // Heuristic: in the narrow (max-w-[260px]) description column the 2-line
+  // clamp kicks in well before 80 chars for typical Persian bank narratives
+  // (lots of wide characters + bank names). We use a low threshold (40) AND
+  // also trigger the toggle whenever the text contains a line break, so the
+  // "نمایش کامل شرح" affordance never silently disappears just because the
+  // string is short in raw char count but visually wraps to >2 lines.
+  const isLong = text.length > 40 || text.includes("\n");
   return (
     <div className="text-xs leading-relaxed">
       <p
