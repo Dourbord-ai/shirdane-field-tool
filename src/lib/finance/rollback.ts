@@ -309,7 +309,9 @@ async function insertRollbackAudit(input: AuditInsertInput): Promise<string | nu
         sepidar_delete_result: (input.sepidarResult as never) ?? null,
         snapshot_before: (input.snapshotBefore as never) ?? null,
         snapshot_after: (input.snapshotAfter as never) ?? null,
-        performed_by: input.performedBy,
+        // Defensive UUID guard — performed_by is uuid in Postgres.
+        performed_by: toUuidOrNull(input.performedBy),
+
         metadata: (input.metadata ?? {}) as never,
       },
     ])
