@@ -64,6 +64,12 @@ import BulkAttachPaymentRequestDialog, {
 import DatePicker from "@/components/DatePicker";
 // Read-only modal that shows the operation linked to an assigned bank tx.
 import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
+// Picker dialog for the "Excel file" filter. The list is derived on the fly
+// from finance_bank_transactions itself (no separate uploads table exists).
+import ImportFileFilter from "@/components/finance/ImportFileFilter";
+// We persist the import-file filter into the URL so a Refresh (or sharing the
+// link) keeps the operator's view intact.
+import { useSearchParams } from "react-router-dom";
 
 
 interface Tx {
@@ -230,12 +236,33 @@ function deriveAutoState(t: Tx, idents: IdentRow[] | undefined, ri: ReceiveMeta 
 const MATCH_TYPE_LABEL: Record<number, string> = { 1: "حساب", 2: "کارت", 3: "شبا" };
 
 export default function BankTransactionsTab({ initialBankId }: { initialBankId?: string }) {
+  // -------------------------------------------------------------------------
+  // URL-backed state for the "Excel file" filter.
+  //
+  // We only persist THIS filter into the URL (per spec). All the other
+  // filters stay component-local for now so this change is minimally
+  // invasive — extending URL persistence to the rest can be done later
+  // without touching the query layer.
+  //
+  // We read the value once on mount via `initialImportFile`, then mirror
+  // every user change back into `?import_file=...` in a small effect below.
+  // -------------------------------------------------------------------------
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialImportFile = searchParams.get("import_file");
+
   const [txs, setTxs] = useState<Tx[]>([]);
   const [banks, setBanks] = useState<Record<string, BankRef>>({});
   const [filterBank, setFilterBank] = useState<string | null>(initialBankId || null);
   const [filterType, setFilterType] = useState<string>("");
   const [filterAssign, setFilterAssign] = useState<string>("");
   const [filterDescr, setFilterDescr] = useState("");
+  // The Excel-file filter holds an `imported_file_name` value (the UUID-
+  // prefixed storage name acts as the per-upload identifier). `null` means
+  // "no file filter applied — show every row across all imports".
+  const [filterImportFile, setFilterImportFile] = useState<string | null>(initialImportFile);
+  // Controls the picker dialog. Kept separate from `filterImportFile` so the
+  // dialog can be opened/closed without touching the active selection.
+  const [openFileFilter, setOpenFileFilter] = useState(false);
   // Transaction-date range (Gregorian ISO from the Jalali DatePicker).
   // These filter on `transaction_datetime` (the real banking date),
   // NOT on `created_at` (when the row was inserted into our DB).
@@ -245,6 +272,23 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // range covers whichever direction (deposit OR withdraw) is populated.
   const [filterMinAmount, setFilterMinAmount] = useState("");
   const [filterMaxAmount, setFilterMaxAmount] = useState("");
+
+  // Keep the URL in sync with `filterImportFile` so a browser refresh — or
+  // sharing the URL — preserves the file filter. We mutate searchParams
+  // immutably via the setter so React Router can react to the change.
+  useEffect(() => {
+    const current = searchParams.get("import_file");
+    if (filterImportFile && current !== filterImportFile) {
+      const next = new URLSearchParams(searchParams);
+      next.set("import_file", filterImportFile);
+      setSearchParams(next, { replace: true });
+    } else if (!filterImportFile && current) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("import_file");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterImportFile]);
   // ---- Debounced mirrors of the text/amount inputs ---------------------
   // Typing should NOT fire a Supabase round-trip per keystroke. 300ms is a
   // common UX sweet-spot — fast enough to feel live, slow enough to coalesce
@@ -507,18 +551,21 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
 
   // Whenever a server-side filter changes, snap back to page 1 so the user
   // doesn't end up on a now-out-of-range page (e.g. page 7 of a 3-page set).
+  // NOTE: filterImportFile is included so picking/clearing an Excel file also
+  // resets pagination.
   useEffect(() => {
     setPage(1);
-  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax]);
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, filterImportFile]);
 
-  // Re-fetch on any server filter OR page change.
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+  // Re-fetch on any server filter OR page change. filterImportFile is part of
+  // the dependency list so toggling it triggers an immediate re-query.
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, filterImportFile, page]);
 
   // Clear bulk-attach selection on filter/page change so we never carry over
   // selections that the user can no longer see in the table.
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, page]);
+  }, [filterBank, filterType, filterAssign, filterFromDate, filterToDate, debouncedDescr, debouncedMin, debouncedMax, filterImportFile, page]);
 
 
   async function load() {
@@ -547,6 +594,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterAssign) q = q.eq("assignment_status", filterAssign);
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
+    // Excel-file filter — matches every row carrying the chosen stored
+    // filename. Because `imported_file_name` is populated atomically when the
+    // upload pipeline inserts the row, this naturally restricts results to a
+    // single batch upload, including legacy uploads.
+    if (filterImportFile) q = q.eq("imported_file_name", filterImportFile);
 
     // -------------------------------------------------------------------
     // Real-time multi-column search.
@@ -1285,6 +1337,47 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         </div>
       </div>
 
+      {/* Filters — third row: "Excel file" filter. Rendered as a single full-
+          width control because it opens a richer picker dialog (with file
+          metadata + transaction counts) instead of a flat dropdown. When a
+          file is active we surface its name + a one-click clear button next
+          to the trigger, so the operator never has to re-open the dialog
+          just to remove the filter. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpenFileFilter(true)}
+          className="gap-1.5"
+        >
+          <FileText className="w-4 h-4" />
+          {filterImportFile ? "تغییر فایل اکسل" : "فیلتر بر اساس فایل اکسل"}
+        </Button>
+        {filterImportFile && (
+          <>
+            {/* Active-filter chip — long file names are truncated so the row
+                stays on a single line on smaller viewports. The full value
+                shows up in the native title tooltip. */}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-xs text-foreground max-w-[60%] truncate"
+              title={filterImportFile}
+            >
+              <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="truncate">{filterImportFile}</span>
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFilterImportFile(null)}
+            >
+              <X className="w-3.5 h-3.5 ml-1" />
+              حذف فیلتر فایل
+            </Button>
+          </>
+        )}
+      </div>
+
       {(filterFromDate || filterToDate || filterMinAmount || filterMaxAmount) && (
         <div className="flex justify-end">
           <Button
@@ -1671,6 +1764,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         onClose={() => setOpenDetails(null)}
         operationType={openDetails?.assigned_operation_type ?? null}
         operationId={openDetails?.assigned_operation_id ?? null}
+      />
+
+      {/* Excel-file picker. Mount stays cheap: the dialog only runs its
+          aggregation queries while `open` is true (see ImportFileFilter
+          implementation), so keeping it mounted has no perf cost. */}
+      <ImportFileFilter
+        open={openFileFilter}
+        onClose={() => setOpenFileFilter(false)}
+        selected={filterImportFile}
+        onSelect={setFilterImportFile}
       />
 
 

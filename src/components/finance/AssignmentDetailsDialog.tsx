@@ -23,7 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 // Props are intentionally minimal: we only need the assignment tuple to drive
 // the lookup. The parent owns open/close state via the `txId` presence pattern.
@@ -55,6 +55,14 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId }: Props) {
+  // Programmatic router navigation. We previously used a <Link> wrapped by a
+  // <Button asChild> with onClick={onClose} — the onClick fired SYNCHRONOUSLY
+  // before the anchor click, which in some cases (StrictMode, fast double-
+  // render) caused the route change to be dropped because the Dialog
+  // unmounted the link's portal before the click event bubbled. Switching to
+  // useNavigate makes navigation deterministic: we close the dialog AND push
+  // the new URL ourselves, in one explicit, ordered handler.
+  const navigate = useNavigate();
   // Three-state UI: loading spinner / error message / data view. We reset on
   // every open so a previous error doesn't leak into a new lookup.
   const [loading, setLoading] = useState(false);
@@ -216,11 +224,20 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             )}
             {view.navTab && (
               <div className="pt-2 flex justify-end">
-                <Button asChild size="sm" variant="outline" onClick={onClose}>
-                  <Link to={`/finance?tab=${view.navTab}`}>
-                    <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                    رفتن به تب مرتبط
-                  </Link>
+                {/* Single handler: navigate first, then close. Using
+                    navigate() instead of <Link> guarantees the route change
+                    happens regardless of how the Dialog unmounts the trigger
+                    after we call onClose(). */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigate(`/finance?tab=${view.navTab}`);
+                    onClose();
+                  }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                  رفتن به تب مرتبط
                 </Button>
               </div>
             )}
