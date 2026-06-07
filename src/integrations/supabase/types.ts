@@ -4838,10 +4838,14 @@ export type Database = {
           is_deleted: boolean | null
           legacy_id: number | null
           reversal_of: string | null
+          rollback_at: string | null
+          rollback_by: string | null
+          rollback_reason: string | null
           sepidar_daily_number: number | null
           sepidar_error_message: string | null
           sepidar_extra_data_id: number | null
           sepidar_reference_number: number | null
+          sepidar_status: string | null
           sepidar_sync_attempts: number | null
           sepidar_sync_status: string | null
           sepidar_synced_at: string | null
@@ -4869,10 +4873,14 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           reversal_of?: string | null
+          rollback_at?: string | null
+          rollback_by?: string | null
+          rollback_reason?: string | null
           sepidar_daily_number?: number | null
           sepidar_error_message?: string | null
           sepidar_extra_data_id?: number | null
           sepidar_reference_number?: number | null
+          sepidar_status?: string | null
           sepidar_sync_attempts?: number | null
           sepidar_sync_status?: string | null
           sepidar_synced_at?: string | null
@@ -4900,10 +4908,14 @@ export type Database = {
           is_deleted?: boolean | null
           legacy_id?: number | null
           reversal_of?: string | null
+          rollback_at?: string | null
+          rollback_by?: string | null
+          rollback_reason?: string | null
           sepidar_daily_number?: number | null
           sepidar_error_message?: string | null
           sepidar_extra_data_id?: number | null
           sepidar_reference_number?: number | null
+          sepidar_status?: string | null
           sepidar_sync_attempts?: number | null
           sepidar_sync_status?: string | null
           sepidar_synced_at?: string | null
@@ -4921,6 +4933,13 @@ export type Database = {
           voucher_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "finance_vouchers_rollback_by_fkey"
+            columns: ["rollback_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fk_finance_vouchers_reversal_of"
             columns: ["reversal_of"]
