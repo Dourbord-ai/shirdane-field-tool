@@ -1655,6 +1655,15 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           }}
         />
       )}
+      {/* Assignment details modal — driven entirely by the selected Tx.
+          Closing it just clears the local state; no side effects. */}
+      <AssignmentDetailsDialog
+        open={!!openDetails}
+        onClose={() => setOpenDetails(null)}
+        operationType={openDetails?.assigned_operation_type ?? null}
+        operationId={openDetails?.assigned_operation_id ?? null}
+      />
+
 
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
