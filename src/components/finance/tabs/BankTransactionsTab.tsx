@@ -266,6 +266,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
+  // "Details" modal for assigned transactions. We hold the entire Tx so the
+  // dialog can resolve the related operation via (assigned_operation_type,
+  // assigned_operation_id) without re-querying the bank transactions table.
+  const [openDetails, setOpenDetails] = useState<Tx | null>(null);
+
   // ---- Bulk-attach selection state ---------------------------------------
   // Only rows that pass `isBulkAttachEligible` (withdraw + unassigned) can be
   // added; the table guards each addition so ineligible rows never end up in
