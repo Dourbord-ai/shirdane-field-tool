@@ -7343,6 +7343,17 @@ export type Database = {
         Args: { p_check_id: string; p_event: string }
         Returns: string
       }
+      fn_finance_list_bank_import_files: {
+        Args: never
+        Returns: {
+          imported_by: string
+          imported_file_name: string
+          latest_imported_at: string
+          original_file_name: string
+          transaction_count: number
+          uploaded_by_name: string
+        }[]
+      }
       fn_finance_recalc_payment_request: {
         Args: { p_request_id: string }
         Returns: undefined

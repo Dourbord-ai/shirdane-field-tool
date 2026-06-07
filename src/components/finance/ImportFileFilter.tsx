@@ -76,75 +76,48 @@ export default function ImportFileFilter({ open, onClose, selected, onSelect }: 
       setLoading(true);
       setError(null);
       try {
-        // STEP 1 — fetch ALL non-null import-file rows.
-        // We intentionally select only the four columns we need so PostgREST
-        // returns a compact payload even when the table holds thousands of
-        // transactions. Order by imported_at DESC so when we group below the
-        // first occurrence per group is naturally the most-recent timestamp.
-        //
-        // NOTE: Supabase has a hard 1000-row default. We bump to 5000 via
-        // `.range(0, 4999)` because a single uploaded file commonly contains
-        // hundreds of transactions, and we need enough raw rows to discover
-        // every distinct file. The GROUP BY happens client-side.
-        const { data, error: e1 } = await supabase
-          .from("finance_bank_transactions")
-          .select("imported_file_name, original_file_name, imported_by, imported_at")
-          .not("imported_file_name", "is", null)
-          .eq("is_deleted", false)
-          .order("imported_at", { ascending: false })
-          .range(0, 4999);
+        // SERVER-SIDE GROUP BY via dedicated RPC.
+        // Previously this component pulled `range(0, 4999)` raw rows and
+        // grouped them on the client. That silently dropped any file whose
+        // transactions lived entirely past row 5000, and produced wrong
+        // tx_count values for files that straddled the window. The RPC
+        // `fn_finance_list_bank_import_files` performs the aggregation in
+        // PostgreSQL across the FULL table (filtered to is_deleted=false +
+        // imported_file_name IS NOT NULL) and resolves the uploader's
+        // display name via a LEFT JOIN to app_users — one call returns
+        // everything we need with correct counts and is ordered by
+        // latest_imported_at DESC.
+        const { data, error: e1 } = await supabase.rpc(
+          "fn_finance_list_bank_import_files" as any,
+        );
         if (e1) throw e1;
 
-        // STEP 2 — group client-side by imported_file_name. We pick the
-        // first-seen original_file_name / imported_by / imported_at because
-        // the rows are already DESC-ordered by upload time, so "first seen"
-        // == "most recent metadata for that file id".
-        const grouped = new Map<string, FileRow>();
-        for (const r of (data ?? []) as any[]) {
-          const key = r.imported_file_name as string;
-          const existing = grouped.get(key);
-          if (existing) {
-            existing.tx_count += 1;
-          } else {
-            grouped.set(key, {
-              imported_file_name: key,
-              original_file_name: r.original_file_name ?? null,
-              imported_by: r.imported_by ?? null,
-              imported_at: r.imported_at ?? null,
-              tx_count: 1,
-            });
-          }
-        }
-
-        const list = Array.from(grouped.values())
-          // Newest upload first — feels natural in a "recent imports" picker.
-          .sort((a, b) => (b.imported_at ?? "").localeCompare(a.imported_at ?? ""))
+        // Map RPC payload → FileRow shape used by the renderer. We keep
+        // the server's ordering as-is (newest upload first).
+        const list: FileRow[] = ((data ?? []) as any[])
+          .map((r) => ({
+            imported_file_name: r.imported_file_name as string,
+            original_file_name: r.original_file_name ?? null,
+            imported_by: r.imported_by ?? null,
+            imported_at: r.latest_imported_at ?? null,
+            tx_count: Number(r.transaction_count ?? 0),
+          }))
           .slice(0, MAX_FILES);
 
         if (cancelled) return;
         setRows(list);
 
-        // STEP 3 — fetch uploader display names. We collect distinct UUIDs,
-        // then a single .in() query resolves them all in one round-trip.
-        // For legacy rows where imported_by is NULL the UI shows "—".
-        const uploaderIds = Array.from(
-          new Set(list.map((r) => r.imported_by).filter(Boolean) as string[]),
-        );
-        if (uploaderIds.length) {
-          const { data: users } = await supabase
-            .from("app_users")
-            .select("id, username, full_name")
-            .in("id", uploaderIds);
-          if (!cancelled && users) {
-            const map: Record<string, string> = {};
-            for (const u of users as any[]) {
-              map[u.id] = u.full_name?.trim() || u.username || u.id;
-            }
-            setUploaderNames(map);
+        // Uploader display names are resolved server-side inside the RPC,
+        // so we just build the id→name lookup directly from the response —
+        // no second round-trip to app_users is needed. Legacy rows with
+        // NULL imported_by continue to render "—" via the fallback below.
+        const map: Record<string, string> = {};
+        for (const r of (data ?? []) as any[]) {
+          if (r.imported_by && r.uploaded_by_name) {
+            map[r.imported_by as string] = r.uploaded_by_name as string;
           }
-        } else {
-          setUploaderNames({});
         }
+        if (!cancelled) setUploaderNames(map);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "خطا در دریافت فهرست فایل‌ها.");
       } finally {
