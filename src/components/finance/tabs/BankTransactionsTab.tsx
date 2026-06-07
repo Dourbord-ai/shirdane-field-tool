@@ -594,6 +594,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     if (filterAssign) q = q.eq("assignment_status", filterAssign);
     if (filterFromDate) q = q.gte("transaction_datetime", filterFromDate);
     if (filterToDate) q = q.lte("transaction_datetime", filterToDate);
+    // Excel-file filter — matches every row carrying the chosen stored
+    // filename. Because `imported_file_name` is populated atomically when the
+    // upload pipeline inserts the row, this naturally restricts results to a
+    // single batch upload, including legacy uploads.
+    if (filterImportFile) q = q.eq("imported_file_name", filterImportFile);
 
     // -------------------------------------------------------------------
     // Real-time multi-column search.
