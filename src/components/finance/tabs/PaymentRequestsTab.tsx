@@ -63,6 +63,9 @@ import SettlementItemDetailsForm from "@/components/finance/SettlementItemDetail
 // already-loaded items list and reload via the existing `reload()` helper.
 import SettlementRequestProgressSummary from "@/components/finance/SettlementRequestProgressSummary";
 import SettlementItemExecutionPanel from "@/components/finance/SettlementItemExecutionPanel";
+// Phase 4 rollback dialog — wired into PRDetail header (request rollback) and
+// into each allocation row (allocation rollback).
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 // Payment-request beneficiary picker now reads from the LOCAL finance_parties
 // table (same source used by «شناسایی دریافت») so we don't silently hide
