@@ -1766,6 +1766,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         operationId={openDetails?.assigned_operation_id ?? null}
       />
 
+      {/* Excel-file picker. Mount stays cheap: the dialog only runs its
+          aggregation queries while `open` is true (see ImportFileFilter
+          implementation), so keeping it mounted has no perf cost. */}
+      <ImportFileFilter
+        open={openFileFilter}
+        onClose={() => setOpenFileFilter(false)}
+        selected={filterImportFile}
+        onSelect={setFilterImportFile}
+      />
+
 
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
