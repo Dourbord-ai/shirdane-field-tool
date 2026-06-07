@@ -332,10 +332,32 @@ export default function ReceiveIdentificationTab() {
         ))}
       </div>
 
+      {/* Advanced server-side filters (date/party/amount/banks).
+          State lives in the URL so refresh + pagination preserve it. */}
+      <ReceiveIdFilters
+        value={advFilters}
+        onApply={applyAdvFilters}
+        onClear={clearAdvFilters}
+      />
+
       {loading ? (
         <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
       ) : items.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">درخواستی یافت نشد</p>
+        // Distinguish "DB is empty for this status" from "the user's
+        // filters narrowed the result to zero". The second case
+        // surfaces a Clear shortcut so the user isn't stuck.
+        <div className="text-center py-10 space-y-2">
+          <p className="text-muted-foreground">
+            {activeAdvCount > 0
+              ? "هیچ رکوردی با فیلترهای فعلی پیدا نشد"
+              : "درخواستی یافت نشد"}
+          </p>
+          {activeAdvCount > 0 && (
+            <Button size="sm" variant="outline" onClick={clearAdvFilters}>
+              حذف فیلترها
+            </Button>
+          )}
+        </div>
       ) : (
         <div className="space-y-2">
           {items.map((r) => {
