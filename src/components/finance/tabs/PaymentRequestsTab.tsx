@@ -1566,7 +1566,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                     amount: headerApproved || headerRequested,
                     extraLines: [
                       { label: "وضعیت", value: PAYMENT_REQUEST_STATUS_LABEL[headerStatus || ""] || headerStatus || "—" },
-                      { label: "پرداخت شده", value: fmtAmount(headerPaid) },
+                      { label: "پرداخت شده", value: formatMoney(headerPaid) },
                     ],
                   }}
                   onSuccess={() => { void reload(); }}
