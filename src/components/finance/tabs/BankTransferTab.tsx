@@ -15,6 +15,8 @@ import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-re
 // underlying date comparisons happen on Gregorian ISO strings — matching
 // what `transfer_datetime` (timestamptz) actually stores in the DB.
 import DatePicker from "@/components/DatePicker";
+// Phase 4 — generic rollback button used in the row actions column.
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 interface SelectedTx {
   id: string; bank_id: string | null; deposit_amount: number | null;
