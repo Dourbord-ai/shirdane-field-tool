@@ -25,6 +25,8 @@ import {
 } from "@/lib/checks";
 import { JalaliDateCell, MoneyCell } from "@/components/finance/atoms";
 import { Clock, FileText, ShieldCheck, Ban } from "lucide-react";
+// Phase 4 — Check rollback (V1: registered/received/issued + delivered only).
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 interface Props {
   checkId: string | null;
