@@ -23,7 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 // Props are intentionally minimal: we only need the assignment tuple to drive
 // the lookup. The parent owns open/close state via the `txId` presence pattern.
