@@ -1585,7 +1585,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {/* Operation-details button — mirrors the desktop column.
                       Only shown when the transaction has a resolved
                       assignment so we know there is something to display. */}
-                  {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                  {/* Mobile: same rule as desktop — render the details
+                      action for every assigned row, even if the operation id
+                      is missing (the dialog explains that case). */}
+                  {t.assignment_status === "assigned" && (
                     <Button size="sm" variant="outline" onClick={() => setOpenDetails(t)}>
                       <FileText className="w-3 h-3 ml-1" /> جزئیات
                     </Button>
