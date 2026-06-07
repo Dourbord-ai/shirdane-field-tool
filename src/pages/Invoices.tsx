@@ -37,6 +37,8 @@ import RelatedCostsSection from "@/components/finance/RelatedCostsSection";
 // off the legacy "ثبت درخواست تسویه" CTA inside RelatedCostsSection.
 import InvoiceSettlementSummaryCard from "@/components/invoices/sections/InvoiceSettlementSummaryCard";
 import type { InvoiceLinkedSettlement } from "@/lib/finance/invoiceSettlementLink";
+// Phase 4 — generic rollback dialog for posted factors (admin/super_admin).
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
 
 interface FactorRow {
   id: string;
