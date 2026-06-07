@@ -60,6 +60,13 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import BulkAttachPaymentRequestDialog, {
   type BulkAttachTx,
 } from "@/components/finance/BulkAttachPaymentRequestDialog";
+// Bulk soft-delete dialog — classifies the selection into deletable / locked /
+// legacy-locked, enforces a reason, and calls the SECURITY DEFINER RPC
+// `fn_finance_bulk_delete_bank_transactions` which re-validates server-side.
+import BulkDeleteBankTxDialog from "@/components/finance/BulkDeleteBankTxDialog";
+// Role gate — bulk delete is treated as financially sensitive (same gate as
+// the rollback dialog) so only admin / super_admin (or dev-access) see it.
+import { canRollbackFinanceOps } from "@/components/finance/RollbackConfirmDialog";
 // Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
 import DatePicker from "@/components/DatePicker";
 // Read-only modal that shows the operation linked to an assigned bank tx.
