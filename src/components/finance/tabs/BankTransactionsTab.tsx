@@ -236,12 +236,33 @@ function deriveAutoState(t: Tx, idents: IdentRow[] | undefined, ri: ReceiveMeta 
 const MATCH_TYPE_LABEL: Record<number, string> = { 1: "حساب", 2: "کارت", 3: "شبا" };
 
 export default function BankTransactionsTab({ initialBankId }: { initialBankId?: string }) {
+  // -------------------------------------------------------------------------
+  // URL-backed state for the "Excel file" filter.
+  //
+  // We only persist THIS filter into the URL (per spec). All the other
+  // filters stay component-local for now so this change is minimally
+  // invasive — extending URL persistence to the rest can be done later
+  // without touching the query layer.
+  //
+  // We read the value once on mount via `initialImportFile`, then mirror
+  // every user change back into `?import_file=...` in a small effect below.
+  // -------------------------------------------------------------------------
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialImportFile = searchParams.get("import_file");
+
   const [txs, setTxs] = useState<Tx[]>([]);
   const [banks, setBanks] = useState<Record<string, BankRef>>({});
   const [filterBank, setFilterBank] = useState<string | null>(initialBankId || null);
   const [filterType, setFilterType] = useState<string>("");
   const [filterAssign, setFilterAssign] = useState<string>("");
   const [filterDescr, setFilterDescr] = useState("");
+  // The Excel-file filter holds an `imported_file_name` value (the UUID-
+  // prefixed storage name acts as the per-upload identifier). `null` means
+  // "no file filter applied — show every row across all imports".
+  const [filterImportFile, setFilterImportFile] = useState<string | null>(initialImportFile);
+  // Controls the picker dialog. Kept separate from `filterImportFile` so the
+  // dialog can be opened/closed without touching the active selection.
+  const [openFileFilter, setOpenFileFilter] = useState(false);
   // Transaction-date range (Gregorian ISO from the Jalali DatePicker).
   // These filter on `transaction_datetime` (the real banking date),
   // NOT on `created_at` (when the row was inserted into our DB).
@@ -251,6 +272,23 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // range covers whichever direction (deposit OR withdraw) is populated.
   const [filterMinAmount, setFilterMinAmount] = useState("");
   const [filterMaxAmount, setFilterMaxAmount] = useState("");
+
+  // Keep the URL in sync with `filterImportFile` so a browser refresh — or
+  // sharing the URL — preserves the file filter. We mutate searchParams
+  // immutably via the setter so React Router can react to the change.
+  useEffect(() => {
+    const current = searchParams.get("import_file");
+    if (filterImportFile && current !== filterImportFile) {
+      const next = new URLSearchParams(searchParams);
+      next.set("import_file", filterImportFile);
+      setSearchParams(next, { replace: true });
+    } else if (!filterImportFile && current) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("import_file");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterImportFile]);
   // ---- Debounced mirrors of the text/amount inputs ---------------------
   // Typing should NOT fire a Supabase round-trip per keystroke. 300ms is a
   // common UX sweet-spot — fast enough to feel live, slow enough to coalesce
