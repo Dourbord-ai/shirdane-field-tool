@@ -1667,7 +1667,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           {/* Mobile cards */}
           <div className="md:hidden space-y-2">
             {filtered.map((t) => {
-              const eligible = isBulkAttachEligible(t);
+              const eligible = isAnySelectionEligible(t);
               const checked = selectedIds.has(t.id);
               return (
               <div key={t.id} className={`rounded-xl border bg-card p-3 ${checked ? "ring-2 ring-primary" : ""}`}>
