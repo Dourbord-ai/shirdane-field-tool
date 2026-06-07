@@ -41,6 +41,17 @@ export default function Finance() {
   const [tab, setTab] = useState(initial);
   const [bankFilter, setBankFilter] = useState<string | undefined>();
 
+  // Keep local `tab` state in sync with the `?tab=` query string. Without
+  // this effect, in-app links that only change the URL (e.g. the
+  // "رفتن به تب مرتبط" button inside AssignmentDetailsDialog) would update
+  // the address bar but leave the rendered tab unchanged, because `useState`
+  // initialises from the URL only on mount.
+  useEffect(() => {
+    const t = params.get("tab") || "dashboard";
+    if (t !== tab) setTab(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
   function changeTab(t: string) {
     setTab(t);
     setParams({ tab: t });
