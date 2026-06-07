@@ -224,11 +224,20 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             )}
             {view.navTab && (
               <div className="pt-2 flex justify-end">
-                <Button asChild size="sm" variant="outline" onClick={onClose}>
-                  <Link to={`/finance?tab=${view.navTab}`}>
-                    <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                    رفتن به تب مرتبط
-                  </Link>
+                {/* Single handler: navigate first, then close. Using
+                    navigate() instead of <Link> guarantees the route change
+                    happens regardless of how the Dialog unmounts the trigger
+                    after we call onClose(). */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigate(`/finance?tab=${view.navTab}`);
+                    onClose();
+                  }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                  رفتن به تب مرتبط
                 </Button>
               </div>
             )}
