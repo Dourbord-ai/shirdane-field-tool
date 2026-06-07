@@ -212,6 +212,7 @@ export default function BankTransferTab() {
                   <th className="p-2 font-bold">تاریخ انتقال</th>
                   <th className="p-2 font-bold">وضعیت</th>
                   <th className="p-2 font-bold">سند</th>
+                  <th className="p-2 font-bold">اقدام</th>
                 </tr>
               </thead>
               <tbody>
