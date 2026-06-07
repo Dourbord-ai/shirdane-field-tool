@@ -196,10 +196,35 @@ export default function CheckDetailDialog({ checkId, onOpenChange }: Props) {
                 </Button>
               ))}
             </div>
+            {/* Phase 4 — V1 rollback restricted to checks in their initial
+                registered state OR already delivered. Other lifecycle states
+                (cashed/bounced/voided/lost) are out of scope for V1. */}
+            {check.category === "operational" &&
+              ["received", "issued", "delivered"].includes(check.status) && (
+                <div className="pt-2">
+                  <RollbackButton
+                    entityType="check"
+                    entityId={check.id}
+                    metadata={{
+                      operationLabel: `چک ${DIRECTION_LABEL[check.direction]}`,
+                      amount: check.amount,
+                      partyLabel: partyLabel(check.party),
+                      bankLabel: bankLabel(check.bank),
+                      sepidarVoucherId: check.voucher_id,
+                      extraLines: [
+                        { label: "شماره چک", value: check.check_number },
+                        { label: "وضعیت", value: check.status },
+                      ],
+                    }}
+                    onSuccess={() => { invalidate(); invalidateBooks(); onOpenChange(false); }}
+                  />
+                </div>
+              )}
           </div>
         )}
 
         <Separator />
+
 
         {/* Timeline — most recent event first; renders Persian event label
             from EVENT_LABEL plus the original description text. */}
