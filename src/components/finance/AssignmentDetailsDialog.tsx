@@ -55,6 +55,14 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId }: Props) {
+  // Programmatic router navigation. We previously used a <Link> wrapped by a
+  // <Button asChild> with onClick={onClose} — the onClick fired SYNCHRONOUSLY
+  // before the anchor click, which in some cases (StrictMode, fast double-
+  // render) caused the route change to be dropped because the Dialog
+  // unmounted the link's portal before the click event bubbled. Switching to
+  // useNavigate makes navigation deterministic: we close the dialog AND push
+  // the new URL ourselves, in one explicit, ordered handler.
+  const navigate = useNavigate();
   // Three-state UI: loading spinner / error message / data view. We reset on
   // every open so a previous error doesn't leak into a new lookup.
   const [loading, setLoading] = useState(false);
