@@ -1539,6 +1539,28 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                         </Button>
                       </div>
                     )}
+                    {/* Phase 4: allocation rollback — only meaningful once the
+                        allocation actually created a Sepidar voucher. The
+                        existing «لغو تخصیص» path above is kept for failed
+                        allocations that never reached Sepidar. */}
+                    {a.status === "synced" && (
+                      <div className="flex gap-2">
+                        <RollbackButton
+                          entityType="payment_allocation"
+                          entityId={a.id}
+                          metadata={{
+                            operationLabel: "تخصیص پرداخت",
+                            amount: a.amount,
+                            bankLabel: a.bank?.title || a.bank?.bank_name || null,
+                            sepidarVoucherId: a.bank_transaction?.document_number || null,
+                            extraLines: a.bank_transaction?.transaction_jalali_date
+                              ? [{ label: "تاریخ تراکنش", value: a.bank_transaction.transaction_jalali_date }]
+                              : undefined,
+                          }}
+                          onSuccess={() => { void reload(); }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
