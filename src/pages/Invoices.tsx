@@ -278,6 +278,13 @@ function DetailRow({ label, value, bold }: { label: string; value: string; bold?
 //   - milk / other / legacy_product_* are intentionally NOT in the supported
 //     set — they have no accounting mappings yet.
 // =============================================================================
+// NOTE (2026-06-07 regression fix): `mixed` was added after the
+// MixedInvoiceForm rollout. Without it, every new invoice (which is written
+// with product_type='mixed') would hide the PostingPanel entirely — no
+// Sepidar status, no Post button, no Retry button. The backend RPC
+// `post_approved_factor` was updated in the same migration to handle
+// `mixed` by iterating `factor_items` and building one inventory/revenue
+// line per per-row product_type plus a consolidated AP/AR line.
 const POSTING_SUPPORTED_PRODUCT_TYPES = new Set<string>([
   "livestock",
   "feed",
@@ -285,6 +292,7 @@ const POSTING_SUPPORTED_PRODUCT_TYPES = new Set<string>([
   "sperm",
   "manure",
   "services",
+  "mixed",
 ]);
 
 function isFeedSale(f: FactorRow): boolean {
