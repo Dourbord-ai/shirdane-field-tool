@@ -62,6 +62,9 @@ import BulkAttachPaymentRequestDialog, {
 } from "@/components/finance/BulkAttachPaymentRequestDialog";
 // Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
 import DatePicker from "@/components/DatePicker";
+// Read-only modal that shows the operation linked to an assigned bank tx.
+import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
+
 
 interface Tx {
   id: string;
@@ -266,6 +269,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   const [openExcel, setOpenExcel] = useState(false);
   const [openRaw, setOpenRaw] = useState<Tx | null>(null);
   const [openReceiveId, setOpenReceiveId] = useState<Tx | null>(null);
+  // "Details" modal for assigned transactions. We hold the entire Tx so the
+  // dialog can resolve the related operation via (assigned_operation_type,
+  // assigned_operation_id) without re-querying the bank transactions table.
+  const [openDetails, setOpenDetails] = useState<Tx | null>(null);
+
   // ---- Bulk-attach selection state ---------------------------------------
   // Only rows that pass `isBulkAttachEligible` (withdraw + unassigned) can be
   // added; the table guards each addition so ineligible rows never end up in
@@ -1465,21 +1473,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                             <ArrowDownToLine className="w-3 h-3 ml-1" /> شناسایی دریافت
                           </Button>
                         )}
-                        {/* Show "ثبت پرداخت" for unassigned withdraws AND for
-                            bank-fee candidates flagged as needs_review, so the
-                            operator can complete the manual payment-request
-                            flow from this row without leaving the screen. */}
-                        {((t.assignment_status === "unassigned" && t.transaction_type === "withdraw") ||
-                          (t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate")) && (
-                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toast.info("ثبت پرداخت از تب درخواست‌های تسویه")}>
-                            <ArrowUpFromLine className="w-3 h-3 ml-1" /> ثبت پرداخت
-                          </Button>
-                        )}
-                        {t.assignment_status === "unassigned" && (
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => toast.info("اتصال به انتقال بین بانکی از تب مربوطه")}>
-                            <ArrowLeftRight className="w-3 h-3 ml-1" /> انتقال بانکی
-                          </Button>
-                        )}
+                        {/* NOTE: The legacy "ثبت پرداخت" and "انتقال بانکی"
+                            buttons were removed from this list — they only
+                            showed a toast asking the operator to switch tabs,
+                            which was confusing. The real entry points live in
+                            the dedicated tabs and are unaffected. */}
                         {t.assignment_status === "assigning" && (
                           <span className="text-[11px] text-amber-700 inline-flex items-center gap-1">
                             <Link2 className="w-3 h-3" /> در انتظار تایید مدیر
@@ -1488,13 +1486,22 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                         {t.assignment_status === "assigned" && t.assigned_operation_type === "receive_identification" && (
                           <span className="text-[11px] text-emerald-700">شناسایی شده</span>
                         )}
+                        {/* "جزئیات" button — only for assigned transactions.
+                            Opens a modal that resolves the related operation
+                            row using (assigned_operation_type, _id) and shows
+                            a read-only summary. Pure UI; no mutations. */}
+                        {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setOpenDetails(t)}
+                          >
+                            <FileText className="w-3 h-3 ml-1" /> جزئیات
+                          </Button>
+                        )}
                         {/* Bank-fee candidate badge — surfaced by the
-                            auto-processing pipeline. Operator clicks "ثبت پرداخت"
-                            (already wired for withdraws) to complete the
-                            manual approve→post flow. We intentionally do NOT
-                            render an auto-post button here yet — that path
-                            belongs in the dedicated bank-fee helper that
-                            mirrors PaymentRequestsTab. */}
+                            auto-processing pipeline. */}
                         {t.assignment_status === "needs_review" && t.assigned_operation_type === "bank_fee_candidate" && (
                           <span className="text-[11px] inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 px-2 py-0.5">
                             <AlertTriangle className="w-3 h-3" /> کارمزد بانکی — بازبینی دستی
@@ -1504,6 +1511,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                         {t.assignment_status === "unassigned" && (
                           <Button size="icon" variant="ghost" title="حذف نرم" onClick={() => softDelete(t)}><Trash2 className="w-3.5 h-3.5" /></Button>
                         )}
+
                       </div>
                     </td>
                   </tr>
@@ -1568,7 +1576,16 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {t.assignment_status === "assigning" && (
                     <span className="text-[11px] text-amber-700">در انتظار تایید مدیر</span>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => setOpenRaw(t)}><FileText className="w-3 h-3 ml-1" /> جزئیات</Button>
+                  {/* Operation-details button — mirrors the desktop column.
+                      Only shown when the transaction has a resolved
+                      assignment so we know there is something to display. */}
+                  {t.assignment_status === "assigned" && t.assigned_operation_id && (
+                    <Button size="sm" variant="outline" onClick={() => setOpenDetails(t)}>
+                      <FileText className="w-3 h-3 ml-1" /> جزئیات
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setOpenRaw(t)}><FileText className="w-3 h-3 ml-1" /> جزئیات خام</Button>
+
                   {t.assignment_status === "unassigned" && (
                     <Button size="sm" variant="ghost" onClick={() => softDelete(t)}><Trash2 className="w-3 h-3 ml-1" /> حذف</Button>
                   )}
@@ -1638,6 +1655,15 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           }}
         />
       )}
+      {/* Assignment details modal — driven entirely by the selected Tx.
+          Closing it just clears the local state; no side effects. */}
+      <AssignmentDetailsDialog
+        open={!!openDetails}
+        onClose={() => setOpenDetails(null)}
+        operationType={openDetails?.assigned_operation_type ?? null}
+        operationId={openDetails?.assigned_operation_id ?? null}
+      />
+
 
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
