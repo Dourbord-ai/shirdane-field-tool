@@ -1486,6 +1486,20 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <Link2 className="w-4 h-4 ml-1" />
               اتصال به درخواست تسویه
             </Button>
+            {/* Bulk delete — role-gated to admin/super_admin (same gate as
+                rollback). The dialog itself filters out locked rows and the
+                RPC re-validates server-side, so showing this with a mixed
+                selection is safe. */}
+            {canRollbackFinanceOps() && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setOpenBulkDelete(true)}
+              >
+                <Trash2 className="w-4 h-4 ml-1" />
+                حذف جمعی
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={clearSelection}>
               <X className="w-4 h-4 ml-1" /> پاک کردن انتخاب
             </Button>
