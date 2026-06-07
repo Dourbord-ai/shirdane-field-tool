@@ -3194,6 +3194,36 @@ export type Database = {
           },
         ]
       }
+      finance_bank_tx_delete_audit: {
+        Row: {
+          created_at: string
+          deleted_at: string
+          deleted_by: string | null
+          id: string
+          reason: string
+          snapshot: Json
+          tx_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          reason: string
+          snapshot: Json
+          tx_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          reason?: string
+          snapshot?: Json
+          tx_id?: string
+        }
+        Relationships: []
+      }
       finance_bank_tx_identifiers: {
         Row: {
           bank_transaction_id: string
@@ -7305,6 +7335,10 @@ export type Database = {
         }[]
       }
       fn_can_rollback_finance: { Args: { _user_id: string }; Returns: boolean }
+      fn_finance_bulk_delete_bank_transactions: {
+        Args: { p_actor: string; p_ids: string[]; p_reason: string }
+        Returns: Json
+      }
       fn_finance_check_post_voucher: {
         Args: { p_check_id: string; p_event: string }
         Returns: string

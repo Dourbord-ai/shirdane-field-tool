@@ -60,6 +60,13 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import BulkAttachPaymentRequestDialog, {
   type BulkAttachTx,
 } from "@/components/finance/BulkAttachPaymentRequestDialog";
+// Bulk soft-delete dialog — classifies the selection into deletable / locked /
+// legacy-locked, enforces a reason, and calls the SECURITY DEFINER RPC
+// `fn_finance_bulk_delete_bank_transactions` which re-validates server-side.
+import BulkDeleteBankTxDialog from "@/components/finance/BulkDeleteBankTxDialog";
+// Role gate — bulk delete is treated as financially sensitive (same gate as
+// the rollback dialog) so only admin / super_admin (or dev-access) see it.
+import { canRollbackFinanceOps } from "@/components/finance/RollbackConfirmDialog";
 // Unified Jalali UI / Gregorian-ISO value date picker — see src/components/DatePicker.tsx
 import DatePicker from "@/components/DatePicker";
 // Read-only modal that shows the operation linked to an assigned bank tx.
@@ -324,6 +331,9 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // the set even if data shifts between renders.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openBulkAttach, setOpenBulkAttach] = useState(false);
+  // Bulk-delete dialog visibility. Same selection set is reused so the
+  // operator doesn't have to re-pick rows when switching between actions.
+  const [openBulkDelete, setOpenBulkDelete] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // ---- Server-side pagination + counts -----------------------------------
@@ -804,6 +814,23 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
   // --------------------------------------------------------------------
   function isBulkAttachEligible(t: Tx): boolean {
     return t.transaction_type === "withdraw" && t.assignment_status === "unassigned";
+  }
+  // Bulk-delete eligibility — must mirror the server-side guard in
+  // fn_finance_bulk_delete_bank_transactions. The marker
+  // `bank_fee_candidate` is a classification hint, not a real linkage, so
+  // it's allowed (same logic in BulkDeleteBankTxDialog.categorize).
+  function isBulkDeleteEligible(t: Tx): boolean {
+    return (
+      t.assignment_status === "unassigned" &&
+      !t.assigned_operation_id &&
+      (!t.assigned_operation_type ||
+        t.assigned_operation_type === "bank_fee_candidate")
+    );
+  }
+  // A row is selectable if it qualifies for AT LEAST ONE bulk action. The
+  // per-action dialog filters the selection again, so mixing rows is safe.
+  function isAnySelectionEligible(t: Tx): boolean {
+    return isBulkAttachEligible(t) || isBulkDeleteEligible(t);
   }
   function toggleSelect(id: string, eligible: boolean) {
     if (!eligible) return;
@@ -1459,6 +1486,20 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               <Link2 className="w-4 h-4 ml-1" />
               اتصال به درخواست تسویه
             </Button>
+            {/* Bulk delete — role-gated to admin/super_admin (same gate as
+                rollback). The dialog itself filters out locked rows and the
+                RPC re-validates server-side, so showing this with a mixed
+                selection is safe. */}
+            {canRollbackFinanceOps() && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setOpenBulkDelete(true)}
+              >
+                <Trash2 className="w-4 h-4 ml-1" />
+                حذف جمعی
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={clearSelection}>
               <X className="w-4 h-4 ml-1" /> پاک کردن انتخاب
             </Button>
@@ -1481,7 +1522,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       matches the rest of the toolbar. */}
                   <th className="p-2 w-8">
                     {(() => {
-                      const eligible = filtered.filter(isBulkAttachEligible);
+                      const eligible = filtered.filter(isAnySelectionEligible);
                       const allSelected =
                         eligible.length > 0 && eligible.every((t) => selectedIds.has(t.id));
                       return (
@@ -1521,7 +1562,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
               </thead>
               <tbody>
                 {filtered.map((t) => {
-                  const eligible = isBulkAttachEligible(t);
+                  const eligible = isAnySelectionEligible(t);
                   const checked = selectedIds.has(t.id);
                   return (
                   <tr key={t.id} className={`border-t hover:bg-secondary/30 ${checked ? "bg-primary/5" : ""}`}>
@@ -1626,7 +1667,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           {/* Mobile cards */}
           <div className="md:hidden space-y-2">
             {filtered.map((t) => {
-              const eligible = isBulkAttachEligible(t);
+              const eligible = isAnySelectionEligible(t);
               const checked = selectedIds.has(t.id);
               return (
               <div key={t.id} className={`rounded-xl border bg-card p-3 ${checked ? "ring-2 ring-primary" : ""}`}>
@@ -1737,7 +1778,10 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         <BulkAttachPaymentRequestDialog
           transactions={
             txs
-              .filter((t) => selectedIds.has(t.id))
+              // Defensive: now that the selection set may also include
+              // deposit/legacy rows (because they're delete-eligible), only
+              // pass attach-eligible rows to the attach dialog.
+              .filter((t) => selectedIds.has(t.id) && isBulkAttachEligible(t))
               .map<BulkAttachTx>((t) => ({
                 id: t.id,
                 withdraw_amount: t.withdraw_amount,
@@ -1752,6 +1796,20 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             // attached rows disappear from the unassigned view and the
             // user starts from a clean slate.
             setOpenBulkAttach(false);
+            clearSelection();
+            void load();
+          }}
+        />
+      )}
+      {/* Bulk delete dialog — receives the FULL selection so it can classify
+          and surface locked / legacy-locked rows to the operator. The
+          underlying RPC re-validates each row server-side. */}
+      {openBulkDelete && (
+        <BulkDeleteBankTxDialog
+          transactions={txs.filter((t) => selectedIds.has(t.id))}
+          onClose={() => setOpenBulkDelete(false)}
+          onDone={() => {
+            setOpenBulkDelete(false);
             clearSelection();
             void load();
           }}
