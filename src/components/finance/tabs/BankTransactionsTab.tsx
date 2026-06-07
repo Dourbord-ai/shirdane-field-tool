@@ -1522,7 +1522,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                       matches the rest of the toolbar. */}
                   <th className="p-2 w-8">
                     {(() => {
-                      const eligible = filtered.filter(isBulkAttachEligible);
+                      const eligible = filtered.filter(isAnySelectionEligible);
                       const allSelected =
                         eligible.length > 0 && eligible.every((t) => selectedIds.has(t.id));
                       return (
