@@ -1167,6 +1167,9 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
   const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [allocItem, setAllocItem] = useState<PRItemFull | null>(null);
+  // Item targeted by the "Edit amount" dialog. Separate from `allocItem` so
+  // the two dialogs can never collide and the row keeps its individual state.
+  const [editAmountItem, setEditAmountItem] = useState<PRItemFull | null>(null);
   const [headerRefresh, setHeaderRefresh] = useState<PR>(pr);
 
   async function reload() {
