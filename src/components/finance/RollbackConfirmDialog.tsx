@@ -165,6 +165,13 @@ export function RollbackConfirmDialog({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-right">
+              {/* Scope-specific confirmation question — shown when the caller
+                  wants to highlight exactly what will be rolled back. */}
+              {metadata.confirmationQuestion && (
+                <p className="text-sm font-semibold text-foreground">
+                  {metadata.confirmationQuestion}
+                </p>
+              )}
               {/* Metadata grid — only renders rows whose values exist. */}
               <div className="rounded-lg border bg-muted/30 p-3 grid grid-cols-2 gap-2 text-xs">
                 <MetaRow label="نوع عملیات" value={metadata.operationLabel} />
