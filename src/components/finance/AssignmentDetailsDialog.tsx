@@ -146,7 +146,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             date: d.transaction_datetime,
             status: d.status,
             description: d.description,
-            navTab: "receive-id",
+            navUrl: `/finance?tab=receive-id&receiveId=${encodeURIComponent(d.id)}`,
           });
         } else if (operationType === "bank_transfer") {
           const { data, error } = await supabase
