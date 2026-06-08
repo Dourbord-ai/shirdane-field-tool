@@ -231,22 +231,23 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 </div>
               </div>
             )}
-            {view.navTab && (
+            {view.navUrl && !hideNavButton && (
               <div className="pt-2 flex justify-end">
-                {/* Single handler: navigate first, then close. Using
-                    navigate() instead of <Link> guarantees the route change
-                    happens regardless of how the Dialog unmounts the trigger
-                    after we call onClose(). */}
+                {/* Open the deep-linked destination in a NEW browser tab so
+                    the operator's place in the bank-transactions list is
+                    preserved (no navigation in the current tab). We use
+                    `noopener,noreferrer` for the standard security hygiene:
+                    the opened tab cannot access window.opener and no
+                    Referer header is leaked. */}
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    navigate(`/finance?tab=${view.navTab}`);
-                    onClose();
+                    window.open(view.navUrl!, "_blank", "noopener,noreferrer");
                   }}
                 >
                   <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                  رفتن به تب مرتبط
+                  رفتن به تب مرتبط (تب جدید)
                 </Button>
               </div>
             )}
