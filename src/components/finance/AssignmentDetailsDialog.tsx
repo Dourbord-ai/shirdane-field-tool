@@ -27,11 +27,16 @@ import { useNavigate } from "react-router-dom";
 
 // Props are intentionally minimal: we only need the assignment tuple to drive
 // the lookup. The parent owns open/close state via the `txId` presence pattern.
+//
+// `hideNavButton` lets a destination tab reuse this dialog as a read-only
+// detail panel WITHOUT re-rendering the "go to related tab" button (which
+// would point right back at itself and create a confusing loop).
 interface Props {
   open: boolean;
   onClose: () => void;
   operationType: string | null;
   operationId: string | null;
+  hideNavButton?: boolean;
 }
 
 // Shape we render after normalising each operation type into a common view-model.
