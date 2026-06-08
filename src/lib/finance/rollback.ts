@@ -186,10 +186,10 @@ export function isSepidarRollbackOk(r: SepidarRollbackResult | null): boolean {
   if (!r) return true; // No voucher to roll back = trivially OK.
   if (!r.success) return false;
   const code = r.result_code;
-  return code === 0 || code === 1 || code === 2 || Number.isNaN(code) || code === -1
-    ? code !== -1 || r.success === true
-    : false;
+  // -1 only ever signals "SP threw"; anything else with success=true is OK.
+  return code !== -1;
 }
+
 
 
 // ----------------------------------------------------------------------------
