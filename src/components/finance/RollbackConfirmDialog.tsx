@@ -286,24 +286,39 @@ export function RollbackButton({
   buttonVariant = "outline",
   buttonSize = "sm",
   buttonClassName,
+  tooltip,
   ...dialogProps
 }: RollbackButtonProps) {
   const [open, setOpen] = useState(false);
   // Hidden completely when the operator can't perform rollbacks — keeps the
   // detail panel clean for non-privileged users.
   if (!canRollbackFinanceOps()) return null;
+
+  const triggerButton = (
+    <Button
+      type="button"
+      variant={buttonVariant}
+      size={buttonSize}
+      className={buttonClassName}
+      onClick={() => setOpen(true)}
+    >
+      <RotateCcw className="w-3.5 h-3.5 ml-1" />
+      {label}
+    </Button>
+  );
+
   return (
     <>
-      <Button
-        type="button"
-        variant={buttonVariant}
-        size={buttonSize}
-        className={buttonClassName}
-        onClick={() => setOpen(true)}
-      >
-        <RotateCcw className="w-3.5 h-3.5 ml-1" />
-        {label}
-      </Button>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-right">
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        triggerButton
+      )}
       <RollbackConfirmDialog
         {...dialogProps}
         open={open}
