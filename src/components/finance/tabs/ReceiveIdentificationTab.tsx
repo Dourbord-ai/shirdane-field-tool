@@ -28,6 +28,10 @@ import ReceiveIdFilters, {
   type ReceiveIdFilterState,
 } from "@/components/finance/ReceiveIdFilters";
 import { toGregorianForDb } from "@/lib/toGregorianForDb";
+// Read-only detail panel reused for the bank-transactions → receive-id
+// deep-link flow. We pass `hideNavButton` so the dialog doesn't render a
+// circular "go to related tab" button pointing back at this same tab.
+import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
 import type { JalaliDate } from "@/lib/jalali";
 
 // Render a status badge using ONLY the receive-identification label map so
