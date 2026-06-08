@@ -107,6 +107,11 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const pr: any = d.finance_payment_requests || {};
           const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
+          // Resolve the parent payment_request_id — that's the entity the
+          // destination tab needs to open (an "allocation" alone isn't a row
+          // in PaymentRequestsTab; the request is). Fall back to pr.id from
+          // the join if the FK column itself is null for any reason.
+          const targetPrId = d.payment_request_id || pr.id || null;
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: pr.title || pr.id || d.payment_request_id,
@@ -115,7 +120,9 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             date: d.allocation_datetime,
             status: d.status,
             description: pr.description,
-            navTab: "payment-requests",
+            navUrl: targetPrId
+              ? `/finance?tab=payment-requests&paymentRequestId=${encodeURIComponent(targetPrId)}`
+              : undefined,
           });
         } else if (operationType === "receive_identification") {
           const { data, error } = await supabase
