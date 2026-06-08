@@ -169,6 +169,27 @@ export default function ReceiveIdentificationTab() {
     [searchParams, setSearchParams],
   );
 
+  // -----------------------------------------------------------------------
+  // Deep-link consumer — `?receiveId=<uuid>` arriving from the
+  // bank-transactions AssignmentDetailsDialog ("رفتن به تب مرتبط" opens this
+  // tab in a NEW browser tab). We mount AssignmentDetailsDialog as a
+  // read-only detail panel for the matching record. If the id can't be
+  // resolved by the dialog's own fetch, the dialog itself shows the
+  // built-in "رکورد ... یافت نشد" error.
+  // -----------------------------------------------------------------------
+  const [deepLinkReceiveId, setDeepLinkReceiveId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get("receiveId");
+    if (!id) return;
+    setDeepLinkReceiveId(id);
+    // Strip the param so refreshes / re-renders don't re-open the dialog
+    // after the user closes it.
+    const p = new URLSearchParams(searchParams);
+    p.delete("receiveId");
+    setSearchParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Clear all advanced filter keys but keep the status pill choice.
   const clearAdvFilters = useCallback(() => {
     const p = new URLSearchParams(searchParams);
