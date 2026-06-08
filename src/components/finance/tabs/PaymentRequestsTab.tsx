@@ -10,6 +10,8 @@ import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/fina
 import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle, Pencil } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 // Phase-N: secure RPC-backed item-amount editor. The dialog handles its own
 // validation but the server-side guard inside
 // `fn_finance_update_payment_request_item_amount` is the source of truth.
@@ -1635,6 +1637,8 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                         <RollbackButton
                           entityType="payment_allocation"
                           entityId={a.id}
+                          label="لغو این تخصیص و برگشت سند"
+                          tooltip="فقط همین تخصیص، سند سپیدار و تراکنش متصل آزاد می‌شود. درخواست اصلی باقی می‌ماند."
                           metadata={{
                             operationLabel: "تخصیص پرداخت",
                             amount: a.amount,
@@ -1643,6 +1647,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                             extraLines: a.bank_transaction?.transaction_jalali_date
                               ? [{ label: "تاریخ تراکنش", value: a.bank_transaction.transaction_jalali_date }]
                               : undefined,
+                            confirmationQuestion: "آیا از لغو این تخصیص و برگشت سند مرتبط مطمئن هستید؟",
                           }}
                           onSuccess={() => { void reload(); }}
                         />
@@ -1666,21 +1671,30 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                 every linked allocation, soft-deletes any posted voucher, and
                 recomputes party balances via the orchestrator. */}
             {(headerStatus === "approved" || headerStatus === "partially_paid" || headerStatus === "paid") && (
-              <div className="col-span-2 flex justify-end">
-                <RollbackButton
-                  entityType="payment_request"
-                  entityId={pr.id}
-                  metadata={{
-                    operationLabel: "درخواست تسویه",
-                    amount: headerApproved || headerRequested,
-                    extraLines: [
-                      { label: "وضعیت", value: PAYMENT_REQUEST_STATUS_LABEL[headerStatus || ""] || headerStatus || "—" },
-                      { label: "پرداخت شده", value: formatMoney(headerPaid) },
-                    ],
-                  }}
-                  onSuccess={() => { void reload(); }}
-                />
-              </div>
+              <>
+                <div className="col-span-2">
+                  <Separator className="my-4" />
+                </div>
+                <div className="col-span-2 flex justify-end">
+                  <RollbackButton
+                    entityType="payment_request"
+                    entityId={pr.id}
+                    label="لغو کامل درخواست"
+                    buttonVariant="destructive"
+                    tooltip="همه تخصیص‌ها و اسناد این درخواست برگشت می‌خورند و خود درخواست لغو می‌شود."
+                    metadata={{
+                      operationLabel: "درخواست تسویه",
+                      amount: headerApproved || headerRequested,
+                      extraLines: [
+                        { label: "وضعیت", value: PAYMENT_REQUEST_STATUS_LABEL[headerStatus || ""] || headerStatus || "—" },
+                        { label: "پرداخت شده", value: formatMoney(headerPaid) },
+                      ],
+                      confirmationQuestion: "آیا از لغو کامل این درخواست و برگشت همه تخصیص‌ها و اسناد آن مطمئن هستید؟",
+                    }}
+                    onSuccess={() => { void reload(); }}
+                  />
+                </div>
+              </>
             )}
           </div>
         </div>

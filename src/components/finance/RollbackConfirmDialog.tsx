@@ -40,6 +40,7 @@ import {
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -76,6 +77,8 @@ export interface RollbackMetadata {
   bankLabel?: string | null;
   sepidarVoucherId?: string | number | null;
   extraLines?: { label: string; value: ReactNode }[];
+  // Optional scope-specific confirmation question shown inside the dialog.
+  confirmationQuestion?: string;
 }
 
 export interface RollbackConfirmDialogProps {
@@ -162,6 +165,13 @@ export function RollbackConfirmDialog({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-right">
+              {/* Scope-specific confirmation question — shown when the caller
+                  wants to highlight exactly what will be rolled back. */}
+              {metadata.confirmationQuestion && (
+                <p className="text-sm font-semibold text-foreground">
+                  {metadata.confirmationQuestion}
+                </p>
+              )}
               {/* Metadata grid — only renders rows whose values exist. */}
               <div className="rounded-lg border bg-muted/30 p-3 grid grid-cols-2 gap-2 text-xs">
                 <MetaRow label="نوع عملیات" value={metadata.operationLabel} />
@@ -267,6 +277,8 @@ export interface RollbackButtonProps
   buttonVariant?: ButtonProps["variant"];
   buttonSize?: ButtonProps["size"];
   buttonClassName?: string;
+  // Optional helper text shown on hover to clarify scope (allocation vs request).
+  tooltip?: string;
 }
 
 export function RollbackButton({
@@ -274,24 +286,39 @@ export function RollbackButton({
   buttonVariant = "outline",
   buttonSize = "sm",
   buttonClassName,
+  tooltip,
   ...dialogProps
 }: RollbackButtonProps) {
   const [open, setOpen] = useState(false);
   // Hidden completely when the operator can't perform rollbacks — keeps the
   // detail panel clean for non-privileged users.
   if (!canRollbackFinanceOps()) return null;
+
+  const triggerButton = (
+    <Button
+      type="button"
+      variant={buttonVariant}
+      size={buttonSize}
+      className={buttonClassName}
+      onClick={() => setOpen(true)}
+    >
+      <RotateCcw className="w-3.5 h-3.5 ml-1" />
+      {label}
+    </Button>
+  );
+
   return (
     <>
-      <Button
-        type="button"
-        variant={buttonVariant}
-        size={buttonSize}
-        className={buttonClassName}
-        onClick={() => setOpen(true)}
-      >
-        <RotateCcw className="w-3.5 h-3.5 ml-1" />
-        {label}
-      </Button>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-right">
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        triggerButton
+      )}
       <RollbackConfirmDialog
         {...dialogProps}
         open={open}
