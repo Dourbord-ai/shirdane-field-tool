@@ -23,7 +23,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
-import { useNavigate } from "react-router-dom";
+// (useNavigate no longer needed: the "go to related tab" button now opens a
+// NEW browser tab via window.open(...) instead of doing in-page routing, so
+// the operator's current view of the bank-transactions list is preserved.)
 
 // Props are intentionally minimal: we only need the assignment tuple to drive
 // the lookup. The parent owns open/close state via the `txId` presence pattern.
