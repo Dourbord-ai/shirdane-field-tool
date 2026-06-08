@@ -1308,7 +1308,17 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
     headerRemaining > 0;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+      // Only close when the click lands on the backdrop itself.
+      // React events bubble through the React tree even across portals,
+      // so without this check, clicks inside nested Radix Dialogs
+      // (EditItemAmountDialog, AllocationDialog) — whose DOM lives in a
+      // portal but whose React parent is this backdrop — would bubble up
+      // here and dismiss the request detail panel unexpectedly.
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+
       <div className="bg-card border-l shadow-lg w-full max-w-2xl h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-card z-10">
           <div>
