@@ -172,7 +172,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             date: d.transfer_datetime,
             status: d.status,
             description: d.description,
-            navTab: "bank-transfer",
+            navUrl: `/finance?tab=bank-transfer&transferId=${encodeURIComponent(d.id)}`,
           });
 
         } else {
