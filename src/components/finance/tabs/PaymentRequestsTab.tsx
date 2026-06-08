@@ -1637,6 +1637,8 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                         <RollbackButton
                           entityType="payment_allocation"
                           entityId={a.id}
+                          label="لغو این تخصیص و برگشت سند"
+                          tooltip="فقط همین تخصیص، سند سپیدار و تراکنش متصل آزاد می‌شود. درخواست اصلی باقی می‌ماند."
                           metadata={{
                             operationLabel: "تخصیص پرداخت",
                             amount: a.amount,
@@ -1645,6 +1647,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                             extraLines: a.bank_transaction?.transaction_jalali_date
                               ? [{ label: "تاریخ تراکنش", value: a.bank_transaction.transaction_jalali_date }]
                               : undefined,
+                            confirmationQuestion: "آیا از لغو این تخصیص و برگشت سند مرتبط مطمئن هستید؟",
                           }}
                           onSuccess={() => { void reload(); }}
                         />
