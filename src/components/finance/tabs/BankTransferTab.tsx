@@ -17,6 +17,14 @@ import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-re
 import DatePicker from "@/components/DatePicker";
 // Phase 4 — generic rollback button used in the row actions column.
 import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
+// React-router hook: we read `?transferId=` from the URL so the deep-link
+// from the bank-transactions AssignmentDetailsDialog can auto-open a
+// read-only detail panel here. Kept self-contained so the create form below
+// is unaffected.
+import { useSearchParams } from "react-router-dom";
+// Reused read-only detail panel. We mount it with `hideNavButton` so the
+// "go to related tab" button doesn't render a self-referential link.
+import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
 
 interface SelectedTx {
   id: string; bank_id: string | null; deposit_amount: number | null;
