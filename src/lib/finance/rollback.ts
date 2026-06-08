@@ -844,9 +844,13 @@ async function rollbackBankTransfer(
   input: RollbackFinanceOperationInput,
   performedBy: string | null,
 ): Promise<RollbackFinanceOperationResult> {
+  // We additionally select from_transaction_id / to_transaction_id so the
+  // repair step at the end can scope its update to the EXACT bank tx rows
+  // this transfer currently points at — preventing accidental release of
+  // a transaction that was manually reassigned elsewhere.
   const { data: bt, error: loadErr } = await supabase
     .from("finance_bank_transfers")
-    .select("id, status, voucher_id, from_amount, to_amount, is_deleted")
+    .select("id, status, voucher_id, from_amount, to_amount, is_deleted, from_transaction_id, to_transaction_id")
     .eq("id", input.entityId)
     .maybeSingle();
   if (loadErr || !bt) return fail("انتقال بین‌بانکی یافت نشد.");
@@ -876,6 +880,9 @@ async function rollbackBankTransfer(
     if (!ok) return fail("به‌روزرسانی سند داخلی ناموفق بود.", sepidarResult);
   }
 
+  // Cancel the transfer header even if it was previously already cancelled
+  // or soft-deleted — the .update is harmless when applied a second time
+  // and keeps the repair step below reachable for idempotent re-runs.
   const newStatus = "cancelled";
   const { data: afterBt } = await supabase
     .from("finance_bank_transfers")
@@ -887,6 +894,36 @@ async function rollbackBankTransfer(
     .eq("id", bt.id)
     .select()
     .maybeSingle();
+
+  // -------------------------------------------------------------------
+  // Bank transaction release (repair step).
+  // Mirrors the receive_identification / payment_allocation pattern.
+  // We only touch rows that STILL claim to belong to this bank_transfer
+  // (assigned_operation_type = 'bank_transfer' AND assigned_operation_id
+  // = bt.id), so a tx that was manually re-assigned after rollback
+  // started is left alone. This block runs unconditionally so it also
+  // acts as a repair for previously-failed rollbacks.
+  // -------------------------------------------------------------------
+  const candidateTxIds = [bt.from_transaction_id, bt.to_transaction_id]
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  const releasedBankTxIds: string[] = [];
+  if (candidateTxIds.length > 0) {
+    const { data: releasedRows } = await supabase
+      .from("finance_bank_transactions")
+      .update({
+        assignment_status: "unassigned",
+        assigned_operation_type: null,
+        assigned_operation_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", candidateTxIds)
+      .eq("assigned_operation_type", "bank_transfer")
+      .eq("assigned_operation_id", bt.id)
+      .select("id");
+    for (const r of releasedRows ?? []) {
+      if (r?.id) releasedBankTxIds.push(r.id as string);
+    }
+  }
 
   await recomputePartyBalances(partyIds);
 
@@ -901,7 +938,11 @@ async function rollbackBankTransfer(
     sepidarResult,
     snapshotBefore,
     snapshotAfter: afterBt ?? null,
-    metadata: { voucherId: voucher?.id ?? null, recomputedParties: partyIds },
+    metadata: {
+      voucherId: voucher?.id ?? null,
+      recomputedParties: partyIds,
+      releasedBankTxIds,
+    },
     performedBy,
   });
 
