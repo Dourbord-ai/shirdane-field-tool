@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toastFinanceError } from "@/lib/financeErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -232,6 +233,58 @@ export default function PaymentRequestsTab() {
       }
     } catch { /* sessionStorage unavailable — no-op */ }
   }, []);
+
+  // -----------------------------------------------------------------------
+  // Deep-link consumer — `?paymentRequestId=<uuid>` arriving from the
+  // bank-transactions AssignmentDetailsDialog ("رفتن به تب مرتبط" → opens a
+  // new browser tab). We queue the id into `pendingOpenId`, then the
+  // existing [requests, pendingOpenId] effect picks it up once the list has
+  // loaded. If the row isn't in the active list (e.g. a server-side filter
+  // would have excluded it), we fall back to a direct fetch and still open
+  // PRDetail so the operator never lands on an empty page.
+  // -----------------------------------------------------------------------
+  const [searchParamsForDeepLink, setSearchParamsForDeepLink] = useSearchParams();
+  useEffect(() => {
+    const id = searchParamsForDeepLink.get("paymentRequestId");
+    if (!id) return;
+    // Clear the param immediately so we don't re-trigger on every list
+    // refresh — once we've consumed the deep-link, it's done.
+    const next = new URLSearchParams(searchParamsForDeepLink);
+    next.delete("paymentRequestId");
+    setSearchParamsForDeepLink(next, { replace: true });
+    setPendingOpenId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fallback fetch: if `pendingOpenId` is set but the list finished loading
+  // and the row is NOT in `requests`, hit the DB directly. This covers the
+  // common case where the deep-linked PR is hidden by the active filters
+  // (e.g. status='approved' filter while linking to a 'draft' record).
+  useEffect(() => {
+    if (!pendingOpenId) return;
+    if (requests.some((r) => r.id === pendingOpenId)) return; // handled above
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("finance_payment_requests")
+        .select("*")
+        .eq("id", pendingOpenId)
+        .eq("is_deleted", false)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data) {
+        setDetail(data as PR);
+      } else {
+        toast.error("رکورد مرتبط پیدا نشد");
+      }
+      setPendingOpenId(null);
+    })();
+    return () => { cancelled = true; };
+    // We intentionally depend on `requests` so this only runs AFTER the
+    // primary list query has resolved — letting the in-list path win when
+    // possible and avoiding a redundant DB roundtrip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, pendingOpenId]);
 
   // Consume pendingOpenId whenever the requests list updates. Covers the
   // case where the list loads before the pendingOpenId effect runs and

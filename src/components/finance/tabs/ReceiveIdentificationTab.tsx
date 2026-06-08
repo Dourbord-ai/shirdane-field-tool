@@ -28,6 +28,10 @@ import ReceiveIdFilters, {
   type ReceiveIdFilterState,
 } from "@/components/finance/ReceiveIdFilters";
 import { toGregorianForDb } from "@/lib/toGregorianForDb";
+// Read-only detail panel reused for the bank-transactions → receive-id
+// deep-link flow. We pass `hideNavButton` so the dialog doesn't render a
+// circular "go to related tab" button pointing back at this same tab.
+import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
 import type { JalaliDate } from "@/lib/jalali";
 
 // Render a status badge using ONLY the receive-identification label map so
@@ -164,6 +168,27 @@ export default function ReceiveIdentificationTab() {
     },
     [searchParams, setSearchParams],
   );
+
+  // -----------------------------------------------------------------------
+  // Deep-link consumer — `?receiveId=<uuid>` arriving from the
+  // bank-transactions AssignmentDetailsDialog ("رفتن به تب مرتبط" opens this
+  // tab in a NEW browser tab). We mount AssignmentDetailsDialog as a
+  // read-only detail panel for the matching record. If the id can't be
+  // resolved by the dialog's own fetch, the dialog itself shows the
+  // built-in "رکورد ... یافت نشد" error.
+  // -----------------------------------------------------------------------
+  const [deepLinkReceiveId, setDeepLinkReceiveId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get("receiveId");
+    if (!id) return;
+    setDeepLinkReceiveId(id);
+    // Strip the param so refreshes / re-renders don't re-open the dialog
+    // after the user closes it.
+    const p = new URLSearchParams(searchParams);
+    p.delete("receiveId");
+    setSearchParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Clear all advanced filter keys but keep the status pill choice.
   const clearAdvFilters = useCallback(() => {
@@ -464,6 +489,17 @@ export default function ReceiveIdentificationTab() {
           onDone={() => { setOpenReject(null); void load(); }}
         />
       )}
+      {/* Deep-link detail panel — opened when the operator clicked
+          "رفتن به تب مرتبط" on a bank transaction whose assignment points
+          at a receive_identification record. `hideNavButton` prevents the
+          dialog from rendering a back-link to the same tab. */}
+      <AssignmentDetailsDialog
+        open={!!deepLinkReceiveId}
+        onClose={() => setDeepLinkReceiveId(null)}
+        operationType={deepLinkReceiveId ? "receive_identification" : null}
+        operationId={deepLinkReceiveId}
+        hideNavButton
+      />
     </div>
   );
 }

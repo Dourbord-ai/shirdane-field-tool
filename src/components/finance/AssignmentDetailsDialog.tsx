@@ -23,15 +23,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
-import { useNavigate } from "react-router-dom";
+// (useNavigate no longer needed: the "go to related tab" button now opens a
+// NEW browser tab via window.open(...) instead of doing in-page routing, so
+// the operator's current view of the bank-transactions list is preserved.)
 
 // Props are intentionally minimal: we only need the assignment tuple to drive
 // the lookup. The parent owns open/close state via the `txId` presence pattern.
+//
+// `hideNavButton` lets a destination tab reuse this dialog as a read-only
+// detail panel WITHOUT re-rendering the "go to related tab" button (which
+// would point right back at itself and create a confusing loop).
 interface Props {
   open: boolean;
   onClose: () => void;
   operationType: string | null;
   operationId: string | null;
+  hideNavButton?: boolean;
 }
 
 // Shape we render after normalising each operation type into a common view-model.
@@ -44,7 +51,11 @@ interface DetailsView {
   date?: string | null;
   status?: string | null;
   description?: string | null;
-  navTab?: string;             // finance tab to deep-link into (?tab=...)
+  // Pre-built deep link URL to the related tab / record. We compute this in
+  // the data-loading branches because only there do we know the *real* target
+  // id (for payment_allocation the target is the parent payment_request_id,
+  // not the allocation id). Empty → no nav button is rendered.
+  navUrl?: string;
 }
 
 // Friendly Persian label per operation type — used in the dialog title.
@@ -52,17 +63,10 @@ const TYPE_LABEL: Record<string, string> = {
   payment_allocation: "تخصیص پرداخت",
   receive_identification: "شناسایی دریافت",
   bank_transfer: "انتقال بین بانکی",
+  bank_fee: "کارمزد بانکی",
 };
 
-export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId }: Props) {
-  // Programmatic router navigation. We previously used a <Link> wrapped by a
-  // <Button asChild> with onClick={onClose} — the onClick fired SYNCHRONOUSLY
-  // before the anchor click, which in some cases (StrictMode, fast double-
-  // render) caused the route change to be dropped because the Dialog
-  // unmounted the link's portal before the click event bubbled. Switching to
-  // useNavigate makes navigation deterministic: we close the dialog AND push
-  // the new URL ourselves, in one explicit, ordered handler.
-  const navigate = useNavigate();
+export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId, hideNavButton = false }: Props) {
   // Three-state UI: loading spinner / error message / data view. We reset on
   // every open so a previous error doesn't leak into a new lookup.
   const [loading, setLoading] = useState(false);
@@ -105,6 +109,11 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const pr: any = d.finance_payment_requests || {};
           const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
+          // Resolve the parent payment_request_id — that's the entity the
+          // destination tab needs to open (an "allocation" alone isn't a row
+          // in PaymentRequestsTab; the request is). Fall back to pr.id from
+          // the join if the FK column itself is null for any reason.
+          const targetPrId = d.payment_request_id || pr.id || null;
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: pr.title || pr.id || d.payment_request_id,
@@ -113,7 +122,9 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             date: d.allocation_datetime,
             status: d.status,
             description: pr.description,
-            navTab: "payment-requests",
+            navUrl: targetPrId
+              ? `/finance?tab=payment-requests&paymentRequestId=${encodeURIComponent(targetPrId)}`
+              : undefined,
           });
         } else if (operationType === "receive_identification") {
           const { data, error } = await supabase
@@ -137,7 +148,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             date: d.transaction_datetime,
             status: d.status,
             description: d.description,
-            navTab: "receive-id",
+            navUrl: `/finance?tab=receive-id&receiveId=${encodeURIComponent(d.id)}`,
           });
         } else if (operationType === "bank_transfer") {
           const { data, error } = await supabase
@@ -163,7 +174,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             date: d.transfer_datetime,
             status: d.status,
             description: d.description,
-            navTab: "bank-transfer",
+            navUrl: `/finance?tab=bank-transfer&transferId=${encodeURIComponent(d.id)}`,
           });
 
         } else {
@@ -222,22 +233,23 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 </div>
               </div>
             )}
-            {view.navTab && (
+            {view.navUrl && !hideNavButton && (
               <div className="pt-2 flex justify-end">
-                {/* Single handler: navigate first, then close. Using
-                    navigate() instead of <Link> guarantees the route change
-                    happens regardless of how the Dialog unmounts the trigger
-                    after we call onClose(). */}
+                {/* Open the deep-linked destination in a NEW browser tab so
+                    the operator's place in the bank-transactions list is
+                    preserved (no navigation in the current tab). We use
+                    `noopener,noreferrer` for the standard security hygiene:
+                    the opened tab cannot access window.opener and no
+                    Referer header is leaked. */}
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    navigate(`/finance?tab=${view.navTab}`);
-                    onClose();
+                    window.open(view.navUrl!, "_blank", "noopener,noreferrer");
                   }}
                 >
                   <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                  رفتن به تب مرتبط
+                  رفتن به تب مرتبط (تب جدید)
                 </Button>
               </div>
             )}

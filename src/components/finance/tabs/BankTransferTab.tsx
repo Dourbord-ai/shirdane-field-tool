@@ -17,6 +17,14 @@ import { CheckCircle2, Plus, X, ArrowRight, FileCheck2, Filter } from "lucide-re
 import DatePicker from "@/components/DatePicker";
 // Phase 4 — generic rollback button used in the row actions column.
 import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
+// React-router hook: we read `?transferId=` from the URL so the deep-link
+// from the bank-transactions AssignmentDetailsDialog can auto-open a
+// read-only detail panel here. Kept self-contained so the create form below
+// is unaffected.
+import { useSearchParams } from "react-router-dom";
+// Reused read-only detail panel. We mount it with `hideNavButton` so the
+// "go to related tab" button doesn't render a self-referential link.
+import AssignmentDetailsDialog from "@/components/finance/AssignmentDetailsDialog";
 
 interface SelectedTx {
   id: string; bank_id: string | null; deposit_amount: number | null;
@@ -63,7 +71,28 @@ export default function BankTransferTab() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
 
+  // -----------------------------------------------------------------------
+  // Deep-link consumer — `?transferId=<uuid>` arriving from the
+  // bank-transactions AssignmentDetailsDialog ("رفتن به تب مرتبط" → new
+  // browser tab). We open AssignmentDetailsDialog as a read-only detail
+  // panel for that transfer. If the id isn't resolvable, the dialog itself
+  // surfaces the "رکورد ... یافت نشد" message.
+  // -----------------------------------------------------------------------
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [deepLinkTransferId, setDeepLinkTransferId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get("transferId");
+    if (!id) return;
+    setDeepLinkTransferId(id);
+    // Strip the param so re-renders / refreshes don't re-open the dialog.
+    const p = new URLSearchParams(searchParams);
+    p.delete("transferId");
+    setSearchParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => { void load(); }, []);
+
 
   async function load() {
     setLoading(true);
@@ -270,6 +299,16 @@ export default function BankTransferTab() {
           onDone={() => { setOpenForm(false); void load(); }}
         />
       )}
+      {/* Deep-link detail panel — opened when arriving from a bank
+          transaction whose assignment points at a bank_transfer record.
+          `hideNavButton` prevents a circular "back to related tab" link. */}
+      <AssignmentDetailsDialog
+        open={!!deepLinkTransferId}
+        onClose={() => setDeepLinkTransferId(null)}
+        operationType={deepLinkTransferId ? "bank_transfer" : null}
+        operationId={deepLinkTransferId}
+        hideNavButton
+      />
     </div>
   );
 }
