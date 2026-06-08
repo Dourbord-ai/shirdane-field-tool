@@ -489,6 +489,17 @@ export default function ReceiveIdentificationTab() {
           onDone={() => { setOpenReject(null); void load(); }}
         />
       )}
+      {/* Deep-link detail panel — opened when the operator clicked
+          "رفتن به تب مرتبط" on a bank transaction whose assignment points
+          at a receive_identification record. `hideNavButton` prevents the
+          dialog from rendering a back-link to the same tab. */}
+      <AssignmentDetailsDialog
+        open={!!deepLinkReceiveId}
+        onClose={() => setDeepLinkReceiveId(null)}
+        operationType={deepLinkReceiveId ? "receive_identification" : null}
+        operationId={deepLinkReceiveId}
+        hideNavButton
+      />
     </div>
   );
 }
