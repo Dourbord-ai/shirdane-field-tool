@@ -270,6 +270,8 @@ export interface RollbackButtonProps
   buttonVariant?: ButtonProps["variant"];
   buttonSize?: ButtonProps["size"];
   buttonClassName?: string;
+  // Optional helper text shown on hover to clarify scope (allocation vs request).
+  tooltip?: string;
 }
 
 export function RollbackButton({
