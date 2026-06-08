@@ -506,6 +506,54 @@ async function rollbackReceiveIdentification(
     .select()
     .maybeSingle();
 
+  // ----------------------------------------------------------------------
+  // Release the linked bank transaction (mirror of payment_allocation flow).
+  // Why a separate step:
+  //   - The receive_identification row is now cancelled, but the bank tx
+  //     still carries assignment_status='assigned' + assigned_operation_*
+  //     pointing back to this RI. Without releasing it, the operator cannot
+  //     re-assign the deposit (the "connect" button only shows when
+  //     assignment_status='unassigned').
+  // Safety: scoped update — we only clear the link if it STILL points at
+  //   this exact RI. If the operator manually re-routed the tx mid-flow we
+  //   leave it alone. Runs even when RI was already cancelled (idempotent
+  //   repair path).
+  // ----------------------------------------------------------------------
+  const releasedBankTxIds: string[] = [];
+  const linkedBankTxId = (ri.bank_transaction_id as string | null) ?? null;
+  if (linkedBankTxId) {
+    const { data: btBefore } = await supabase
+      .from("finance_bank_transactions")
+      .select("id, assigned_operation_type, assigned_operation_id")
+      .eq("id", linkedBankTxId)
+      .maybeSingle();
+
+    const stillLinked =
+      btBefore?.assigned_operation_type === "receive_identification" &&
+      btBefore?.assigned_operation_id === ri.id;
+
+    if (stillLinked) {
+      const { error: btErr } = await supabase
+        .from("finance_bank_transactions")
+        .update({
+          assignment_status: "unassigned",
+          assigned_operation_type: null,
+          assigned_operation_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", linkedBankTxId)
+        // Defensive scope — refuse to clear if the link has changed since.
+        .eq("assigned_operation_type", "receive_identification")
+        .eq("assigned_operation_id", ri.id);
+      if (btErr) {
+        // eslint-disable-next-line no-console
+        console.error("[rollback receive_identification] bank tx release failed", btErr);
+      } else {
+        releasedBankTxIds.push(linkedBankTxId);
+      }
+    }
+  }
+
   await recomputePartyBalances(partyIds);
 
   const auditId = await insertRollbackAudit({
@@ -519,7 +567,11 @@ async function rollbackReceiveIdentification(
     sepidarResult,
     snapshotBefore,
     snapshotAfter: afterRi ?? null,
-    metadata: { voucherId: voucher?.id ?? null, recomputedParties: partyIds },
+    metadata: {
+      voucherId: voucher?.id ?? null,
+      recomputedParties: partyIds,
+      releasedBankTxIds,
+    },
     performedBy,
   });
 
