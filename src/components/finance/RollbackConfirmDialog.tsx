@@ -77,6 +77,8 @@ export interface RollbackMetadata {
   bankLabel?: string | null;
   sepidarVoucherId?: string | number | null;
   extraLines?: { label: string; value: ReactNode }[];
+  // Optional scope-specific confirmation question shown inside the dialog.
+  confirmationQuestion?: string;
 }
 
 export interface RollbackConfirmDialogProps {
