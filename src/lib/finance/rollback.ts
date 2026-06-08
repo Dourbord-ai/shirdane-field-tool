@@ -150,9 +150,22 @@ export async function rollbackSepidarVoucher(args: {
     };
   }
 
-  const resp = (data ?? {}) as Partial<SepidarRollbackResult> & Record<string, unknown>;
+  // The edge function may return an object OR an array (mssql recordset).
+  // Normalize to a single row before reading flags.
+  const raw = data as unknown;
+  const resp = (Array.isArray(raw) ? raw[0] : raw ?? {}) as Partial<SepidarRollbackResult> & Record<string, unknown>;
+
+  // Normalize success across truthy variants the SP / wrappers can emit:
+  //   true | 1 | "1" | "true"  → success
+  const rawSuccess = resp.success as unknown;
+  const successNormalized =
+    rawSuccess === true ||
+    rawSuccess === 1 ||
+    rawSuccess === "1" ||
+    rawSuccess === "true";
+
   return {
-    success: Boolean(resp.success),
+    success: successNormalized,
     result_code: Number(resp.result_code ?? -1),
     message: String(resp.message ?? ""),
     sepidar_voucher_id: Number(resp.sepidar_voucher_id ?? args.sepidarVoucherId),
@@ -162,13 +175,22 @@ export async function rollbackSepidarVoucher(args: {
 }
 
 /**
- * Predicate exported because every entity handler uses the same rule:
- * result_code 0 = deleted now, 2 = already gone, both are success.
+ * Predicate exported because every entity handler uses the same rule.
+ * Accepts every documented "deleted / already-gone" code the SP can return:
+ *   - result_code 0 = deleted now (legacy)
+ *   - result_code 1 = deleted now (current SP)
+ *   - result_code 2 = already gone (idempotent)
+ * Also tolerates result_code missing when success flag is explicitly true.
  */
 export function isSepidarRollbackOk(r: SepidarRollbackResult | null): boolean {
   if (!r) return true; // No voucher to roll back = trivially OK.
-  return r.success === true && (r.result_code === 0 || r.result_code === 2);
+  if (!r.success) return false;
+  const code = r.result_code;
+  return code === 0 || code === 1 || code === 2 || Number.isNaN(code) || code === -1
+    ? code !== -1 || r.success === true
+    : false;
 }
+
 
 // ----------------------------------------------------------------------------
 // Internal helpers
