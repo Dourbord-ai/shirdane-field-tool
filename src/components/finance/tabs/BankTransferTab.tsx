@@ -71,7 +71,28 @@ export default function BankTransferTab() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
 
+  // -----------------------------------------------------------------------
+  // Deep-link consumer — `?transferId=<uuid>` arriving from the
+  // bank-transactions AssignmentDetailsDialog ("رفتن به تب مرتبط" → new
+  // browser tab). We open AssignmentDetailsDialog as a read-only detail
+  // panel for that transfer. If the id isn't resolvable, the dialog itself
+  // surfaces the "رکورد ... یافت نشد" message.
+  // -----------------------------------------------------------------------
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [deepLinkTransferId, setDeepLinkTransferId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get("transferId");
+    if (!id) return;
+    setDeepLinkTransferId(id);
+    // Strip the param so re-renders / refreshes don't re-open the dialog.
+    const p = new URLSearchParams(searchParams);
+    p.delete("transferId");
+    setSearchParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => { void load(); }, []);
+
 
   async function load() {
     setLoading(true);
