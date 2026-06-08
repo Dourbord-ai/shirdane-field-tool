@@ -1671,21 +1671,30 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
                 every linked allocation, soft-deletes any posted voucher, and
                 recomputes party balances via the orchestrator. */}
             {(headerStatus === "approved" || headerStatus === "partially_paid" || headerStatus === "paid") && (
-              <div className="col-span-2 flex justify-end">
-                <RollbackButton
-                  entityType="payment_request"
-                  entityId={pr.id}
-                  metadata={{
-                    operationLabel: "درخواست تسویه",
-                    amount: headerApproved || headerRequested,
-                    extraLines: [
-                      { label: "وضعیت", value: PAYMENT_REQUEST_STATUS_LABEL[headerStatus || ""] || headerStatus || "—" },
-                      { label: "پرداخت شده", value: formatMoney(headerPaid) },
-                    ],
-                  }}
-                  onSuccess={() => { void reload(); }}
-                />
-              </div>
+              <>
+                <div className="col-span-2">
+                  <Separator className="my-4" />
+                </div>
+                <div className="col-span-2 flex justify-end">
+                  <RollbackButton
+                    entityType="payment_request"
+                    entityId={pr.id}
+                    label="لغو کامل درخواست"
+                    buttonVariant="destructive"
+                    tooltip="همه تخصیص‌ها و اسناد این درخواست برگشت می‌خورند و خود درخواست لغو می‌شود."
+                    metadata={{
+                      operationLabel: "درخواست تسویه",
+                      amount: headerApproved || headerRequested,
+                      extraLines: [
+                        { label: "وضعیت", value: PAYMENT_REQUEST_STATUS_LABEL[headerStatus || ""] || headerStatus || "—" },
+                        { label: "پرداخت شده", value: formatMoney(headerPaid) },
+                      ],
+                      confirmationQuestion: "آیا از لغو کامل این درخواست و برگشت همه تخصیص‌ها و اسناد آن مطمئن هستید؟",
+                    }}
+                    onSuccess={() => { void reload(); }}
+                  />
+                </div>
+              </>
             )}
           </div>
         </div>
