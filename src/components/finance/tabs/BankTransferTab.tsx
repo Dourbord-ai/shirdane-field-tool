@@ -299,6 +299,16 @@ export default function BankTransferTab() {
           onDone={() => { setOpenForm(false); void load(); }}
         />
       )}
+      {/* Deep-link detail panel — opened when arriving from a bank
+          transaction whose assignment points at a bank_transfer record.
+          `hideNavButton` prevents a circular "back to related tab" link. */}
+      <AssignmentDetailsDialog
+        open={!!deepLinkTransferId}
+        onClose={() => setDeepLinkTransferId(null)}
+        operationType={deepLinkTransferId ? "bank_transfer" : null}
+        operationId={deepLinkTransferId}
+        hideNavButton
+      />
     </div>
   );
 }
