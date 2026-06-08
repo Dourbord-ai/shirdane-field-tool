@@ -10,6 +10,8 @@ import { MoneyCell, FinanceStatusBadge, JalaliDateCell } from "@/components/fina
 import { PartySelector } from "@/components/finance/selectors";
 import { createPaymentAllocation, retryPaymentAllocationSync, cancelPaymentAllocation, approvePaymentRequest, parseMoney, partyName, formatMoney, formatJalaliDateTime, PAYMENT_REQUEST_STATUS_LABEL, PAYMENT_STATUS_LABEL } from "@/lib/finance";
 import { Plus, X, CheckCircle2, Trash2, AlertTriangle, Link2, RefreshCw, XCircle, Pencil } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 // Phase-N: secure RPC-backed item-amount editor. The dialog handles its own
 // validation but the server-side guard inside
 // `fn_finance_update_payment_request_item_amount` is the source of truth.
