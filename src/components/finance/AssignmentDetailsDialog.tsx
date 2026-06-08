@@ -49,7 +49,11 @@ interface DetailsView {
   date?: string | null;
   status?: string | null;
   description?: string | null;
-  navTab?: string;             // finance tab to deep-link into (?tab=...)
+  // Pre-built deep link URL to the related tab / record. We compute this in
+  // the data-loading branches because only there do we know the *real* target
+  // id (for payment_allocation the target is the parent payment_request_id,
+  // not the allocation id). Empty → no nav button is rendered.
+  navUrl?: string;
 }
 
 // Friendly Persian label per operation type — used in the dialog title.
@@ -57,17 +61,10 @@ const TYPE_LABEL: Record<string, string> = {
   payment_allocation: "تخصیص پرداخت",
   receive_identification: "شناسایی دریافت",
   bank_transfer: "انتقال بین بانکی",
+  bank_fee: "کارمزد بانکی",
 };
 
-export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId }: Props) {
-  // Programmatic router navigation. We previously used a <Link> wrapped by a
-  // <Button asChild> with onClick={onClose} — the onClick fired SYNCHRONOUSLY
-  // before the anchor click, which in some cases (StrictMode, fast double-
-  // render) caused the route change to be dropped because the Dialog
-  // unmounted the link's portal before the click event bubbled. Switching to
-  // useNavigate makes navigation deterministic: we close the dialog AND push
-  // the new URL ourselves, in one explicit, ordered handler.
-  const navigate = useNavigate();
+export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId, hideNavButton = false }: Props) {
   // Three-state UI: loading spinner / error message / data view. We reset on
   // every open so a previous error doesn't leak into a new lookup.
   const [loading, setLoading] = useState(false);
