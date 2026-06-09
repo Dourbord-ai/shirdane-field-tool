@@ -624,6 +624,11 @@ Deno.serve(async (req) => {
   let rawError: unknown = null;
 
   try {
+    log.info("sepidar_call", "Calling bridge.CreatePaymentRequestVoucher", {
+      party_id: party.sepidar_party_id,
+      amount: payable,
+      request_type: requestType,
+    });
     console.log("[factor-post-voucher] SP call", {
       factorId, voucherId, partyId: party.sepidar_party_id,
       partyAccountSLRef, requestType, amount: payable, creator: creatorEnv,
