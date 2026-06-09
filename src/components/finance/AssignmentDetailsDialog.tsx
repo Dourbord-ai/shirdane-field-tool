@@ -41,6 +41,9 @@ interface Props {
   operationType: string | null;
   operationId: string | null;
   hideNavButton?: boolean;
+  // Fired after a successful in-dialog rollback so the host tab can refresh
+  // its list. The dialog also auto-closes on success.
+  onRollbackSuccess?: () => void;
 }
 
 // Shape we render after normalising each operation type into a common view-model.
