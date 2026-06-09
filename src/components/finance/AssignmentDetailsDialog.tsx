@@ -118,7 +118,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const { data, error } = await supabase
             .from("finance_payment_allocations")
             .select(
-              "id, amount, allocation_datetime, status, payment_request_id, party_id, " +
+              "id, amount, allocation_datetime, status, payment_request_id, party_id, bank_id, bank_transaction_id, " +
                 "finance_payment_requests(id, title, status, payment_status, description), " +
                 "finance_parties(first_name, last_name, company_name)",
             )
@@ -137,6 +137,23 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           // in PaymentRequestsTab; the request is). Fall back to pr.id from
           // the join if the FK column itself is null for any reason.
           const targetPrId = d.payment_request_id || pr.id || null;
+          // Lookup the bank title to display in the rollback metadata
+          // (mirrors PRDetail's `a.bank?.title` usage). Separate query
+          // keeps the main select small and avoids relying on a named FK.
+          let bankLabel: string | null = null;
+          if (d.bank_id) {
+            const { data: bank } = await supabase
+              .from("finance_banks")
+              .select("title, bank_name")
+              .eq("id", d.bank_id)
+              .maybeSingle();
+            const b: any = bank || {};
+            bankLabel = b.title || b.bank_name || null;
+          }
+          // Same eligibility gate as the PRDetail allocation card: only
+          // synced allocations can be rolled back here. The shared
+          // RollbackButton additionally enforces the admin/super_admin role.
+          const eligible = d.status === "synced";
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: pr.title || pr.id || d.payment_request_id,
@@ -148,7 +165,23 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             navUrl: targetPrId
               ? `/finance?tab=payment-requests&paymentRequestId=${encodeURIComponent(targetPrId)}`
               : undefined,
+            rollback: eligible
+              ? {
+                  entityType: "payment_allocation",
+                  entityId: d.id,
+                  operationLabel: "تخصیص پرداخت",
+                  amount: Number(d.amount) || 0,
+                  partyLabel: pn,
+                  bankLabel,
+                  buttonLabel: "لغو این تخصیص و برگشت سند",
+                  tooltip:
+                    "فقط همین تخصیص، سند سپیدار و تراکنش متصل آزاد می‌شود. درخواست اصلی باقی می‌ماند.",
+                  confirmationQuestion:
+                    "آیا از لغو این تخصیص و برگشت سند مرتبط مطمئن هستید؟",
+                }
+              : undefined,
           });
+
         } else if (operationType === "receive_identification") {
           const { data, error } = await supabase
             .from("finance_receive_identifications")
