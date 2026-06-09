@@ -323,6 +323,20 @@ function ApprovalPanel({ factor, onChanged }: { factor: FactorRow; onChanged: ()
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const state = factor.derived_status || factor.lifecycle_state || "draft";
+  // Hard-block: a rolled-back factor must never be re-approved or re-rejected.
+  // Without this guard the operator could push it back into the posting
+  // pipeline and create a duplicate Sepidar voucher. We render a read-only
+  // notice instead of the action buttons. This runs BEFORE the draft check
+  // so it wins even if upstream code ever coerces rolled_back → draft.
+  if (state === "rolled_back") {
+    return (
+      <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <p className="text-xs text-amber-400 leading-6">
+          این فاکتور برگشت خورده است و امکان تأیید مجدد یا ورود دوباره به چرخه عملیاتی را ندارد.
+        </p>
+      </div>
+    );
+  }
   // Show Approve/Reject only while the factor is still in the editable bucket.
   // Anything past 'approved' is owned by the PostingPanel below.
   const isDraft = state === "draft";
@@ -426,6 +440,19 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   const [resultOk, setResultOk] = useState<boolean | null>(null);
 
   const state = factor.lifecycle_state ?? "";
+  // Hard-block: rolled-back factors must never see the Post button. We
+  // render a read-only message and exit BEFORE computing canPost so even a
+  // stale 'approved'-looking mirror could not bypass this. The RPC
+  // posting guard remains as a second line of defence.
+  if (state === "rolled_back") {
+    return (
+      <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <p className="text-xs text-amber-400 leading-6">
+          این فاکتور برگشت خورده است و امکان ثبت سند مجدد ندارد.
+        </p>
+      </div>
+    );
+  }
   // SINGLE SOURCE OF TRUTH for "this factor is already in Sepidar":
   // either mirror field is enough — we never want to allow a second post
   // even if a partial update left lifecycle_state behind. This guards
@@ -1281,6 +1308,10 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   posted:         { label: "ثبت شده در سپیدار",  cls: "bg-primary/20 text-primary" },
   voucher_failed: { label: "خطای ساخت سند",      cls: "bg-destructive/15 text-destructive" },
   sepidar_failed: { label: "خطای ثبت سپیدار",    cls: "bg-destructive/15 text-destructive" },
+  // Rolled-back: distinct amber/warning treatment so it cannot be confused
+  // with a fresh draft. This is the visual half of the safety fix that
+  // prevents accidental re-approval of a rolled-back factor.
+  rolled_back:    { label: "برگشت‌خورده",        cls: "bg-amber-500/15 text-amber-400" },
 };
 
 // Default page size for the server-side filtered list. The RPC clamps to 500.
