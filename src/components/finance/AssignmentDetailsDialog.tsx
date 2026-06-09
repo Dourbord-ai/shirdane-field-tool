@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
+import type { RollbackEntityType } from "@/lib/finance/rollback";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 // (useNavigate no longer needed: the "go to related tab" button now opens a
 // NEW browser tab via window.open(...) instead of doing in-page routing, so
@@ -39,6 +41,9 @@ interface Props {
   operationType: string | null;
   operationId: string | null;
   hideNavButton?: boolean;
+  // Fired after a successful in-dialog rollback so the host tab can refresh
+  // its list. The dialog also auto-closes on success.
+  onRollbackSuccess?: () => void;
 }
 
 // Shape we render after normalising each operation type into a common view-model.
@@ -56,6 +61,19 @@ interface DetailsView {
   // id (for payment_allocation the target is the parent payment_request_id,
   // not the allocation id). Empty → no nav button is rendered.
   navUrl?: string;
+  // Rollback config — populated only for operations that are currently
+  // eligible for rollback (already synced to Sepidar AND not already
+  // cancelled/rolled_back). When present, the dialog renders the same
+  // RollbackButton used in the list view, with identical handler/metadata.
+  rollback?: {
+    entityType: RollbackEntityType;
+    entityId: string;
+    operationLabel: string;
+    amount?: number | null;
+    partyLabel?: string | null;
+    bankLabel?: string | null;
+    sepidarVoucherId?: string | number | null;
+  };
 }
 
 // Friendly Persian label per operation type — used in the dialog title.
@@ -66,7 +84,7 @@ const TYPE_LABEL: Record<string, string> = {
   bank_fee: "کارمزد بانکی",
 };
 
-export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId, hideNavButton = false }: Props) {
+export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId, hideNavButton = false, onRollbackSuccess }: Props) {
   // Three-state UI: loading spinner / error message / data view. We reset on
   // every open so a previous error doesn't leak into a new lookup.
   const [loading, setLoading] = useState(false);
@@ -131,6 +149,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .from("finance_receive_identifications")
             .select(
               "id, title, amount, transaction_datetime, status, description, party_id, " +
+                "voucher_id, bank_id, " +
                 "finance_parties(first_name, last_name, company_name)",
             )
             .eq("id", operationId)
@@ -140,6 +159,24 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const d: any = data;
           const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
+          // Separate bank lookup — avoids relying on PostgREST FK embed
+          // syntax (which would require knowing the constraint name) and
+          // matches the pattern used by ReceiveIdentificationTab itself.
+          let bn: string | null = null;
+          if (d.bank_id) {
+            const { data: bank } = await supabase
+              .from("finance_banks")
+              .select("title, bank_name")
+              .eq("id", d.bank_id)
+              .maybeSingle();
+            const b: any = bank || {};
+            bn = b.title || b.bank_name || null;
+          }
+          // Mirror the list-view eligibility gate: rollback only when a
+          // Sepidar voucher exists AND the record is not already cancelled
+          // or rolled back. Same condition as ReceiveIdentificationTab.
+          const eligible =
+            !!d.voucher_id && d.status !== "cancelled" && d.status !== "rolled_back";
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: d.title || d.id,
@@ -149,12 +186,24 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             status: d.status,
             description: d.description,
             navUrl: `/finance?tab=receive-id&receiveId=${encodeURIComponent(d.id)}`,
+            rollback: eligible
+              ? {
+                  entityType: "receive_identification",
+                  entityId: d.id,
+                  operationLabel: "شناسایی دریافت",
+                  amount: Number(d.amount) || 0,
+                  partyLabel: pn,
+                  bankLabel: bn,
+                  sepidarVoucherId: d.voucher_id,
+                }
+              : undefined,
           });
         } else if (operationType === "bank_transfer") {
           const { data, error } = await supabase
             .from("finance_bank_transfers")
             .select(
               "id, from_amount, to_amount, transfer_datetime, status, description, " +
+                "voucher_id, " +
                 "from_bank:from_bank_id(title), to_bank:to_bank_id(title)",
             )
             .eq("id", operationId)
@@ -164,17 +213,31 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const d: any = data;
           const fb: any = d.from_bank || {};
           const tb: any = d.to_bank || {};
+          const bankLine = `${fb.title || "—"} ← ${tb.title || "—"}`;
+          // Same gate as BankTransferTab list row.
+          const eligible =
+            !!d.voucher_id && d.status !== "cancelled" && d.status !== "rolled_back";
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: d.id,
             // For a bank-transfer there is no party; we surface the two banks
             // as the "counterparty" line so the operator gets context.
-            partyName: `${fb.title || "—"} ← ${tb.title || "—"}`,
+            partyName: bankLine,
             amount: Number(d.from_amount ?? d.to_amount) || 0,
             date: d.transfer_datetime,
             status: d.status,
             description: d.description,
             navUrl: `/finance?tab=bank-transfer&transferId=${encodeURIComponent(d.id)}`,
+            rollback: eligible
+              ? {
+                  entityType: "bank_transfer",
+                  entityId: d.id,
+                  operationLabel: "انتقال بانکی",
+                  amount: Number(d.from_amount ?? d.to_amount) || 0,
+                  bankLabel: bankLine,
+                  sepidarVoucherId: d.voucher_id,
+                }
+              : undefined,
           });
 
         } else {
@@ -233,24 +296,53 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 </div>
               </div>
             )}
-            {view.navUrl && !hideNavButton && (
-              <div className="pt-2 flex justify-end">
-                {/* Open the deep-linked destination in a NEW browser tab so
-                    the operator's place in the bank-transactions list is
-                    preserved (no navigation in the current tab). We use
-                    `noopener,noreferrer` for the standard security hygiene:
-                    the opened tab cannot access window.opener and no
-                    Referer header is leaked. */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    window.open(view.navUrl!, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                  رفتن به تب مرتبط (تب جدید)
-                </Button>
+            {/* Action footer — combines the (optional) deep-link nav button
+                and the (optional) in-dialog rollback button. Both are gated
+                independently so the dialog gracefully degrades when one
+                isn't applicable. The RollbackButton itself is the SAME
+                component used in the list rows, so the handler, dialog,
+                metadata, role gate, and toast behaviour are all identical
+                — we only changed where it is rendered. */}
+            {((view.navUrl && !hideNavButton) || view.rollback) && (
+              <div className="pt-2 flex flex-wrap gap-2 justify-end border-t mt-2">
+                {view.rollback && (
+                  <RollbackButton
+                    entityType={view.rollback.entityType}
+                    entityId={view.rollback.entityId}
+                    metadata={{
+                      operationLabel: view.rollback.operationLabel,
+                      amount: view.rollback.amount,
+                      partyLabel: view.rollback.partyLabel,
+                      bankLabel: view.rollback.bankLabel,
+                      sepidarVoucherId: view.rollback.sepidarVoucherId,
+                    }}
+                    buttonVariant="destructive"
+                    onSuccess={() => {
+                      // Close this dialog and let the host tab refresh its
+                      // list. The RollbackButton has already shown the
+                      // success toast (identical to the list flow).
+                      onRollbackSuccess?.();
+                      onClose();
+                    }}
+                  />
+                )}
+                {view.navUrl && !hideNavButton && (
+                  // Open the deep-linked destination in a NEW browser tab so
+                  // the operator's place in the bank-transactions list is
+                  // preserved. `noopener,noreferrer` is standard security
+                  // hygiene: opened tab cannot access window.opener and no
+                  // Referer header is leaked.
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      window.open(view.navUrl!, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                    رفتن به تب مرتبط (تب جدید)
+                  </Button>
+                )}
               </div>
             )}
           </div>

@@ -308,6 +308,7 @@ export default function BankTransferTab() {
         operationType={deepLinkTransferId ? "bank_transfer" : null}
         operationId={deepLinkTransferId}
         hideNavButton
+        onRollbackSuccess={() => { setDeepLinkTransferId(null); void load(); }}
       />
     </div>
   );
