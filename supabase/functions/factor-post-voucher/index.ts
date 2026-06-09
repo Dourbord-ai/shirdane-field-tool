@@ -395,12 +395,14 @@ Deno.serve(async (req) => {
   // =========================================================================
   // STEP B: build (or reuse) the internal finance_vouchers row via RPC.
   // =========================================================================
+  log.info("rpc_call", "Calling post_approved_factor RPC");
   const { data: rpcRes, error: rpcErr } = await sb.rpc("post_approved_factor", {
     p_factor_id: factorId,
     p_triggered_by: triggeredBy,
   });
 
   if (rpcErr) {
+    log.error("rpc_call", "RPC failed", { error: rpcErr.message });
     return json({
       success: false,
       step: "rpc_call",
@@ -422,6 +424,7 @@ Deno.serve(async (req) => {
   // =========================================================================
   // STEP C: load full factor row (we now need fields the RPC didn't return)
   // =========================================================================
+  log.info("load_factor", "Loading full factor row");
   const { data: factorRow, error: factorErr } = await sb
     .from("factors")
     .select(
@@ -429,6 +432,7 @@ Deno.serve(async (req) => {
     )
     .eq("id", factorId)
     .maybeSingle();
+
 
   if (factorErr || !factorRow) {
     return json({ success: false, step: "load_factor", message: "بارگذاری فاکتور با خطا مواجه شد." }, 500);
