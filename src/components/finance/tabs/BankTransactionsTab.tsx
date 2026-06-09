@@ -948,7 +948,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             return (
               <TooltipProvider delayDuration={150}>
                 <Button
-                  onClick={runFeeIdentification}
+                  onClick={openFeeIdentificationPreview}
                   disabled={feesRunning}
                   className="bg-blue-600 text-white hover:bg-blue-700"
                 >
