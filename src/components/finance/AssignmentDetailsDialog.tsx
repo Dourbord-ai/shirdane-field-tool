@@ -84,7 +84,7 @@ const TYPE_LABEL: Record<string, string> = {
   bank_fee: "کارمزد بانکی",
 };
 
-export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId, hideNavButton = false }: Props) {
+export default function AssignmentDetailsDialog({ open, onClose, operationType, operationId, hideNavButton = false, onRollbackSuccess }: Props) {
   // Three-state UI: loading spinner / error message / data view. We reset on
   // every open so a previous error doesn't leak into a new lookup.
   const [loading, setLoading] = useState(false);
