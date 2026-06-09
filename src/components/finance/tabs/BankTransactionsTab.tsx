@@ -420,18 +420,60 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     }
   }
 
-  // Bank-fee-only sweep — dedicated button. Uses the standalone
-  // processBankFees() orchestrator which classifies, creates PRs,
-  // auto-approves, and posts to Sepidar in one pass.
-  async function runFeeIdentification() {
+  // Bank-fee preview — READ-ONLY first step. Opens the confirmation dialog
+  // showing eligible count, total amount, rule, and the first 10 rows. No
+  // writes happen until the operator explicitly clicks one of the run
+  // buttons inside the dialog.
+  async function openFeeIdentificationPreview() {
+    if (feesRunning || feesPreviewLoading) return;
+    setFeesPreviewLoading(true);
+    setFeesPreviewOpen(true);
+    try {
+      const preview = await previewBankFees();
+      setFeesPreview(preview);
+      if (preview.error) {
+        toastFinanceError(toast, new Error(preview.error));
+      }
+    } catch (e) {
+      toastFinanceError(toast, e);
+      setFeesPreviewOpen(false);
+    } finally {
+      setFeesPreviewLoading(false);
+    }
+  }
+
+  // Actually run the sweep — caller decides the scope (single-row test vs
+  // explicit bulk confirmation). `txIds` always carries the exact allow-list
+  // we showed in the preview dialog, so the run cannot drift to other rows.
+  async function executeFeeIdentification(opts: { txIds: string[]; limit: number; mode: "single" | "bulk" }) {
     if (feesRunning) return;
+    setFeesPreviewOpen(false);
     setFeesRunning(true);
     setFeesProgress(emptyFeesProgress());
     try {
-      const final = await processBankFees((p) => setFeesProgress(p));
-      toast.success(
-        `شناسایی کارمزد — کل بررسی‌شده: ${final.checked}/${final.total} · کاندید کارمزد: ${final.fee_candidates} · درخواست‌های تسویه ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
-      );
+      const final = await processBankFees((p) => setFeesProgress(p), {
+        txIds: opts.txIds,
+        limit: opts.limit,
+      });
+      // Sepidar failures are infrastructure-level (bridge unreachable) and
+      // can be retried later — they do NOT mean fee identification failed.
+      // We split the message so the operator sees that clearly.
+      const sepidarOnlyFailures = final.failures.filter((f) => f.step === "sepidar_post").length;
+      const realFailures = final.failed - sepidarOnlyFailures;
+      const head = opts.mode === "single" ? "اجرای آزمایشی شناسایی کارمزد" : "شناسایی کارمزد";
+      const base =
+        `${head} — بررسی‌شده: ${final.checked}/${final.total} · ` +
+        `درخواست‌های تسویه ایجادشده: ${final.payment_requests_created} · ` +
+        `ارسال به سپیدار: ${final.sepidar_posted}`;
+      if (realFailures > 0) {
+        toast.error(`${base} · ناموفق: ${realFailures}`);
+      } else if (sepidarOnlyFailures > 0) {
+        toast.warning(
+          `${base} · ارسال به سپیدار ناموفق (${sepidarOnlyFailures}) — خطای زیرساخت، قابل بازپخش بعداً.`,
+        );
+      } else {
+        toast.success(base);
+      }
       void load();
     } catch (e) {
       toastFinanceError(toast, e);
@@ -439,6 +481,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setFeesRunning(false);
     }
   }
+
 
   // "شناسایی واریزها" — single-click orchestrator: fires the n8n webhook,
   // then processes whatever n8n parsed by reusing the canonical manual
