@@ -33,6 +33,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 // Same mssql client used by sepidar-create-payment-voucher / receive flow.
 // Re-using it keeps the integration style 1:1 with the existing bridge calls.
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
+// Hoshyar structured logger — writes timed step rows into the external
+// hoshyar_logs table so we can trace each invocation end-to-end.
+import { createLogger } from "../_shared/logger.ts";
 
 // ---- CORS ------------------------------------------------------------------
 // Kept inline to stay consistent with the other Sepidar-related functions in
@@ -302,6 +305,12 @@ Deno.serve(async (req) => {
     } catch { /* non-fatal — proceed without attribution */ }
   }
 
+  // ---- Hoshyar structured logger ------------------------------------------
+  // Created AFTER triggeredBy resolves so user_id is attached to every entry.
+  // record_id is the factor_id so log rows can be filtered per factor.
+  const log = createLogger("factor-post-voucher", triggeredBy ?? undefined, factorId);
+  log.info("start", "Processing factor post voucher request", { factor_id: factorId });
+
   // =========================================================================
   // STEP A: SUPABASE-SIDE IDEMPOTENCY GUARD (BEFORE building any voucher)
   // -------------------------------------------------------------------------
@@ -310,6 +319,7 @@ Deno.serve(async (req) => {
   // from duplicate Sepidar vouchers because bridge.CreatePaymentRequestVoucher
   // is not idempotent on any app key.
   // =========================================================================
+  log.info("idempotency_check", "Checking for existing Sepidar voucher");
   const { data: existingFactor } = await sb
     .from("factors")
     .select("id, sepidar_voucher_id, sepidar_voucher_number, voucher_id")
@@ -330,6 +340,9 @@ Deno.serve(async (req) => {
 
   if (existingFactor.sepidar_voucher_id) {
     // Already posted on a previous attempt — short-circuit, do NOT touch SQL.
+    log.info("already_posted", "Factor already posted, returning existing voucher", {
+      sepidar_voucher_id: existingFactor.sepidar_voucher_id,
+    });
     // Defensive: also force lifecycle_state='posted' in case a previous run
     // wrote the sepidar id but failed to flip lifecycle (partial mirror).
     // This is the single source of truth that prevents the UI from re-posting.
@@ -382,12 +395,14 @@ Deno.serve(async (req) => {
   // =========================================================================
   // STEP B: build (or reuse) the internal finance_vouchers row via RPC.
   // =========================================================================
+  log.info("rpc_call", "Calling post_approved_factor RPC");
   const { data: rpcRes, error: rpcErr } = await sb.rpc("post_approved_factor", {
     p_factor_id: factorId,
     p_triggered_by: triggeredBy,
   });
 
   if (rpcErr) {
+    log.error("rpc_call", "RPC failed", { error: rpcErr.message });
     return json({
       success: false,
       step: "rpc_call",
@@ -409,6 +424,7 @@ Deno.serve(async (req) => {
   // =========================================================================
   // STEP C: load full factor row (we now need fields the RPC didn't return)
   // =========================================================================
+  log.info("load_factor", "Loading full factor row");
   const { data: factorRow, error: factorErr } = await sb
     .from("factors")
     .select(
@@ -416,6 +432,7 @@ Deno.serve(async (req) => {
     )
     .eq("id", factorId)
     .maybeSingle();
+
 
   if (factorErr || !factorRow) {
     return json({ success: false, step: "load_factor", message: "بارگذاری فاکتور با خطا مواجه شد." }, 500);
@@ -469,6 +486,7 @@ Deno.serve(async (req) => {
   // =========================================================================
   // STEP D: resolve party + creator (discriminated result → precise errors)
   // =========================================================================
+  log.info("resolve_party", "Resolving counterparty");
   const partyRes = await resolveParty(sb, factorRow as Record<string, unknown>);
   // Always log the structured resolution outcome so we can prove which branch
   // ran in production without re-deploying instrumentation later.
@@ -484,6 +502,10 @@ Deno.serve(async (req) => {
   );
 
   if (!partyRes.ok) {
+    log.error("resolve_party", partyRes.message, {
+      error_code: partyRes.error_code,
+      ...partyRes.debug,
+    });
     await sb.from("factors").update({
       lifecycle_state: "sepidar_failed",
       last_posting_error: partyRes.message,
@@ -602,6 +624,11 @@ Deno.serve(async (req) => {
   let rawError: unknown = null;
 
   try {
+    log.info("sepidar_call", "Calling bridge.CreatePaymentRequestVoucher", {
+      party_id: party.sepidar_party_id,
+      amount: payable,
+      request_type: requestType,
+    });
     console.log("[factor-post-voucher] SP call", {
       factorId, voucherId, partyId: party.sepidar_party_id,
       partyAccountSLRef, requestType, amount: payable, creator: creatorEnv,
@@ -660,6 +687,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     sepidarMessage = "ارتباط با سپیدار با خطا مواجه شد.";
     rawError = e instanceof Error ? e.message : String(e);
+    log.error("sepidar_call", sepidarMessage, { raw_error: rawError });
     console.error("[factor-post-voucher] SP error", rawError);
   } finally {
     // Always close the pool — leaking connections eventually exhausts SQL Server.
@@ -749,6 +777,16 @@ Deno.serve(async (req) => {
       } as never,
       response_payload: { message: sepidarMessage, raw_error: rawError } as never,
     } as never);
+  }
+
+  // Final structured log — success vs failure branch.
+  if (sepidarOk) {
+    log.info("complete", "Factor posted successfully", {
+      sepidar_voucher_id: sepidarVoucherId,
+      duration_ms: log.duration(),
+    });
+  } else {
+    log.error("complete", "Factor posting failed", { message: sepidarMessage });
   }
 
   return json({
