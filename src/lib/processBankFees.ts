@@ -55,6 +55,29 @@ import { buildPaymentRequestItemAmountType } from "@/lib/paymentAmountTypes";
 // classifiers stay in lockstep.
 export const FEE_THRESHOLD_IRR = 1_000_000;
 
+// Persian keywords that strongly indicate a row is a real bank fee.
+// We REQUIRE one of these in the description (in addition to the amount
+// threshold) so a generic small-amount withdraw is NOT mistaken for a fee.
+// This avoids accidentally sweeping every <1M IRR withdraw.
+export const FEE_DESCRIPTION_KEYWORDS = [
+  "کارمزد",
+  "كارمزد", // alternate Arabic kaf
+  "هزينه تراکنش",
+  "هزینه تراکنش",
+  "کسر کارمزد",
+  "کارمزد انتقال",
+  "کارمزد ساتنا",
+  "کارمزد پایا",
+  "کارمزد پل",
+];
+
+// Human-readable description of the eligibility rule, shown in the
+// confirmation dialog so the operator can audit what is about to run.
+export const FEE_ELIGIBILITY_RULE_FA =
+  `تراکنش‌های برداشت با وضعیت «شناسایی‌نشده» که مبلغ آن‌ها کمتر از ` +
+  `${FEE_THRESHOLD_IRR.toLocaleString("fa-IR")} ریال است و شرح آن‌ها شامل ` +
+  `یکی از کلیدواژه‌های کارمزد (مثلاً «کارمزد»، «هزینه تراکنش») باشد.`;
+
 // Small page so the UI can stream progress and the PostgREST URL stays
 // well under the URI-length cap.
 const BATCH_SIZE = 25;
@@ -62,6 +85,13 @@ const BATCH_SIZE = 25;
 // Console group prefix — every log line is namespaced so DevTools filtering
 // (search for "[BankFees]") shows only this run.
 const TAG = "[BankFees]";
+
+// Does this row's description match any of our fee keywords?
+function descriptionLooksLikeFee(desc: string | null | undefined): boolean {
+  if (!desc) return false;
+  const s = String(desc);
+  return FEE_DESCRIPTION_KEYWORDS.some((kw) => s.includes(kw));
+}
 
 // ---------------------------------------------------------------------------
 // Public progress shape — surfaced into the UI summary panel.
