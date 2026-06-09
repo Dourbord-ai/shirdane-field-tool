@@ -393,6 +393,14 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     emptyWithdrawAIProgress(),
   );
 
+  // ── شناسایی کارمزد preview/confirmation state ──────────────────────────
+  // Before running the sweep we ALWAYS show the operator a confirmation
+  // dialog summarising what is about to happen (count, total amount, rule,
+  // first 10 sample rows). The button no longer triggers writes directly.
+  const [feesPreviewOpen, setFeesPreviewOpen] = useState(false);
+  const [feesPreviewLoading, setFeesPreviewLoading] = useState(false);
+  const [feesPreview, setFeesPreview] = useState<BankFeesPreview | null>(null);
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
