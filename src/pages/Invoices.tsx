@@ -548,6 +548,9 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
             extraLines: [
               { label: "شماره فاکتور", value: toPersianDigits(String((factor as { invoice_number?: string | number | null }).invoice_number ?? "—")) },
             ],
+            // Legacy factors without a linked internal voucher only get a
+            // status-only rollback; suppress the destructive Sepidar warning.
+            noVoucherWarning: !((factor as any).voucher_id ?? null),
           }}
           onSuccess={onChanged}
         />
