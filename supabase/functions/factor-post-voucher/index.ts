@@ -778,6 +778,16 @@ Deno.serve(async (req) => {
     } as never);
   }
 
+  // Final structured log — success vs failure branch.
+  if (sepidarOk) {
+    log.info("complete", "Factor posted successfully", {
+      sepidar_voucher_id: sepidarVoucherId,
+      duration_ms: log.duration(),
+    });
+  } else {
+    log.error("complete", "Factor posting failed", { message: sepidarMessage });
+  }
+
   return json({
     success: sepidarOk,
     step: sepidarOk ? "posted" : "sepidar_post",
