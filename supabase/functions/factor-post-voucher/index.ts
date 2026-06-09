@@ -33,6 +33,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 // Same mssql client used by sepidar-create-payment-voucher / receive flow.
 // Re-using it keeps the integration style 1:1 with the existing bridge calls.
 import { getSepidarSqlConfig, sql } from "../_shared/sepidarSqlClient.ts";
+// Hoshyar structured logger — writes timed step rows into the external
+// hoshyar_logs table so we can trace each invocation end-to-end.
+import { createLogger } from "../_shared/logger.ts";
 
 // ---- CORS ------------------------------------------------------------------
 // Kept inline to stay consistent with the other Sepidar-related functions in
