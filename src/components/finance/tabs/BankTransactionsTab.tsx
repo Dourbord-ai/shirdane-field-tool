@@ -18,7 +18,13 @@ import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
 import { autoProcessUnassigned, emptyProgress, type AutoProcessProgress } from "@/lib/autoProcessUnassigned";
 // Dedicated "شناسایی کارمزد" pipeline — withdraws under FEE_THRESHOLD_IRR
 // get a payment-request + auto-approval + Sepidar voucher in one click.
-import { processBankFees, emptyFeesProgress, type BankFeesProgress } from "@/lib/processBankFees";
+import {
+  processBankFees,
+  previewBankFees,
+  emptyFeesProgress,
+  type BankFeesProgress,
+  type BankFeesPreview,
+} from "@/lib/processBankFees";
 // "شناسایی واریزها" — n8n-AI-assisted deposit identification orchestrator.
 // Reuses the canonical manual receive-identification + approval helpers; it
 // only adds the n8n webhook trigger and the ai_verify_status state machine.
