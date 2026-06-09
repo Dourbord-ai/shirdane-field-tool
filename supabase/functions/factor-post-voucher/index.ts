@@ -687,6 +687,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     sepidarMessage = "ارتباط با سپیدار با خطا مواجه شد.";
     rawError = e instanceof Error ? e.message : String(e);
+    log.error("sepidar_call", sepidarMessage, { raw_error: rawError });
     console.error("[factor-post-voucher] SP error", rawError);
   } finally {
     // Always close the pool — leaking connections eventually exhausts SQL Server.
