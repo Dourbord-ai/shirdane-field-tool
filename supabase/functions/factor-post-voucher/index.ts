@@ -486,6 +486,7 @@ Deno.serve(async (req) => {
   // =========================================================================
   // STEP D: resolve party + creator (discriminated result → precise errors)
   // =========================================================================
+  log.info("resolve_party", "Resolving counterparty");
   const partyRes = await resolveParty(sb, factorRow as Record<string, unknown>);
   // Always log the structured resolution outcome so we can prove which branch
   // ran in production without re-deploying instrumentation later.
@@ -501,6 +502,10 @@ Deno.serve(async (req) => {
   );
 
   if (!partyRes.ok) {
+    log.error("resolve_party", partyRes.message, {
+      error_code: partyRes.error_code,
+      ...partyRes.debug,
+    });
     await sb.from("factors").update({
       lifecycle_state: "sepidar_failed",
       last_posting_error: partyRes.message,
