@@ -358,7 +358,29 @@ async function processOneFeeTx(
       ...feeAmountType,
       description,
       status: "pending_approval",
+      // ----------------------------------------------------------------
+      // Phase-3 settlement fields. `payment_method` is NOT NULL on the
+      // DB column (migration 20260603080903 dropped the 'legacy' default
+      // after backfill), so omitting it makes submit_payment_request fail
+      // with a NOT NULL violation and no PR is ever created.
+      //
+      // For an auto-detected bank fee, the bank itself already withdrew
+      // the money from our account via an internal transfer — so the
+      // honest method is `bank_transfer`. The subject is `commission`
+      // (کارمزد). `details` carries a small informational payload so the
+      // PR detail view can show what tx the fee came from; no DB check
+      // constrains `details` keys, and validateDetails() is only invoked
+      // by the manual create-dialog, not by the RPC.
+      // ----------------------------------------------------------------
+      payment_method: "bank_transfer",
+      settlement_subject_type: "commission",
+      details: {
+        payment_note: description,
+        transfer_type: "bank_transfer",
+        source_bank_transaction_id: tx.id,
+      },
     }];
+
 
     // eslint-disable-next-line no-console
     console.log(TAG, "manual-helper.createPR", { txId: tx.id, requestPayload, itemPayload });
