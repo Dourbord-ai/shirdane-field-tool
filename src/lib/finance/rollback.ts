@@ -371,10 +371,13 @@ async function rollbackFactor(
   performedBy: string | null,
 ): Promise<RollbackFinanceOperationResult> {
   // A) Load entity.
+  // We also pull legacy_factor_id so it can be recorded in audit metadata.
+  // NOTE: legacy_factor_id is descriptive/context only — the operational
+  // decision (status-only vs. full rollback) is based solely on voucher_id.
   const { data: factor, error: loadErr } = await supabase
     .from("factors")
     .select(
-      "id, lifecycle_state, voucher_id, sepidar_voucher_id, sync_status, payable_amount, finance_party_id",
+      "id, lifecycle_state, voucher_id, sepidar_voucher_id, sync_status, payable_amount, finance_party_id, legacy_factor_id",
     )
     .eq("id", input.entityId)
     .maybeSingle();
@@ -382,6 +385,64 @@ async function rollbackFactor(
 
   const snapshotBefore = factor;
   const oldStatus = (factor.lifecycle_state as string | null) ?? null;
+  const legacyFactorId =
+    (factor as { legacy_factor_id?: string | null }).legacy_factor_id ?? null;
+
+  // ---------------------------------------------------------------------
+  // GUARD: status-only rollback when there is NO linked voucher.
+  // ---------------------------------------------------------------------
+  // When factors.voucher_id IS NULL the factor has no financial side-effects
+  // (no internal voucher row, no party-balance impact, no Sepidar voucher
+  // reachable via the voucher record). In that case we MUST NOT:
+  //   - call Sepidar rollback
+  //   - soft-delete any finance_vouchers row
+  //   - recompute party balances
+  // We only flip the factor lifecycle/status and write an audit record
+  // with mode='status_only'. This branch runs BEFORE any Sepidar call.
+  if (!factor.voucher_id) {
+    const newStatus = "rolled_back";
+    const { data: afterFactor, error: updErr } = await supabase
+      .from("factors")
+      .update({
+        lifecycle_state: newStatus,
+        sync_status: "rolled_back",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", factor.id)
+      .select()
+      .maybeSingle();
+    if (updErr) {
+      // eslint-disable-next-line no-console
+      console.error("[rollback factor status-only] update failed", updErr);
+      return fail("به‌روزرسانی وضعیت فاکتور ناموفق بود.");
+    }
+
+    const auditId = await insertRollbackAudit({
+      entityType: "factor",
+      entityId: factor.id,
+      action: input.action ?? "rollback",
+      reason: input.reason,
+      oldStatus,
+      newStatus,
+      sepidarVoucherId: null,
+      sepidarResult: null,
+      snapshotBefore,
+      snapshotAfter: afterFactor ?? null,
+      metadata: {
+        mode: "status_only",
+        reason: "no_voucher",
+        legacy_factor_id: legacyFactorId,
+        voucher_id: null,
+      },
+      performedBy,
+    });
+
+    return { ok: true, sepidarResult: null, newStatus, auditId };
+  }
+
+  // ---------------------------------------------------------------------
+  // Full rollback path (voucher_id IS NOT NULL) — unchanged behavior.
+  // ---------------------------------------------------------------------
 
   // B) Find linked voucher.
   const voucher = await loadVoucherById(factor.voucher_id as string | null);
