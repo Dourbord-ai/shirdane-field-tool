@@ -347,12 +347,15 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                   <RollbackButton
                     entityType={view.rollback.entityType}
                     entityId={view.rollback.entityId}
+                    label={view.rollback.buttonLabel}
+                    tooltip={view.rollback.tooltip}
                     metadata={{
                       operationLabel: view.rollback.operationLabel,
                       amount: view.rollback.amount,
                       partyLabel: view.rollback.partyLabel,
                       bankLabel: view.rollback.bankLabel,
                       sepidarVoucherId: view.rollback.sepidarVoucherId,
+                      confirmationQuestion: view.rollback.confirmationQuestion,
                     }}
                     buttonVariant="destructive"
                     onSuccess={() => {
