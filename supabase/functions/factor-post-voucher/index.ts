@@ -305,6 +305,12 @@ Deno.serve(async (req) => {
     } catch { /* non-fatal — proceed without attribution */ }
   }
 
+  // ---- Hoshyar structured logger ------------------------------------------
+  // Created AFTER triggeredBy resolves so user_id is attached to every entry.
+  // record_id is the factor_id so log rows can be filtered per factor.
+  const log = createLogger("factor-post-voucher", triggeredBy ?? undefined, factorId);
+  log.info("start", "Processing factor post voucher request", { factor_id: factorId });
+
   // =========================================================================
   // STEP A: SUPABASE-SIDE IDEMPOTENCY GUARD (BEFORE building any voucher)
   // -------------------------------------------------------------------------
@@ -313,6 +319,7 @@ Deno.serve(async (req) => {
   // from duplicate Sepidar vouchers because bridge.CreatePaymentRequestVoucher
   // is not idempotent on any app key.
   // =========================================================================
+  log.info("idempotency_check", "Checking for existing Sepidar voucher");
   const { data: existingFactor } = await sb
     .from("factors")
     .select("id, sepidar_voucher_id, sepidar_voucher_number, voucher_id")
