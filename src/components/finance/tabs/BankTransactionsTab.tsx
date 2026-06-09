@@ -59,6 +59,14 @@ import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownTo
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 // Bulk "Attach to Payment Request" — pure frontend orchestrator. See the
 // dialog file's header doc for why concurrency is serialized and why we
 // never split a transaction across items. The backend stays unchanged: we
