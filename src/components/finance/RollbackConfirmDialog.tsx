@@ -204,19 +204,30 @@ export function RollbackConfirmDialog({
                 />
               </div>
 
-              {/* Hard warning panel — wording mandated by Phase 4 spec.
-                  Highlighted with destructive tone so it cannot be missed. */}
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <div className="font-bold">سند سپیدار ابتدا حذف می‌شود.</div>
+              {/* Warning panel — destructive when a real voucher exists,
+                  informational when there is no linked voucher (status-only). */}
+              {metadata.noVoucherWarning ? (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-600 flex gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
-                    فقط در صورت موفقیت حذف از سپیدار، وضعیت سند داخلی، مانده طرف
-                    حساب و وضعیت موجودیت به‌روزرسانی می‌شود. شناسه سند سپیدار
-                    برای پیگیری حفظ خواهد شد.
+                    این فاکتور سند مالی متصل ندارد. با ادامه عملیات فقط وضعیت
+                    فاکتور تغییر خواهد کرد و هیچ عملیات حسابداری یا سپیدار
+                    انجام نمی‌شود.
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold">سند سپیدار ابتدا حذف می‌شود.</div>
+                    <div>
+                      فقط در صورت موفقیت حذف از سپیدار، وضعیت سند داخلی، مانده طرف
+                      حساب و وضعیت موجودیت به‌روزرسانی می‌شود. شناسه سند سپیدار
+                      برای پیگیری حفظ خواهد شد.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Reason input — required, controlled, autoFocus to push the
                   operator toward providing context immediately. */}
