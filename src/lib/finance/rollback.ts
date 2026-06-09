@@ -371,13 +371,13 @@ async function rollbackFactor(
   performedBy: string | null,
 ): Promise<RollbackFinanceOperationResult> {
   // A) Load entity.
-  // We also pull legacy_factor_id so it can be recorded in audit metadata.
-  // NOTE: legacy_factor_id is descriptive/context only — the operational
-  // decision (status-only vs. full rollback) is based solely on voucher_id.
+  // We intentionally do NOT include legacy_factor_id in this typed select:
+  // the cloud schema does not always have that column (it exists in the
+  // local enterprise DB). We fetch it separately, best-effort, below.
   const { data: factor, error: loadErr } = await supabase
     .from("factors")
     .select(
-      "id, lifecycle_state, voucher_id, sepidar_voucher_id, sync_status, payable_amount, finance_party_id, legacy_factor_id",
+      "id, lifecycle_state, voucher_id, sepidar_voucher_id, sync_status, payable_amount, finance_party_id",
     )
     .eq("id", input.entityId)
     .maybeSingle();
@@ -385,8 +385,29 @@ async function rollbackFactor(
 
   const snapshotBefore = factor;
   const oldStatus = (factor.lifecycle_state as string | null) ?? null;
-  const legacyFactorId =
-    (factor as { legacy_factor_id?: string | null }).legacy_factor_id ?? null;
+
+  // Best-effort lookup of legacy_factor_id — descriptive/context only.
+  // Wrapped in try/catch so environments where the column does not exist
+  // (e.g. cloud) silently fall back to null without breaking rollback.
+  let legacyFactorId: string | null = null;
+  try {
+    const { data: legacyRow } = await (supabase as unknown as {
+      from: (t: string) => {
+        select: (s: string) => {
+          eq: (c: string, v: string) => {
+            maybeSingle: () => Promise<{ data: { legacy_factor_id: string | null } | null }>;
+          };
+        };
+      };
+    })
+      .from("factors")
+      .select("legacy_factor_id")
+      .eq("id", factor.id)
+      .maybeSingle();
+    legacyFactorId = legacyRow?.legacy_factor_id ?? null;
+  } catch {
+    legacyFactorId = null;
+  }
 
   // ---------------------------------------------------------------------
   // GUARD: status-only rollback when there is NO linked voucher.
