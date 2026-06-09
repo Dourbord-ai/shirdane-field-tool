@@ -61,6 +61,19 @@ interface DetailsView {
   // id (for payment_allocation the target is the parent payment_request_id,
   // not the allocation id). Empty → no nav button is rendered.
   navUrl?: string;
+  // Rollback config — populated only for operations that are currently
+  // eligible for rollback (already synced to Sepidar AND not already
+  // cancelled/rolled_back). When present, the dialog renders the same
+  // RollbackButton used in the list view, with identical handler/metadata.
+  rollback?: {
+    entityType: RollbackEntityType;
+    entityId: string;
+    operationLabel: string;
+    amount?: number | null;
+    partyLabel?: string | null;
+    bankLabel?: string | null;
+    sepidarVoucherId?: string | number | null;
+  };
 }
 
 // Friendly Persian label per operation type — used in the dialog title.
