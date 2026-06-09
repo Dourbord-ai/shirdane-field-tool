@@ -1822,6 +1822,11 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
         onClose={() => setOpenDetails(null)}
         operationType={openDetails?.assigned_operation_type ?? null}
         operationId={openDetails?.assigned_operation_id ?? null}
+        // After an in-dialog rollback (e.g. payment_allocation,
+        // receive_identification, bank_transfer) refresh the bank
+        // transactions list so the now-released transaction reflects
+        // its new assignment status without a manual reload.
+        onRollbackSuccess={() => { void load(); }}
       />
 
       {/* Excel-file picker. Mount stays cheap: the dialog only runs its
