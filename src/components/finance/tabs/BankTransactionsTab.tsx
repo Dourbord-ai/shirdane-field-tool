@@ -1964,7 +1964,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                 // operators legitimately need to process all eligible fees in
                 // one pass from this same dialog.
                 const ok = window.confirm(
-                  `اجرای شناسایی کارمزد روی ${count} تراکنش؟ این عملیات درخواست تسویه و سند مالی ایجاد می‌کند.`,
+                  `آیا از شناسایی ${count.toLocaleString("fa-IR")} تراکنش کارمزد به مبلغ مجموع ${feesPreview.totalAmount.toLocaleString("fa-IR")} ریال مطمئن هستید؟ این عملیات درخواست تسویه و سند مالی ایجاد می‌کند.`,
                 );
                 if (!ok) return;
                 executeFeeIdentification({
