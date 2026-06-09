@@ -150,8 +150,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .select(
               "id, title, amount, transaction_datetime, status, description, party_id, " +
                 "voucher_id, bank_id, " +
-                "finance_parties(first_name, last_name, company_name), " +
-                "finance_banks:bank_id(title, bank_name)",
+                "finance_parties(first_name, last_name, company_name)",
             )
             .eq("id", operationId)
             .maybeSingle();
@@ -160,8 +159,19 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const d: any = data;
           const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
-          const b: any = d.finance_banks || {};
-          const bn = b.title || b.bank_name || null;
+          // Separate bank lookup — avoids relying on PostgREST FK embed
+          // syntax (which would require knowing the constraint name) and
+          // matches the pattern used by ReceiveIdentificationTab itself.
+          let bn: string | null = null;
+          if (d.bank_id) {
+            const { data: bank } = await supabase
+              .from("finance_banks")
+              .select("title, bank_name")
+              .eq("id", d.bank_id)
+              .maybeSingle();
+            const b: any = bank || {};
+            bn = b.title || b.bank_name || null;
+          }
           // Mirror the list-view eligibility gate: rollback only when a
           // Sepidar voucher exists AND the record is not already cancelled
           // or rolled back. Same condition as ReceiveIdentificationTab.
