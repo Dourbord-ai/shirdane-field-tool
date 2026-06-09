@@ -440,6 +440,19 @@ function PostingPanel({ factor, onChanged }: { factor: FactorRow; onChanged: () 
   const [resultOk, setResultOk] = useState<boolean | null>(null);
 
   const state = factor.lifecycle_state ?? "";
+  // Hard-block: rolled-back factors must never see the Post button. We
+  // render a read-only message and exit BEFORE computing canPost so even a
+  // stale 'approved'-looking mirror could not bypass this. The RPC
+  // posting guard remains as a second line of defence.
+  if (state === "rolled_back") {
+    return (
+      <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <p className="text-xs text-amber-400 leading-6">
+          این فاکتور برگشت خورده است و امکان ثبت سند مجدد ندارد.
+        </p>
+      </div>
+    );
+  }
   // SINGLE SOURCE OF TRUTH for "this factor is already in Sepidar":
   // either mirror field is enough — we never want to allow a second post
   // even if a partial update left lifecycle_state behind. This guards
