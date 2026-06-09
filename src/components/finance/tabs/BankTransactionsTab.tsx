@@ -2916,13 +2916,11 @@ function FeeIdentificationPreviewBody({ preview }: { preview: BankFeesPreview })
         </div>
       )}
 
-      {import.meta.env.DEV && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
-          <strong>حالت توسعه (DEV):</strong> برای امنیت، اجرای گروهی نیاز به تایپ
-          عدد تعداد تراکنش‌ها دارد. توصیه می‌شود ابتدا «اجرای آزمایشی روی ۱ تراکنش»
-          را امتحان کنید.
-        </div>
-      )}
+      <div className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-3 text-xs leading-6">
+        توصیه: ابتدا «اجرای آزمایشی روی ۱ تراکنش» را اجرا کنید و نتیجه (درخواست
+        تسویه، آیتم، سند سپیدار) را بررسی کنید. سپس برای پردازش گروهی،
+        «شناسایی همه موارد واجد شرایط» را بزنید.
+      </div>
     </div>
   );
 }
