@@ -286,24 +286,53 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                 </div>
               </div>
             )}
-            {view.navUrl && !hideNavButton && (
-              <div className="pt-2 flex justify-end">
-                {/* Open the deep-linked destination in a NEW browser tab so
-                    the operator's place in the bank-transactions list is
-                    preserved (no navigation in the current tab). We use
-                    `noopener,noreferrer` for the standard security hygiene:
-                    the opened tab cannot access window.opener and no
-                    Referer header is leaked. */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    window.open(view.navUrl!, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                  رفتن به تب مرتبط (تب جدید)
-                </Button>
+            {/* Action footer — combines the (optional) deep-link nav button
+                and the (optional) in-dialog rollback button. Both are gated
+                independently so the dialog gracefully degrades when one
+                isn't applicable. The RollbackButton itself is the SAME
+                component used in the list rows, so the handler, dialog,
+                metadata, role gate, and toast behaviour are all identical
+                — we only changed where it is rendered. */}
+            {((view.navUrl && !hideNavButton) || view.rollback) && (
+              <div className="pt-2 flex flex-wrap gap-2 justify-end border-t mt-2">
+                {view.rollback && (
+                  <RollbackButton
+                    entityType={view.rollback.entityType}
+                    entityId={view.rollback.entityId}
+                    metadata={{
+                      operationLabel: view.rollback.operationLabel,
+                      amount: view.rollback.amount,
+                      partyLabel: view.rollback.partyLabel,
+                      bankLabel: view.rollback.bankLabel,
+                      sepidarVoucherId: view.rollback.sepidarVoucherId,
+                    }}
+                    buttonVariant="destructive"
+                    onSuccess={() => {
+                      // Close this dialog and let the host tab refresh its
+                      // list. The RollbackButton has already shown the
+                      // success toast (identical to the list flow).
+                      onRollbackSuccess?.();
+                      onClose();
+                    }}
+                  />
+                )}
+                {view.navUrl && !hideNavButton && (
+                  // Open the deep-linked destination in a NEW browser tab so
+                  // the operator's place in the bank-transactions list is
+                  // preserved. `noopener,noreferrer` is standard security
+                  // hygiene: opened tab cannot access window.opener and no
+                  // Referer header is leaked.
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      window.open(view.navUrl!, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                    رفتن به تب مرتبط (تب جدید)
+                  </Button>
+                )}
               </div>
             )}
           </div>
