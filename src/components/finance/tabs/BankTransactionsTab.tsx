@@ -955,7 +955,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
                   {feesRunning
                     ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
                     : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
-                  {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
+                  {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد (سوئیپ گروهی)"}
                 </Button>
 
                 {/* شناسایی واریزها */}
