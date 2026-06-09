@@ -149,7 +149,9 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             .from("finance_receive_identifications")
             .select(
               "id, title, amount, transaction_datetime, status, description, party_id, " +
-                "finance_parties(first_name, last_name, company_name)",
+                "voucher_id, bank_id, " +
+                "finance_parties(first_name, last_name, company_name), " +
+                "finance_banks:bank_id(title, bank_name)",
             )
             .eq("id", operationId)
             .maybeSingle();
@@ -158,6 +160,13 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const d: any = data;
           const p: any = d.finance_parties || {};
           const pn = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.company_name || null;
+          const b: any = d.finance_banks || {};
+          const bn = b.title || b.bank_name || null;
+          // Mirror the list-view eligibility gate: rollback only when a
+          // Sepidar voucher exists AND the record is not already cancelled
+          // or rolled back. Same condition as ReceiveIdentificationTab.
+          const eligible =
+            !!d.voucher_id && d.status !== "cancelled" && d.status !== "rolled_back";
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: d.title || d.id,
@@ -167,12 +176,24 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
             status: d.status,
             description: d.description,
             navUrl: `/finance?tab=receive-id&receiveId=${encodeURIComponent(d.id)}`,
+            rollback: eligible
+              ? {
+                  entityType: "receive_identification",
+                  entityId: d.id,
+                  operationLabel: "شناسایی دریافت",
+                  amount: Number(d.amount) || 0,
+                  partyLabel: pn,
+                  bankLabel: bn,
+                  sepidarVoucherId: d.voucher_id,
+                }
+              : undefined,
           });
         } else if (operationType === "bank_transfer") {
           const { data, error } = await supabase
             .from("finance_bank_transfers")
             .select(
               "id, from_amount, to_amount, transfer_datetime, status, description, " +
+                "voucher_id, " +
                 "from_bank:from_bank_id(title), to_bank:to_bank_id(title)",
             )
             .eq("id", operationId)
@@ -182,17 +203,31 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
           const d: any = data;
           const fb: any = d.from_bank || {};
           const tb: any = d.to_bank || {};
+          const bankLine = `${fb.title || "—"} ← ${tb.title || "—"}`;
+          // Same gate as BankTransferTab list row.
+          const eligible =
+            !!d.voucher_id && d.status !== "cancelled" && d.status !== "rolled_back";
           setView({
             typeLabel: TYPE_LABEL[operationType],
             refNumber: d.id,
             // For a bank-transfer there is no party; we surface the two banks
             // as the "counterparty" line so the operator gets context.
-            partyName: `${fb.title || "—"} ← ${tb.title || "—"}`,
+            partyName: bankLine,
             amount: Number(d.from_amount ?? d.to_amount) || 0,
             date: d.transfer_datetime,
             status: d.status,
             description: d.description,
             navUrl: `/finance?tab=bank-transfer&transferId=${encodeURIComponent(d.id)}`,
+            rollback: eligible
+              ? {
+                  entityType: "bank_transfer",
+                  entityId: d.id,
+                  operationLabel: "انتقال بانکی",
+                  amount: Number(d.from_amount ?? d.to_amount) || 0,
+                  bankLabel: bankLine,
+                  sepidarVoucherId: d.voucher_id,
+                }
+              : undefined,
           });
 
         } else {
