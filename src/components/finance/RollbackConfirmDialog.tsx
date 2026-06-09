@@ -79,6 +79,9 @@ export interface RollbackMetadata {
   extraLines?: { label: string; value: ReactNode }[];
   // Optional scope-specific confirmation question shown inside the dialog.
   confirmationQuestion?: string;
+  // When true, show a status-only warning instead of the destructive
+  // Sepidar/voucher warning. Used for legacy factors with no linked voucher.
+  noVoucherWarning?: boolean;
 }
 
 export interface RollbackConfirmDialogProps {
