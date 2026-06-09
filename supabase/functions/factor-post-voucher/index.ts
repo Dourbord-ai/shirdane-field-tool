@@ -340,6 +340,9 @@ Deno.serve(async (req) => {
 
   if (existingFactor.sepidar_voucher_id) {
     // Already posted on a previous attempt — short-circuit, do NOT touch SQL.
+    log.info("already_posted", "Factor already posted, returning existing voucher", {
+      sepidar_voucher_id: existingFactor.sepidar_voucher_id,
+    });
     // Defensive: also force lifecycle_state='posted' in case a previous run
     // wrote the sepidar id but failed to flip lifecycle (partial mirror).
     // This is the single source of truth that prevents the UI from re-posting.
