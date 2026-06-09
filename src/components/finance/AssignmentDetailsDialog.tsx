@@ -95,6 +95,12 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<DetailsView | null>(null);
+  // Bumped after a successful rollback to force the data-loading effect to
+  // re-run. We deliberately don't close the dialog on rollback success —
+  // operators want to see the updated status (e.g. "rolled_back" / no
+  // rollback button) confirming the action actually took effect in the DB.
+  const [reloadKey, setReloadKey] = useState(0);
+
 
   useEffect(() => {
     if (!open) return;
