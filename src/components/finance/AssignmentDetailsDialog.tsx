@@ -297,7 +297,7 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
     return () => {
       cancelled = true;
     };
-  }, [open, operationType, operationId]);
+  }, [open, operationType, operationId, reloadKey]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
