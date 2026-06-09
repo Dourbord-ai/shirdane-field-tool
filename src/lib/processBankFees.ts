@@ -738,11 +738,16 @@ export async function processBankFees(
     willProcess: eligible.length,
   });
 
+  progress.total = eligible.length;
+  progress.eligibleTotal = eligible.length;
+  progress.remaining = eligible.length;
+  progress.remainingEligible = eligible.length;
+  onProgress({ ...progress });
 
   // eslint-disable-next-line no-console
   console.log(TAG, "eligible.total", {
     eligibleTotal: eligible.length,
-    fetchedUnassignedTotal: all.length,
+    fetchedUnassignedTotal: allEligible.length,
     threshold: FEE_THRESHOLD_IRR,
   });
 
