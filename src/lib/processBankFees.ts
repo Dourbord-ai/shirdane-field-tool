@@ -55,6 +55,29 @@ import { buildPaymentRequestItemAmountType } from "@/lib/paymentAmountTypes";
 // classifiers stay in lockstep.
 export const FEE_THRESHOLD_IRR = 1_000_000;
 
+// Persian keywords that strongly indicate a row is a real bank fee.
+// We REQUIRE one of these in the description (in addition to the amount
+// threshold) so a generic small-amount withdraw is NOT mistaken for a fee.
+// This avoids accidentally sweeping every <1M IRR withdraw.
+export const FEE_DESCRIPTION_KEYWORDS = [
+  "کارمزد",
+  "كارمزد", // alternate Arabic kaf
+  "هزينه تراکنش",
+  "هزینه تراکنش",
+  "کسر کارمزد",
+  "کارمزد انتقال",
+  "کارمزد ساتنا",
+  "کارمزد پایا",
+  "کارمزد پل",
+];
+
+// Human-readable description of the eligibility rule, shown in the
+// confirmation dialog so the operator can audit what is about to run.
+export const FEE_ELIGIBILITY_RULE_FA =
+  `تراکنش‌های برداشت با وضعیت «شناسایی‌نشده» که مبلغ آن‌ها کمتر از ` +
+  `${FEE_THRESHOLD_IRR.toLocaleString("fa-IR")} ریال است و شرح آن‌ها شامل ` +
+  `یکی از کلیدواژه‌های کارمزد (مثلاً «کارمزد»، «هزینه تراکنش») باشد.`;
+
 // Small page so the UI can stream progress and the PostgREST URL stays
 // well under the URI-length cap.
 const BATCH_SIZE = 25;
@@ -62,6 +85,13 @@ const BATCH_SIZE = 25;
 // Console group prefix — every log line is namespaced so DevTools filtering
 // (search for "[BankFees]") shows only this run.
 const TAG = "[BankFees]";
+
+// Does this row's description match any of our fee keywords?
+function descriptionLooksLikeFee(desc: string | null | undefined): boolean {
+  if (!desc) return false;
+  const s = String(desc);
+  return FEE_DESCRIPTION_KEYWORDS.some((kw) => s.includes(kw));
+}
 
 // ---------------------------------------------------------------------------
 // Public progress shape — surfaced into the UI summary panel.
@@ -567,11 +597,103 @@ async function processOneFeeTx(
 }
 
 // ---------------------------------------------------------------------------
-// Public entry point. Iterates over unassigned rows in BATCH_SIZE chunks,
-// applies the fee pipeline, and streams progress to the caller.
+// Shared eligibility fetch — used by BOTH previewBankFees() (read-only
+// confirmation step in the UI) and processBankFees() (the actual run).
+//
+// Eligibility filter:
+//   - is_deleted = false
+//   - assignment_status = 'unassigned'
+//   - transaction_type = 'withdraw'                       (DB-side)
+//   - abs(withdraw_amount | amount) > 0 AND < FEE_THRESHOLD_IRR   (client)
+//   - description contains a Persian fee keyword          (client)
+//     OR row is already tagged 'bank_fee_candidate' (a previous run flagged
+//     it, so we retry it even if the keyword check is fuzzy).
+//
+// The keyword requirement is the key safety upgrade: before this change, the
+// sweep treated EVERY small withdraw as a fee candidate, which is why a
+// single button click could process 181 unrelated transactions.
 // ---------------------------------------------------------------------------
+async function fetchEligibleFeeRows(): Promise<{ rows: FeeTx[]; fetchedTotal: number; error?: string }> {
+  const PAGE_SIZE = 1000;
+  const all: FeeTx[] = [];
+  let pageIndex = 0;
+  while (true) {
+    const from = pageIndex * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data: page, error: pageErr } = await supabase
+      .from("finance_bank_transactions")
+      .select("id, bank_id, transaction_type, withdraw_amount, deposit_amount, amount, transaction_datetime, description, assigned_operation_type")
+      .eq("assignment_status", "unassigned")
+      .eq("is_deleted", false)
+      .eq("transaction_type", "withdraw")
+      .order("transaction_datetime", { ascending: true })
+      .range(from, to);
+    if (pageErr) return { rows: [], fetchedTotal: 0, error: pageErr.message };
+    const rowsPage = (page ?? []) as FeeTx[];
+    all.push(...rowsPage);
+    if (rowsPage.length < PAGE_SIZE) break;
+    pageIndex++;
+  }
+
+  const eligible = all.filter((tx) => {
+    const w = Math.abs(Number(tx.withdraw_amount) || 0);
+    const a = Math.abs(Number(tx.amount) || 0);
+    const absWithdraw = w || a;
+    if (!(absWithdraw > 0 && absWithdraw < FEE_THRESHOLD_IRR)) return false;
+    // Description-based filter — the safety net that prevents bulk-sweeping
+    // every small withdraw. Allow retry of already-tagged candidates.
+    if (tx.assigned_operation_type === "bank_fee_candidate") return true;
+    return descriptionLooksLikeFee(tx.description);
+  });
+
+  return { rows: eligible, fetchedTotal: all.length };
+}
+
+// ---------------------------------------------------------------------------
+// previewBankFees — READ-ONLY. Returns the eligible rows + a human rule so
+// the UI can show a confirmation dialog (count, total amount, sample rows)
+// BEFORE the operator commits to any DB writes.
+// ---------------------------------------------------------------------------
+export interface BankFeesPreview {
+  eligible: FeeTx[];
+  totalAmount: number;
+  rule: string;
+  fetchedTotal: number;
+  error?: string;
+}
+
+export async function previewBankFees(): Promise<BankFeesPreview> {
+  const { rows, fetchedTotal, error } = await fetchEligibleFeeRows();
+  const totalAmount = rows.reduce((sum, tx) => {
+    const w = Math.abs(Number(tx.withdraw_amount) || 0);
+    const a = Math.abs(Number(tx.amount) || 0);
+    return sum + (w || a);
+  }, 0);
+  return {
+    eligible: rows,
+    totalAmount,
+    rule: FEE_ELIGIBILITY_RULE_FA,
+    fetchedTotal,
+    error,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point. Now SCOPED: callers MUST pass either an explicit list
+// of tx IDs (preferred — comes from the confirmation dialog) or a hard limit.
+// This prevents the historical bug where one click silently processed 181
+// transactions.
+// ---------------------------------------------------------------------------
+export interface ProcessBankFeesOptions {
+  /** Explicit allow-list of bank-transaction IDs to process. */
+  txIds?: string[];
+  /** Hard cap on rows processed in this run. Default 1 (single-row safety). */
+  limit?: number;
+}
+
 export async function processBankFees(
   onProgress: (p: BankFeesProgress) => void,
+  options: ProcessBankFeesOptions = {},
 ): Promise<BankFeesProgress> {
   // eslint-disable-next-line no-console
   console.group(`${TAG} run start`);
@@ -591,59 +713,29 @@ export async function processBankFees(
     return progress;
   }
 
-  // -------------------------------------------------------------------------
-  // Fetch ALL eligible rows using explicit pagination so the default 1000-row
-  // PostgREST cap never silently truncates the scan. We re-fetch in pages of
-  // PAGE_SIZE until a short page comes back (= no more rows).
-  //
-  // Eligibility filter (per user spec — MUST NOT exclude bank_fee_candidate
-  // or previously-failed rows, since those are exactly what we need to retry):
-  //   - is_deleted = false
-  //   - assignment_status = 'unassigned'
-  //   - transaction_type = 'withdraw'                  (DB-side filter)
-  //   - abs(coalesce(withdraw_amount, amount, 0)) < threshold   (client-side)
-  // -------------------------------------------------------------------------
-  const PAGE_SIZE = 1000;
-  const all: FeeTx[] = [];
-  let pageIndex = 0;
-  // We use range-based pagination because count('exact') + offset is the
-  // recommended pattern for streaming large result sets in Supabase.
-  while (true) {
-    const from = pageIndex * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    const { data: page, error: pageErr } = await supabase
-      .from("finance_bank_transactions")
-      .select("id, bank_id, transaction_type, withdraw_amount, deposit_amount, amount, transaction_datetime, description, assigned_operation_type")
-      .eq("assignment_status", "unassigned")
-      .eq("is_deleted", false)
-      .eq("transaction_type", "withdraw")
-      .order("transaction_datetime", { ascending: true })
-      .range(from, to);
-    if (pageErr) {
-      progress.lastMessage = pageErr.message;
-      progress.failures.push({ txId: "—", step: "fetch", message: pageErr.message });
-      onProgress({ ...progress });
-      // eslint-disable-next-line no-console
-      console.error(TAG, "fetch failed", pageErr);
-      // eslint-disable-next-line no-console
-      console.groupEnd();
-      return progress;
-    }
-    const rowsPage = (page ?? []) as FeeTx[];
+  const { rows: allEligible, error: fetchErr } = await fetchEligibleFeeRows();
+  if (fetchErr) {
+    progress.lastMessage = fetchErr;
+    progress.failures.push({ txId: "—", step: "fetch", message: fetchErr });
+    onProgress({ ...progress });
     // eslint-disable-next-line no-console
-    console.log(TAG, "fetched.batch", { pageIndex, fetched: rowsPage.length, runningTotal: all.length + rowsPage.length });
-    all.push(...rowsPage);
-    if (rowsPage.length < PAGE_SIZE) break; // last page reached
-    pageIndex++;
+    console.groupEnd();
+    return progress;
   }
 
-  // Apply the amount threshold client-side (some rows carry the amount in
-  // `amount` rather than `withdraw_amount`, so SQL filtering would miss them).
-  const eligible = all.filter((tx) => {
-    const w = Math.abs(Number(tx.withdraw_amount) || 0);
-    const a = Math.abs(Number(tx.amount) || 0);
-    const absWithdraw = w || a;
-    return absWithdraw > 0 && absWithdraw < FEE_THRESHOLD_IRR;
+  // Scope to caller-supplied IDs (preferred) and then apply the hard limit.
+  // Default limit = 1 so a forgetful caller cannot mass-process by accident.
+  const allowList = options.txIds ? new Set(options.txIds) : null;
+  const limit = Math.max(1, options.limit ?? 1);
+  const scoped = allEligible.filter((tx) => !allowList || allowList.has(tx.id));
+  const eligible = scoped.slice(0, limit);
+
+  // eslint-disable-next-line no-console
+  console.log(TAG, "scope", {
+    allEligible: allEligible.length,
+    afterAllowList: scoped.length,
+    limit,
+    willProcess: eligible.length,
   });
 
   progress.total = eligible.length;
@@ -655,7 +747,7 @@ export async function processBankFees(
   // eslint-disable-next-line no-console
   console.log(TAG, "eligible.total", {
     eligibleTotal: eligible.length,
-    fetchedUnassignedTotal: all.length,
+    fetchedUnassignedTotal: allEligible.length,
     threshold: FEE_THRESHOLD_IRR,
   });
 

@@ -18,7 +18,13 @@ import { parseMoney, recalculateBankUnassignedBalances } from "@/lib/finance";
 import { autoProcessUnassigned, emptyProgress, type AutoProcessProgress } from "@/lib/autoProcessUnassigned";
 // Dedicated "شناسایی کارمزد" pipeline — withdraws under FEE_THRESHOLD_IRR
 // get a payment-request + auto-approval + Sepidar voucher in one click.
-import { processBankFees, emptyFeesProgress, type BankFeesProgress } from "@/lib/processBankFees";
+import {
+  processBankFees,
+  previewBankFees,
+  emptyFeesProgress,
+  type BankFeesProgress,
+  type BankFeesPreview,
+} from "@/lib/processBankFees";
 // "شناسایی واریزها" — n8n-AI-assisted deposit identification orchestrator.
 // Reuses the canonical manual receive-identification + approval helpers; it
 // only adds the n8n webhook trigger and the ai_verify_status state machine.
@@ -53,6 +59,14 @@ import { Plus, Upload, Download, X, Trash2, FileText, AlertTriangle, ArrowDownTo
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 // Bulk "Attach to Payment Request" — pure frontend orchestrator. See the
 // dialog file's header doc for why concurrency is serialized and why we
 // never split a transaction across items. The backend stays unchanged: we
@@ -379,6 +393,14 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     emptyWithdrawAIProgress(),
   );
 
+  // ── شناسایی کارمزد preview/confirmation state ──────────────────────────
+  // Before running the sweep we ALWAYS show the operator a confirmation
+  // dialog summarising what is about to happen (count, total amount, rule,
+  // first 10 sample rows). The button no longer triggers writes directly.
+  const [feesPreviewOpen, setFeesPreviewOpen] = useState(false);
+  const [feesPreviewLoading, setFeesPreviewLoading] = useState(false);
+  const [feesPreview, setFeesPreview] = useState<BankFeesPreview | null>(null);
+
   async function runAutoProcess() {
     if (autoRunning) return;
     setAutoRunning(true);
@@ -398,18 +420,60 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
     }
   }
 
-  // Bank-fee-only sweep — dedicated button. Uses the standalone
-  // processBankFees() orchestrator which classifies, creates PRs,
-  // auto-approves, and posts to Sepidar in one pass.
-  async function runFeeIdentification() {
+  // Bank-fee preview — READ-ONLY first step. Opens the confirmation dialog
+  // showing eligible count, total amount, rule, and the first 10 rows. No
+  // writes happen until the operator explicitly clicks one of the run
+  // buttons inside the dialog.
+  async function openFeeIdentificationPreview() {
+    if (feesRunning || feesPreviewLoading) return;
+    setFeesPreviewLoading(true);
+    setFeesPreviewOpen(true);
+    try {
+      const preview = await previewBankFees();
+      setFeesPreview(preview);
+      if (preview.error) {
+        toastFinanceError(toast, new Error(preview.error));
+      }
+    } catch (e) {
+      toastFinanceError(toast, e);
+      setFeesPreviewOpen(false);
+    } finally {
+      setFeesPreviewLoading(false);
+    }
+  }
+
+  // Actually run the sweep — caller decides the scope (single-row test vs
+  // explicit bulk confirmation). `txIds` always carries the exact allow-list
+  // we showed in the preview dialog, so the run cannot drift to other rows.
+  async function executeFeeIdentification(opts: { txIds: string[]; limit: number; mode: "single" | "bulk" }) {
     if (feesRunning) return;
+    setFeesPreviewOpen(false);
     setFeesRunning(true);
     setFeesProgress(emptyFeesProgress());
     try {
-      const final = await processBankFees((p) => setFeesProgress(p));
-      toast.success(
-        `شناسایی کارمزد — کل بررسی‌شده: ${final.checked}/${final.total} · کاندید کارمزد: ${final.fee_candidates} · درخواست‌های تسویه ایجادشده: ${final.payment_requests_created} · ارسال به سپیدار: ${final.sepidar_posted} · ناموفق: ${final.failed}`,
-      );
+      const final = await processBankFees((p) => setFeesProgress(p), {
+        txIds: opts.txIds,
+        limit: opts.limit,
+      });
+      // Sepidar failures are infrastructure-level (bridge unreachable) and
+      // can be retried later — they do NOT mean fee identification failed.
+      // We split the message so the operator sees that clearly.
+      const sepidarOnlyFailures = final.failures.filter((f) => f.step === "sepidar_post").length;
+      const realFailures = final.failed - sepidarOnlyFailures;
+      const head = opts.mode === "single" ? "اجرای آزمایشی شناسایی کارمزد" : "شناسایی کارمزد";
+      const base =
+        `${head} — بررسی‌شده: ${final.checked}/${final.total} · ` +
+        `درخواست‌های تسویه ایجادشده: ${final.payment_requests_created} · ` +
+        `ارسال به سپیدار: ${final.sepidar_posted}`;
+      if (realFailures > 0) {
+        toast.error(`${base} · ناموفق: ${realFailures}`);
+      } else if (sepidarOnlyFailures > 0) {
+        toast.warning(
+          `${base} · ارسال به سپیدار ناموفق (${sepidarOnlyFailures}) — خطای زیرساخت، قابل بازپخش بعداً.`,
+        );
+      } else {
+        toast.success(base);
+      }
       void load();
     } catch (e) {
       toastFinanceError(toast, e);
@@ -417,6 +481,7 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       setFeesRunning(false);
     }
   }
+
 
   // "شناسایی واریزها" — single-click orchestrator: fires the n8n webhook,
   // then processes whatever n8n parsed by reusing the canonical manual
@@ -883,14 +948,14 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
             return (
               <TooltipProvider delayDuration={150}>
                 <Button
-                  onClick={runFeeIdentification}
+                  onClick={openFeeIdentificationPreview}
                   disabled={feesRunning}
                   className="bg-blue-600 text-white hover:bg-blue-700"
                 >
                   {feesRunning
                     ? <Loader2 className="w-4 h-4 ml-1 animate-spin" />
                     : <ArrowUpFromLine className="w-4 h-4 ml-1" />}
-                  {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد"}
+                  {feesRunning ? "در حال شناسایی کارمزد…" : "شناسایی کارمزد (سوئیپ گروهی)"}
                 </Button>
 
                 {/* شناسایی واریزها */}
@@ -1840,6 +1905,90 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       />
 
 
+      {/* ── شناسایی کارمزد — preview/confirmation dialog ────────────────
+          Always shown BEFORE any writes happen. Surfaces the eligibility
+          rule, the matching row count, the total amount, and the first 10
+          sample rows. Operator must explicitly choose:
+            • «اجرای آزمایشی روی ۱ تراکنش» — safe single-row test
+            • «اجرای روی همه (سوئیپ)»      — full bulk, only after typing
+                                              the count for confirmation (in dev)
+          Cancel does nothing. */}
+      <Dialog open={feesPreviewOpen} onOpenChange={setFeesPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>پیش‌نمایش شناسایی کارمزد</DialogTitle>
+            <DialogDescription>
+              این عملیات قبل از اجرا نیاز به تأیید شما دارد. هیچ تغییری در دیتابیس
+              ایجاد نمی‌شود تا یکی از دکمه‌های زیر را بزنید.
+            </DialogDescription>
+          </DialogHeader>
+
+          {feesPreviewLoading || !feesPreview ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin inline ml-2" />
+              در حال بارگذاری پیش‌نمایش…
+            </div>
+          ) : (
+            <FeeIdentificationPreviewBody preview={feesPreview} />
+          )}
+
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => setFeesPreviewOpen(false)} disabled={feesRunning}>
+              انصراف
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!feesPreview || feesPreview.eligible.length === 0 || feesRunning}
+              onClick={() => {
+                if (!feesPreview || feesPreview.eligible.length === 0) return;
+                // Single-row test: pick the first eligible row only.
+                executeFeeIdentification({
+                  txIds: [feesPreview.eligible[0].id],
+                  limit: 1,
+                  mode: "single",
+                });
+              }}
+            >
+              اجرای آزمایشی روی ۱ تراکنش
+            </Button>
+            <Button
+              className="bg-blue-600 text-white hover:bg-blue-700"
+              disabled={!feesPreview || feesPreview.eligible.length === 0 || feesRunning}
+              onClick={() => {
+                if (!feesPreview || feesPreview.eligible.length === 0) return;
+                const count = feesPreview.eligible.length;
+                // In dev, demand an explicit typed confirmation so an accidental
+                // click cannot mass-process. In prod, a standard confirm() is
+                // still required — defensive UX, not a hard policy switch.
+                const isDev = import.meta.env.DEV;
+                if (isDev) {
+                  const typed = window.prompt(
+                    `حالت توسعه (DEV) — برای اجرای سوئیپ گروهی روی ${count} تراکنش، عدد ${count} را تایپ کنید:`,
+                  );
+                  if (typed?.trim() !== String(count)) {
+                    toast.info("اجرای گروهی لغو شد.");
+                    return;
+                  }
+                } else {
+                  const ok = window.confirm(
+                    `اجرای شناسایی کارمزد روی ${count} تراکنش؟ این عملیات درخواست تسویه و سند مالی ایجاد می‌کند.`,
+                  );
+                  if (!ok) return;
+                }
+                executeFeeIdentification({
+                  txIds: feesPreview.eligible.map((tx) => tx.id),
+                  limit: count,
+                  mode: "bulk",
+                });
+              }}
+            >
+              اجرای روی همه ({(feesPreview?.eligible.length ?? 0).toLocaleString("fa-IR")} تراکنش)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
       {openReceiveId && (
@@ -2699,3 +2848,89 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
   );
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// FeeIdentificationPreviewBody
+// Renders the body of the «شناسایی کارمزد» confirmation dialog:
+//   • the eligibility rule (so the operator can audit it)
+//   • total eligible count
+//   • total absolute amount
+//   • the first 10 sample rows (so they can sanity-check the filter)
+// Pure presentation — no side effects, no DB calls.
+// ─────────────────────────────────────────────────────────────────────────
+function FeeIdentificationPreviewBody({ preview }: { preview: BankFeesPreview }) {
+  const sample = preview.eligible.slice(0, 10);
+  return (
+    <div className="space-y-4 text-sm" dir="rtl">
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <div className="font-bold mb-1">قاعدهٔ واجد شرایط بودن</div>
+        <div className="text-muted-foreground leading-6">{preview.rule}</div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">تعداد تراکنش‌های واجد شرایط</div>
+          <div className="text-xl font-bold">
+            {preview.eligible.length.toLocaleString("fa-IR")}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            از {preview.fetchedTotal.toLocaleString("fa-IR")} برداشت شناسایی‌نشده
+          </div>
+        </div>
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">مجموع مبلغ (ریال)</div>
+          <div className="text-xl font-bold">
+            {preview.totalAmount.toLocaleString("fa-IR")}
+          </div>
+        </div>
+      </div>
+
+      {sample.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground">
+          هیچ تراکنش واجد شرایطی پیدا نشد.
+        </div>
+      ) : (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="px-3 py-2 bg-muted/40 text-xs font-bold border-b">
+            ۱۰ نمونه اول
+          </div>
+          <div className="divide-y">
+            {sample.map((tx) => {
+              const w = Math.abs(Number(tx.withdraw_amount) || 0);
+              const a = Math.abs(Number(tx.amount) || 0);
+              const amount = w || a;
+              return (
+                <div key={tx.id} className="px-3 py-2 text-xs flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-[10px] text-muted-foreground truncate">
+                      {tx.id}
+                    </div>
+                    <div className="truncate" title={tx.description ?? ""}>
+                      {tx.description || <span className="text-muted-foreground">— بدون شرح —</span>}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {tx.transaction_datetime
+                        ? new Date(tx.transaction_datetime).toLocaleString("fa-IR")
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="font-bold whitespace-nowrap">
+                    {amount.toLocaleString("fa-IR")} ریال
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {import.meta.env.DEV && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+          <strong>حالت توسعه (DEV):</strong> برای امنیت، اجرای گروهی نیاز به تایپ
+          عدد تعداد تراکنش‌ها دارد. توصیه می‌شود ابتدا «اجرای آزمایشی روی ۱ تراکنش»
+          را امتحان کنید.
+        </div>
+      )}
+    </div>
+  );
+}
