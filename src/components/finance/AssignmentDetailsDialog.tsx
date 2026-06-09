@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
+import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
+import type { RollbackEntityType } from "@/lib/finance/rollback";
 import { MoneyCell, JalaliDateCell, FinanceStatusBadge } from "@/components/finance/atoms";
 // (useNavigate no longer needed: the "go to related tab" button now opens a
 // NEW browser tab via window.open(...) instead of doing in-page routing, so
