@@ -1910,8 +1910,8 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
           rule, the matching row count, the total amount, and the first 10
           sample rows. Operator must explicitly choose:
             • «اجرای آزمایشی روی ۱ تراکنش» — safe single-row test
-            • «اجرای روی همه (سوئیپ)»      — full bulk, only after typing
-                                              the count for confirmation (in dev)
+            • «شناسایی همه موارد واجد شرایط» — bulk run on every eligible row
+                                               after a confirm() prompt
           Cancel does nothing. */}
       <Dialog open={feesPreviewOpen} onOpenChange={setFeesPreviewOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
