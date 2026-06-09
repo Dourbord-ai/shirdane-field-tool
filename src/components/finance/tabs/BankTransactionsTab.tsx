@@ -1905,6 +1905,90 @@ export default function BankTransactionsTab({ initialBankId }: { initialBankId?:
       />
 
 
+      {/* ── شناسایی کارمزد — preview/confirmation dialog ────────────────
+          Always shown BEFORE any writes happen. Surfaces the eligibility
+          rule, the matching row count, the total amount, and the first 10
+          sample rows. Operator must explicitly choose:
+            • «اجرای آزمایشی روی ۱ تراکنش» — safe single-row test
+            • «اجرای روی همه (سوئیپ)»      — full bulk, only after typing
+                                              the count for confirmation (in dev)
+          Cancel does nothing. */}
+      <Dialog open={feesPreviewOpen} onOpenChange={setFeesPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>پیش‌نمایش شناسایی کارمزد</DialogTitle>
+            <DialogDescription>
+              این عملیات قبل از اجرا نیاز به تأیید شما دارد. هیچ تغییری در دیتابیس
+              ایجاد نمی‌شود تا یکی از دکمه‌های زیر را بزنید.
+            </DialogDescription>
+          </DialogHeader>
+
+          {feesPreviewLoading || !feesPreview ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin inline ml-2" />
+              در حال بارگذاری پیش‌نمایش…
+            </div>
+          ) : (
+            <FeeIdentificationPreviewBody preview={feesPreview} />
+          )}
+
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => setFeesPreviewOpen(false)} disabled={feesRunning}>
+              انصراف
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!feesPreview || feesPreview.eligible.length === 0 || feesRunning}
+              onClick={() => {
+                if (!feesPreview || feesPreview.eligible.length === 0) return;
+                // Single-row test: pick the first eligible row only.
+                executeFeeIdentification({
+                  txIds: [feesPreview.eligible[0].id],
+                  limit: 1,
+                  mode: "single",
+                });
+              }}
+            >
+              اجرای آزمایشی روی ۱ تراکنش
+            </Button>
+            <Button
+              className="bg-blue-600 text-white hover:bg-blue-700"
+              disabled={!feesPreview || feesPreview.eligible.length === 0 || feesRunning}
+              onClick={() => {
+                if (!feesPreview || feesPreview.eligible.length === 0) return;
+                const count = feesPreview.eligible.length;
+                // In dev, demand an explicit typed confirmation so an accidental
+                // click cannot mass-process. In prod, a standard confirm() is
+                // still required — defensive UX, not a hard policy switch.
+                const isDev = import.meta.env.DEV;
+                if (isDev) {
+                  const typed = window.prompt(
+                    `حالت توسعه (DEV) — برای اجرای سوئیپ گروهی روی ${count} تراکنش، عدد ${count} را تایپ کنید:`,
+                  );
+                  if (typed?.trim() !== String(count)) {
+                    toast.info("اجرای گروهی لغو شد.");
+                    return;
+                  }
+                } else {
+                  const ok = window.confirm(
+                    `اجرای شناسایی کارمزد روی ${count} تراکنش؟ این عملیات درخواست تسویه و سند مالی ایجاد می‌کند.`,
+                  );
+                  if (!ok) return;
+                }
+                executeFeeIdentification({
+                  txIds: feesPreview.eligible.map((tx) => tx.id),
+                  limit: count,
+                  mode: "bulk",
+                });
+              }}
+            >
+              اجرای روی همه ({(feesPreview?.eligible.length ?? 0).toLocaleString("fa-IR")} تراکنش)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       {openManual && <ManualTxDialog onClose={() => setOpenManual(false)} onDone={() => { setOpenManual(false); void load(); }} />}
       {openExcel && <ExcelImportDialog onClose={() => setOpenExcel(false)} onDone={() => { setOpenExcel(false); void load(); }} />}
       {openReceiveId && (
