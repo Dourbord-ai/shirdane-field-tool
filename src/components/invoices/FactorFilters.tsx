@@ -87,6 +87,9 @@ const STATUS_CHIPS: Array<{ label: string; value: string }> = [
   { label: "ثبت شده در سپیدار", value: "posted" },
   { label: "خطای ساخت سند", value: "voucher_failed" },
   { label: "خطای ثبت سپیدار", value: "sepidar_failed" },
+  // Rolled-back factors must be distinguishable from drafts so operators
+  // can audit them and never reintroduce them into the posting pipeline.
+  { label: "برگشت‌خورده", value: "rolled_back" },
 ];
 
 interface Props {
