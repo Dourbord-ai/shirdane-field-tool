@@ -2848,3 +2848,89 @@ function ExcelImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (
   );
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// FeeIdentificationPreviewBody
+// Renders the body of the «شناسایی کارمزد» confirmation dialog:
+//   • the eligibility rule (so the operator can audit it)
+//   • total eligible count
+//   • total absolute amount
+//   • the first 10 sample rows (so they can sanity-check the filter)
+// Pure presentation — no side effects, no DB calls.
+// ─────────────────────────────────────────────────────────────────────────
+function FeeIdentificationPreviewBody({ preview }: { preview: BankFeesPreview }) {
+  const sample = preview.eligible.slice(0, 10);
+  return (
+    <div className="space-y-4 text-sm" dir="rtl">
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <div className="font-bold mb-1">قاعدهٔ واجد شرایط بودن</div>
+        <div className="text-muted-foreground leading-6">{preview.rule}</div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">تعداد تراکنش‌های واجد شرایط</div>
+          <div className="text-xl font-bold">
+            {preview.eligible.length.toLocaleString("fa-IR")}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            از {preview.fetchedTotal.toLocaleString("fa-IR")} برداشت شناسایی‌نشده
+          </div>
+        </div>
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">مجموع مبلغ (ریال)</div>
+          <div className="text-xl font-bold">
+            {preview.totalAmount.toLocaleString("fa-IR")}
+          </div>
+        </div>
+      </div>
+
+      {sample.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground">
+          هیچ تراکنش واجد شرایطی پیدا نشد.
+        </div>
+      ) : (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="px-3 py-2 bg-muted/40 text-xs font-bold border-b">
+            ۱۰ نمونه اول
+          </div>
+          <div className="divide-y">
+            {sample.map((tx) => {
+              const w = Math.abs(Number(tx.withdraw_amount) || 0);
+              const a = Math.abs(Number(tx.amount) || 0);
+              const amount = w || a;
+              return (
+                <div key={tx.id} className="px-3 py-2 text-xs flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-[10px] text-muted-foreground truncate">
+                      {tx.id}
+                    </div>
+                    <div className="truncate" title={tx.description ?? ""}>
+                      {tx.description || <span className="text-muted-foreground">— بدون شرح —</span>}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {tx.transaction_datetime
+                        ? new Date(tx.transaction_datetime).toLocaleString("fa-IR")
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="font-bold whitespace-nowrap">
+                    {amount.toLocaleString("fa-IR")} ریال
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {import.meta.env.DEV && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+          <strong>حالت توسعه (DEV):</strong> برای امنیت، اجرای گروهی نیاز به تایپ
+          عدد تعداد تراکنش‌ها دارد. توصیه می‌شود ابتدا «اجرای آزمایشی روی ۱ تراکنش»
+          را امتحان کنید.
+        </div>
+      )}
+    </div>
+  );
+}
