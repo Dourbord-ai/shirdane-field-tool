@@ -62,8 +62,7 @@ interface DetailsView {
   // not the allocation id). Empty → no nav button is rendered.
   navUrl?: string;
   // Rollback config — populated only for operations that are currently
-  // eligible for rollback (already synced to Sepidar AND not already
-  // cancelled/rolled_back). When present, the dialog renders the same
+  // eligible for rollback. When present, the dialog renders the same
   // RollbackButton used in the list view, with identical handler/metadata.
   rollback?: {
     entityType: RollbackEntityType;
@@ -73,6 +72,12 @@ interface DetailsView {
     partyLabel?: string | null;
     bankLabel?: string | null;
     sepidarVoucherId?: string | number | null;
+    // Optional overrides so each entity type can reuse the same button
+    // label/tooltip/confirmation wording as its list-view counterpart
+    // (e.g. allocation rollback in PRDetail uses "لغو این تخصیص و برگشت سند").
+    buttonLabel?: string;
+    tooltip?: string;
+    confirmationQuestion?: string;
   };
 }
 
