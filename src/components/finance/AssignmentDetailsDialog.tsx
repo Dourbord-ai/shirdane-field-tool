@@ -365,11 +365,24 @@ export default function AssignmentDetailsDialog({ open, onClose, operationType, 
                     }}
                     buttonVariant="destructive"
                     onSuccess={() => {
-                      // Close this dialog and let the host tab refresh its
-                      // list. The RollbackButton has already shown the
-                      // success toast (identical to the list flow).
+                      // After a successful rollback we want THREE things to
+                      // happen, regardless of entity type (receive_id /
+                      // bank_transfer / payment_allocation):
+                      //   1) Re-fetch the operation inside this dialog so the
+                      //      operator immediately sees the new status (e.g.
+                      //      "rolled_back"/"cancelled") and so the rollback
+                      //      button auto-hides (eligibility re-evaluates).
+                      //   2) Notify the parent (BankTransactionsTab) so it
+                      //      reloads the transactions list — the underlying
+                      //      finance_bank_transactions row has just been
+                      //      released (assignment_status → unassigned,
+                      //      assigned_operation_* → null) by the rollback
+                      //      orchestrator, but the cached list row still
+                      //      shows the previous "assigned" state.
+                      //   3) Keep the dialog OPEN so the operator gets
+                      //      visual confirmation; they can close it manually.
+                      setReloadKey((k) => k + 1);
                       onRollbackSuccess?.();
-                      onClose();
                     }}
                   />
                 )}
