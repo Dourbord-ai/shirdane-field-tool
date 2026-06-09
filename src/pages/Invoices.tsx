@@ -1281,6 +1281,10 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   posted:         { label: "ثبت شده در سپیدار",  cls: "bg-primary/20 text-primary" },
   voucher_failed: { label: "خطای ساخت سند",      cls: "bg-destructive/15 text-destructive" },
   sepidar_failed: { label: "خطای ثبت سپیدار",    cls: "bg-destructive/15 text-destructive" },
+  // Rolled-back: distinct amber/warning treatment so it cannot be confused
+  // with a fresh draft. This is the visual half of the safety fix that
+  // prevents accidental re-approval of a rolled-back factor.
+  rolled_back:    { label: "برگشت‌خورده",        cls: "bg-amber-500/15 text-amber-400" },
 };
 
 // Default page size for the server-side filtered list. The RPC clamps to 500.
