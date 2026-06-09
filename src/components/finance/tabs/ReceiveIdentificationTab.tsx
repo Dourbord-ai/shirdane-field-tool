@@ -499,6 +499,7 @@ export default function ReceiveIdentificationTab() {
         operationType={deepLinkReceiveId ? "receive_identification" : null}
         operationId={deepLinkReceiveId}
         hideNavButton
+        onRollbackSuccess={() => { setDeepLinkReceiveId(null); void load(); }}
       />
     </div>
   );
