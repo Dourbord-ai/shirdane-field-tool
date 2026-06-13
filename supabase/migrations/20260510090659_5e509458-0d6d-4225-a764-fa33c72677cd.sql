@@ -1,0 +1,2 @@
+ALTER TABLE public.finance_payment_requests ADD COLUMN IF NOT EXISTS legacy_request_type_code integer;
+ALTER TABLE public.finance_payment_request_items ADD COLUMN IF NOT EXISTS legacy_request_type_code integer;

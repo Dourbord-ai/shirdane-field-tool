@@ -1,0 +1,2566 @@
+// =============================================================================
+// LivestockListBuilder.tsx
+// -----------------------------------------------------------------------------
+// "تولید لیست شخصی دام‌ها" — a custom livestock list builder for Damban.
+//
+// This page lets users compose filters against `public.cows`, generate a
+// professional list, print/export to XLSX, and apply group actions
+// (insemination, rinse, pregnancy test, vaccination) to the rows.
+//
+// Design rules followed:
+//   • Single source of truth: the same query backs the on-screen table, the
+//     print view, the XLSX export, and the group-action target list.
+//   • Never write to cached cow columns (is_pregnancy, is_dry, last_*) —
+//     fertility-event triggers + rebuild_cow_fertility_cache do that.
+//   • All ID literals match the existing fertility_operations:
+//        1 erotic   2 insemination   3,4,11,12 pregnancy tests
+//        5 abortion 6 birth          7 dry  8 rinse  10 clean  13 sync
+//   • RTL Persian UI, dark theme, semantic tokens only.
+// =============================================================================
+
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { syncCowFertilityCache } from "@/lib/syncCowFertilityCache";
+// formatShamsi accepts either a Gregorian ISO string (what Postgres now
+// returns for timestamptz/date columns after Group D migration) OR a legacy
+// text-stored string, and renders a Jalali/Persian date. Keeping a single
+// helper guarantees Jalali display continues to work uniformly even though
+// the underlying column types changed.
+import { formatShamsi } from "@/lib/dateDisplay";
+import * as XLSX from "xlsx";
+import { toast } from "sonner";
+import {
+  Beef, Filter, Printer, FileSpreadsheet, ChevronDown, ChevronUp, X,
+  Loader2, CheckSquare, Square, Sparkles, Search, ArrowUpDown,
+  Archive, FolderOpen, Trash2, Clock, User as UserIcon,
+} from "lucide-react";
+// Auth context — we need who the user is so we can stamp archives with the
+// creator's id / username / full name. Without this we couldn't tell who
+// built a given archive later.
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import JalaliDatePicker from "@/components/JalaliDatePicker";
+import { JalaliDate, formatJalali, todayJalali, jalaliToGregorian } from "@/lib/jalali";
+// Shared helper: converts a JalaliDate + "HH:MM" into the Gregorian
+// "YYYY-MM-DD HH:MM" string that the now-typed `event_date timestamp`
+// column in Postgres expects. Every batch insert below must use this.
+import { toGregorianForDb } from "@/lib/toGregorianForDb";
+
+// Local helper for the inline-batch flow where the date arrives as a
+// pre-formatted Jalali string (e.g. "1404/02/15") rather than a JalaliDate
+// object. Parses the string, converts to Gregorian, and appends time.
+function jalaliStrToGregorianTs(jStr: string, time?: string | null): string | null {
+  // Accept both "/" and "-" separators just like other helpers in the app.
+  const m = jStr?.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (!m) return null;
+  const g = jalaliToGregorian(Number(m[1]), Number(m[2]), Number(m[3]));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const datePart = `${g.year}-${pad(g.month)}-${pad(g.day)}`;
+  const t = (time ?? "").trim();
+  return t ? `${datePart} ${t}` : datePart;
+}
+import { cn } from "@/lib/utils";
+import { FERTILITY_STATUS_LABELS, PRESENCE_STATUS_LABELS } from "@/lib/livestock";
+// Lifecycle classification helper — provides "وضعیت چرخه دام" derived from
+// existing cow fields. We use it here both to render a column and to power
+// the new lifecycle multi-select filter.
+import {
+  calculateLifecycleState,
+  LIFECYCLE_LABELS,
+  ALL_LIFECYCLE_STATES,
+  type LifecycleState,
+} from "@/lib/lifecycleState";
+
+// -----------------------------------------------------------------------------
+// Types and lookup row shapes — kept loose to mirror the actual cows columns.
+// -----------------------------------------------------------------------------
+type CowRow = {
+  id: number;
+  tag_number: string | null;
+  earnumber: number | null;
+  bodynumber: number | null;
+  sex: number | null;
+  sextype: string | null;
+  date_of_birth: string | null;
+  description: string | null;
+  presence_status: number | null;
+  existancestatus: number | null;
+  last_type_id: number | null;
+  last_location_id: number | null;
+  last_status_id: number | null;
+  is_pregnancy: boolean | null;
+  is_dry: boolean | null;
+  last_fertility_status: number | null;
+  last_erotic_date: string | null;
+  last_inoculation_date: string | null;
+  last_pregnancy_date: string | null;
+  last_birth_date: string | null;
+  last_abortion_date: string | null;
+  last_dry_date: string | null;
+  last_rinse_date: string | null;
+  last_clean_test_date: string | null;
+  number_of_births: number | null;
+  last_period: number | null;
+};
+
+type Lookup = { id: number; name: string | null };
+type AppUser = { id: string; full_name: string | null; username: string };
+type SpermRow = { id: number; code: string | null; name: string | null };
+
+// Row shape for the `livestock_list_archives` table created in the migration.
+// Stored alongside the cow ids and filters so an archive is fully reproducible.
+type ArchiveRow = {
+  id: string;
+  name: string;
+  note: string | null;
+  filters: any;
+  column_keys: string[];
+  cow_ids: number[];
+  cow_count: number;
+  created_by_user_id: string | null;
+  created_by_username: string | null;
+  created_by_name: string | null;
+  created_at: string;
+};
+
+// -----------------------------------------------------------------------------
+// Filter state shape. Each field is independent so users can mix freely.
+// -----------------------------------------------------------------------------
+type FilterState = {
+  search: string;                              // tag/ear/body number
+  sex: "" | "0" | "2";                          // 0=female, 2=male (matches insemination dialog)
+  typeId: string;
+  locationId: string;
+  statusId: string;
+  presenceStatus: string;                      // applied against `presence_status` OR `existancestatus`
+  pregnancy: "" | "yes" | "no";
+  dry: "" | "yes" | "no";
+  fertilityStatusId: string;
+  bornFrom: JalaliDate | null;
+  bornTo: JalaliDate | null;
+  minAgeMonths: string;
+  maxAgeMonths: string;
+  hasRecentHeatDays: string;                   // ≤ N days
+  hasRecentInseminationDays: string;
+  hasRecentAbortionDays: string;
+  missingFertility: boolean;                   // last_fertility_status IS NULL
+  incompleteData: boolean;                      // no DoB or no tag/ear
+  // Multi-select over the calculated "وضعیت چرخه دام". Filtering happens
+  // client-side after fetch because the state is derived, not stored.
+  lifecycleStates: LifecycleState[];
+  // operational presets that map onto multiple raw filters at query time
+  preset: "" | "ready_insem" | "needs_preg_test" | "pregnant" | "dry_cows" | "milking_cows" | "recent_heat" | "no_fertility";
+};
+
+const EMPTY_FILTERS: FilterState = {
+  search: "", sex: "", typeId: "", locationId: "", statusId: "",
+  presenceStatus: "0",  // default: only in-herd animals, per spec safety rule
+  pregnancy: "", dry: "", fertilityStatusId: "",
+  bornFrom: null, bornTo: null, minAgeMonths: "", maxAgeMonths: "",
+  hasRecentHeatDays: "", hasRecentInseminationDays: "", hasRecentAbortionDays: "",
+  missingFertility: false, incompleteData: false,
+  lifecycleStates: [],
+  preset: "",
+};
+
+// -----------------------------------------------------------------------------
+// Column definitions — single source for the on-screen table, print, XLSX.
+// `accessor` receives the full row + lookup maps so labels can be resolved.
+// -----------------------------------------------------------------------------
+type ColumnDef = {
+  key: string;
+  label: string;                               // Persian header
+  accessor: (r: CowRow, ctx: AccessorCtx) => string | number | null;
+};
+type AccessorCtx = {
+  types: Map<number, string>;
+  locations: Map<number, string>;
+  statuses: Map<number, string>;
+};
+
+const tagLabel = (r: CowRow) =>
+  r.tag_number || (r.earnumber ? String(r.earnumber) : "") ||
+  (r.bodynumber ? String(r.bodynumber) : "") || `#${r.id}`;
+
+const sexLabel = (r: CowRow) =>
+  r.sex === 0 ? "ماده" : r.sex === 2 ? "نر" : r.sextype || "—";
+
+const yesNo = (v: boolean | null, yes = "بله", no = "خیر") =>
+  v == null ? "—" : v ? yes : no;
+
+const ALL_COLUMNS: ColumnDef[] = [
+  { key: "tag",        label: "شماره پلاک",        accessor: (r) => tagLabel(r) },
+  { key: "sex",        label: "جنسیت",             accessor: (r) => sexLabel(r) },
+  { key: "presence",   label: "وضعیت حضور",        accessor: (r) => PRESENCE_STATUS_LABELS[r.presence_status ?? r.existancestatus ?? -1] ?? "—" },
+  { key: "milking",    label: "وضعیت دوشش",        accessor: (r) => yesNo(r.is_dry, "خشک", "دوشا") },
+  { key: "pregnancy",  label: "وضعیت آبستنی",      accessor: (r) => yesNo(r.is_pregnancy, "آبستن", "غیر آبستن") },
+  { key: "fertility",  label: "آخرین وضعیت باروری", accessor: (r) => FERTILITY_STATUS_LABELS[r.last_fertility_status ?? -1] ?? "—" },
+  // Calculated lifecycle classification (e.g. "گاو دوشا", "تلیسه آبستن").
+  // Pulled from the shared helper so the label matches every other surface.
+  { key: "lifecycle",  label: "وضعیت چرخه دام",    accessor: (r) => calculateLifecycleState(r as any).label },
+  // Group D: these cow date/timestamp fields are now native PostgreSQL
+  // `date` / `timestamptz` values that the Supabase client serialises as
+  // ISO strings (e.g. "2026-04-12T00:00:00+00:00"). We must render them via
+  // formatShamsi so the user keeps seeing Persian/Jalali dates instead of
+  // raw ISO timestamps. Empty / null values still collapse to "—".
+  { key: "erotic",     label: "آخرین فحلی",        accessor: (r) => formatShamsi(r.last_erotic_date, false, "—") },
+  { key: "inoc",       label: "آخرین تلقیح",       accessor: (r) => formatShamsi(r.last_inoculation_date, false, "—") },
+  { key: "pregTest",   label: "آخرین تست آبستنی",  accessor: (r) => formatShamsi(r.last_pregnancy_date, false, "—") },
+  { key: "birth",      label: "آخرین زایش",        accessor: (r) => formatShamsi(r.last_birth_date, false, "—") },
+  { key: "abortion",   label: "آخرین سقط",         accessor: (r) => formatShamsi(r.last_abortion_date, false, "—") },
+  { key: "dryDate",    label: "آخرین خشک کردن",    accessor: (r) => formatShamsi(r.last_dry_date, false, "—") },
+  { key: "location",   label: "بهاربند",           accessor: (r, c) => c.locations.get(r.last_location_id ?? -1) || "—" },
+  { key: "type",       label: "نوع دام",            accessor: (r, c) => c.types.get(r.last_type_id ?? -1) || "—" },
+  // optional/extra columns
+  { key: "dob",        label: "تاریخ تولد",         accessor: (r) => formatShamsi(r.date_of_birth, false, "—") },
+  { key: "births",     label: "تعداد زایش",         accessor: (r) => r.number_of_births ?? "—" },
+  { key: "period",     label: "دوره",               accessor: (r) => r.last_period ?? "—" },
+  { key: "status",     label: "وضعیت سلامت",        accessor: (r, c) => c.statuses.get(r.last_status_id ?? -1) || "—" },
+  { key: "desc",       label: "توضیحات",            accessor: (r) => r.description || "—" },
+];
+
+const DEFAULT_COLUMN_KEYS = [
+  "tag","sex","presence","milking","pregnancy","fertility","erotic","inoc",
+  "pregTest","birth","abortion","dryDate","location","type",
+];
+
+const SORT_OPTIONS = [
+  { key: "tag",    label: "شماره پلاک" },
+  { key: "dob",    label: "تاریخ تولد" },
+  { key: "birth",  label: "آخرین زایش" },
+  { key: "inoc",   label: "آخرین تلقیح" },
+  { key: "erotic", label: "آخرین فحلی" },
+  { key: "fert",   label: "آخرین وضعیت باروری" },
+] as const;
+
+// =============================================================================
+// PRESET → filter overrides. Spec: "Pregnant" must be exactly
+// sex=0 AND is_pregnancy=true AND presence_status=0.
+// =============================================================================
+function applyPreset(p: FilterState["preset"], f: FilterState): FilterState {
+  switch (p) {
+    case "pregnant":
+      return { ...f, preset: p, sex: "0", pregnancy: "yes", presenceStatus: "0" };
+    case "dry_cows":
+      return { ...f, preset: p, sex: "0", dry: "yes", presenceStatus: "0" };
+    case "milking_cows":
+      return { ...f, preset: p, sex: "0", dry: "no", presenceStatus: "0" };
+    case "ready_insem":
+      // Open, milking, female, in-herd → candidates for insemination
+      return { ...f, preset: p, sex: "0", pregnancy: "no", dry: "no", presenceStatus: "0" };
+    case "needs_preg_test":
+      // Inseminated within last 60 days, no positive yet
+      return { ...f, preset: p, sex: "0", presenceStatus: "0", hasRecentInseminationDays: "60" };
+    case "recent_heat":
+      return { ...f, preset: p, sex: "0", presenceStatus: "0", hasRecentHeatDays: "30" };
+    case "no_fertility":
+      return { ...f, preset: p, sex: "0", presenceStatus: "0", missingFertility: true };
+    default:
+      return { ...f, preset: "" };
+  }
+}
+
+// =============================================================================
+// Page component
+// =============================================================================
+export default function LivestockListBuilder() {
+  // ---- Lookups -------------------------------------------------------------
+  const [types, setTypes] = useState<Lookup[]>([]);
+  const [locations, setLocations] = useState<Lookup[]>([]);
+  const [statuses, setStatuses] = useState<Lookup[]>([]);
+  const [fertStatuses, setFertStatuses] = useState<Lookup[]>([]);
+  const [lookupsLoading, setLookupsLoading] = useState(true);
+
+  // ---- Filter state --------------------------------------------------------
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [columnKeys, setColumnKeys] = useState<string[]>(DEFAULT_COLUMN_KEYS);
+  const [sortBy, setSortBy] = useState<(typeof SORT_OPTIONS)[number]["key"]>("tag");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // ---- Results -------------------------------------------------------------
+  const [rows, setRows] = useState<CowRow[] | null>(null);   // null = not generated yet
+  const [generating, setGenerating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // ---- UI state: collapsible filter groups --------------------------------
+  const [openGroup, setOpenGroup] = useState<string | null>("basic");
+
+  // ---- Group-action dialog state ------------------------------------------
+  const [actionKey, setActionKey] = useState<"" | "insemination" | "rinse" | "preg_test" | "vaccination">("");
+  const [actionOpen, setActionOpen] = useState(false);
+
+  // After the common-form is confirmed for insemination/rinse/preg_test the
+  // page switches into an INLINE per-row mode: extra columns are rendered
+  // into the results table and the user fills اپراتور/اسپرم/دارو/تست per row.
+  // Submitting then bulk-inserts all rows in one go.
+  type InlineMode = {
+    kind: "insemination" | "rinse" | "preg_test";
+    common: { dateStr: string; time: string; description: string; doctorName?: string };
+    perRow: Record<number, {
+      operatorId?: string;
+      spermId?: string;
+      medicineIds?: string[];
+      testType?: "initial" | "final" | "extra" | "dry" | "";
+      testResult?: "positive" | "negative" | "suspicious" | "";
+    }>;
+  };
+  const [inlineAction, setInlineAction] = useState<InlineMode | null>(null);
+  // Reference data needed by inline per-row selectors. Loaded lazily once
+  // the user enters inline mode so the page boot stays cheap.
+  const [inlineUsers, setInlineUsers] = useState<AppUser[]>([]);
+  const [inlineSperms, setInlineSperms] = useState<SpermRow[]>([]);
+  const [inlineMedicines, setInlineMedicines] = useState<Lookup[]>([]);
+  const [inlineSubmitting, setInlineSubmitting] = useState(false);
+
+  // Column-picker dialog (opens when the user clicks تایید و تولید لیست).
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+
+  // Manual-add row state — small inline input above the results table so the
+  // user can paste a tag/body number and pull a single cow into the list.
+  const [manualSearch, setManualSearch] = useState("");
+  const [manualAdding, setManualAdding] = useState(false);
+
+  // ---- Archive dialogs -----------------------------------------------------
+  // `saveArchiveOpen` opens the "name this archive" form after a list is built.
+  // `archivesListOpen` opens the browser of previously-saved archives so a
+  // user can reopen a list someone else generated and run group actions on it.
+  // `loadedArchive` remembers the currently-opened archive so we can show its
+  // name/creator/date as a banner above the results.
+  const [saveArchiveOpen, setSaveArchiveOpen] = useState(false);
+  const [archivesListOpen, setArchivesListOpen] = useState(false);
+  const [loadedArchive, setLoadedArchive] = useState<ArchiveRow | null>(null);
+
+  // Current user from auth context — used to stamp who created an archive.
+  const { user } = useAuth();
+
+  // ---- Load lookups on mount ----------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Parallel reads — they're independent and small.
+      const [t, l, s, fs] = await Promise.all([
+        supabase.from("livestock_types").select("id, name").order("name"),
+        supabase.from("livestock_locations").select("id, name").order("name"),
+        supabase.from("livestock_statuses").select("id, name").order("name"),
+        supabase.from("fertility_statuses").select("id, name").order("sort_order"),
+      ]);
+      if (cancelled) return;
+      setTypes((t.data as Lookup[]) ?? []);
+      setLocations((l.data as Lookup[]) ?? []);
+      setStatuses((s.data as Lookup[]) ?? []);
+      setFertStatuses((fs.data as Lookup[]) ?? []);
+      setLookupsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- Lookup maps for fast access in column accessors --------------------
+  const ctx: AccessorCtx = useMemo(() => ({
+    types: new Map(types.map((x) => [x.id, x.name || ""])),
+    locations: new Map(locations.map((x) => [x.id, x.name || ""])),
+    statuses: new Map(statuses.map((x) => [x.id, x.name || ""])),
+  }), [types, locations, statuses]);
+
+  // ---- Chips for active filters -------------------------------------------
+  const activeChips = useMemo(() => {
+    const chips: { key: string; label: string; clear: () => void }[] = [];
+    const f = filters;
+    const push = (key: string, label: string, clear: () => void) =>
+      chips.push({ key, label, clear });
+
+    if (f.search) push("search", `جستجو: ${f.search}`, () => setFilters({ ...f, search: "" }));
+    if (f.sex) push("sex", `جنسیت: ${f.sex === "0" ? "ماده" : "نر"}`, () => setFilters({ ...f, sex: "" }));
+    if (f.typeId) push("type", `نوع: ${ctx.types.get(+f.typeId)}`, () => setFilters({ ...f, typeId: "" }));
+    if (f.locationId) push("loc", `بهاربند: ${ctx.locations.get(+f.locationId)}`, () => setFilters({ ...f, locationId: "" }));
+    if (f.statusId) push("status", `سلامت: ${ctx.statuses.get(+f.statusId)}`, () => setFilters({ ...f, statusId: "" }));
+    if (f.presenceStatus !== "") push("pres", `حضور: ${PRESENCE_STATUS_LABELS[+f.presenceStatus] ?? "—"}`, () => setFilters({ ...f, presenceStatus: "" }));
+    if (f.pregnancy) push("preg", f.pregnancy === "yes" ? "آبستن" : "غیر آبستن", () => setFilters({ ...f, pregnancy: "" }));
+    if (f.dry) push("dry", f.dry === "yes" ? "خشک" : "دوشا", () => setFilters({ ...f, dry: "" }));
+    if (f.fertilityStatusId) push("fs", `باروری: ${FERTILITY_STATUS_LABELS[+f.fertilityStatusId]}`, () => setFilters({ ...f, fertilityStatusId: "" }));
+    if (f.bornFrom) push("bf", `از تولد: ${formatJalali(f.bornFrom)}`, () => setFilters({ ...f, bornFrom: null }));
+    if (f.bornTo) push("bt", `تا تولد: ${formatJalali(f.bornTo)}`, () => setFilters({ ...f, bornTo: null }));
+    if (f.minAgeMonths) push("ma", `حداقل سن: ${f.minAgeMonths} ماه`, () => setFilters({ ...f, minAgeMonths: "" }));
+    if (f.maxAgeMonths) push("mx", `حداکثر سن: ${f.maxAgeMonths} ماه`, () => setFilters({ ...f, maxAgeMonths: "" }));
+    if (f.hasRecentHeatDays) push("rh", `فحلی اخیر ≤ ${f.hasRecentHeatDays} روز`, () => setFilters({ ...f, hasRecentHeatDays: "" }));
+    if (f.hasRecentInseminationDays) push("ri", `تلقیح اخیر ≤ ${f.hasRecentInseminationDays} روز`, () => setFilters({ ...f, hasRecentInseminationDays: "" }));
+    if (f.hasRecentAbortionDays) push("ra", `سقط اخیر ≤ ${f.hasRecentAbortionDays} روز`, () => setFilters({ ...f, hasRecentAbortionDays: "" }));
+    if (f.missingFertility) push("mf", "بدون وضعیت باروری", () => setFilters({ ...f, missingFertility: false }));
+    if (f.incompleteData) push("ic", "داده ناقص", () => setFilters({ ...f, incompleteData: false }));
+    // One chip per selected lifecycle state — clicking removes just that one.
+    f.lifecycleStates.forEach((s) =>
+      push(`life:${s}`, `چرخه: ${LIFECYCLE_LABELS[s]}`, () =>
+        setFilters({ ...f, lifecycleStates: f.lifecycleStates.filter((x) => x !== s) }),
+      ),
+    );
+    return chips;
+  }, [filters, ctx]);
+
+  // ---- Run query: identical for table/print/export/group-actions ----------
+  async function generate() {
+    setGenerating(true);
+    setSelectedIds(new Set());
+    try {
+      // Build a Supabase query against `public.cows` only.
+      let q = supabase.from("cows").select(
+        "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+        "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+        "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+        "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+        "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+      );
+
+      const f = filters;
+      // Basic equality filters
+      if (f.sex !== "") q = q.eq("sex", +f.sex);
+      if (f.typeId) q = q.eq("last_type_id", +f.typeId);
+      if (f.locationId) q = q.eq("last_location_id", +f.locationId);
+      if (f.statusId) q = q.eq("last_status_id", +f.statusId);
+      if (f.presenceStatus !== "") {
+        // Some rows use `presence_status`, others `existancestatus`. Match either.
+        q = q.or(`presence_status.eq.${+f.presenceStatus},existancestatus.eq.${+f.presenceStatus}`);
+      }
+      if (f.pregnancy === "yes") q = q.eq("is_pregnancy", true);
+      if (f.pregnancy === "no")  q = q.or("is_pregnancy.is.null,is_pregnancy.eq.false");
+      if (f.dry === "yes") q = q.eq("is_dry", true);
+      if (f.dry === "no")  q = q.or("is_dry.is.null,is_dry.eq.false");
+      if (f.fertilityStatusId) q = q.eq("last_fertility_status", +f.fertilityStatusId);
+      if (f.missingFertility)  q = q.is("last_fertility_status", null);
+
+      // Recent-event windows — we filter client-side because event_date is a
+      // Jalali string in this DB; the cached `last_*_date` columns are too.
+      // The query still server-side filters by `.not("last_x_date", "is", null)`
+      // when a window is requested to reduce payload.
+      if (f.hasRecentHeatDays) q = q.not("last_erotic_date", "is", null);
+      if (f.hasRecentInseminationDays) q = q.not("last_inoculation_date", "is", null);
+      if (f.hasRecentAbortionDays) q = q.not("last_abortion_date", "is", null);
+
+      // Server-side text search across tag/ear/body
+      if (f.search.trim()) {
+        const s = f.search.trim().replace(/[%,]/g, "");
+        q = q.or(
+          `tag_number.ilike.%${s}%,earnumber.eq.${/^\d+$/.test(s) ? +s : -1},bodynumber.eq.${/^\d+$/.test(s) ? +s : -1}`
+        );
+      }
+
+      // Pull up to 5000 rows — well above per-screen needs, matches list view.
+      const { data, error } = await q.limit(5000);
+      if (error) throw error;
+
+      let result = ((data ?? []) as unknown) as CowRow[];
+
+      // ----- Client-side post-filters ------------------------------------
+      const todayMs = Date.now();
+      const monthsAgo = (n: number) => {
+        const d = new Date(); d.setMonth(d.getMonth() - n); return d.getTime();
+      };
+      // Treat date_of_birth as ISO if parseable; otherwise skip age filters.
+      if (f.minAgeMonths || f.maxAgeMonths) {
+        const minMs = f.maxAgeMonths ? monthsAgo(+f.maxAgeMonths) : -Infinity;
+        const maxMs = f.minAgeMonths ? monthsAgo(+f.minAgeMonths) : Infinity;
+        result = result.filter((r) => {
+          if (!r.date_of_birth) return false;
+          const t = Date.parse(r.date_of_birth);
+          if (isNaN(t)) return true; // Jalali strings — skip silently
+          return t >= minMs && t <= maxMs;
+        });
+      }
+      if (f.bornFrom || f.bornTo) {
+        const fromS = f.bornFrom ? formatJalali(f.bornFrom) : null;
+        const toS = f.bornTo ? formatJalali(f.bornTo) : null;
+        result = result.filter((r) =>
+          (!fromS || (r.date_of_birth ?? "") >= fromS) &&
+          (!toS   || (r.date_of_birth ?? "") <= toS),
+        );
+      }
+      if (f.incompleteData) {
+        result = result.filter((r) =>
+          !r.date_of_birth || (!r.tag_number && !r.earnumber && !r.bodynumber));
+      }
+      // Recency check on Jalali string dates is best-effort: compare prefixes.
+      // We use the cached `last_*_date` already restricted server-side, then
+      // measure days against today's Gregorian timestamp.
+      const filterRecent = (col: keyof CowRow, days: string) => {
+        if (!days) return;
+        const cutoff = todayMs - (+days) * 86_400_000;
+        result = result.filter((r) => {
+          const v = r[col] as string | null;
+          if (!v) return false;
+          const t = Date.parse(v);
+          return isNaN(t) ? true : t >= cutoff;
+        });
+      };
+      filterRecent("last_erotic_date",       f.hasRecentHeatDays);
+      filterRecent("last_inoculation_date",  f.hasRecentInseminationDays);
+      filterRecent("last_abortion_date",     f.hasRecentAbortionDays);
+
+      // ----- Lifecycle filter (client-side) ------------------------------
+      // وضعیت چرخه دام is derived, not stored, so we compute it per row and
+      // keep only rows whose calculated state is in the user's selection.
+      if (f.lifecycleStates.length > 0) {
+        const wanted = new Set(f.lifecycleStates);
+        result = result.filter((r) => wanted.has(calculateLifecycleState(r as any).state));
+      }
+
+      // ----- Sort --------------------------------------------------------
+      const dir = sortDir === "asc" ? 1 : -1;
+      const sortKey = sortBy;
+      const sortFn: Record<string, (r: CowRow) => string | number> = {
+        tag:    (r) => tagLabel(r),
+        dob:    (r) => r.date_of_birth || "",
+        birth:  (r) => r.last_birth_date || "",
+        inoc:   (r) => r.last_inoculation_date || "",
+        erotic: (r) => r.last_erotic_date || "",
+        fert:   (r) => r.last_fertility_status ?? -1,
+      };
+      result.sort((a, b) => {
+        const av = sortFn[sortKey](a), bv = sortFn[sortKey](b);
+        return av > bv ? dir : av < bv ? -dir : 0;
+      });
+
+      setRows(result);
+      toast.success(`${result.length} رکورد یافت شد`);
+    } catch (e: any) {
+      toast.error("خطا در تولید لیست: " + (e.message || e));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  // ---- Active columns + selected rows -------------------------------------
+  const activeColumns = useMemo(
+    () => columnKeys.map((k) => ALL_COLUMNS.find((c) => c.key === k)!).filter(Boolean),
+    [columnKeys],
+  );
+  const visibleRows = rows ?? [];
+  const targetRows = useMemo(
+    () => selectedIds.size > 0 ? visibleRows.filter((r) => selectedIds.has(r.id)) : visibleRows,
+    [visibleRows, selectedIds],
+  );
+
+  // ---- Manual add cow by tag/body number -----------------------------------
+  // Lets the user type a tag_number or bodynumber and append that single cow
+  // into the current generated list. Useful for one-off additions after the
+  // filter pass — e.g. an animal that just came in from another pen.
+  async function manualAddCow() {
+    const q = manualSearch.trim();
+    if (!q) return toast.error("شماره دام یا شماره بدن را وارد کنید");
+    if (!rows) return toast.error("ابتدا لیست را تولید کنید");
+    setManualAdding(true);
+    try {
+      const isNum = /^\d+$/.test(q);
+      // Search both bodynumber (integer) and tag_number (text). We OR them
+      // so the user doesn't have to pick which kind of identifier they have.
+      let query = supabase.from("cows").select(
+        "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+        "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+        "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+        "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+        "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+      );
+      if (isNum) {
+        query = query.or(`tag_number.eq.${q},bodynumber.eq.${+q},earnumber.eq.${+q}`);
+      } else {
+        query = query.eq("tag_number", q);
+      }
+      const { data, error } = await query.limit(5);
+      if (error) throw error;
+      const found = ((data ?? []) as unknown) as CowRow[];
+      if (found.length === 0) return toast.error("دامی با این شماره پیدا نشد");
+      // De-dupe against current rows.
+      const existingIds = new Set(rows.map((r) => r.id));
+      const fresh = found.filter((c) => !existingIds.has(c.id));
+      if (fresh.length === 0) return toast.error("این دام از قبل در لیست هست");
+      setRows([...fresh, ...rows]);
+      setManualSearch("");
+      toast.success(`${fresh.length} دام به لیست افزوده شد`);
+    } catch (e: any) {
+      toast.error("خطا در افزودن: " + (e.message || e));
+    } finally {
+      setManualAdding(false);
+    }
+  }
+
+  // ---- Start INLINE per-row group-action mode ------------------------------
+  // For insemination / rinse / preg_test we collect only the shared form
+  // (date/time/notes + doctor) up-front, then render per-row editors.
+  async function startInlineAction(
+    kind: "insemination" | "rinse" | "preg_test",
+    common: InlineMode["common"],
+  ) {
+    // Lazy-load reference tables only when we actually need them.
+    const needsUsers = true;
+    const needsSperms = kind === "insemination";
+    const needsMeds = kind === "rinse";
+    const tasks: Promise<any>[] = [];
+    if (needsUsers && inlineUsers.length === 0) {
+      tasks.push(
+        (async () => {
+          const r = await supabase.from("app_users")
+            .select("id, full_name, username").eq("is_active", true).order("full_name");
+          setInlineUsers((r.data as AppUser[]) ?? []);
+        })(),
+      );
+    }
+    if (needsSperms && inlineSperms.length === 0) {
+      tasks.push(
+        (async () => {
+          // Only active sperms appear in selection dropdowns (see /settings).
+          const r = await supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name");
+          setInlineSperms((r.data as SpermRow[]) ?? []);
+        })(),
+      );
+    }
+    if (needsMeds && inlineMedicines.length === 0) {
+      tasks.push(
+        (async () => {
+          const r = await supabase.from("medicines").select("id, name").order("name");
+          setInlineMedicines((r.data as Lookup[]) ?? []);
+        })(),
+      );
+    }
+    await Promise.all(tasks);
+    setInlineAction({ kind, common, perRow: {} });
+    toast.success("اطلاعات هر ردیف را تکمیل و سپس «ثبت همه» را بزنید");
+  }
+
+  // ---- Submit-all for the inline per-row mode ------------------------------
+  async function submitInlineAction() {
+    if (!inlineAction) return;
+    const { kind, common, perRow } = inlineAction;
+    const targets = targetRows;
+
+    // Validate that every (eligible) row has the needed fields.
+    const missing: number[] = [];
+    for (const r of targets) {
+      const presence = r.presence_status ?? r.existancestatus;
+      if (presence !== 0) continue; // out-of-herd cows are skipped silently
+      if (r.sex !== 0) continue;    // fertility ops are female-only
+      const cfg = perRow[r.id] || {};
+      if (kind === "insemination" && (!cfg.operatorId || !cfg.spermId)) missing.push(r.id);
+      if (kind === "rinse" && (!cfg.operatorId || !cfg.medicineIds?.length)) missing.push(r.id);
+      if (kind === "preg_test" && (!cfg.testType || !cfg.testResult)) missing.push(r.id);
+    }
+    if (missing.length > 0) {
+      return toast.error(`${missing.length} ردیف ناقص است — اپراتور/داده هر ردیف را تکمیل کنید`);
+    }
+
+    setInlineSubmitting(true);
+    try {
+      // common.dateStr is the Jalali string the user picked. The DB column
+      // event_date is now a real `timestamp`, so convert to Gregorian here
+      // before sending. We still keep the Jalali display value in metadata
+      // (via common.dateStr / common.time references elsewhere) for UI.
+      const dateStr = common.dateStr;
+      const eventDate = jalaliStrToGregorianTs(dateStr, common.time);
+      if (!eventDate) {
+        setInlineSubmitting(false);
+        return toast.error("تاریخ نامعتبر است");
+      }
+      const payload: any[] = [];
+
+      for (const r of targets) {
+        const presence = r.presence_status ?? r.existancestatus;
+        if (presence !== 0 || r.sex !== 0) continue;
+        const cfg = perRow[r.id] || {};
+
+        if (kind === "insemination") {
+          const op = inlineUsers.find((u) => String(u.id) === cfg.operatorId);
+          const s = inlineSperms.find((x) => String(x.id) === cfg.spermId);
+          payload.push({
+            livestock_id: r.id,
+            event_type: "insemination",
+            fertility_operation_id: 2,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: op?.full_name ?? op?.username ?? null,
+            notes: common.description || null,
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              insemination_type: "sperm",
+              sperm_id: s?.id,
+              sperm_label: s ? (s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name) : null,
+              time: common.time,
+              operator_name: op?.full_name ?? op?.username ?? null,
+              source: "list_builder_inline",
+            },
+          });
+        } else if (kind === "rinse") {
+          const op = inlineUsers.find((u) => String(u.id) === cfg.operatorId);
+          const medNames = (cfg.medicineIds || []).map(
+            (mid) => inlineMedicines.find((m) => String(m.id) === mid)?.name ?? mid,
+          );
+          payload.push({
+            livestock_id: r.id,
+            event_type: "rinse",
+            fertility_operation_id: 8,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: op?.full_name ?? op?.username ?? null,
+            notes: common.description || null,
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              rinse_reason: common.description || "—",
+              medicine_ids: cfg.medicineIds,
+              medicine_names: medNames,
+              time: common.time,
+              operator_name: op?.full_name ?? op?.username ?? null,
+              source: "list_builder_inline",
+            },
+          });
+        } else if (kind === "preg_test") {
+          // Per-row test type + result determine the fertility_operation_id
+          // and status_code, same mapping as the legacy dialog.
+          const opMap = { initial: 3, final: 4, extra: 11, dry: 12 } as const;
+          const codeMap: Record<string, Partial<Record<string, number>>> = {
+            initial: { positive: 4, suspicious: 5, negative: 6 },
+            final:   { positive: 8, negative: 7 },
+            extra:   { positive: 18, negative: 17 },
+            dry:     { positive: 20, negative: 19 },
+          };
+          const operationId = opMap[cfg.testType as keyof typeof opMap];
+          const statusCode = codeMap[cfg.testType!]?.[cfg.testResult!] ?? null;
+          if (statusCode == null) continue;
+          payload.push({
+            livestock_id: r.id,
+            event_type: "pregnancy_test",
+            fertility_operation_id: operationId,
+            event_date: eventDate,
+            operator_user_id: null,
+            operator_name: common.doctorName || null,
+            notes: common.description || null,
+            status_code: statusCode,
+            fertility_status_id: statusCode,
+            result: cfg.testResult === "positive" ? "مثبت" : cfg.testResult === "negative" ? "منفی" : "مشکوک",
+            legacy_table_name: "manual_batch",
+            legacy_record_id: null,
+            metadata: {
+              test_type: cfg.testType,
+              result: cfg.testResult,
+              doctor_name: common.doctorName,
+              time: common.time,
+              source: "list_builder_inline",
+            },
+          });
+        }
+      }
+
+      if (payload.length === 0) {
+        setInlineSubmitting(false);
+        return toast.error("هیچ ردیف معتبری برای ثبت وجود ندارد");
+      }
+      const { error } = await supabase.from("livestock_fertility_events" as any).insert(payload);
+      if (error) throw error;
+      // Rebuild fertility cache for each affected cow (DB triggers also do
+      // this, but we re-sync defensively so the UI shows fresh values).
+      for (const p of payload) await syncCowFertilityCache(p.livestock_id);
+      toast.success(`${payload.length} رویداد ثبت شد`);
+      setInlineAction(null);
+      generate(); // refresh visible rows
+    } catch (e: any) {
+      toast.error("خطا در ثبت: " + (e.message || e));
+    } finally {
+      setInlineSubmitting(false);
+    }
+  }
+
+
+  function exportXlsx() {
+    if (!rows || rows.length === 0) return toast.error("لیستی برای خروجی وجود ندارد");
+    const data = rows.map((r) => {
+      const obj: Record<string, any> = {};
+      activeColumns.forEach((c) => { obj[c.label] = c.accessor(r, ctx); });
+      return obj;
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "لیست دام‌ها");
+    const stamp = formatJalali(todayJalali()).replace(/\//g, "-");
+    XLSX.writeFile(wb, `livestock-list-${stamp}.xlsx`);
+  }
+
+  // ---- Print: opens a new window with the same data ----------------------
+  function printList() {
+    if (!rows) return;
+    const w = window.open("", "_blank", "width=1000,height=700");
+    if (!w) return;
+    const title = "لیست شخصی دام‌ها";
+    const filtersSummary = activeChips.map((c) => c.label).join(" • ") || "بدون فیلتر اضافی";
+    const dateStr = formatJalali(todayJalali());
+    const head = activeColumns.map((c) => `<th>${c.label}</th>`).join("");
+    const body = rows.map((r) => `<tr>${activeColumns.map((c) =>
+      `<td>${c.accessor(r, ctx) ?? "—"}</td>`).join("")}</tr>`).join("");
+    w.document.write(`<!doctype html><html dir="rtl" lang="fa"><head><meta charset="utf-8"/>
+      <title>${title}</title>
+      <style>
+        @page { size: A4 landscape; margin: 12mm; }
+        body { font-family: Vazirmatn, Tahoma, sans-serif; color: #000; }
+        h1 { font-size: 18pt; margin: 0 0 6pt; }
+        .meta { font-size: 10pt; color: #444; margin-bottom: 8pt; }
+        table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+        th, td { border: 1px solid #333; padding: 4pt 6pt; text-align: right; }
+        thead { background: #eee; }
+      </style></head><body>
+      <h1>${title}</h1>
+      <div class="meta">تاریخ چاپ: ${dateStr} — تعداد: ${rows.length} — فیلترها: ${filtersSummary}</div>
+      <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+      <script>window.onload=()=>window.print()</script>
+      </body></html>`);
+    w.document.close();
+  }
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+  return (
+    <div dir="rtl" className="space-y-6 print:hidden">
+      {/* Page header */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-primary flex items-center justify-center glow-primary">
+            <Beef className="w-6 h-6 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold text-foreground">تولید لیست شخصی دام‌ها</h1>
+            <p className="text-sm text-muted-foreground">فیلترها را انتخاب کنید، لیست را بسازید، چاپ یا خروجی اکسل بگیرید و عملیات گروهی اعمال کنید.</p>
+          </div>
+        </div>
+        {/* Open the archives browser. Visible always so users can jump to any
+            previously saved list and continue group actions on it. */}
+        <Button variant="outline" onClick={() => setArchivesListOpen(true)}>
+          <FolderOpen className="w-4 h-4 ml-2" /> آرشیوها
+        </Button>
+      </div>
+
+      {/* Banner shown when the current view came from an archive — gives
+          context (name, creator, date) so users know they're looking at
+          someone else's saved list and not a fresh one. */}
+      {loadedArchive && (
+        <Card className="p-3 bg-primary/5 border-primary/30 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="font-bold flex items-center gap-1">
+              <Archive className="w-4 h-4 text-primary" /> {loadedArchive.name}
+            </span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <UserIcon className="w-3.5 h-3.5" />
+              {loadedArchive.created_by_name || loadedArchive.created_by_username || "—"}
+            </span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {new Date(loadedArchive.created_at).toLocaleString("fa-IR")}
+            </span>
+            {loadedArchive.note && (
+              <span className="text-muted-foreground">— {loadedArchive.note}</span>
+            )}
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setLoadedArchive(null)}>
+            <X className="w-4 h-4 ml-1" /> بستن آرشیو
+          </Button>
+        </Card>
+      )}
+
+      {/* ============== Filter section ================= */}
+      <Card className="p-4 bg-card border-border space-y-4">
+        {/* Presets */}
+        <div>
+          <div className="flex items-center gap-2 mb-2 text-sm font-bold text-foreground">
+            <Sparkles className="w-4 h-4 text-primary" /> پیش‌فرض‌های سریع
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "pregnant",        label: "آبستن" },
+              { key: "milking_cows",    label: "دوشا" },
+              { key: "dry_cows",        label: "خشک" },
+              { key: "ready_insem",     label: "آماده تلقیح" },
+              { key: "needs_preg_test", label: "نیازمند تست آبستنی" },
+              { key: "recent_heat",     label: "فحل شده" },
+              { key: "no_fertility",    label: "بدون وضعیت" },
+            ].map((p) => (
+              <Button key={p.key} size="sm"
+                variant={filters.preset === p.key ? "default" : "outline"}
+                onClick={() => setFilters(applyPreset(p.key as any, EMPTY_FILTERS))}>
+                {p.label}
+              </Button>
+            ))}
+            {filters.preset && (
+              <Button size="sm" variant="ghost" onClick={() => setFilters(EMPTY_FILTERS)}>
+                <X className="w-3.5 h-3.5 ml-1" /> پاک کردن
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Active chips */}
+        {activeChips.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+            {activeChips.map((c) => (
+              <Badge key={c.key} variant="secondary" className="gap-1 cursor-pointer"
+                onClick={c.clear}>
+                {c.label} <X className="w-3 h-3" />
+              </Badge>
+            ))}
+            <Button size="sm" variant="ghost" onClick={() => setFilters(EMPTY_FILTERS)}>
+              پاک کردن همه
+            </Button>
+          </div>
+        )}
+
+        {/* Filter groups (collapsible) */}
+        <FilterGroup title="اطلاعات پایه" id="basic" open={openGroup} onToggle={setOpenGroup} tone="info">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Field label="جستجو (پلاک/گوش/بدن)">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input className="pr-8" value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })} />
+              </div>
+            </Field>
+            <Field label="جنسیت">
+              <Select value={filters.sex} onValueChange={(v) => setFilters({ ...filters, sex: v as any })} dir="rtl">
+                <SelectTrigger><SelectValue placeholder="همه" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">ماده</SelectItem>
+                  <SelectItem value="2">نر</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="نوع دام">
+              <LookupSelect value={filters.typeId} onChange={(v) => setFilters({ ...filters, typeId: v })}
+                items={types} placeholder="همه" />
+            </Field>
+            <Field label="بهاربند">
+              <LookupSelect value={filters.locationId} onChange={(v) => setFilters({ ...filters, locationId: v })}
+                items={locations} placeholder="همه" />
+            </Field>
+            <Field label="وضعیت سلامت">
+              <LookupSelect value={filters.statusId} onChange={(v) => setFilters({ ...filters, statusId: v })}
+                items={statuses} placeholder="همه" />
+            </Field>
+            <Field label="وضعیت حضور">
+              <Select value={filters.presenceStatus} onValueChange={(v) => setFilters({ ...filters, presenceStatus: v })} dir="rtl">
+                <SelectTrigger><SelectValue placeholder="همه" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRESENCE_STATUS_LABELS).map(([k, l]) => (
+                    <SelectItem key={k} value={k}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="تاریخ تولد از">
+              <JalaliDatePicker value={filters.bornFrom} onChange={(d) => setFilters({ ...filters, bornFrom: d })} />
+            </Field>
+            <Field label="تاریخ تولد تا">
+              <JalaliDatePicker value={filters.bornTo} onChange={(d) => setFilters({ ...filters, bornTo: d })} />
+            </Field>
+            <Field label="حداقل/حداکثر سن (ماه)">
+              <div className="flex gap-2">
+                <Input type="number" placeholder="حداقل" value={filters.minAgeMonths}
+                  onChange={(e) => setFilters({ ...filters, minAgeMonths: e.target.value })} />
+                <Input type="number" placeholder="حداکثر" value={filters.maxAgeMonths}
+                  onChange={(e) => setFilters({ ...filters, maxAgeMonths: e.target.value })} />
+              </div>
+            </Field>
+          </div>
+        </FilterGroup>
+
+        <FilterGroup title="باروری و وضعیت فیزیولوژیک" id="fert" open={openGroup} onToggle={setOpenGroup} tone="warning">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Field label="آبستنی">
+              <Select value={filters.pregnancy} onValueChange={(v) => setFilters({ ...filters, pregnancy: v as any })} dir="rtl">
+                <SelectTrigger><SelectValue placeholder="همه" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">آبستن</SelectItem>
+                  <SelectItem value="no">غیر آبستن</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="وضعیت دوشش">
+              <Select value={filters.dry} onValueChange={(v) => setFilters({ ...filters, dry: v as any })} dir="rtl">
+                <SelectTrigger><SelectValue placeholder="همه" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no">دوشا</SelectItem>
+                  <SelectItem value="yes">خشک</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="آخرین وضعیت باروری">
+              <Select value={filters.fertilityStatusId}
+                onValueChange={(v) => setFilters({ ...filters, fertilityStatusId: v })} dir="rtl">
+                <SelectTrigger><SelectValue placeholder="همه" /></SelectTrigger>
+                <SelectContent>
+                  {fertStatuses.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name || `#${s.id}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="فحلی اخیر (روز اخیر)">
+              <Input type="number" value={filters.hasRecentHeatDays}
+                onChange={(e) => setFilters({ ...filters, hasRecentHeatDays: e.target.value })} />
+            </Field>
+            <Field label="تلقیح اخیر (روز اخیر)">
+              <Input type="number" value={filters.hasRecentInseminationDays}
+                onChange={(e) => setFilters({ ...filters, hasRecentInseminationDays: e.target.value })} />
+            </Field>
+            <Field label="سقط اخیر (روز اخیر)">
+              <Input type="number" value={filters.hasRecentAbortionDays}
+                onChange={(e) => setFilters({ ...filters, hasRecentAbortionDays: e.target.value })} />
+            </Field>
+            <div className="flex items-center gap-2">
+              <Checkbox id="mf" checked={filters.missingFertility}
+                onCheckedChange={(v) => setFilters({ ...filters, missingFertility: !!v })} />
+              <Label htmlFor="mf" className="cursor-pointer">بدون وضعیت باروری</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="ic" checked={filters.incompleteData}
+                onCheckedChange={(v) => setFilters({ ...filters, incompleteData: !!v })} />
+              <Label htmlFor="ic" className="cursor-pointer">داده ناقص</Label>
+            </div>
+          </div>
+        </FilterGroup>
+
+        {/* ---------------------------------------------------------------
+            وضعیت چرخه دام (lifecycle) — multi-select chip group.
+            Click a chip to toggle inclusion; the filter is applied
+            client-side after the main DB query because the state is
+            derived from existing cow fields by calculateLifecycleState().
+            --------------------------------------------------------------- */}
+        <FilterGroup title="وضعیت چرخه دام" id="lifecycle" open={openGroup} onToggle={setOpenGroup} tone="accent">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {filters.lifecycleStates.length === 0
+                  ? "همه وضعیت‌ها (هیچ فیلتری اعمال نشده)"
+                  : `${filters.lifecycleStates.length.toLocaleString("fa-IR")} وضعیت انتخاب شده`}
+              </div>
+              {filters.lifecycleStates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, lifecycleStates: [] })}
+                  className="text-xs text-destructive hover:underline"
+                >پاک‌سازی</button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_LIFECYCLE_STATES.map((s) => {
+                // A chip per lifecycle state — tracked in filters.lifecycleStates.
+                const on = filters.lifecycleStates.includes(s);
+                return (
+                  <Badge
+                    key={s}
+                    variant={on ? "default" : "outline"}
+                    className="cursor-pointer select-none"
+                    onClick={() =>
+                      setFilters({
+                        ...filters,
+                        lifecycleStates: on
+                          ? filters.lifecycleStates.filter((x) => x !== s)
+                          : [...filters.lifecycleStates, s],
+                      })
+                    }
+                  >
+                    {LIFECYCLE_LABELS[s]}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        </FilterGroup>
+
+        {/* NOTE: column/sort selection was removed from the always-visible
+            filter form. Per request, the user now picks columns + sort
+            inside a dialog that opens AFTER pressing "تایید و تولید لیست".
+            See <ColumnPickerDialog/> below. */}
+
+        {/* Generate — opens the column picker first, then generates */}
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <Button variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>
+            بازنشانی
+          </Button>
+          <Button
+            onClick={() => setColumnPickerOpen(true)}
+            disabled={generating || lookupsLoading}
+            // Distinct color (amber gradient) so it stands out from the
+            // primary-green archive/save buttons.
+            className="bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/30 border-0"
+          >
+            {generating && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+            <Filter className="w-4 h-4 ml-2" /> تایید و تولید لیست
+          </Button>
+        </div>
+      </Card>
+
+      {/* Column-picker dialog — opened by the generate button. Lets users
+          choose visible/exported columns and sort settings, then runs the
+          actual query. Replaces the old always-on "ستون‌ها و مرتب‌سازی". */}
+      {columnPickerOpen && (
+        <ColumnPickerDialog
+          columnKeys={columnKeys}
+          setColumnKeys={setColumnKeys}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          sortDir={sortDir}
+          setSortDir={setSortDir}
+          onCancel={() => setColumnPickerOpen(false)}
+          onConfirm={() => { setColumnPickerOpen(false); generate(); }}
+        />
+      )}
+
+      {/* ============== Results ================= */}
+      {rows && (
+        <Card className="p-4 bg-card border-border space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="font-bold text-foreground">تعداد:</span>{" "}
+              <span className="text-primary font-bold">{rows.length}</span>
+              {selectedIds.size > 0 && (
+                <span className="mr-3 text-muted-foreground">
+                  انتخاب شده: <b className="text-foreground">{selectedIds.size}</b>
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={printList}>
+                <Printer className="w-4 h-4 ml-2" /> چاپ
+              </Button>
+              <Button size="sm" variant="outline" onClick={exportXlsx}>
+                <FileSpreadsheet className="w-4 h-4 ml-2" /> خروجی اکسل
+              </Button>
+              {/* Archive button — opens the save-archive dialog. We only show
+                  it when there are rows so the user can't archive nothing.
+                  The archive stores the exact cow ids displayed, the active
+                  filters, and the chosen columns so it can be reopened later
+                  with the same shape. */}
+              <Button
+                size="sm"
+                onClick={() => setSaveArchiveOpen(true)}
+                disabled={rows.length === 0}
+                className="bg-gradient-primary text-primary-foreground"
+              >
+                <Archive className="w-4 h-4 ml-2" /> آرشیو
+              </Button>
+            </div>
+          </div>
+
+          {/* Manual-add row: a small inline input lets the user paste a
+              tag/body/ear number and add a single cow to the current list
+              without re-running filters. Empty cells are styled to look like
+              a placeholder row at the top of the table. */}
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2">
+            <Input
+              value={manualSearch}
+              onChange={(e) => setManualSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") manualAddCow(); }}
+              placeholder="شماره دام، شماره بدن یا شماره گوش..."
+              className="h-9"
+            />
+            <Button
+              size="sm"
+              onClick={manualAddCow}
+              disabled={manualAdding}
+              className="bg-primary text-primary-foreground shrink-0"
+            >
+              {manualAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : "+ افزودن"}
+            </Button>
+          </div>
+
+          {/* Inline group-action submit banner — only shown when the user has
+              entered per-row mode for insemination/rinse/preg_test. */}
+          {inlineAction && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-3">
+              <div className="text-sm text-emerald-200">
+                حالت ثبت ردیفی فعال: <b>
+                  {inlineAction.kind === "insemination" ? "تلقیح" :
+                   inlineAction.kind === "rinse" ? "شستشو" : "تست آبستنی"}
+                </b>{" "}
+                — تاریخ: {inlineAction.common.dateStr}{inlineAction.common.time ? ` ${inlineAction.common.time}` : ""}
+                {inlineAction.common.doctorName && ` — پزشک: ${inlineAction.common.doctorName}`}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setInlineAction(null)} disabled={inlineSubmitting}>
+                  لغو
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={submitInlineAction}
+                  disabled={inlineSubmitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {inlineSubmitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+                  ثبت همه
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/40">
+                <tr>
+                  <th className="p-2 w-10">
+                    <Checkbox
+                      checked={selectedIds.size === visibleRows.length && visibleRows.length > 0}
+                      onCheckedChange={(v) => setSelectedIds(v
+                        ? new Set(visibleRows.map((r) => r.id)) : new Set())}
+                    />
+                  </th>
+                  {activeColumns.map((c) => (
+                    <th key={c.key} className="p-2 text-right font-bold text-foreground whitespace-nowrap">
+                      {c.label}
+                    </th>
+                  ))}
+                  {/* Extra inline-action headers */}
+                  {inlineAction?.kind === "insemination" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اپراتور</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اسپرم</th>
+                    </>
+                  )}
+                  {inlineAction?.kind === "rinse" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">اپراتور</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">داروها</th>
+                    </>
+                  )}
+                  {inlineAction?.kind === "preg_test" && (
+                    <>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">نوع تست</th>
+                      <th className="p-2 text-right font-bold text-emerald-300 whitespace-nowrap">نتیجه</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.length === 0 && (
+                  <tr><td colSpan={activeColumns.length + 1} className="p-6 text-center text-muted-foreground">
+                    موردی یافت نشد
+                  </td></tr>
+                )}
+                {visibleRows.map((r) => (
+                  <tr key={r.id} className="border-t border-border hover:bg-secondary/30">
+                    <td className="p-2">
+                      <Checkbox checked={selectedIds.has(r.id)}
+                        onCheckedChange={(v) => {
+                          const next = new Set(selectedIds);
+                          v ? next.add(r.id) : next.delete(r.id);
+                          setSelectedIds(next);
+                        }} />
+                    </td>
+                    {activeColumns.map((c) => (
+                      <td key={c.key} className="p-2 text-foreground whitespace-nowrap">
+                        {c.accessor(r, ctx) ?? "—"}
+                      </td>
+                    ))}
+                    {/* Per-row inline editors */}
+                    {inlineAction && (
+                      <InlineRowEditors
+                        row={r}
+                        mode={inlineAction.kind}
+                        value={inlineAction.perRow[r.id] || {}}
+                        onChange={(patch) =>
+                          setInlineAction({
+                            ...inlineAction,
+                            perRow: {
+                              ...inlineAction.perRow,
+                              [r.id]: { ...(inlineAction.perRow[r.id] || {}), ...patch },
+                            },
+                          })
+                        }
+                        users={inlineUsers}
+                        sperms={inlineSperms}
+                        medicines={inlineMedicines}
+                      />
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-2">
+            {visibleRows.map((r) => (
+              <div key={r.id} className="rounded-lg border border-border p-3 bg-background/40">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox checked={selectedIds.has(r.id)}
+                      onCheckedChange={(v) => {
+                        const next = new Set(selectedIds);
+                        v ? next.add(r.id) : next.delete(r.id);
+                        setSelectedIds(next);
+                      }} />
+                    <span className="font-bold text-foreground">{tagLabel(r)}</span>
+                  </div>
+                  <Badge variant="outline">{sexLabel(r)}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-xs">
+                  {activeColumns.filter((c) => c.key !== "tag" && c.key !== "sex").map((c) => (
+                    <div key={c.key} className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">{c.label}:</span>
+                      <span className="text-foreground text-end">{c.accessor(r, ctx) ?? "—"}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Inline editors on mobile too */}
+                {inlineAction && (
+                  <div className="mt-2 pt-2 border-t border-emerald-400/30 space-y-2">
+                    <MobileInlineEditors
+                      row={r}
+                      mode={inlineAction.kind}
+                      value={inlineAction.perRow[r.id] || {}}
+                      onChange={(patch) =>
+                        setInlineAction({
+                          ...inlineAction,
+                          perRow: {
+                            ...inlineAction.perRow,
+                            [r.id]: { ...(inlineAction.perRow[r.id] || {}), ...patch },
+                          },
+                        })
+                      }
+                      users={inlineUsers}
+                      sperms={inlineSperms}
+                      medicines={inlineMedicines}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ============== Group actions ================= */}
+      {rows && rows.length > 0 && !inlineAction && (
+        <Card className="p-4 bg-card border-primary/30 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <CheckSquare className="w-4 h-4 text-primary" /> عملیات گروهی روی لیست
+          </div>
+          <p className="text-xs text-muted-foreground">
+            اگر هیچ ردیفی انتخاب نکنید، عملیات روی <b>کل لیست</b> اعمال می‌شود. در غیر این صورت فقط روی <b>{selectedIds.size}</b> ردیف انتخاب‌شده اعمال می‌شود.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "insemination", label: "تلقیح" },
+              { key: "rinse",        label: "شستشو" },
+              { key: "preg_test",    label: "تست آبستنی" },
+              { key: "vaccination",  label: "واکسیناسیون" },
+            ].map((a) => (
+              <Button key={a.key} size="sm" variant="outline"
+                onClick={() => { setActionKey(a.key as any); setActionOpen(true); }}>
+                {a.label}
+              </Button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Group action dialog — for VACCINATION we keep the legacy bulk
+          dialog (all-rows-same-values). For insemination/rinse/preg_test we
+          show a small common-fields dialog that then switches the page into
+          inline per-row mode. */}
+      {actionOpen && actionKey === "vaccination" && (
+        <GroupActionDialog
+          actionKey={actionKey}
+          rows={targetRows}
+          onClose={() => { setActionOpen(false); setActionKey(""); }}
+          onDone={async (affected) => {
+            for (const id of affected) await syncCowFertilityCache(id);
+            setActionOpen(false); setActionKey("");
+            generate();
+          }}
+        />
+      )}
+      {actionOpen && (actionKey === "insemination" || actionKey === "rinse" || actionKey === "preg_test") && (
+        <InlineCommonDialog
+          kind={actionKey}
+          onCancel={() => { setActionOpen(false); setActionKey(""); }}
+          onConfirm={async (common) => {
+            setActionOpen(false);
+            const key = actionKey;
+            setActionKey("");
+            await startInlineAction(key as any, common);
+          }}
+        />
+      )}
+
+      {/* Save-archive dialog: asks for a name + optional note, then writes
+          a new row into `livestock_list_archives` stamped with the current
+          user, time, filters, columns, and the exact cow_ids of the list. */}
+      {saveArchiveOpen && rows && (
+        <SaveArchiveDialog
+          rows={rows}
+          filters={filters}
+          columnKeys={columnKeys}
+          user={user}
+          onClose={() => setSaveArchiveOpen(false)}
+          onSaved={(archive) => {
+            // Show a confirmation banner that this list is now archived.
+            setLoadedArchive(archive);
+            setSaveArchiveOpen(false);
+            toast.success("لیست در آرشیو ذخیره شد");
+          }}
+        />
+      )}
+
+      {/* Archives browser dialog: lists all saved archives, lets the user
+          open one (which reloads the exact cow_ids + columns + filters into
+          the page), or delete an archive they no longer need. */}
+      {archivesListOpen && (
+        <ArchivesListDialog
+          onClose={() => setArchivesListOpen(false)}
+          onOpen={async (archive) => {
+            // Re-fetch the actual cows from `public.cows` using the archived
+            // ids. This guarantees we render the latest state (post-trigger
+            // cache rebuilds) even though the archive was saved earlier.
+            try {
+              const { data, error } = await supabase
+                .from("cows")
+                .select(
+                  "id,tag_number,earnumber,bodynumber,sex,sextype,date_of_birth,description," +
+                  "presence_status,existancestatus,last_type_id,last_location_id,last_status_id," +
+                  "is_pregnancy,is_dry,last_fertility_status,last_erotic_date,last_inoculation_date," +
+                  "last_pregnancy_date,last_birth_date,last_abortion_date,last_dry_date," +
+                  "last_rinse_date,last_clean_test_date,number_of_births,last_period"
+                )
+                .in("id", archive.cow_ids);
+              if (error) throw error;
+              // Hydrate UI state to match what was archived.
+              setRows(((data as unknown) as CowRow[]) ?? []);
+              setFilters({ ...(archive.filters || EMPTY_FILTERS) });
+              if (archive.column_keys?.length) setColumnKeys(archive.column_keys);
+              setSelectedIds(new Set());
+              setLoadedArchive(archive);
+              setArchivesListOpen(false);
+              toast.success(`آرشیو «${archive.name}» باز شد`);
+            } catch (e: any) {
+              toast.error("خطا در باز کردن آرشیو: " + (e.message || e));
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Tiny helper components
+// =============================================================================
+// Each filter group accepts a `tone` so the 3 main filter sections render
+// with visually distinct colored headers — easier to scan a long form.
+// Tones use semantic tokens with /10 opacity so they remain theme-friendly.
+type GroupTone = "primary" | "accent" | "info" | "warning";
+const GROUP_TONE_CLASSES: Record<GroupTone, { wrap: string; header: string; dot: string }> = {
+  primary: { wrap: "border-primary/40",      header: "bg-primary/10 hover:bg-primary/15 text-primary",        dot: "bg-primary" },
+  accent:  { wrap: "border-emerald-400/40",  header: "bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-300", dot: "bg-emerald-400" },
+  info:    { wrap: "border-sky-400/40",      header: "bg-sky-500/10 hover:bg-sky-500/15 text-sky-300",        dot: "bg-sky-400" },
+  warning: { wrap: "border-amber-400/40",    header: "bg-amber-500/10 hover:bg-amber-500/15 text-amber-300",  dot: "bg-amber-400" },
+};
+
+function FilterGroup({
+  title, id, open, onToggle, children, tone = "primary",
+}: {
+  title: string; id: string; open: string | null;
+  onToggle: (v: string | null) => void; children: React.ReactNode;
+  tone?: GroupTone;
+}) {
+  const isOpen = open === id;
+  const t = GROUP_TONE_CLASSES[tone];
+  return (
+    <div className={cn("rounded-lg border", t.wrap)}>
+      <button type="button"
+        className={cn(
+          "w-full flex items-center justify-between p-3 text-sm font-bold transition-colors",
+          t.header,
+        )}
+        onClick={() => onToggle(isOpen ? null : id)}>
+        <span className="flex items-center gap-2">
+          <span className={cn("w-2 h-2 rounded-full", t.dot)} />
+          {title}
+        </span>
+        {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+      {isOpen && <div className="p-3 border-t border-border bg-background/30">{children}</div>}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function LookupSelect({
+  value, onChange, items, placeholder,
+}: {
+  value: string; onChange: (v: string) => void;
+  items: Lookup[]; placeholder: string;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange} dir="rtl">
+      <SelectTrigger><SelectValue placeholder={placeholder} /></SelectTrigger>
+      <SelectContent>
+        {items.map((it) => (
+          <SelectItem key={it.id} value={String(it.id)}>{it.name || `#${it.id}`}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// =============================================================================
+// Group action dialog — handles all 4 actions in one form
+// =============================================================================
+function GroupActionDialog({
+  actionKey, rows, onClose, onDone,
+}: {
+  actionKey: "insemination" | "rinse" | "preg_test" | "vaccination";
+  rows: CowRow[];
+  onClose: () => void;
+  onDone: (affectedIds: number[]) => void;
+}) {
+  // ---- Shared form state -------------------------------------------------
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [sperms, setSperms] = useState<SpermRow[]>([]);
+  const [date, setDate] = useState<JalaliDate | null>(todayJalali());
+  const [time, setTime] = useState<string>("");
+  const [operatorId, setOperatorId] = useState<string>("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Insemination-specific
+  const [spermId, setSpermId] = useState<string>("");
+  // Pregnancy test-specific
+  const [testType, setTestType] = useState<"initial" | "final" | "extra" | "dry" | "">("");
+  const [testResult, setTestResult] = useState<"positive" | "negative" | "suspicious" | "">("");
+  // Rinse-specific
+  const [reason, setReason] = useState("");
+  // Vaccination-specific
+  const [vaccineName, setVaccineName] = useState("");
+  const [dose, setDose] = useState("");
+  const [batch, setBatch] = useState("");
+  const [nextReminder, setNextReminder] = useState<JalaliDate | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const [u, s] = await Promise.all([
+        supabase.from("app_users").select("id, full_name, username").eq("is_active", true).order("full_name"),
+        actionKey === "insemination"
+          ? supabase.from("sperms").select("id, code, name").eq("is_active", true).order("name")
+          : Promise.resolve({ data: [] } as any),
+      ]);
+      setUsers((u.data as AppUser[]) ?? []);
+      setSperms((s.data as SpermRow[]) ?? []);
+    })();
+  }, [actionKey]);
+
+  // ---- Compute target & skipped rows BEFORE insert (validation safety) ---
+  const { valid, skipped } = useMemo(() => {
+    const valid: CowRow[] = [];
+    const skipped: { r: CowRow; reason: string }[] = [];
+    rows.forEach((r) => {
+      // Must be in-herd
+      const presence = r.presence_status ?? r.existancestatus;
+      if (presence !== 0) {
+        skipped.push({ r, reason: "خارج از گله" }); return;
+      }
+      // Fertility actions are female-only
+      if (actionKey !== "vaccination" && r.sex !== 0) {
+        skipped.push({ r, reason: "نر — عملیات باروری مجاز نیست" }); return;
+      }
+      valid.push(r);
+    });
+    return { valid, skipped };
+  }, [rows, actionKey]);
+
+  const TITLES: Record<typeof actionKey, string> = {
+    insemination: "تلقیح گروهی",
+    rinse: "شستشوی گروهی",
+    preg_test: "تست آبستنی گروهی",
+    vaccination: "واکسیناسیون گروهی",
+  };
+
+  // ---- Form validation ---------------------------------------------------
+  function validate(): string | null {
+    if (!date) return "تاریخ را انتخاب کنید";
+    if (actionKey !== "vaccination" && !time) return "ساعت را وارد کنید";
+    if (!operatorId) return "اپراتور را انتخاب کنید";
+    if (actionKey === "insemination" && !spermId) return "اسپرم را انتخاب کنید";
+    if (actionKey === "preg_test" && !testType) return "نوع تست را انتخاب کنید";
+    if (actionKey === "preg_test" && !testResult) return "نتیجه تست را انتخاب کنید";
+    if (actionKey === "rinse" && !reason.trim()) return "علت شستشو را وارد کنید";
+    if (actionKey === "vaccination" && !vaccineName.trim()) return "نام واکسن را وارد کنید";
+    if (valid.length === 0) return "هیچ دامی برای اعمال عملیات وجود ندارد";
+    return null;
+  }
+
+  // ---- Submit handler — opens confirm modal first -----------------------
+  function handleSubmitClick() {
+    const err = validate();
+    if (err) return toast.error(err);
+    setConfirmOpen(true);
+  }
+
+  // ---- Actual insert after confirmation ----------------------------------
+  async function performInsert() {
+    setSubmitting(true);
+    const dateStr = formatJalali(date!);
+    // event_date column is now `timestamp`; convert Jalali pick → Gregorian.
+    const eventDate = toGregorianForDb(date!, time);
+    const operator = users.find((u) => String(u.id) === operatorId);
+    const operatorName = operator?.full_name ?? operator?.username ?? null;
+
+    // -------------- VACCINATION → livestock_events ---------------------
+    if (actionKey === "vaccination") {
+      // We persist all vaccination fields inside `description` as JSON so we
+      // don't need a schema migration. Existing livestock_events.event_type
+      // = 'vaccination' acts as the discriminator.
+      const meta = {
+        vaccine_name: vaccineName,
+        dose, batch,
+        operator_name: operatorName,
+        next_reminder: nextReminder ? formatJalali(nextReminder) : null,
+        notes: description,
+      };
+      const payload = valid.map((r) => ({
+        cow_id: r.id,
+        event_type: "vaccination",
+        // Group B migration: livestock_events.event_date is now `timestamptz`,
+        // not text. Send the already-computed Gregorian timestamp (from
+        // toGregorianForDb at line 1616) instead of the Jalali display string,
+        // otherwise Postgres rejects the insert. UI input/display stays Jalali.
+        event_date: eventDate,
+        to_value: vaccineName,
+        description: JSON.stringify(meta),
+      }));
+      const { error } = await supabase.from("livestock_events").insert(payload);
+      setSubmitting(false);
+      if (error) return toast.error("خطای ذخیره: " + error.message);
+      toast.success(`واکسیناسیون برای ${valid.length} دام ثبت شد`);
+      onDone(valid.map((r) => r.id));
+      return;
+    }
+
+    // -------------- FERTILITY ACTIONS → livestock_fertility_events -----
+    let operationId = 0;
+    let eventType = "";
+    let statusCode: number | null = null;
+    let extraMeta: Record<string, any> = {};
+    if (actionKey === "insemination") {
+      operationId = 2; eventType = "insemination";
+      const s = sperms.find((x) => String(x.id) === spermId);
+      extraMeta = {
+        insemination_type: "sperm",
+        sperm_id: s?.id, sperm_label: s ? (s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name) : null,
+      };
+    } else if (actionKey === "rinse") {
+      operationId = 8; eventType = "rinse";
+      extraMeta = { rinse_reason: reason.trim() };
+    } else if (actionKey === "preg_test") {
+      const opMap = { initial: 3, final: 4, extra: 11, dry: 12 } as const;
+      const codeMap: Record<string, Partial<Record<string, number>>> = {
+        initial: { positive: 4, suspicious: 5, negative: 6 },
+        final:   { positive: 8, negative: 7 },
+        extra:   { positive: 18, negative: 17 },
+        dry:     { positive: 20, negative: 19 },
+      };
+      operationId = opMap[testType as keyof typeof opMap];
+      eventType = "pregnancy_test";
+      statusCode = codeMap[testType][testResult] ?? null;
+      if (statusCode == null) {
+        setSubmitting(false);
+        return toast.error("ترکیب نوع تست و نتیجه نامعتبر است");
+      }
+      extraMeta = {
+        test_type: testType, result: testResult,
+      };
+    }
+
+    // Build per-cow insert payloads. We bypass the per-event validation
+    // function (checkFertilityOperation) here to keep the batch atomic —
+    // skipped rows are already filtered above and the DB trigger
+    // `livestock_fertility_events_rebuild_cache` rebuilds the cache.
+    const payload = valid.map((r) => ({
+      livestock_id: r.id,
+      event_type: eventType,
+      fertility_operation_id: operationId,
+      event_date: eventDate,
+      operator_user_id: null,
+      operator_name: operatorName,
+      notes: description || null,
+      status_code: statusCode,
+      fertility_status_id: statusCode,
+      result: testResult ? (testResult === "positive" ? "مثبت" : testResult === "negative" ? "منفی" : "مشکوک") : null,
+      legacy_table_name: "manual_batch",
+      legacy_record_id: null,
+      metadata: { ...extraMeta, time, operator_name: operatorName, source: "list_builder_batch" },
+    }));
+
+    const { error } = await supabase.from("livestock_fertility_events" as any).insert(payload);
+    setSubmitting(false);
+    if (error) return toast.error("خطای ذخیره: " + error.message);
+    toast.success(`${TITLES[actionKey]} برای ${valid.length} دام ثبت شد`);
+    onDone(valid.map((r) => r.id));
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent dir="rtl" className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-right">{TITLES[actionKey]}</DialogTitle>
+          <DialogDescription className="text-right">
+            تعداد دام‌های قابل اعمال: <b className="text-primary">{valid.length}</b>
+            {skipped.length > 0 && (
+              <span className="text-destructive"> • رد شده: {skipped.length}</span>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {/* Common: date/time/operator */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="تاریخ">
+              <JalaliDatePicker value={date} onChange={setDate} />
+            </Field>
+            {actionKey !== "vaccination" && (
+              <Field label="ساعت">
+                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} dir="ltr" />
+              </Field>
+            )}
+          </div>
+          <Field label="اپراتور / مسئول">
+            <Select value={operatorId} onValueChange={setOperatorId} dir="rtl">
+              <SelectTrigger><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {/* Action-specific fields */}
+          {actionKey === "insemination" && (
+            <Field label="اسپرم">
+              <Select value={spermId} onValueChange={setSpermId} dir="rtl">
+                <SelectTrigger><SelectValue placeholder="انتخاب اسپرم" /></SelectTrigger>
+                <SelectContent>
+                  {sperms.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+
+          {actionKey === "rinse" && (
+            <Field label="علت شستشو">
+              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثلاً ترشحات غیرطبیعی" />
+            </Field>
+          )}
+
+          {actionKey === "preg_test" && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="نوع تست">
+                <Select value={testType} onValueChange={(v) => setTestType(v as any)} dir="rtl">
+                  <SelectTrigger><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="initial">تست اولیه</SelectItem>
+                    <SelectItem value="final">تست نهایی</SelectItem>
+                    <SelectItem value="extra">تست تکمیلی</SelectItem>
+                    <SelectItem value="dry">تست خشکی</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="نتیجه">
+                <Select value={testResult} onValueChange={(v) => setTestResult(v as any)} dir="rtl">
+                  <SelectTrigger><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="positive">مثبت</SelectItem>
+                    <SelectItem value="negative">منفی</SelectItem>
+                    <SelectItem value="suspicious">مشکوک</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          )}
+
+          {actionKey === "vaccination" && (
+            <>
+              <Field label="نام واکسن"><Input value={vaccineName} onChange={(e) => setVaccineName(e.target.value)} /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="دوز"><Input value={dose} onChange={(e) => setDose(e.target.value)} /></Field>
+                <Field label="شماره سری ساخت"><Input value={batch} onChange={(e) => setBatch(e.target.value)} /></Field>
+              </div>
+              <Field label="تاریخ یادآور بعدی (اختیاری)">
+                <JalaliDatePicker value={nextReminder} onChange={setNextReminder} />
+              </Field>
+            </>
+          )}
+
+          <Field label="توضیحات">
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </Field>
+
+          {/* Skipped rows report */}
+          {skipped.length > 0 && (
+            <div className="text-xs bg-destructive/10 border border-destructive/30 rounded p-2 max-h-32 overflow-y-auto">
+              <div className="font-bold mb-1 text-destructive">ردیف‌های رد شده ({skipped.length}):</div>
+              {skipped.slice(0, 20).map((s) => (
+                <div key={s.r.id}>• {tagLabel(s.r)} — {s.reason}</div>
+              ))}
+              {skipped.length > 20 && <div>...</div>}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>انصراف</Button>
+          <Button onClick={handleSubmitClick} disabled={submitting} className="bg-gradient-primary text-primary-foreground">
+            ادامه و تایید
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+
+      {/* Confirmation dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-right">تایید عملیات گروهی</DialogTitle>
+            <DialogDescription className="text-right">
+              آیا مطمئن هستید می‌خواهید <b>{TITLES[actionKey]}</b> را برای <b className="text-primary">{valid.length}</b> دام ثبت کنید؟
+              این عملیات قابل بازگشت نیست.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={submitting}>خیر</Button>
+            <Button onClick={() => { setConfirmOpen(false); performInsert(); }}
+              disabled={submitting} className="bg-gradient-primary text-primary-foreground">
+              {submitting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+              بله، ثبت کن
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// SaveArchiveDialog — pops up after the user clicks "آرشیو" on a generated list.
+// Collects a human-friendly name (required) and an optional note/description,
+// then writes a row into `livestock_list_archives` with the exact cow_ids,
+// the active filters, and the chosen columns, plus a creator stamp.
+//
+// Why we store cow_ids (not just filters): the herd changes daily. Re-running
+// the same filters next week would return a different population, which would
+// defeat the whole point of "open this archive and run group actions on it".
+// =============================================================================
+function SaveArchiveDialog({
+  rows, filters, columnKeys, user, onClose, onSaved,
+}: {
+  rows: CowRow[];
+  filters: FilterState;
+  columnKeys: string[];
+  user: { id: string; username: string; fullName: string } | null;
+  onClose: () => void;
+  onSaved: (a: ArchiveRow) => void;
+}) {
+  // Suggest a default name including today's Jalali date so users always have
+  // a sensible starting point — they can rename freely before saving.
+  const [name, setName] = useState(`لیست ${formatJalali(todayJalali())}`);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    // Trim + guard: a blank name is meaningless when browsing archives later.
+    const trimmed = name.trim();
+    if (!trimmed) { toast.error("نام آرشیو الزامی است"); return; }
+    setSaving(true);
+    try {
+      // Insert the archive row. Note we serialize JalaliDate objects in the
+      // filters by going through JSON — this keeps the data shape consistent.
+      const { data, error } = await supabase
+        .from("livestock_list_archives")
+        .insert({
+          name: trimmed,
+          note: note.trim() || null,
+          // Serialize then parse to drop any non-JSON-safe artifacts (Maps etc.)
+          filters: JSON.parse(JSON.stringify(filters)),
+          column_keys: columnKeys,
+          cow_ids: rows.map((r) => r.id),
+          cow_count: rows.length,
+          // Stamp the creator. The app auth layer produces uuid-like ids;
+          // we still send the username + display name as a fallback for
+          // listing UIs that don't want to join back to app_users.
+          created_by_user_id: user?.id ?? null,
+          created_by_username: user?.username ?? null,
+          created_by_name: user?.fullName ?? null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      onSaved(data as ArchiveRow);
+    } catch (e: any) {
+      toast.error("خطا در ذخیره آرشیو: " + (e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Archive className="w-5 h-5 text-primary" /> ذخیره در آرشیو
+          </DialogTitle>
+          <DialogDescription>
+            {`این آرشیو شامل ${rows.length.toLocaleString("fa-IR")} دام خواهد بود و بعداً قابل بازیابی و عملیات گروهی است.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {/* Required name */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">نام آرشیو *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="مثلاً: تلقیح هفته جاری" />
+          </div>
+          {/* Optional note — useful when other users open the archive later */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">توضیحات (اختیاری)</Label>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="هدف از این آرشیو، یادداشت‌ها ..." rows={3} />
+          </div>
+          {/* Auto-stamped meta: shown so the user sees exactly what we record */}
+          <div className="rounded-lg border border-border p-3 text-xs space-y-1 bg-background/40">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <UserIcon className="w-3.5 h-3.5" />
+              <span>ایجاد توسط:</span>
+              <span className="text-foreground">
+                {user?.fullName || user?.username || "—"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" />
+              <span>تاریخ ایجاد:</span>
+              <span className="text-foreground">
+                {new Date().toLocaleString("fa-IR")}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>انصراف</Button>
+          <Button onClick={save} disabled={saving}
+            className="bg-gradient-primary text-primary-foreground">
+            {saving && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+            ذخیره آرشیو
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// ArchivesListDialog — browses every saved archive in the project. Lets the
+// user open one (which the parent re-hydrates into the page) or delete one.
+// Sorted by created_at desc so the freshest archives appear first.
+// =============================================================================
+function ArchivesListDialog({
+  onClose, onOpen,
+}: {
+  onClose: () => void;
+  onOpen: (a: ArchiveRow) => void;
+}) {
+  // Local list + loading + simple search field over name/creator/note.
+  const [items, setItems] = useState<ArchiveRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  // Reload archives — extracted so we can call it again after a delete.
+  async function load() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("livestock_list_archives")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) toast.error("خطا در بارگذاری آرشیو: " + error.message);
+    setItems((data as ArchiveRow[]) ?? []);
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  // Client-side search (small dataset, no server filter needed).
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((a) =>
+      (a.name || "").toLowerCase().includes(q) ||
+      (a.note || "").toLowerCase().includes(q) ||
+      (a.created_by_name || "").toLowerCase().includes(q) ||
+      (a.created_by_username || "").toLowerCase().includes(q)
+    );
+  }, [items, search]);
+
+  async function remove(a: ArchiveRow) {
+    if (!confirm(`حذف آرشیو «${a.name}»؟ این عمل قابل بازگشت نیست.`)) return;
+    const { error } = await supabase
+      .from("livestock_list_archives").delete().eq("id", a.id);
+    if (error) return toast.error("خطا در حذف: " + error.message);
+    toast.success("آرشیو حذف شد");
+    load();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl" className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-primary" /> آرشیو لیست‌های شخصی دام‌ها
+          </DialogTitle>
+          <DialogDescription>
+            هر آرشیو شامل دام‌های دقیق همان لحظه است؛ با باز کردن آن می‌توانید عملیات گروهی اعمال کنید.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Search box across name/note/creator */}
+        <div className="relative">
+          <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pr-9" placeholder="جستجو در نام / یادداشت / سازنده ..."
+            value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+          {loading && (
+            <div className="py-8 text-center text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin inline ml-2" /> در حال بارگذاری...
+            </div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div className="py-8 text-center text-muted-foreground">
+              آرشیوی یافت نشد
+            </div>
+          )}
+          {!loading && filtered.map((a) => (
+            <div key={a.id}
+              className="rounded-lg border border-border p-3 bg-background/40 hover:border-primary/40 transition-colors">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold text-foreground truncate">{a.name}</span>
+                    <Badge variant="secondary">
+                      {a.cow_count.toLocaleString("fa-IR")} دام
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1">
+                      <UserIcon className="w-3 h-3" />
+                      {a.created_by_name || a.created_by_username || "—"}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {new Date(a.created_at).toLocaleString("fa-IR")}
+                    </span>
+                  </div>
+                  {a.note && (
+                    <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.note}</div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <Button size="sm" onClick={() => onOpen(a)}
+                    className="bg-gradient-primary text-primary-foreground">
+                    <FolderOpen className="w-3.5 h-3.5 ml-1" /> باز کردن
+                  </Button>
+                  <Button size="sm" variant="ghost"
+                    onClick={() => remove(a)}
+                    className="text-destructive hover:text-destructive">
+                    <Trash2 className="w-3.5 h-3.5 ml-1" /> حذف
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>بستن</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// ColumnPickerDialog — opens after the user clicks "تایید و تولید لیست".
+// Lets them choose which columns to show/export and the sort key/direction
+// before the actual query runs. Replaces the old always-on filter section.
+// =============================================================================
+function ColumnPickerDialog({
+  columnKeys, setColumnKeys, sortBy, setSortBy, sortDir, setSortDir,
+  onCancel, onConfirm,
+}: {
+  columnKeys: string[];
+  setColumnKeys: (k: string[]) => void;
+  sortBy: (typeof SORT_OPTIONS)[number]["key"];
+  setSortBy: (k: any) => void;
+  sortDir: "asc" | "desc";
+  setSortDir: (d: "asc" | "desc") => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-right">انتخاب ستون‌ها و مرتب‌سازی</DialogTitle>
+          <DialogDescription className="text-right">
+            ستون‌هایی که می‌خواهید در لیست/خروجی نمایش داده شوند را انتخاب و سپس «تایید و تولید لیست» را بزنید.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Quick selection helpers — saves clicks for common scenarios */}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setColumnKeys(ALL_COLUMNS.map((c) => c.key))}>
+              همه ستون‌ها
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setColumnKeys(DEFAULT_COLUMN_KEYS)}>
+              پیش‌فرض
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setColumnKeys(["tag"])}>
+              فقط پلاک
+            </Button>
+          </div>
+
+          <div>
+            <div className="text-xs text-muted-foreground mb-1.5">ستون‌های نمایش/خروجی</div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_COLUMNS.map((c) => {
+                const on = columnKeys.includes(c.key);
+                return (
+                  <Badge
+                    key={c.key}
+                    variant={on ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setColumnKeys(
+                      on ? columnKeys.filter((k) => k !== c.key) : [...columnKeys, c.key],
+                    )}
+                  >
+                    {c.label}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">مرتب‌سازی بر اساس</Label>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v)} dir="rtl">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">ترتیب</Label>
+              <Select value={sortDir} onValueChange={(v) => setSortDir(v as any)} dir="rtl">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">صعودی</SelectItem>
+                  <SelectItem value="desc">نزولی</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>انصراف</Button>
+          <Button
+            onClick={onConfirm}
+            disabled={columnKeys.length === 0}
+            className="bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
+          >
+            <Filter className="w-4 h-4 ml-2" /> تایید و تولید لیست
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// InlineCommonDialog — collects the SHARED fields (date/time/notes plus, for
+// pregnancy test, the doctor name) for the 3 per-row group actions. On
+// confirm the page enters inline mode and renders per-row editors.
+// =============================================================================
+function InlineCommonDialog({
+  kind, onCancel, onConfirm,
+}: {
+  kind: "insemination" | "rinse" | "preg_test";
+  onCancel: () => void;
+  onConfirm: (common: { dateStr: string; time: string; description: string; doctorName?: string }) => void;
+}) {
+  const [date, setDate] = useState<JalaliDate | null>(todayJalali());
+  const [time, setTime] = useState("");
+  const [description, setDescription] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+
+  const TITLE = {
+    insemination: "تلقیح گروهی — اطلاعات مشترک",
+    rinse: "شستشوی گروهی — اطلاعات مشترک",
+    preg_test: "تست آبستنی گروهی — اطلاعات مشترک",
+  }[kind];
+
+  function handleConfirm() {
+    if (!date) return toast.error("تاریخ را انتخاب کنید");
+    if (!time) return toast.error("ساعت را وارد کنید");
+    if (kind === "preg_test" && !doctorName.trim()) return toast.error("نام پزشک را وارد کنید");
+    onConfirm({
+      dateStr: formatJalali(date),
+      time,
+      description: description.trim(),
+      doctorName: kind === "preg_test" ? doctorName.trim() : undefined,
+    });
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-right">{TITLE}</DialogTitle>
+          <DialogDescription className="text-right">
+            پس از تایید، می‌توانید برای هر ردیف اپراتور و سایر اطلاعات را جداگانه تنظیم کنید.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">تاریخ</Label>
+              <JalaliDatePicker value={date} onChange={setDate} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">ساعت</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} dir="ltr" />
+            </div>
+          </div>
+          {kind === "preg_test" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">نام پزشک</Label>
+              <Input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} placeholder="نام و نام خانوادگی پزشک" />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">توضیحات</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>انصراف</Button>
+          <Button onClick={handleConfirm} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            تایید و ورود به حالت ردیفی
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// =============================================================================
+// InlineRowEditors — per-row editors injected as <td>s into the desktop table
+// when the page is in inline group-action mode. Renders the right widgets
+// based on action kind (operator+sperm / operator+medicines / type+result).
+// =============================================================================
+function InlineRowEditors({
+  row, mode, value, onChange, users, sperms, medicines,
+}: {
+  row: CowRow;
+  mode: "insemination" | "rinse" | "preg_test";
+  value: any;
+  onChange: (patch: any) => void;
+  users: AppUser[];
+  sperms: SpermRow[];
+  medicines: Lookup[];
+}) {
+  // Eligibility — out-of-herd or male animals can't receive fertility ops.
+  // We still render placeholder cells so the table stays aligned.
+  const presence = row.presence_status ?? row.existancestatus;
+  const ineligible = presence !== 0 || row.sex !== 0;
+  if (ineligible) {
+    return (
+      <>
+        <td className="p-2 text-xs text-muted-foreground" colSpan={2}>غیرقابل اعمال</td>
+      </>
+    );
+  }
+
+  if (mode === "insemination") {
+    return (
+      <>
+        <td className="p-2 min-w-[140px]">
+          <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اپراتور" /></SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="p-2 min-w-[160px]">
+          <Select value={value.spermId || ""} onValueChange={(v) => onChange({ spermId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اسپرم" /></SelectTrigger>
+            <SelectContent>
+              {sperms.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+      </>
+    );
+  }
+
+  if (mode === "rinse") {
+    return (
+      <>
+        <td className="p-2 min-w-[140px]">
+          <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اپراتور" /></SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="p-2 min-w-[200px]">
+          <MultiMedicinePicker
+            medicines={medicines}
+            selected={value.medicineIds || []}
+            onChange={(ids) => onChange({ medicineIds: ids })}
+          />
+        </td>
+      </>
+    );
+  }
+
+  // preg_test
+  return (
+    <>
+      <td className="p-2 min-w-[130px]">
+        <Select value={value.testType || ""} onValueChange={(v) => onChange({ testType: v })} dir="rtl">
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نوع تست" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="initial">تست اولیه</SelectItem>
+            <SelectItem value="final">تست نهایی</SelectItem>
+            <SelectItem value="extra">تست تکمیلی</SelectItem>
+            <SelectItem value="dry">تست خشکی</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+      <td className="p-2 min-w-[120px]">
+        <Select value={value.testResult || ""} onValueChange={(v) => onChange({ testResult: v })} dir="rtl">
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نتیجه" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="positive">مثبت</SelectItem>
+            <SelectItem value="negative">منفی</SelectItem>
+            <SelectItem value="suspicious">مشکوک</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+    </>
+  );
+}
+
+// Same as InlineRowEditors but rendered as labeled blocks for the mobile card.
+function MobileInlineEditors(props: React.ComponentProps<typeof InlineRowEditors>) {
+  const { row, mode, value, onChange, users, sperms, medicines } = props;
+  const presence = row.presence_status ?? row.existancestatus;
+  if (presence !== 0 || row.sex !== 0) {
+    return <div className="text-xs text-muted-foreground">غیرقابل اعمال</div>;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2 text-xs">
+      {mode === "insemination" && (
+        <>
+          <LabeledField label="اپراتور">
+            <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <LabeledField label="اسپرم">
+            <Select value={value.spermId || ""} onValueChange={(v) => onChange({ spermId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {sperms.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.code && s.name ? `${s.code} - ${s.name}` : s.code || s.name || `#${s.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+        </>
+      )}
+      {mode === "rinse" && (
+        <>
+          <LabeledField label="اپراتور">
+            <Select value={value.operatorId || ""} onValueChange={(v) => onChange({ operatorId: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.username}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <div className="col-span-2">
+            <LabeledField label="داروها">
+              <MultiMedicinePicker
+                medicines={medicines}
+                selected={value.medicineIds || []}
+                onChange={(ids) => onChange({ medicineIds: ids })}
+              />
+            </LabeledField>
+          </div>
+        </>
+      )}
+      {mode === "preg_test" && (
+        <>
+          <LabeledField label="نوع تست">
+            <Select value={value.testType || ""} onValueChange={(v) => onChange({ testType: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="initial">اولیه</SelectItem>
+                <SelectItem value="final">نهایی</SelectItem>
+                <SelectItem value="extra">تکمیلی</SelectItem>
+                <SelectItem value="dry">خشکی</SelectItem>
+              </SelectContent>
+            </Select>
+          </LabeledField>
+          <LabeledField label="نتیجه">
+            <Select value={value.testResult || ""} onValueChange={(v) => onChange({ testResult: v })} dir="rtl">
+              <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="positive">مثبت</SelectItem>
+                <SelectItem value="negative">منفی</SelectItem>
+                <SelectItem value="suspicious">مشکوک</SelectItem>
+              </SelectContent>
+            </Select>
+          </LabeledField>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// =============================================================================
+// MultiMedicinePicker — compact multi-select used for the شستشو دارو column.
+// Lightweight checkbox dropdown rendered via the popover primitive so it
+// works the same on desktop and mobile.
+// =============================================================================
+function MultiMedicinePicker({
+  medicines, selected, onChange,
+}: {
+  medicines: Lookup[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = q
+    ? medicines.filter((m) => (m.name || "").toLowerCase().includes(q.toLowerCase()))
+    : medicines;
+  const labels = selected.map((id) => medicines.find((m) => String(m.id) === id)?.name || id).join("، ");
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full h-8 px-2 text-xs text-right rounded-md border border-input bg-background text-foreground truncate"
+      >
+        {selected.length === 0 ? "انتخاب دارو(ها)" : `${selected.length} مورد: ${labels}`}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 mt-1 w-72 max-h-72 overflow-y-auto rounded-md border border-border bg-popover p-2 shadow-md">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="جستجوی دارو..."
+              className="h-7 text-xs mb-2"
+            />
+            {filtered.length === 0 && (
+              <div className="text-xs text-muted-foreground p-2 text-center">یافت نشد</div>
+            )}
+            {filtered.map((m) => {
+              const id = String(m.id);
+              const on = selected.includes(id);
+              return (
+                <label
+                  key={id}
+                  className="flex items-center gap-2 p-1.5 text-xs hover:bg-muted rounded cursor-pointer"
+                >
+                  <Checkbox
+                    checked={on}
+                    onCheckedChange={() =>
+                      onChange(on ? selected.filter((x) => x !== id) : [...selected, id])
+                    }
+                  />
+                  <span className="flex-1 text-right">{m.name || `#${m.id}`}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

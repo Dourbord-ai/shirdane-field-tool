@@ -1,0 +1,52 @@
+project_id = "gwwryrdrbmhifhfdmkph"
+
+[functions.verify-account]
+verify_jwt = false
+
+[functions.get-hr-attendance]
+verify_jwt = false
+
+[functions.submit-hr-request]
+verify_jwt = false
+
+[functions.check-hr-alerts]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
+
+[functions.check-fertility-operation]
+verify_jwt = false
+
+[functions.sepidar-beneficiary-statement]
+verify_jwt = false
+
+[functions.sepidar-beneficiary-balance]
+verify_jwt = false
+
+[functions.sepidar-create-payment-voucher]
+verify_jwt = false
+
+[functions.sepidar-allocate-payment-transaction]
+verify_jwt = false
+
+[functions.sepidar-voucher-status]
+verify_jwt = false
+
+[functions.sepidar-beneficiaries]
+verify_jwt = false
+
+[functions.sepidar-financial-documents]
+verify_jwt = false
+
+[functions.sepidar-financial-document-details]
+verify_jwt = false
+
+[functions.sepidar-create-interbank-transfer-voucher]
+verify_jwt = false
+
+[functions.sepidar-create-party-transfer-voucher]
+verify_jwt = false
+
+[functions.sepidar-post-voucher]
+verify_jwt = false

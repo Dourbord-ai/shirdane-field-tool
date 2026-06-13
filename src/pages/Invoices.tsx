@@ -6,6 +6,9 @@ import { Separator } from "@/components/ui/separator";
 import { toPersianDigits } from "@/lib/jalali";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import AmendmentPanel from "@/components/factors/AmendmentPanel";
+import AmendmentRequestDialog from "@/components/finance/AmendmentRequestDialog";
+
 
 interface FactorRow {
   id: string;
@@ -361,9 +364,10 @@ export default function Invoices() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<SpermBuyRow[]>([]);
   const [selectedMilkItems, setSelectedMilkItems] = useState<MilkRow[]>([]);
-  const [selectedFeedItems, setSelectedFeedItems] = useState<FeedItemRow[]>([]);
   const [selectedMedicineItems, setSelectedMedicineItems] = useState<MedicineItemRow[]>([]);
   const [selectedLivestockItems, setSelectedLivestockItems] = useState<LivestockItemRow[]>([]);
+  const [amendmentOpen, setAmendmentOpen] = useState(false);
+
 
   useEffect(() => {
     const fetchFactors = async () => {

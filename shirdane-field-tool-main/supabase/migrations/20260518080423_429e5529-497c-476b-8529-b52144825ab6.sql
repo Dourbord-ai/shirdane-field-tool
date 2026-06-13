@@ -1,0 +1,2 @@
+ALTER TABLE public.finance_sepidar_settings ADD COLUMN IF NOT EXISTS sepidar_party_account_sl_ref integer;
+UPDATE public.finance_sepidar_settings SET sepidar_party_account_sl_ref = 193 WHERE sepidar_party_account_sl_ref IS NULL;

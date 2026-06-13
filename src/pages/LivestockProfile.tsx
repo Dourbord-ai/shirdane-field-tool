@@ -1,0 +1,408 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  presenceLabel,
+  fertilityLabel,
+  presenceBadgeClass,
+  isFemale,
+  dryLabel,
+} from "@/lib/livestock";
+import { Loader2, History, ArrowRight, Activity, Milk, HeartPulse, ShoppingCart } from "lucide-react";
+import FertilitySection from "@/components/livestock/FertilitySection";
+// New: derived "خلاصه باروری" card computed from the real fertility-event timeline.
+import FertilitySummaryCard from "@/components/livestock/FertilitySummaryCard";
+import CowChangeSection from "@/components/livestock/CowChangeSection";
+import PhysicalStatusSection from "@/components/livestock/PhysicalStatusSection";
+import MilkRecordsSection from "@/components/livestock/MilkRecordsSection";
+import { cowImageFor } from "@/lib/cowImage";
+// Universal Shamsi formatter — every visible date on the cow profile
+// (created_at, purchase_date, pre_entry_*) is routed through this so the
+// page never accidentally shows Gregorian numerals or raw ISO strings.
+import { formatShamsi } from "@/lib/dateDisplay";
+// Pull events for THIS cow via the same shared hook the summary card uses
+// (react-query dedupes the query, so this is free) so we can derive
+// "آخرین وضعیت باروری" from the freshest event instead of the cached
+// `cows.last_fertility_status` field which is often stale.
+import { useFertilitySummary } from "@/hooks/useFertilitySummary";
+import { deriveLatestStatus } from "@/lib/fertility/deriveLatestStatus";
+
+type Cow = {
+  id: number;
+  tag_number: string | null;
+  earnumber: number | null;
+  bodynumber: number | null;
+  sextype: string | null;
+  sex: number | null;
+  existancestatus: number | null;
+  is_dry: boolean | null;
+  last_fertility_status: number | null;
+  last_location_id: number | null;
+  last_location_date: string | null;
+  last_type_id: number | null;
+  last_type_date: string | null;
+  last_status_id: number | null;
+  last_status_date: string | null;
+  created_at: string;
+  // date_of_birth comes from the cows table and represents the animal's birthday.
+  // Per business rule: "تاریخ ورود" در پروفایل دام باید برابر date_of_birth باشد
+  // (نه created_at که زمان ثبت رکورد در سیستم است).
+  date_of_birth: string | null;
+  purchase_date: string | null;
+  purchase_price: number | null;
+  supplier: string | null;
+  purchase_invoice_number: string | null;
+  pre_entry_birth_date: string | null;
+  pre_entry_abortion_date: string | null;
+  pre_entry_dry_date: string | null;
+  pre_entry_period: number | null;
+  pre_entry_note: string | null;
+};
+
+type Event = {
+  id: string;
+  event_type: string;
+  from_value: string | null;
+  to_value: string | null;
+  description: string | null;
+  event_date: string | null;
+  created_at: string;
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  presence_change: "تغییر وضعیت حضور",
+  dry_change: "تغییر وضعیت دوشش",
+  fertility_change: "تغییر وضعیت باروری",
+  sale: "فروش",
+  death: "تلفات",
+  slaughter: "کشتار",
+  other: "خروج به سایر دلایل",
+};
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <h2 className="text-body-lg font-bold text-foreground">{title}</h2>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-start gap-3 text-sm">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-foreground font-medium text-left">{value ?? "—"}</span>
+    </div>
+  );
+}
+
+export default function LivestockProfile() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [cow, setCow] = useState<Cow | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = () => setRefreshKey((k) => k + 1);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!id) return;
+      if (refreshKey === 0) setLoading(true);
+      const numId = Number(id);
+      const [{ data: cowData, error: cowErr }, { data: evData }] = await Promise.all([
+        supabase.from("cows").select("*").eq("id", numId).maybeSingle(),
+        supabase
+          .from("livestock_events")
+          .select("*")
+          .eq("cow_id", numId)
+          .order("created_at", { ascending: false }),
+      ]);
+      if (cancelled) return;
+      if (cowErr || !cowData) {
+        setNotFound(true);
+      } else {
+        setCow(cowData as Cow);
+        setEvents((evData ?? []) as Event[]);
+      }
+      setLoading(false);
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refreshKey]);
+
+  // Note: no realtime/polling — profile refreshes only after a successful user action
+  // via the onOperationSaved callback passed to FertilitySection.
+
+  // ---- Live "آخرین وضعیت باروری" ---------------------------------------
+  // MUST be called unconditionally before any early returns so React's
+  // Rules of Hooks aren't violated. The shared `useFertilitySummary` hook
+  // guards itself with `enabled: !!cowId`, so passing `cow?.id` is safe even
+  // before the cow row finishes loading.
+  const { events: fertilityEvents } = useFertilitySummary(cow?.id, {
+    cow: cow ? { id: cow.id } : null,
+  });
+  // Derive the freshest status id from the timeline (falls back to the
+  // cached cow row when no events exist).
+  const liveStatus = deriveLatestStatus(
+    fertilityEvents,
+    cow?.last_fertility_status ?? null,
+  );
+  const liveStatusId = liveStatus?.id ?? null;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (notFound || !cow) {
+    return (
+      <div className="py-12 text-center space-y-3">
+        <p className="text-muted-foreground">این دام یافت نشد.</p>
+        <button
+          onClick={() => navigate("/livestock")}
+          className="text-primary underline text-sm"
+        >
+          بازگشت به لیست دام‌ها
+        </button>
+      </div>
+    );
+  }
+
+  const female = isFemale(cow.sextype, cow.sex);
+  const tag = cow.tag_number || cow.earnumber || cow.bodynumber || "—";
+  const inHerd = (cow.existancestatus ?? 0) === 0;
+
+  return (
+    <div className="py-4 space-y-4 animate-fade-in livestock-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen">
+      {/* Back */}
+      <button
+        onClick={() => navigate("/livestock")}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowRight className="w-4 h-4" />
+        بازگشت به لیست دام‌ها
+      </button>
+
+      {/* Hero */}
+      <div className="cow-hero">
+        <div className="flex items-start gap-4 flex-wrap">
+          <img
+            src={cowImageFor(cow)}
+            alt={`دام شماره ${tag}`}
+            width={112}
+            height={112}
+            className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-border/60 shadow-lg shrink-0"
+          />
+          <div className="space-y-1 flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground">شماره پلاک</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="cow-hero-tag">{tag}</h1>
+              <span className={`text-xs px-2.5 py-1 rounded-full border ${presenceBadgeClass((cow.existancestatus ?? 0))}`}>
+                {presenceLabel((cow.existancestatus ?? 0))}
+              </span>
+              {female && (
+                <span className="chip-default">
+                  {dryLabel(cow.is_dry)}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")}
+              {female && liveStatusId != null && (
+                <> • {fertilityLabel(liveStatusId)}</>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* Quick actions */}
+        {inHerd && (
+          <div className="grid grid-cols-4 gap-2 mt-4">
+            {female && (
+              <button className="quick-action" onClick={() => document.getElementById("fertility-section")?.scrollIntoView({ behavior: "smooth" })}>
+                <span className="quick-action-icon"><HeartPulse className="w-5 h-5" /></span>
+                <span className="text-xs font-medium">باروری</span>
+              </button>
+            )}
+            <button className="quick-action" onClick={() => document.getElementById("history-section")?.scrollIntoView({ behavior: "smooth" })}>
+              <span className="quick-action-icon"><Activity className="w-5 h-5" /></span>
+              <span className="text-xs font-medium">تاریخچه</span>
+            </button>
+            {female && (
+              <button className="quick-action">
+                <span className="quick-action-icon"><Milk className="w-5 h-5" /></span>
+                <span className="text-xs font-medium">دوشش</span>
+              </button>
+            )}
+            <button className="quick-action">
+              <span className="quick-action-icon"><ShoppingCart className="w-5 h-5" /></span>
+              <span className="text-xs font-medium">خرید</span>
+            </button>
+          </div>
+        )}
+
+        {!inHerd && (
+          <p className="mt-3 text-xs text-muted-foreground bg-muted/50 rounded-md px-2 py-1.5">
+            این دام از گله خارج شده است — عملیات فروش، تلفات، کشتار یا خروج مجدد قابل ثبت نیست.
+          </p>
+        )}
+      </div>
+
+      {/* Section 1: Basic info */}
+      <Section title="اطلاعات پایه دام">
+        <Row label="شماره پلاک" value={tag} />
+        <Row label="نوع دام" value="گاو" />
+        <Row label="جنسیت" value={cow.sextype || (cow.sex === 0 ? "ماده" : cow.sex === 1 ? "نر" : "—")} />
+        <Row label="وضعیت حضور" value={presenceLabel((cow.existancestatus ?? 0))} />
+        <Row
+          label="تاریخ تولد"
+          // مقدار از ستون `date_of_birth` در جدول `public.cows` خوانده می‌شود.
+          // formatShamsi هم رشته‌های شمسی ذخیره‌شده و هم ISO میلادی را به
+          // شمسی با ارقام فارسی تبدیل می‌کند.
+          value={formatShamsi(cow.date_of_birth)}
+        />
+      </Section>
+
+      {/* Section 2: Female-only */}
+      {female && (
+        <Section title="وضعیت دام ماده">
+          <Row label="وضعیت دوشش" value={dryLabel(cow.is_dry)} />
+          <Row label="آخرین وضعیت باروری" value={fertilityLabel(liveStatusId)} />
+        </Section>
+      )}
+
+      {/* Fertility tabs (female only) */}
+      {female && (
+        <div id="fertility-section" className="space-y-4">
+          {/* Derived summary block — all values come from livestock_fertility_events
+              via useFertilitySummary; cow row passed only for is_dry/is_pregnancy
+              fallback. Mounted above the operations tabs per spec. */}
+          <FertilitySummaryCard
+            cow={{
+              id: cow.id,
+              date_of_birth: cow.date_of_birth,
+              is_dry: cow.is_dry,
+              last_fertility_status: liveStatusId,
+            }}
+          />
+          <FertilitySection
+            livestockId={cow.id}
+            latestStatus={liveStatusId}
+            isDry={cow.is_dry}
+            onOperationSaved={() => {
+              console.log("Fertility operation saved; refreshing cow profile UI", cow.id);
+              refresh();
+            }}
+          />
+        </div>
+      )}
+
+      {/* Cow profile change management: location/type/status */}
+      <div id="history-section" className="space-y-4">
+        <CowChangeSection
+          cowId={cow.id}
+          kind="location"
+          currentRefId={cow.last_location_id}
+          currentDate={cow.last_location_date}
+          onChanged={refresh}
+        />
+        <CowChangeSection
+          cowId={cow.id}
+          kind="type"
+          currentRefId={cow.last_type_id}
+          currentDate={cow.last_type_date}
+          onChanged={refresh}
+        />
+        <CowChangeSection
+          cowId={cow.id}
+          kind="status"
+          currentRefId={cow.last_status_id}
+          currentDate={cow.last_status_date}
+          onChanged={refresh}
+        />
+      </div>
+
+      <PhysicalStatusSection cowId={cow.id} onChanged={refresh} />
+
+      <MilkRecordsSection cowId={cow.id} isFemale={female} onChanged={refresh} />
+
+      {female && (cow.pre_entry_birth_date || cow.pre_entry_abortion_date || cow.pre_entry_dry_date || cow.pre_entry_period != null || cow.pre_entry_note) && (
+        <Section title="اطلاعات اولیه قبل از ورود به دامداری">
+          {/* These values may already be Shamsi strings from import, but we still
+              pass them through formatShamsi so digits/separators are normalized. */}
+          <Row label="تاریخ زایش قبل از ورود" value={formatShamsi(cow.pre_entry_birth_date, false, "")} />
+          <Row label="تاریخ سقط قبل از ورود" value={formatShamsi(cow.pre_entry_abortion_date, false, "")} />
+          <Row label="تاریخ خشکی قبل از ورود" value={formatShamsi(cow.pre_entry_dry_date, false, "")} />
+          <Row label="دوره/روزهای قبل از ورود" value={cow.pre_entry_period != null ? `${cow.pre_entry_period} روز` : null} />
+          <Row label="توضیحات" value={cow.pre_entry_note} />
+        </Section>
+      )}
+
+      {/* Section 3: Purchase info */}
+      <Section title="اطلاعات خرید">
+        <Row label="تاریخ خرید" value={formatShamsi(cow.purchase_date, false, "")} />
+        <Row
+          label="قیمت خرید"
+          value={
+            cow.purchase_price != null
+              ? `${Number(cow.purchase_price).toLocaleString("fa-IR")} ریال`
+              : null
+          }
+        />
+        <Row label="تامین‌کننده" value={cow.supplier} />
+        <Row label="شماره فاکتور خرید" value={cow.purchase_invoice_number} />
+      </Section>
+
+      {/* Section 4: Timeline */}
+      <Section title="تاریخچه و رویدادها">
+        {events.length === 0 ? (
+          <div className="flex flex-col items-center text-center py-6 text-muted-foreground">
+            <History className="w-8 h-8 mb-2 opacity-50" />
+            <p className="text-sm">رویدادی برای این دام ثبت نشده است</p>
+            <p className="text-xs mt-1 opacity-70">
+              تغییرات وضعیت حضور، دوشش، باروری و … در آینده اینجا نمایش داده می‌شود
+            </p>
+          </div>
+        ) : (
+          <ol className="relative border-r border-border pr-4 space-y-3">
+            {events.map((e) => (
+              <li key={e.id} className="relative">
+                <span className="absolute -right-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary" />
+                <div className="text-sm">
+                  <p className="font-medium text-foreground">
+                    {EVENT_LABELS[e.event_type] || e.event_type}
+                  </p>
+                  {(e.from_value || e.to_value) && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {e.from_value && <>از: {e.from_value} </>}
+                      {e.to_value && <>به: {e.to_value}</>}
+                    </p>
+                  )}
+                  {e.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{e.description}</p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {/* اولویت با event_date است (که از قبل شمسی ذخیره می‌شود)؛
+                        اگر نبود، به created_at میلادی برمی‌گردیم. formatShamsi
+                        هر دو حالت را به شمسی فارسی یکدست تبدیل می‌کند. */}
+                    {formatShamsi(e.event_date || e.created_at)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
+    </div>
+  );
+}

@@ -1,0 +1,151 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Label } from "@/components/ui/label";
+import SearchableSelect from "@/components/SearchableSelect";
+import { useCows, useFertilityOperations, useFertilityStatuses, cowLabel } from "@/hooks/useFertilityRefs";
+import { PREGNANCY_STATE_BADGE, MILKING_STATE_BADGE } from "@/lib/fertilityRefs";
+import { deriveEventPeople } from "@/lib/fertility";
+
+interface FertilityEvent {
+  id: string;
+  livestock_id: number;
+  fertility_operation_id: number | null;
+  event_type: string;
+  event_date: string | null;
+  event_time: string | null;
+  fertility_status_id: number | null;
+  notes: string | null;
+  is_cancelled: boolean;
+  result_code: string | null;
+  created_at: string;
+  erotic_type_id: number | null;
+  operator_name: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface EroticType { id: number; title: string }
+
+export default function FertilityTimeline() {
+  const { data: cows = [] } = useCows();
+  const { data: ops = [] } = useFertilityOperations();
+  const { data: statuses = [] } = useFertilityStatuses();
+  const [cowId, setCowId] = useState<string>("");
+
+  const { data: eroticTypes = [] } = useQuery({
+    queryKey: ["fertility_erotic_types_all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fertility_erotic_types" as never)
+        .select("id, title");
+      if (error) throw error;
+      return (data ?? []) as EroticType[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const cowOptions = useMemo(
+    () => cows.map((c) => ({ value: String(c.id), label: cowLabel(c) })),
+    [cows]
+  );
+
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ["livestock_fertility_events", cowId],
+    enabled: !!cowId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("livestock_fertility_events")
+        .select("id, livestock_id, fertility_operation_id, event_type, event_date, event_time, fertility_status_id, notes, is_cancelled, result_code, created_at, erotic_type_id, operator_name, metadata")
+        .eq("livestock_id", Number(cowId))
+        .order("event_date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as unknown as FertilityEvent[];
+    },
+  });
+
+  return (
+    <div className="py-6 space-y-4 animate-fade-in fertility-surface -mx-4 px-4 sm:-mx-6 sm:px-6 min-h-screen" dir="rtl">
+      <div className="fertility-hero">
+        <p className="text-xs text-muted-foreground">ماژول باروری</p>
+        <h1 className="text-heading text-foreground mt-1">تایم‌لاین باروری دام</h1>
+        <p className="text-sm text-muted-foreground mt-1">مشاهده زمانی رویدادهای فحلی، تلقیح، آبستنی و زایش</p>
+      </div>
+
+      <div className="rounded-xl bg-card border border-border p-4 space-y-2">
+        <Label>انتخاب دام</Label>
+        <SearchableSelect options={cowOptions} value={cowId} onChange={setCowId} placeholder="جستجو و انتخاب دام..." />
+      </div>
+
+      {!cowId ? (
+        <div className="rounded-xl bg-card border border-border p-8 text-center text-muted-foreground">
+          ابتدا یک دام انتخاب کنید
+        </div>
+      ) : isLoading ? (
+        <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+      ) : events.length === 0 ? (
+        <div className="rounded-xl bg-card border border-border p-8 text-center text-muted-foreground">
+          رویدادی برای این دام ثبت نشده است
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {events.map((e) => {
+            const op = ops.find((o) => o.id === e.fertility_operation_id);
+            const st = statuses.find((s) => s.id === e.fertility_status_id);
+            const preg = st ? PREGNANCY_STATE_BADGE[st.pregnancy_state] : null;
+            const milk = st ? MILKING_STATE_BADGE[st.milking_state] : null;
+            return (
+              <div key={e.id} className={`rounded-xl bg-card border p-4 ${e.is_cancelled ? "border-destructive/30 opacity-70" : "border-border"}`}>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-body-lg font-bold text-foreground">
+                      {op?.name || e.event_type}
+                      {e.fertility_operation_id === 1 && e.erotic_type_id && (
+                        <span className="text-sm font-normal text-muted-foreground mr-2">
+                          — {eroticTypes.find((t) => t.id === e.erotic_type_id)?.title || ""}
+                        </span>
+                      )}
+                    </h3>
+                    {st && (
+                      <span className="text-xs px-2 py-0.5 rounded-full border" style={{ borderColor: st.color, color: st.color }}>
+                        {st.name}
+                      </span>
+                    )}
+                    {preg && preg.label !== "نامشخص" && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${preg.cls}`}>{preg.label}</span>
+                    )}
+                    {milk && milk.label !== "نامشخص" && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${milk.cls}`}>{milk.label}</span>
+                    )}
+                    {e.is_cancelled && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/30">لغو شده</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {e.event_date || "—"} {e.event_time ? `• ${e.event_time}` : ""}
+                  </span>
+                </div>
+                {e.result_code && <p className="text-xs text-muted-foreground mt-1">کد نتیجه: {e.result_code}</p>}
+                {(() => {
+                  // Compact «اپراتور / دامپزشک» row under date metadata, reusing
+                  // the shared helper so pregnancy_test rows correctly surface
+                  // the vet under «دامپزشک» instead of «اپراتور».
+                  const people = deriveEventPeople(e as unknown as import("@/lib/fertility").FertilityEvent);
+                  if (!people.operator_name && !people.doctor_name) return null;
+                  return (
+                    <p className="text-[11px] text-muted-foreground mt-1 flex flex-wrap gap-x-3">
+                      {people.operator_name && <span>اپراتور: {people.operator_name}</span>}
+                      {people.doctor_name && <span>دامپزشک: {people.doctor_name}</span>}
+                    </p>
+                  );
+                })()}
+                {e.notes && <p className="text-sm text-foreground mt-2 leading-relaxed">{e.notes}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

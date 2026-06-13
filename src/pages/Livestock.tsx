@@ -1,0 +1,632 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  PRESENCE_STATUS_LABELS,
+  FERTILITY_STATUS_LABELS,
+  presenceLabel,
+  fertilityLabel,
+  presenceBadgeClass,
+  isFemale,
+  dryLabel,
+} from "@/lib/livestock";
+import {
+  QUICK_CHIPS,
+  applyFilters,
+  getOption,
+  presenceIdFromStatus,
+  fertilityIdFromStatus,
+} from "@/lib/livestockFilters";
+import { toEnDigits } from "@/lib/digits";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, SlidersHorizontal, Loader2, ChevronLeft, X, Droplet } from "lucide-react";
+import kpiCowHerd from "@/assets/kpi-cow-herd.png";
+import kpiCowMilking from "@/assets/kpi-cow-milking.png";
+import kpiCowPregnant from "@/assets/kpi-cow-pregnant.png";
+import kpiMilkCan from "@/assets/kpi-milk-can.png";
+import kpiCowDry from "@/assets/kpi-cow.png";
+import { cowImageFor } from "@/lib/cowImage";
+// Lifecycle helper — derives a single classification (e.g. "گاو دوشا",
+// "تلیسه آبستن") from existing cow fields. Used for the badge + filter below.
+import {
+  calculateLifecycleState,
+  LIFECYCLE_LABELS,
+  ALL_LIFECYCLE_STATES,
+  type LifecycleState,
+} from "@/lib/lifecycleState";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const PAGE_SIZE = 10;
+
+type Cow = {
+  id: number;
+  tag_number: string | null;
+  earnumber: number | null;
+  bodynumber: number | null;
+  sextype: string | null;
+  sex: number | null;
+  existancestatus: number | null;
+  is_dry: boolean | null;
+  is_pregnancy: boolean | null;
+  last_fertility_status: number | null;
+  // Fields required to compute the lifecycle state on the client.
+  date_of_birth: string | null;
+  last_birth_date: string | null;
+  last_inoculation_date: string | null;
+  number_of_births: number | null;
+  last_type_id: number | null;
+  last_status_id: number | null;
+  created_at: string;
+};
+
+import { IN_HERD_OR_STRING as IN_HERD_OR } from "@/lib/cowPresence";
+
+export default function Livestock() {
+  const navigate = useNavigate();
+  // Read ?kpi=... so a KPI click on Dashboard lands here with the matching
+  // filter pre-applied. We use this to keep the count and the click-through
+  // list driven by the SAME WHERE conditions on public.cows.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kpiParam = searchParams.get("kpi");
+
+  const [cows, setCows] = useState<Cow[]>([]);
+  const [totals, setTotals] = useState<{ total: number; in_herd: number; wet: number; dry: number; pregnant: number; pregnant_heifers: number; inseminated: number; fresh: number }>(
+    { total: 0, in_herd: 0, wet: 0, dry: 0, pregnant: 0, pregnant_heifers: 0, inseminated: 0, fresh: 0 }
+  );
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
+  // search (debounced)
+  // Initialize from ?q=... so the global header search can deep-link here
+  // with the same query semantics as the on-page search box.
+  const initialQ = searchParams.get("q") ?? "";
+  const [searchInput, setSearchInput] = useState(initialQ);
+  const [search, setSearch] = useState(initialQ);
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(toEnDigits(searchInput).trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  // Keep local state in sync when the ?q= param changes via header navigation.
+  useEffect(() => {
+    const q = searchParams.get("q") ?? "";
+    setSearchInput((prev) => (prev === q ? prev : q));
+  }, [searchParams]);
+
+  // -------- Unified filter state --------
+  // Single source of truth: a Set of filter ids (e.g. "presence:in_herd").
+  // Both quick chips and advanced dropdowns write into this set.
+  // Initial selection: derived from the ?kpi= query param when present, so a
+  // Dashboard KPI click lands here with the exact same filter as the count.
+  const initialSelected = useMemo(() => {
+    switch (kpiParam) {
+      case "pregnant":
+        // Count query: IN_HERD + sex=0 + is_pregnancy=true
+        // We add presence:in_herd so the chip UI reflects it, and kpi:pregnant
+        // applies the sex=0 + is_pregnancy=true predicates below.
+        return new Set(["presence:in_herd", "kpi:pregnant"]);
+      case "heifer":
+        return new Set(["presence:in_herd", "kpi:heifer"]);
+      case "milking":
+        return new Set(["presence:in_herd", "milking:wet"]);
+      case "dry":
+        return new Set(["presence:in_herd", "milking:dry"]);
+      case "in_herd":
+      default:
+        return new Set(["presence:in_herd"]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [selected, setSelected] = useState<Set<string>>(initialSelected);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Lifecycle filter is computed client-side from each cow's derived state,
+  // so it lives outside `selected` (which builds the DB query).
+  const [lifecycleFilter, setLifecycleFilter] = useState<Set<LifecycleState>>(new Set());
+  const toggleLifecycle = (s: LifecycleState) =>
+    setLifecycleFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+
+  const selectedKey = useMemo(() => Array.from(selected).sort().join("|"), [selected]);
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Advanced single-select dropdown helpers: replace any existing id in the
+  // same category so the dropdown always reflects exactly one choice.
+  const setSingleInCategory = (prefix: string, id: string | null) => {
+    setSelected((prev) => {
+      const next = new Set(Array.from(prev).filter((x) => !x.startsWith(prefix)));
+      if (id) next.add(id);
+      return next;
+    });
+  };
+
+  const presenceFilter = useMemo(() => {
+    const id = Array.from(selected).find((x) => x.startsWith("presence:"));
+    return id ? id.split(":")[1] : "all";
+  }, [selectedKey]);
+
+  const fertilityFilter = useMemo(() => {
+    const id = Array.from(selected).find((x) => x.startsWith("fertility:"));
+    return id ? id.split(":")[1] : "all";
+  }, [selectedKey]);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // KPI counts — treat NULL presence_status as "in herd"
+  useEffect(() => {
+    let cancelled = false;
+    async function loadKpis() {
+      const head = (q: any) => q.select("id", { count: "exact", head: true });
+      // IMPORTANT: these queries must match the rules used by the main
+      // Dashboard (src/pages/Dashboard.tsx) so the KPI numbers shown on both
+      // pages are identical:
+      //   - "موجود گله" → existancestatus IS NULL OR = 0 (IN_HERD_OR)
+      //   - female      → sex = 0 (canonical, not sextype text)
+      //   - pregnant    → is_pregnancy = true (boolean cache, not status id)
+      //   - milking/dry → is_dry = false / true
+      const [t, h, w, d, p, ph, ins, fr] = await Promise.all([
+        head(supabase.from("cows")),
+        head(supabase.from("cows")).or(IN_HERD_OR),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", false),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_dry", true),
+        // «گاو آبستن» (kpi:pregnant) عمداً تلیسه‌ها را حذف می‌کند تا با KPI «تلیسه آبستن» جمع‌پذیر باشد:
+        //   pregnant_cows + pregnant_heifers = total_pregnant
+        // پس شرط اضافه‌ی last_birth_date IS NOT NULL یعنی فقط ماده‌هایی که قبلاً زاییده‌اند.
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).not("last_birth_date", "is", null),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true).is("last_birth_date", null),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 3),
+        head(supabase.from("cows")).or(IN_HERD_OR).eq("sex", 0).eq("last_fertility_status", 12),
+      ]);
+      if (cancelled) return;
+      setTotals({
+        total: t.count ?? 0,
+        in_herd: h.count ?? 0,
+        wet: w.count ?? 0,
+        dry: d.count ?? 0,
+        pregnant: p.count ?? 0,
+        pregnant_heifers: ph.count ?? 0,
+        inseminated: ins.count ?? 0,
+        fresh: fr.count ?? 0,
+      });
+    }
+    loadKpis();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Reset paging when filters change
+  useEffect(() => {
+    setCows([]);
+    setPage(0);
+    setHasMore(true);
+  }, [search, selectedKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!hasMore && page > 0) return;
+      setLoading(true);
+      let q = supabase
+        .from("cows")
+        .select(
+          // Include is_pregnancy + existancestatus + sex so we can render
+          // a debug badge row and verify no male / non-existing animals
+          // appear in the pregnant KPI click-through.
+          // Additional date/parity fields power the lifecycle state badge.
+          "id,tag_number,earnumber,bodynumber,sextype,sex,existancestatus,is_dry,is_pregnancy,last_fertility_status,date_of_birth,last_birth_date,last_inoculation_date,number_of_births,last_type_id,last_status_id,created_at",
+        )
+        .order("created_at", { ascending: false })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+
+      if (search) {
+        const n = Number(search);
+        q = q.or(
+          `tag_number.ilike.%${search}%,earnumber.eq.${Number.isFinite(n) ? n : 0},bodynumber.eq.${Number.isFinite(n) ? n : 0}`,
+        );
+      }
+
+      // Single shared filter pipeline — used by both quick chips and advanced
+      q = applyFilters(q, selected);
+
+      // KPI-specific chips that don't map to a single fertility status id.
+      // These must mirror the KPI count queries above so the resulting list
+      // contains exactly the cows that were counted on the tile.
+      if (selected.has("kpi:pregnant") || selected.has("kpi:heifer")) {
+        // پایه‌ی مشترک هر دو KPI: ماده‌ی موجود در گله و آبستن
+        q = q.or(IN_HERD_OR).eq("sex", 0).eq("is_pregnancy", true);
+        if (selected.has("kpi:heifer")) {
+          // تلیسه آبستن = هنوز هیچ زایشی ندارد
+          q = q.is("last_birth_date", null);
+        } else {
+          // گاو آبستن = حداقل یک زایش قبلی دارد (تلیسه‌ها را کنار می‌گذاریم)
+          q = q.not("last_birth_date", "is", null);
+        }
+      }
+
+      const { data, error } = await q;
+      if (cancelled) return;
+      if (error) { console.error(error); setLoading(false); return; }
+      const rows = (data ?? []) as Cow[];
+      setCows((prev) => (page === 0 ? rows : [...prev, ...rows]));
+      setHasMore(rows.length === PAGE_SIZE);
+      setLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [page, search, selectedKey, hasMore]);
+
+  // Manual pagination — no auto infinite scroll (improves LCP).
+  // The sentinel is kept for layout but only triggers when explicitly intersected
+  // after the user clicks "Load more". We removed the IntersectionObserver entirely.
+
+  const kpis = useMemo(() => ([
+    { id: "presence:in_herd", label: "موجود در گله", value: totals.in_herd,       image: kpiCowHerd,     accent: "hsl(127 58% 58%)" },
+    { id: "milking:wet",      label: "گاوهای دوشا",  value: totals.wet,           image: kpiCowMilking,  accent: "hsl(217 91% 60%)" },
+    { id: "milking:dry",      label: "گاوهای خشک",   value: totals.dry,           image: kpiCowDry,     accent: "hsl(38 92% 55%)" },
+    { id: "kpi:pregnant",     label: "گاوهای آبستن", value: totals.pregnant,      image: kpiCowPregnant, accent: "hsl(258 90% 66%)" },
+    { id: "kpi:heifer",       label: "تلیسه آبستن",  value: totals.pregnant_heifers, image: kpiCowPregnant, accent: "hsl(320 80% 60%)" },
+  ]), [totals]);
+
+  const selectedList = useMemo(
+    () => Array.from(selected).map((id) => ({ id, opt: getOption(id) })).filter((x) => x.opt),
+    [selectedKey],
+  );
+
+  const clearAll = () => setSelected(new Set());
+
+  return (
+    <div className="livestock-surface -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 space-y-4 animate-fade-in min-h-[calc(100vh-3.5rem)]">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-heading text-foreground">مدیریت دام</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            مجموع: <span className="tabular-nums font-semibold text-foreground">{totals.total.toLocaleString("fa-IR")}</span>
+          </p>
+        </div>
+        {/* Quick-access: open the Dry-Off Registration form */}
+        <Button
+          onClick={() => navigate("/livestock/dry-off/new")}
+          className="gap-2 bg-gradient-primary text-primary-foreground glow-primary"
+        >
+          <Droplet className="w-4 h-4" />
+          ثبت خشکی
+        </Button>
+      </div>
+
+      {/* KPI strip — image-rich enterprise tiles */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+        {kpis.map((k) => {
+          const active = selected.has(k.id);
+          return (
+            <button
+              key={k.id}
+              onClick={() => toggle(k.id)}
+              className={`kpi-tile group ${active ? "ring-2 ring-primary/40 border-primary/40" : ""}`}
+              style={active ? { boxShadow: `0 14px 40px -12px ${k.accent}` } : undefined}
+            >
+              <div className="flex items-start justify-between gap-2 relative z-10">
+                <div className="min-w-0 flex-1 text-right">
+                  <span className="kpi-label">{k.label}</span>
+                  <div className="kpi-value mt-1">{(k.value ?? 0).toLocaleString("fa-IR")}</div>
+                </div>
+                <img
+                  src={k.image}
+                  alt=""
+                  loading="lazy"
+                  className="w-14 h-14 sm:w-16 sm:h-16 object-contain shrink-0 -my-1 -mr-1 drop-shadow-[0_6px_18px_rgba(0,0,0,0.4)]"
+                />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sticky search */}
+      <div className="sticky top-14 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 backdrop-blur bg-background/80 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              inputMode="search"
+              placeholder="جستجوی فوری با شماره پلاک..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pr-9 pl-9 h-11 rounded-full bg-card"
+            />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput("")}
+                className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted"
+                aria-label="پاک کردن"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant={showAdvanced ? "default" : "outline"}
+            size="icon"
+            className="rounded-full h-11 w-11 shrink-0"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-label="فیلترهای پیشرفته"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Multi-select shortcut chips — horizontally scrollable on mobile */}
+        <div
+          className="chips-scroller"
+          dir="rtl"
+          role="listbox"
+          aria-label="فیلترهای سریع"
+        >
+          {QUICK_CHIPS.map((f) => {
+            const active = selected.has(f.id);
+            return (
+              <button
+                key={f.id}
+                onClick={() => toggle(f.id)}
+                aria-pressed={active}
+                role="option"
+                aria-selected={active}
+                className={`${active ? "chip-active" : "chip-default"} whitespace-nowrap`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected filter summary */}
+      {selectedList.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">فیلترهای فعال:</span>
+          {selectedList.map(({ id, opt }) => (
+            <button
+              key={id}
+              onClick={() => toggle(id)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs hover:bg-primary/15"
+            >
+              {opt!.label}
+              <X className="w-3 h-3" />
+            </button>
+          ))}
+          <button
+            onClick={clearAll}
+            className="text-xs text-muted-foreground hover:text-destructive underline-offset-2 hover:underline mr-1"
+          >
+            پاک کردن همه فیلترها
+          </button>
+        </div>
+      )}
+
+      {/* Advanced (collapsible, compact) */}
+      {showAdvanced && (
+        <div className="rounded-2xl border border-border bg-card p-3 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">وضعیت حضور</label>
+            <Select
+              value={presenceFilter}
+              onValueChange={(v) =>
+                setSingleInCategory("presence:", v === "all" ? null : presenceIdFromStatus(v))
+              }
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">همه</SelectItem>
+                {Object.entries(PRESENCE_STATUS_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">آخرین وضعیت باروری</label>
+            <Select
+              value={fertilityFilter}
+              onValueChange={(v) =>
+                setSingleInCategory("fertility:", v === "all" ? null : fertilityIdFromStatus(v))
+              }
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">همه</SelectItem>
+                {Object.entries(FERTILITY_STATUS_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Lifecycle multi-select — client-side filter on calculated state */}
+          <div className="sm:col-span-2">
+            <label className="text-xs text-muted-foreground mb-1 block">وضعیت چرخه دام</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-between font-normal">
+                  <span className="truncate text-sm">
+                    {lifecycleFilter.size === 0
+                      ? "همه"
+                      : `${lifecycleFilter.size.toLocaleString("fa-IR")} مورد انتخاب شده`}
+                  </span>
+                  <SlidersHorizontal className="w-4 h-4 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 max-h-[60vh] overflow-y-auto p-2" dir="rtl">
+                <div className="flex items-center justify-between px-2 py-1 mb-1">
+                  <span className="text-xs text-muted-foreground">انتخاب چندتایی</span>
+                  {lifecycleFilter.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setLifecycleFilter(new Set())}
+                      className="text-xs text-destructive hover:underline"
+                    >پاک‌سازی</button>
+                  )}
+                </div>
+                {ALL_LIFECYCLE_STATES.map((s) => (
+                  <label key={s} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                    <Checkbox
+                      checked={lifecycleFilter.has(s)}
+                      onCheckedChange={() => toggleLifecycle(s)}
+                    />
+                    <span>{LIFECYCLE_LABELS[s]}</span>
+                  </label>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+      )}
+
+      {/* Cow grid */}
+      <TooltipProvider delayDuration={250}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+        {cows
+          // Compute lifecycle once per row, then filter client-side.
+          // We keep this lightweight (pure function over already-loaded data).
+          .map((c) => ({ c, life: calculateLifecycleState(c) }))
+          .filter(({ life }) => lifecycleFilter.size === 0 || lifecycleFilter.has(life.state))
+          .map(({ c, life }) => {
+          const female = isFemale(c.sextype, c.sex);
+          const tag = c.tag_number || c.earnumber || c.bodynumber || "—";
+          return (
+            <button
+              key={c.id}
+              onClick={() => navigate(`/livestock/${c.id}`)}
+              className="cow-card group"
+            >
+              <div className="flex items-start gap-3">
+                <img
+                  src={cowImageFor(c)}
+                  alt=""
+                  loading="lazy"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 rounded-xl object-cover shrink-0 border border-border/60 shadow-md"
+                />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="cow-tag text-base">{tag}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {c.sextype || (c.sex === 0 ? "ماده" : c.sex === 1 ? "نر" : "—")}
+                    </span>
+                  </div>
+                  {/* Lifecycle badge — primary at-a-glance classification.
+                      Tooltip explains *why* this state was chosen so the
+                      operator can audit the calculation. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border ${life.badgeClass}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {life.label}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[260px] text-right" dir="rtl">
+                      <div className="font-semibold mb-1">{life.label}</div>
+                      <div className="text-xs opacity-80 mb-1">دلیل: {life.reason}</div>
+                      {import.meta.env.DEV && (
+                        <pre className="text-[10px] leading-tight opacity-70 whitespace-pre-wrap font-mono">
+{JSON.stringify(life.debug, null, 1)}
+                        </pre>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${presenceBadgeClass(c.existancestatus ?? 0)}`}>
+                      {presenceLabel(c.existancestatus ?? 0)}
+                    </span>
+                    {female && (
+                      <span className="text-xs px-2 py-0.5 rounded-full border"
+                      style={c.is_dry
+                        ? { color: "hsl(38 92% 70%)", borderColor: "hsl(38 92% 55% / 0.35)", background: "hsl(38 92% 55% / 0.12)" }
+                        : { color: "hsl(217 91% 75%)", borderColor: "hsl(217 91% 60% / 0.35)", background: "hsl(217 91% 60% / 0.12)" }}
+                      >
+                        {dryLabel(c.is_dry)}
+                      </span>
+                    )}
+                    {female && c.last_fertility_status != null && (
+                      <span className="text-xs px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">
+                        {fertilityLabel(c.last_fertility_status)}
+                      </span>
+                    )}
+                    {/* Debug badges for the pregnant KPI click-through so the
+                        user can visually verify that every row in the list
+                        satisfies sex=0, existancestatus=0, is_pregnancy=true
+                        (i.e. the SAME WHERE used by the KPI count). */}
+                    {(selected.has("kpi:pregnant") || selected.has("kpi:heifer")) && (
+                      <>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          sex={c.sex ?? "—"}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          presence_status={c.existancestatus ?? "null"}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-background/60 text-muted-foreground font-mono">
+                          is_pregnancy={String(c.is_pregnancy)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <ChevronLeft className="w-5 h-5 text-muted-foreground shrink-0 mt-1 group-hover:text-primary transition-colors" />
+              </div>
+            </button>
+          );
+        })}
+
+        {loading && (
+          <div className="col-span-full flex items-center justify-center py-6 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        )}
+
+        {!loading && cows.length === 0 && (
+          <div className="col-span-full text-center py-12 text-muted-foreground text-sm">
+            دامی با این فیلترها یافت نشد
+          </div>
+        )}
+
+        <div ref={sentinelRef} className="col-span-full h-2" />
+        {!loading && hasMore && cows.length > 0 && (
+          <div className="col-span-full flex justify-center py-3">
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-full px-6"
+            >
+              نمایش بیشتر
+            </Button>
+          </div>
+        )}
+        {!hasMore && cows.length > 0 && (
+          <p className="col-span-full text-center text-xs text-muted-foreground py-2">پایان لیست</p>
+        )}
+      </div>
+      </TooltipProvider>
+    </div>
+  );
+}

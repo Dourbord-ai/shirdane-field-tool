@@ -1,0 +1,888 @@
+// Edge function: full timeline-based validation for a fertility operation.
+// Returns { allowed: boolean, messages: string[], debug?: any }.
+//
+// Modes:
+//   mode = "insert" (default) — simulate adding a new event
+//   mode = "update"           — replace event with id = event_id
+//   mode = "delete"           — remove event with id = event_id
+//
+// Body:
+// {
+//   cow_id: number,
+//   fertility_operation_id: number,   // operation being checked
+//   event_date: string (YYYY-MM-DD),  // date of the simulated event
+//   fertility_status_id?: number,
+//   mode?: "insert" | "update" | "delete",
+//   event_id?: string,                // required for update/delete
+//   debug?: boolean
+// }
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+// Operation IDs (must mirror fertility_operations table)
+const OP = {
+  Erotic: 1,
+  Inoculation: 2,
+  Pregnancy1: 3,
+  Pregnancy2: 4,
+  Abortion: 5,
+  Birth: 6,
+  Dry: 7,
+  Rinse: 8,
+  CleanTest: 10,
+  Pregnancy3: 11,
+  Pregnancy4: 12,
+  Sync: 13,
+} as const;
+
+const FEMALE_ONLY_OPS = new Set<number>([
+  OP.Erotic, OP.Inoculation, OP.Pregnancy1, OP.Pregnancy2, OP.Abortion,
+  OP.Birth, OP.Dry, OP.Rinse, OP.CleanTest, OP.Pregnancy3, OP.Pregnancy4, OP.Sync,
+]);
+
+// Single source of truth for cow sex in this project (verified against DB):
+//   cows.sex = 0  ⇔  sextype = "ماده"  (female)
+//   cows.sex = 1  ⇔  sextype = "نر"    (male)
+// sextype is the human label and may be NULL; sex is the canonical numeric field.
+function isFemaleCow(sex: unknown, sextype?: unknown): boolean {
+  if (sex === 0 || sex === "0") return true;
+  if (sex === 1 || sex === "1") return false;
+  const st = String(sextype ?? "").trim();
+  if (st === "ماده") return true;
+  if (st === "نر") return false;
+  return false;
+}
+
+function normalizeTime(t: unknown): string {
+  if (!t) return "00:00:00";
+  return String(t).slice(0, 8);
+}
+
+function eventTimestampKey(e: { event_date: string | null; event_time: string | null }): string {
+  return `${e.event_date ?? "0000-00-00"}T${normalizeTime(e.event_time)}`;
+}
+
+interface Body {
+  cow_id?: number;
+  livestock_id?: number;
+  fertility_operation_id?: number;
+  event_date?: string;
+  event_time?: string | null;
+  result_code?: string | null;
+  fertility_status_id?: number | null;
+  mode?: "insert" | "update" | "delete";
+  event_id?: string;
+  debug?: boolean;
+}
+
+// ---------- Date helpers — unified to Unix-epoch days ----------
+// Convert Jalali (Shamsi) y/m/d to Gregorian {year, month, day}
+function jalaliToGregorian(jy: number, jm: number, jd: number): { year: number; month: number; day: number } {
+  let jy2 = jy + 1595;
+  let days =
+    -355668 +
+    365 * jy2 +
+    Math.floor(jy2 / 33) * 8 +
+    Math.floor(((jy2 % 33) + 3) / 4) +
+    jd +
+    (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+  let gy = 400 * Math.floor(days / 146097);
+  days %= 146097;
+  if (days > 36524) {
+    gy += 100 * Math.floor(--days / 36524);
+    days %= 36524;
+    if (days >= 365) days++;
+  }
+  gy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) {
+    gy += Math.floor((days - 1) / 365);
+    days = (days - 1) % 365;
+  }
+  let gd = days + 1;
+  const sal_a = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gm = 0;
+  for (gm = 0; gm < 13 && gd > sal_a[gm]; gm++) gd -= sal_a[gm];
+  return { year: gy, month: gm, day: gd };
+}
+
+function gregorianDateToDays(y: number, m: number, d: number): number {
+  return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+}
+
+// Unified parser: ALWAYS returns Unix-epoch days regardless of calendar.
+function parseDateToDays(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const datePart = String(s).trim().split(/[ T]/)[0];
+  const m = datePart.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (y >= 1300 && y <= 1500) {
+    const g = jalaliToGregorian(y, mo, d);
+    return gregorianDateToDays(g.year, g.month, g.day);
+  }
+  if (y > 1900) {
+    return gregorianDateToDays(y, mo, d);
+  }
+  return null;
+}
+
+interface FertilityEvent {
+  id: string;
+  livestock_id: number;
+  fertility_operation_id: number | null;
+  fertility_status_id: number | null;
+  event_date: string | null;
+  event_time: string | null;
+  is_cancelled: boolean;
+  metadata: Record<string, unknown>;
+}
+
+interface FertilityStatus {
+  id: number;
+  name: string;
+  pregnancy_state: string; // pregnant | open | suspect | unknown
+  milking_state: string;   // dry | milking | unknown
+  is_abortion: boolean;
+}
+
+interface Workflow {
+  id: string;
+  name: string;
+  category: number; // 0 all, 1 cow, 2 heifer, 3 male
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+}
+
+interface Rule {
+  id: string;
+  workflow_id: string;
+  fertility_operation_id: number;
+  title: string;
+  is_active: boolean;
+  duration_of_credit: number | null;
+  alert_enabled: boolean;
+}
+
+interface Condition {
+  id: string;
+  rule_id: string;
+  condition_type: string;
+  min_value: number | null;
+  max_value: number | null;
+  bool_value: boolean | null;
+  text_value: string | null;
+  extra_json: Record<string, unknown>;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // ============================================================
+  // TEMPORARY BYPASS — DISABLE_FERTILITY_VALIDATION env flag.
+  // While set to "true" (default during the migration/data-fix
+  // phase), this function short-circuits and returns allowed=true
+  // without running any validation. The full validation logic
+  // below is intentionally preserved; flip the env var to "false"
+  // to restore normal behaviour.
+  // ============================================================
+  const bypassFlag = Deno.env.get("DISABLE_FERTILITY_VALIDATION") ?? "true";
+  if (bypassFlag !== "false") {
+    console.warn(
+      "[check-fertility-operation] BYPASSED — DISABLE_FERTILITY_VALIDATION env flag is ON. No validation executed.",
+    );
+    return json({
+      allowed: true,
+      messages: [],
+      matched_rule_id: null,
+      failed_rules: [],
+      bypassed: true,
+    });
+  }
+
+
+  try {
+    const body = (await req.json()) as Body;
+    const cow_id = Number(body.cow_id ?? body.livestock_id);
+    let op_id = Number(body.fertility_operation_id);
+    let event_date = body.event_date;
+    let event_time = body.event_time ?? null;
+    const mode = body.mode ?? "insert";
+    const debug = !!body.debug;
+
+    if (mode === "delete") {
+      if (!cow_id || !body.event_id) {
+        return json({ allowed: false, messages: ["برای حذف، شناسه دام و شناسه رویداد الزامی است"] }, 400);
+      }
+    } else {
+      if (!cow_id || !op_id || !event_date) {
+        return json({ allowed: false, messages: ["اطلاعات ورودی ناقص است"] }, 400);
+      }
+      if (mode === "update" && !body.event_id) {
+        return json({ allowed: false, messages: ["شناسه رویداد برای ویرایش الزامی است"] }, 400);
+      }
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const messages: string[] = [];
+
+    // --- 1) Cow basic checks
+    let cow: any = null;
+    let cowErr: any = null;
+    {
+      const r = await supabase
+        .from("cows")
+        .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+        .eq("id", cow_id)
+        .maybeSingle();
+      if (r.error) {
+        const r2 = await supabase
+          .from("cows")
+          .select("id, sex, sextype, existancestatus, last_type_id, is_dry, purchase_date, date_of_birth, pre_entry_birth_date, pre_entry_abortion_date, pre_entry_dry_date, pre_entry_period, last_out_birth_date, last_out_abortion_date, last_out_dry_date, last_out_period")
+          .eq("id", cow_id)
+          .maybeSingle();
+        cow = r2.data; cowErr = r2.error;
+      } else {
+        cow = r.data; cowErr = r.error;
+      }
+    }
+    if (cowErr) return json({ allowed: false, messages: ["خطا در بازیابی اطلاعات دام"] }, 500);
+    if (!cow) return json({ allowed: false, messages: ["دام یافت نشد"] });
+    // Single source of truth for "in herd": existancestatus IS NULL or = 0.
+    // (1=sold, 2=died, 3=slaughtered, 4=other_exit are NOT in herd.)
+    const existance = (cow as any).existancestatus;
+    const presentInHerd = existance == null || existance === 0;
+    if (!presentInHerd) {
+      return json({
+        allowed: false,
+        messages: ["این دام در گله موجود نیست و نمی‌توان عملیات باروری ثبت کرد"],
+        ...(debug ? { debug: { cow_id, existancestatus: existance } } : {}),
+      });
+    }
+    if (FEMALE_ONLY_OPS.has(op_id) && !isFemaleCow(cow.sex, cow.sextype)) {
+      return json({
+        allowed: false,
+        messages: ["این عملیات فقط برای دام ماده مجاز است"],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: { cow_id, cow_sex: cow.sex, cow_sextype: cow.sextype, existancestatus: cow.existancestatus } } : {}),
+      });
+    }
+
+    // Determine workflow by livestock type group_id
+    let selected_workflow_id: string | null = null;
+    let group_id_val: number | null = null;
+    if (cow.last_type_id != null) {
+      const { data: typeRow } = await supabase
+        .from("livestock_types")
+        .select("id, group_id, name")
+        .eq("id", cow.last_type_id)
+        .maybeSingle();
+      group_id_val = (typeRow as any)?.group_id ?? null;
+    }
+    if (group_id_val === 2) {
+      selected_workflow_id = "00000000-0000-0000-0000-000000000012";
+    } else if (group_id_val === 6) {
+      selected_workflow_id = "00000000-0000-0000-0000-000000000013";
+    } else {
+      return json({
+        allowed: false,
+        messages: ["این نوع دام مشمول فرآیند باروری نیست"],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: { cow_id, last_type_id: cow.last_type_id, group_id: group_id_val } } : {}),
+      });
+    }
+
+    // --- 2) Load reference data
+    const [statusesRes, eventsRes] = await Promise.all([
+      supabase.from("fertility_statuses").select("id, name, pregnancy_state, milking_state, is_abortion"),
+      supabase
+        .from("livestock_fertility_events")
+        .select("id, livestock_id, fertility_operation_id, fertility_status_id, event_date, event_time, is_cancelled, metadata")
+        .eq("livestock_id", cow_id)
+        .eq("is_cancelled", false)
+        .order("event_date", { ascending: true })
+        .order("event_time", { ascending: true }),
+    ]);
+
+    if (statusesRes.error || eventsRes.error) {
+      return json({ allowed: false, messages: ["خطا در بازیابی داده‌های مرجع"] }, 500);
+    }
+
+    const statuses: FertilityStatus[] = (statusesRes.data ?? []) as FertilityStatus[];
+    const statusById = new Map(statuses.map((s) => [s.id, s]));
+
+    let timeline: FertilityEvent[] = (eventsRes.data ?? []) as FertilityEvent[];
+
+    // For delete mode: derive op_id / event_date from the existing event
+    if (mode === "delete") {
+      const existing = timeline.find((e) => e.id === body.event_id);
+      if (!existing) {
+        return json({ allowed: false, messages: ["رویداد موردنظر برای حذف یافت نشد"] }, 404);
+      }
+      op_id = existing.fertility_operation_id ?? op_id;
+      event_date = existing.event_date ?? event_date;
+      event_time = existing.event_time ?? event_time;
+    }
+
+    // --- 3) Simulate the new event into the timeline
+    const simulated: FertilityEvent = {
+      id: body.event_id ?? "__simulated__",
+      livestock_id: cow_id,
+      fertility_operation_id: op_id,
+      fertility_status_id: body.fertility_status_id ?? null,
+      event_date: event_date!,
+      event_time: normalizeTime(event_time ?? "00:00:00"),
+      is_cancelled: false,
+      metadata: {},
+    };
+
+    if (mode === "delete") {
+      timeline = timeline.filter((e) => e.id !== body.event_id);
+    } else if (mode === "update") {
+      timeline = timeline.filter((e) => e.id !== body.event_id);
+      timeline.push(simulated);
+    } else {
+      // insert: duplicate same op same date+time => block
+      const dup = timeline.some(
+        (e) =>
+          e.fertility_operation_id === op_id &&
+          e.event_date === event_date &&
+          normalizeTime(e.event_time) === normalizeTime(event_time ?? "00:00:00"),
+      );
+      if (dup) {
+        return json({ allowed: false, messages: ["این عملیات قبلاً برای این دام در همین تاریخ و ساعت ثبت شده است"] });
+      }
+      timeline.push(simulated);
+    }
+
+    timeline.sort((a, b) => {
+      const ka = eventTimestampKey(a);
+      const kb = eventTimestampKey(b);
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+
+    // --- 3.5) Load latest weight (best-effort; table may not exist)
+    let weightVal: number | null = null;
+    try {
+      const { data: weightRow } = await supabase
+        .from("livestock_physical_records" as any)
+        .select("weight, record_date")
+        .eq("livestock_id", cow_id)
+        .lte("record_date", event_date)
+        .order("record_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      weightVal = (weightRow as any)?.weight ?? null;
+    } catch {
+      weightVal = null;
+    }
+
+    // --- 4) Build context up to (and including) the simulated event date
+    const ctx = buildContext(timeline, simulated, statusById, cow);
+    ctx.weight = weightVal;
+
+    // --- 5) Load the selected workflow only
+    const { data: wfRows, error: wfErr } = await supabase
+      .from("breeding_workflows")
+      .select("id, name, category, start_date, end_date, is_active")
+      .eq("id", selected_workflow_id);
+    if (wfErr) return json({ allowed: false, messages: ["خطا در بازیابی ورکفلوها"] }, 500);
+
+    const allWorkflows: Workflow[] = (wfRows ?? []) as Workflow[];
+
+    const debugPayload = () => {
+      const parsed_birth_days = parseDateToDays(ctx.date_of_birth);
+      const parsed_event_days = parseDateToDays(ctx.event_date);
+      const calculated_age_days =
+        parsed_birth_days != null && parsed_event_days != null
+          ? parsed_event_days - parsed_birth_days
+          : null;
+      return {
+        cow_id,
+        op_id,
+        event_date: ctx.event_date,
+        event_time: simulated.event_time,
+        cow_date_of_birth: ctx.date_of_birth,
+        parsed_birth_days,
+        parsed_event_days,
+        calculated_age_days,
+        history_count: ctx.history.length,
+        history_events: ctx.history.map((e) => ({
+          id: e.id,
+          operation_id: e.fertility_operation_id,
+          status_id: e.fertility_status_id,
+          event_date: e.event_date,
+          event_time: e.event_time,
+        })),
+        lastErotic: ctx.lastErotic,
+        lastInoculation: ctx.lastInoculation,
+        lastSync: ctx.lastSync,
+        lastBirth: ctx.lastBirth,
+        lastFertilityStatus: ctx.lastFertilityStatus,
+        pregnancy_state: ctx.pregnancy_state,
+        milking_state: ctx.milking_state,
+      };
+    };
+    console.log("[check-fertility-operation] debug", debugPayload());
+
+    if (allWorkflows.length === 0) {
+      return json({
+        allowed: false,
+        messages: ["ورکفلو باروری این نوع دام تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
+      });
+    }
+
+    const workflows = allWorkflows.filter((w) => w.is_active);
+    if (workflows.length === 0) {
+      return json({
+        allowed: false,
+        messages: ["ورکفلو باروری این نوع دام فعال نیست."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
+      });
+    }
+
+    // --- 6) Load rules + conditions for this op across these workflows
+    const wfIds = workflows.map((w) => w.id);
+    const { data: ruleRows, error: ruleErr } = await supabase
+      .from("breeding_workflow_rules")
+      .select("id, workflow_id, fertility_operation_id, title, is_active, duration_of_credit, alert_enabled")
+      .in("workflow_id", wfIds)
+      .eq("fertility_operation_id", op_id)
+      .eq("is_active", true);
+    if (ruleErr) return json({ allowed: false, messages: ["خطا در بازیابی قواعد"] }, 500);
+
+    const rules: Rule[] = (ruleRows ?? []) as Rule[];
+
+    if (rules.length === 0) {
+      return json({
+        allowed: false,
+        messages: ["برای این عملیات در ورکفلو این دام قانون فعالی تعریف نشده است."],
+        matched_rule_id: null,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
+      });
+    }
+
+    const ruleIds = rules.map((r) => r.id);
+    const { data: condRows, error: condErr } = await supabase
+      .from("breeding_workflow_rule_conditions")
+      .select("id, rule_id, condition_type, min_value, max_value, bool_value, text_value, extra_json")
+      .in("rule_id", ruleIds);
+    if (condErr) return json({ allowed: false, messages: ["خطا در بازیابی شرایط قواعد"] }, 500);
+
+    const conditionsByRule = new Map<string, Condition[]>();
+    for (const c of (condRows ?? []) as Condition[]) {
+      const arr = conditionsByRule.get(c.rule_id) ?? [];
+      arr.push(c);
+      conditionsByRule.set(c.rule_id, arr);
+    }
+
+    // --- 7) Evaluate rules: rules = OR, conditions inside a rule = AND
+    let matchedRuleId: string | null = null;
+    const failedRules: Array<{ rule_id: string; title: string; reasons: string[] }> = [];
+
+    for (const rule of rules) {
+      const ruleConds = conditionsByRule.get(rule.id) ?? [];
+      let allOk = true;
+      const reasons: string[] = [];
+      for (const cond of ruleConds) {
+        const res = evaluateCondition(cond, ctx);
+        if (!res.ok) {
+          allOk = false;
+          reasons.push(res.message);
+        }
+      }
+      if (allOk) {
+        matchedRuleId = rule.id;
+        break;
+      } else {
+        failedRules.push({ rule_id: rule.id, title: rule.title, reasons });
+      }
+    }
+
+    if (matchedRuleId) {
+      messages.push("عملیات مطابق قواعد ورکفلو مجاز است");
+      return json({
+        allowed: true,
+        messages,
+        matched_rule_id: matchedRuleId,
+        failed_rules: [],
+        ...(debug ? { debug: debugPayload() } : {}),
+      });
+    }
+
+    return json({
+      allowed: false,
+      messages: [
+        "هیچ‌یک از قواعد ورکفلو برای این عملیات برقرار نیست:",
+        ...failedRules.map((f) => `«${f.title}»: ${f.reasons.join(" و ")}`),
+      ],
+      matched_rule_id: null,
+      failed_rules: failedRules,
+      ...(debug ? { debug: debugPayload() } : {}),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "خطای نامشخص";
+    return json({ allowed: false, messages: [msg] }, 500);
+  }
+});
+
+// ============================================================================
+// Context building
+// ============================================================================
+
+interface CowCtx {
+  id: number;
+  sex: number | null;
+  is_dry: boolean | null;
+  purchase_date: string | null;
+}
+
+interface Context {
+  cow: CowCtx;
+  event_date: string;
+  daysSince: (d: string | null | undefined) => number | null;
+  daysBetween: (a: string, b: string) => number;
+
+  // Last events
+  lastFertilityStatus: FertilityStatus | null;
+  lastErotic: FertilityEvent | null;
+  lastInoculation: FertilityEvent | null;
+  lastPregnancyCheck: FertilityEvent | null;
+  lastBirth: FertilityEvent | null;
+  lastSync: FertilityEvent | null;
+  lastAbortion: FertilityEvent | null;
+  lastDry: FertilityEvent | null;
+
+  // Derived
+  pregnancy_state: string; // pregnant | open | suspect | unknown
+  milking_state: string;   // dry | milking | unknown
+  pregnancyDays: number | null;
+  dateOfPregnancy: string | null;
+
+  // Optional / not available in this DB
+  weight: number | null;
+  milkAvg: number | null;
+  date_of_birth: string | null;
+
+  // Whole timeline (up to the event being evaluated, inclusive)
+  history: FertilityEvent[];
+}
+
+function buildContext(
+  timeline: FertilityEvent[],
+  simulated: FertilityEvent,
+  statusById: Map<number, FertilityStatus>,
+  cow: { id: number; sex: number | null; is_dry: boolean | null; purchase_date: string | null },
+): Context {
+  const evDate = simulated.event_date!;
+  // History = events strictly before the simulated event datetime.
+  // Same-datetime events are excluded to avoid circular validation.
+  const simKey = eventTimestampKey(simulated);
+  const history = timeline.filter((e) => {
+    if (!e.event_date) return false;
+    if (e.id === simulated.id) return false;
+    return eventTimestampKey(e) < simKey;
+  });
+
+  const findLastByOps = (ops: number[]) => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const ev = history[i];
+      if (ev.fertility_operation_id != null && ops.includes(ev.fertility_operation_id)) return ev;
+    }
+    return null;
+  };
+
+  const lastErotic = findLastByOps([OP.Erotic]);
+  const lastInoculation = findLastByOps([OP.Inoculation]);
+  const lastPregnancyCheck = findLastByOps([OP.Pregnancy1, OP.Pregnancy2, OP.Pregnancy3, OP.Pregnancy4]);
+  const cowAny = cow as any;
+  const baselineEvent = (date: string | null | undefined, op: number): FertilityEvent | null =>
+    date ? { id: "__pre_entry__", livestock_id: cow.id, fertility_operation_id: op, fertility_status_id: null, event_date: date, event_time: null, is_cancelled: false, metadata: { pre_entry: true } } : null;
+  const lastBirth = findLastByOps([OP.Birth])
+    ?? baselineEvent(cowAny.pre_entry_birth_date ?? cowAny.last_out_birth_date, OP.Birth);
+  const lastSync = findLastByOps([OP.Sync]);
+  const lastAbortion = findLastByOps([OP.Abortion])
+    ?? baselineEvent(cowAny.pre_entry_abortion_date ?? cowAny.last_out_abortion_date, OP.Abortion);
+  const lastDry = findLastByOps([OP.Dry])
+    ?? baselineEvent(cowAny.pre_entry_dry_date ?? cowAny.last_out_dry_date, OP.Dry);
+
+  // Last status: derived from timeline events strictly before the simulated event.
+  // Walk backward through history; the most recent meaningful event wins:
+  //   1) If the event has an explicit fertility_status_id, use it.
+  //   2) Else, infer an implicit status from its operation (Erotic→فحل شده, etc.)
+  // Only fall back to "بدون وضعیت" (id=1) if no meaningful prior event exists.
+  // IMPORTANT: do NOT read cows.last_fertility_status — timeline is the source of truth.
+  const OP_IMPLIED_STATUS: Record<number, number> = {
+    [OP.Erotic]: 2,        // فحل شده
+    [OP.Inoculation]: 3,   // تلقیح شده
+    [OP.Abortion]: 9,      // سقط کرده
+    [OP.Birth]: 12,        // تازه زا
+    [OP.Dry]: 10,          // باز خشک
+    [OP.Rinse]: 14,        // شستشو شده
+    [OP.CleanTest]: 15,    // کلین تست مثبت
+    [OP.Sync]: 21,         // همزمان سازی فحلی
+  };
+  let lastFertilityStatus: FertilityStatus | null = null;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const ev = history[i];
+    const sid = ev.fertility_status_id;
+    if (sid != null) {
+      const s = statusById.get(sid);
+      if (s) { lastFertilityStatus = s; break; }
+    }
+    const opId = ev.fertility_operation_id;
+    if (opId != null && OP_IMPLIED_STATUS[opId] != null) {
+      const implied = statusById.get(OP_IMPLIED_STATUS[opId]);
+      if (implied) { lastFertilityStatus = implied; break; }
+    }
+  }
+  if (!lastFertilityStatus) {
+    lastFertilityStatus = statusById.get(1) ?? null;
+  }
+
+  const pregnancy_state = lastFertilityStatus?.pregnancy_state ?? "unknown";
+  const milking_state = lastFertilityStatus?.milking_state ?? (cow.is_dry ? "dry" : "unknown");
+
+  // pregnancyDays: days since last positive insemination if currently pregnant
+  let pregnancyDays: number | null = null;
+  let dateOfPregnancy: string | null = null;
+  if (pregnancy_state === "pregnant" && lastInoculation?.event_date) {
+    // ensure no birth/abortion happened after that insemination
+    const inocDay = parseDateToDays(lastInoculation.event_date);
+    const after = history.filter((e) => {
+      const eventDay = parseDateToDays(e.event_date);
+      return (
+        eventDay != null &&
+        inocDay != null &&
+        eventDay > inocDay &&
+        (e.fertility_operation_id === OP.Birth || e.fertility_operation_id === OP.Abortion)
+      );
+    });
+    if (after.length === 0) {
+      dateOfPregnancy = lastInoculation.event_date;
+      pregnancyDays = daysBetween(lastInoculation.event_date!, evDate);
+    }
+  }
+
+  const daysSince = (d: string | null | undefined): number | null => {
+    if (!d) return null;
+    return daysBetween(d, evDate);
+  };
+
+  return {
+    cow,
+    event_date: evDate,
+    daysSince,
+    daysBetween,
+    lastFertilityStatus,
+    lastErotic,
+    lastInoculation,
+    lastPregnancyCheck,
+    lastBirth,
+    lastSync,
+    lastAbortion,
+    lastDry,
+    pregnancy_state,
+    milking_state,
+    pregnancyDays,
+    dateOfPregnancy,
+    weight: null,
+    milkAvg: null,
+    date_of_birth: (cow as any)?.date_of_birth ?? null,
+    history,
+  };
+}
+
+function inferCategory(
+  cow: { sex: number | null },
+  ctx: Context,
+): number {
+  // 1 cow (دام شیری/زایش‌کرده), 2 heifer (تلیسه), 3 male
+  if (cow.sex === 2) return 3;
+  if (ctx.lastBirth) return 1;
+  return 2;
+}
+
+// ============================================================================
+// Condition evaluation
+// ============================================================================
+
+interface EvalResult {
+  ok: boolean;
+  message: string;
+}
+
+function evaluateCondition(c: Condition, ctx: Context): EvalResult {
+  switch (c.condition_type) {
+    case "Weight": {
+      if (ctx.weight == null) {
+        return { ok: false, message: "اطلاعات وزن برای این دام ثبت نشده است" };
+      }
+      return evalRange(ctx.weight, c, "وزن", "کیلوگرم", true);
+    }
+    case "MilkRecord":
+      return evalRange(ctx.milkAvg, c, "میانگین رکورد شیر", "کیلوگرم", true);
+    case "PregnancyDays":
+      return evalRange(ctx.pregnancyDays, c, "روزهای آبستنی", "روز", false);
+    case "FertilityStatus": {
+      const wanted = parseIdList(
+        c.text_value,
+        (c.extra_json as any)?.status_ids ?? (c.extra_json as any)?.ids ?? (c.extra_json as any)?.ConditionFertilityStatusId,
+      );
+      const cur = ctx.lastFertilityStatus?.id ?? null;
+      if (wanted.length === 0) return { ok: true, message: "" };
+      if (cur != null && wanted.includes(cur)) return { ok: true, message: "" };
+      return { ok: false, message: `وضعیت باروری فعلی (${ctx.lastFertilityStatus?.name ?? "نامشخص"}) مجاز نیست` };
+    }
+    case "Sync": {
+      const lastSync = ctx.lastSync;
+      const lastStatusId = ctx.lastFertilityStatus?.id ?? null;
+      if (c.bool_value === true) {
+        if (!lastSync) {
+          return { ok: false, message: "هیچ همزمان‌سازی قبلی ثبت نشده است" };
+        }
+        if (lastStatusId !== 21) {
+          return { ok: false, message: "دام در وضعیت مجاز برای سینک نیست" };
+        }
+        return { ok: true, message: "" };
+      }
+      const days = ctx.daysSince(lastSync?.event_date);
+      return evalDaysSinceOrBool(days, c, "همزمان‌سازی فحلی");
+    }
+    case "Erotic":
+      return evalDaysSinceOrBool(ctx.daysSince(ctx.lastErotic?.event_date), c, "فحلی");
+    case "Inoculation":
+      return evalDaysSinceOrBool(ctx.daysSince(ctx.lastInoculation?.event_date), c, "تلقیح");
+    case "Birth":
+      return evalDaysSinceOrBool(ctx.daysSince(ctx.lastBirth?.event_date), c, "زایش");
+    case "DateOfBirth":
+      return evalRange(ctx.daysSince(ctx.date_of_birth), c, "سن دام", "روز", true);
+    case "DateOfPregnancy":
+      return evalRange(ctx.daysSince(ctx.dateOfPregnancy), c, "روزهای آبستنی", "روز", false);
+    case "IsPregnancy": {
+      const want = c.bool_value ?? true;
+      const isPreg = ctx.pregnancy_state === "pregnant";
+      if (isPreg === want) return { ok: true, message: "" };
+      return { ok: false, message: want ? "دام آبستن نیست" : "دام آبستن است" };
+    }
+    case "IsDry": {
+      const want = c.bool_value ?? true;
+      const isDry = ctx.milking_state === "dry";
+      if (isDry === want) return { ok: true, message: "" };
+      return { ok: false, message: want ? "دام خشک نیست" : "دام خشک است" };
+    }
+    default:
+      // Unknown condition types do not block
+      return { ok: true, message: "" };
+  }
+}
+
+function evalRange(
+  value: number | null,
+  c: Condition,
+  label: string,
+  unit: string,
+  warnIfNull: boolean,
+): EvalResult {
+  if (value == null) {
+    // Data missing — be permissive but warn via the rule message path.
+    return warnIfNull
+      ? { ok: false, message: `${label} برای این دام در دسترس نیست` }
+      : { ok: false, message: `${label} قابل محاسبه نیست` };
+  }
+  if (c.min_value != null && value < Number(c.min_value)) {
+    return { ok: false, message: `${label} (${value} ${unit}) کمتر از حد مجاز ${c.min_value} است` };
+  }
+  if (c.max_value != null && value > Number(c.max_value)) {
+    return { ok: false, message: `${label} (${value} ${unit}) بیشتر از حد مجاز ${c.max_value} است` };
+  }
+  return { ok: true, message: "" };
+}
+
+function evalDaysSinceOrBool(
+  daysSince: number | null,
+  c: Condition,
+  label: string,
+): EvalResult {
+  // bool mode: must have happened (true) or must NOT have happened (false)
+  if (c.bool_value != null && c.min_value == null && c.max_value == null) {
+    const happened = daysSince != null;
+    if (happened === c.bool_value) return { ok: true, message: "" };
+    return {
+      ok: false,
+      message: c.bool_value
+        ? `${label} قبلاً ثبت نشده است`
+        : `${label} قبلاً ثبت شده و مجاز نیست`,
+    };
+  }
+  // window mode: require min/max days since last occurrence
+  if (daysSince == null) {
+    return { ok: false, message: `${label} قبلی برای این دام ثبت نشده است` };
+  }
+  if (c.min_value != null && daysSince < Number(c.min_value)) {
+    return { ok: false, message: `از آخرین ${label} فقط ${daysSince} روز گذشته (حداقل ${c.min_value} روز نیاز است)` };
+  }
+  if (c.max_value != null && daysSince > Number(c.max_value)) {
+    return { ok: false, message: `از آخرین ${label} ${daysSince} روز گذشته (حداکثر مجاز ${c.max_value} روز است)` };
+  }
+  return { ok: true, message: "" };
+}
+
+function parseIdList(text: string | null, extra: unknown): number[] {
+  const out: number[] = [];
+  const pushAll = (val: unknown) => {
+    if (val == null) return;
+    if (Array.isArray(val)) {
+      for (const v of val) {
+        const n = Number(v);
+        if (Number.isFinite(n)) out.push(n);
+      }
+    } else if (typeof val === "string") {
+      for (const part of val.split(/[,\-\s]+/)) {
+        const n = Number(part.trim());
+        if (Number.isFinite(n)) out.push(n);
+      }
+    } else if (typeof val === "number") {
+      if (Number.isFinite(val)) out.push(val);
+    }
+  };
+  pushAll(extra);
+  pushAll(text);
+  return out;
+}
+
+function daysBetween(a: string, b: string): number {
+  const da = parseDateToDays(a);
+  const db = parseDateToDays(b);
+  if (da == null || db == null) return 0;
+  return db - da;
+}
+
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
