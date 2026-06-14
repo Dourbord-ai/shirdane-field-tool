@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import DatePicker from "@/components/DatePicker";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FertilityBreadcrumb from "@/components/reports/FertilityBreadcrumb";
@@ -158,10 +159,14 @@ export default function FertilityHerdPerformance() {
           <Select value={groupId} onValueChange={setGroupId}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">همه گروه‌ها</SelectItem>
-              {refs.locations.map((l) => (
-                <SelectItem key={l.id} value={String(l.id)}>{l.name ?? `#${l.id}`}</SelectItem>
-              ))}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">از تاریخ</Label>
+          <DatePicker value={fromDate} onChange={(v) => setFromDate(v ?? isoDate(ninetyDaysAgo()))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">تا تاریخ</Label>
+          <DatePicker value={toDate} onChange={(v) => setToDate(v ?? isoDate(today()))} />
+        </div>
             </SelectContent>
           </Select>
         </div>
