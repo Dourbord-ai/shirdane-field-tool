@@ -1,0 +1,7 @@
+src/pages/Invoices.tsx merge=ours
+src/components/factors/AmendmentPanel.tsx merge=ours
+src/components/finance/AmendmentItemsEditor.tsx merge=ours
+src/components/finance/AmendmentRequestDialog.tsx merge=ours
+src/lib/finance/amendment.ts merge=ours
+src/hooks/useFactorAmendment.ts merge=ours
+supabase/functions/factor-request-amendment/index.ts merge=ours
