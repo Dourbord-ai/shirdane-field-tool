@@ -82,8 +82,6 @@ async function fetchCows(): Promise<CowRow[]> {
   let from = 0;
   const all: CowRow[] = [];
   while (true) {
-    const { data, error } = await supabase
-      .from("cows")
       .select(
         "id, bodynumber, earnumber, tag_number, sex, sextype, existancestatus, presence_status, is_dry, is_pregnancy, number_of_births, date_of_birth, last_birth_date, last_pregnancy_date, last_abortion_date, last_fertility_status, last_location_id, last_sync_date",
       )
@@ -91,7 +89,7 @@ async function fetchCows(): Promise<CowRow[]> {
       .or("existancestatus.is.null,existancestatus.eq.0")
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
-
+    if (error) throw error;
     const rows = (data ?? []) as unknown as CowRow[];
     all.push(...rows);
     if (rows.length < PAGE) break;
