@@ -8,3 +8,4 @@ src/hooks/useFactorAmendment.ts merge=ours
 supabase/functions/factor-request-amendment/index.ts merge=ours
 src/integrations/supabase/client.ts merge=ours
 .env merge=ours
+src/components/finance/tabs/PaymentRequestsTab.tsx merge=ours

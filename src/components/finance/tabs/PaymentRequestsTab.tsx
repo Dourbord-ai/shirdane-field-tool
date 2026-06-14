@@ -1697,7 +1697,7 @@ function PRDetail({ pr, onClose }: { pr: PR; onClose: () => void }) {
               </>
             )}
           </div>
-              «خلاصه کل درخواست تسویه» — moved from the top of the modal
+          {/* «خلاصه کل درخواست تسویه» — moved from the top of the modal
               to the BOTTOM so the operator first sees per-item context
               (especially in the focused-item flow) and only afterwards the
               roll-up for the entire parent request. Visually separated
