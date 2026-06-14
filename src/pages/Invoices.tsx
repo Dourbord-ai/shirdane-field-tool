@@ -40,8 +40,6 @@ import InvoiceSettlementSummaryCard from "@/components/invoices/sections/Invoice
 import type { InvoiceLinkedSettlement } from "@/lib/finance/invoiceSettlementLink";
 // Phase 4 — generic rollback dialog for posted factors (admin/super_admin).
 import { RollbackButton } from "@/components/finance/RollbackConfirmDialog";
-import { AmendmentPanel } from "@/components/factors/AmendmentPanel";
-import AmendmentRequestDialog from "@/components/finance/AmendmentRequestDialog";
 
 interface FactorRow {
   id: string;
@@ -765,7 +763,6 @@ function InvoiceDetail({
   // card sets it via onLinkedChange; we read it to (a) hide the legacy
   // creation CTA inside RelatedCostsSection and (b) avoid showing two
   // entry points side-by-side.
-  const [amendmentOpen, setAmendmentOpen] = useState(false);
   const [linkedSettlement, setLinkedSettlement] = useState<InvoiceLinkedSettlement | null>(null);
 
   return (
@@ -1291,17 +1288,6 @@ function InvoiceDetail({
               takes over once the factor reaches the 'approved' bucket. */}
           {/* Recovery: surfaces when finance_party_id is NULL so the operator
               can repair pre-validation or imported factors and unblock posting. */}
-          <AmendmentPanel
-            factorId={factor.id}
-            onRequestAmendment={() => setAmendmentOpen(true)}
-          />
-          <AmendmentRequestDialog
-            open={amendmentOpen}
-            onOpenChange={setAmendmentOpen}
-            factorId={factor.id}
-            invoiceNumber={factor.invoice_number || "—"}
-            onSuccess={onChanged}
-          />
           <FixPartyPanel factor={factor} onChanged={onChanged} />
           <ApprovalPanel factor={factor} onChanged={onChanged} />
           <PostingPanel factor={factor} onChanged={onChanged} />

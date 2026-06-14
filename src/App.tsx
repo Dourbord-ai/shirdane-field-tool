@@ -38,6 +38,15 @@ import SyncTypesAdmin from "./pages/admin/SyncTypesAdmin";
 import SyncTypeDetailsAdmin from "./pages/admin/SyncTypeDetailsAdmin";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
+// Fertility settings (admin-managed thresholds) + Reproductive Action List
+// report. Routes live under /settings/fertility and /reports/fertility/...
+// per the approved spec.
+import FertilitySettings from "./pages/settings/FertilitySettings";
+import FertilityReports from "./pages/reports/FertilityReports";
+import FertilityActionList from "./pages/reports/FertilityActionList";
+import FertilityReportPlaceholder from "./components/reports/FertilityReportPlaceholder";
+import ReportCategoryPlaceholder from "./components/reports/ReportCategoryPlaceholder";
+import FertilityHerdPerformance from "./pages/reports/FertilityHerdPerformance";
 // Task 6 — Freight Trips (multi-invoice freight allocation). Lazy-static
 // imports keep the existing bundle behavior; these pages are small.
 import FreightTripsList from "./pages/finance/FreightTrips";
@@ -91,7 +100,33 @@ const App = () => (
               <Route path="/admin/sync-types" element={<SyncTypesAdmin />} />
               <Route path="/admin/sync-type-details" element={<SyncTypeDetailsAdmin />} />
               <Route path="/settings" element={<Settings />} />
+              {/* Fertility-specific settings page hosting the configurable
+                  thresholds that drive the Reproductive Action List. */}
+              <Route path="/settings/fertility" element={<FertilitySettings />} />
               <Route path="/reports" element={<Reports />} />
+              {/* Fertility Reports submenu — landing page + all report routes. */}
+              <Route path="/reports/fertility" element={<FertilityReports />} />
+              {/* Reproductive Action List — the operational worklist. */}
+              <Route path="/reports/fertility/action-list" element={<FertilityActionList />} />
+              {/* Placeholder routes for future fertility reports. */}
+              <Route path="/reports/fertility/dashboard" element={<FertilityReportPlaceholder pageTitle="داشبورد باروری" />} />
+              <Route path="/reports/fertility/herd-performance" element={<FertilityHerdPerformance />} />
+              <Route path="/reports/fertility/semen-performance" element={<FertilityReportPlaceholder pageTitle="عملکرد اسپرم" />} />
+              <Route path="/reports/fertility/technician-performance" element={<FertilityReportPlaceholder pageTitle="عملکرد تلقیح‌کنندگان" />} />
+              <Route path="/reports/fertility/synchronization-protocols" element={<FertilityReportPlaceholder pageTitle="پروتکل‌های همزمانی" />} />
+              <Route path="/reports/fertility/pregnancy-cost" element={<FertilityReportPlaceholder pageTitle="هزینه آبستنی" />} />
+              <Route path="/reports/fertility/pregnancy-loss" element={<FertilityReportPlaceholder pageTitle="سقط و تلفات آبستنی" />} />
+              <Route path="/reports/fertility/fresh-cows" element={<FertilityReportPlaceholder pageTitle="گاوهای تازه‌زا" />} />
+              <Route path="/reports/fertility/economic-analysis" element={<FertilityReportPlaceholder pageTitle="تحلیل اقتصادی تولیدمثل" />} />
+              {/* Placeholder routes for future top-level report categories. */}
+              <Route path="/reports/health" element={<ReportCategoryPlaceholder categoryTitle="سلامت و دامپزشکی" />} />
+              <Route path="/reports/herd" element={<ReportCategoryPlaceholder categoryTitle="گله و جمعیت" />} />
+              <Route path="/reports/nutrition" element={<ReportCategoryPlaceholder categoryTitle="تغذیه" />} />
+              <Route path="/reports/genetics" element={<ReportCategoryPlaceholder categoryTitle="ژنتیک و اصلاح نژاد" />} />
+              <Route path="/reports/economics" element={<ReportCategoryPlaceholder categoryTitle="اقتصاد و مالی" />} />
+              <Route path="/reports/calf-heifer" element={<ReportCategoryPlaceholder categoryTitle="مدیریت گوساله و تلیسه" />} />
+              <Route path="/reports/facility" element={<ReportCategoryPlaceholder categoryTitle="مدیریت تأسیسات" />} />
+              <Route path="/reports/executive-kpis" element={<ReportCategoryPlaceholder categoryTitle="شاخص‌های کلیدی مدیریتی" />} />
               {/* Task 6 — Freight Trips routes. New trip uses the same
                   editor component with no :id param; detail/edit share the
                   same /:id base. */}

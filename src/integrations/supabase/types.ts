@@ -2779,6 +2779,72 @@ export type Database = {
         }
         Relationships: []
       }
+      fertility_thresholds: {
+        Row: {
+          chronic_breeder_services: number
+          close_to_calving_days: number
+          days_since_heat_alert: number
+          days_since_service_alert: number
+          high_risk_dim: number
+          high_risk_heats: number
+          high_risk_services: number
+          id: number
+          preg_check_window_max: number
+          preg_check_window_min: number
+          recheck_window_max: number
+          recheck_window_min: number
+          repeat_breeder_services: number
+          sync_due_recheck_days: number
+          sync_to_service_window_days: number
+          updated_at: string
+          updated_by: string | null
+          vwp_cow_days: number
+          vwp_heifer_days: number
+        }
+        Insert: {
+          chronic_breeder_services?: number
+          close_to_calving_days?: number
+          days_since_heat_alert?: number
+          days_since_service_alert?: number
+          high_risk_dim?: number
+          high_risk_heats?: number
+          high_risk_services?: number
+          id?: number
+          preg_check_window_max?: number
+          preg_check_window_min?: number
+          recheck_window_max?: number
+          recheck_window_min?: number
+          repeat_breeder_services?: number
+          sync_due_recheck_days?: number
+          sync_to_service_window_days?: number
+          updated_at?: string
+          updated_by?: string | null
+          vwp_cow_days?: number
+          vwp_heifer_days?: number
+        }
+        Update: {
+          chronic_breeder_services?: number
+          close_to_calving_days?: number
+          days_since_heat_alert?: number
+          days_since_service_alert?: number
+          high_risk_dim?: number
+          high_risk_heats?: number
+          high_risk_services?: number
+          id?: number
+          preg_check_window_max?: number
+          preg_check_window_min?: number
+          recheck_window_max?: number
+          recheck_window_min?: number
+          repeat_breeder_services?: number
+          sync_due_recheck_days?: number
+          sync_to_service_window_days?: number
+          updated_at?: string
+          updated_by?: string | null
+          vwp_cow_days?: number
+          vwp_heifer_days?: number
+        }
+        Relationships: []
+      }
       finance_account_mappings: {
         Row: {
           account_id: string | null
@@ -7332,6 +7398,54 @@ export type Database = {
         Returns: {
           id: string
           ord: number
+        }[]
+      }
+      finance_list_settlement_items_v1: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_limit?: number
+          p_offset?: number
+          p_payment_status?: string
+          p_requester?: string
+          p_search?: string
+          p_status?: string
+          p_type_code?: number
+        }
+        Returns: {
+          amount: number
+          amount_type_code: number
+          description: string
+          execution_status: string
+          invoice_number: string
+          item_id: string
+          item_source_factor_id: string
+          item_source_related_cost_id: string
+          paid_amount: number
+          party_balance: number
+          party_company_name: string
+          party_first_name: string
+          party_id: string
+          party_last_name: string
+          party_ownership_type: string
+          payment_method: string
+          payment_request_id: string
+          related_cost_category: string
+          remaining_amount: number
+          request_created_at: string
+          request_description: string
+          request_has_voucher: boolean
+          request_legacy_id: number
+          request_legacy_type_code: number
+          request_payment_status: string
+          request_requested_by: string
+          request_source_factor_id: string
+          request_status: string
+          request_title: string
+          request_total_amount: number
+          settlement_subject_type: string
+          total_count: number
+          voucher_id: string
         }[]
       }
       fn_can_rollback_finance: { Args: { _user_id: string }; Returns: boolean }
