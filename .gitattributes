@@ -1,3 +1,4 @@
+# Files owned by Hoshyar — never auto-merge from Lovable
 src/pages/Invoices.tsx merge=ours
 src/components/factors/AmendmentPanel.tsx merge=ours
 src/components/finance/AmendmentItemsEditor.tsx merge=ours
