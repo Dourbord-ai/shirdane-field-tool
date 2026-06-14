@@ -7334,54 +7334,6 @@ export type Database = {
           ord: number
         }[]
       }
-      finance_list_settlement_items_v1: {
-        Args: {
-          p_date_from?: string
-          p_date_to?: string
-          p_limit?: number
-          p_offset?: number
-          p_payment_status?: string
-          p_requester?: string
-          p_search?: string
-          p_status?: string
-          p_type_code?: number
-        }
-        Returns: {
-          amount: number
-          amount_type_code: number
-          description: string
-          execution_status: string
-          invoice_number: string
-          item_id: string
-          item_source_factor_id: string
-          item_source_related_cost_id: string
-          paid_amount: number
-          party_balance: number
-          party_company_name: string
-          party_first_name: string
-          party_id: string
-          party_last_name: string
-          party_ownership_type: string
-          payment_method: string
-          payment_request_id: string
-          related_cost_category: string
-          remaining_amount: number
-          request_created_at: string
-          request_description: string
-          request_has_voucher: boolean
-          request_legacy_id: number
-          request_legacy_type_code: number
-          request_payment_status: string
-          request_requested_by: string
-          request_source_factor_id: string
-          request_status: string
-          request_title: string
-          request_total_amount: number
-          settlement_subject_type: string
-          total_count: number
-          voucher_id: string
-        }[]
-      }
       fn_can_rollback_finance: { Args: { _user_id: string }; Returns: boolean }
       fn_finance_bulk_delete_bank_transactions: {
         Args: { p_actor: string; p_ids: string[]; p_reason: string }
